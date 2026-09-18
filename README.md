@@ -327,6 +327,55 @@ acknowledgements from the peer and it resends immediately instead of waiting
 out the timer, which is the difference between the 200 ms row and the 15 ms
 ones. (Its counter prints both kinds as "timeouts", which flatters the timer.)
 
+### Twelve routes, and 141 refused reads
+
+`./site.sh all` runs every cookie-free route in `judge_gopher.py`'s list
+through both machines. Twelve routes, twenty-four boots: same status, same
+bytes, same connection, every time — including a 26 KB PDF and the redirects.
+
+`./flaky.sh gopher all` is the one that pays for everything. The real server
+makes **141 disk requests** to boot, back-fill its chat sidecars and answer
+`GET /`. Refusing each in turn, one boot per request, takes seven minutes:
+
+```
+gopher makes 141 disk requests; an untouched run: exit 0 — PASS — client got: 200, 13668 bytes
+   129 runs  (#4..#132)    exit 1   FAIL: the FAT could not be held in memory
+     3 runs  (#135..#137)  exit 0   PASS — client got: 200, 13668 bytes
+     2 runs  (#140..#141)  exit 0   PASS — client got: 200, 7799 bytes
+     2 runs  (#138..#139)  exit 0   PASS — client got: 200, 7801 bytes
+     2 runs  (#133..#134)  exit 124  said nothing about it
+     2 runs  (#1..#2)      exit 1   FAIL: the disk has no GPT partition to serve from
+     1 runs  (#3..#3)      exit 1   FAIL: the first partition is not FAT16
+```
+
+The 129 loud failures are right: the FAT is read at boot, and a machine that
+cannot read it should say so and stop. Two rows are not right.
+
+**`exit 124` is a hang.** Refusing request #133 or #134 leaves the machine
+alive and silent: it answers `GET /` correctly, prints its per-request report,
+and then never reaches its closing summary and never exits. Two minutes, against
+a 1.6 s baseline. No message, no crash — the failure mode with nothing to
+debug from. The recipe is exact, which is the point: `DISK_REFUSE=133`.
+
+**And the short pages are a 200.** Refusing #138 gets the client 7,801 bytes
+ending in:
+
+```html
+<h1>Home unavailable</h1>
+<p>pages/home.txt could not be rendered: <strong>FileNotFound</strong>.</p>
+```
+
+The file is there. The disk refused to read it. `io.zig` says
+`v.open(path) catch return Error.FileNotFound` in eight places, which collapses
+a read error, a corrupt FAT and a genuinely missing file into one answer — so a
+machine with a failing disk reports deleted files, and anything that reacts to a
+missing file by recreating or skipping it will do that to a file that is
+perfectly fine. The status stays 200, so a cache would store "Home unavailable"
+as the site's home page.
+
+Neither of those is a bug in this hypervisor. Both are what it was built to
+find.
+
 ### The pitfall that cost a retransmission
 
 The first run of the real server reported **1 timeout** where curl through QEMU

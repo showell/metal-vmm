@@ -2,6 +2,7 @@
 # **THE REAL SERVER AS THE GUEST**, and the same page fetched twice.
 #
 #   ./site.sh [path]          # / by default
+#   ./site.sh all             # every route below, one boot each side per route
 #
 # `gopher.elf` is angry-gopher's own route table compiled for a machine with no
 # operating system: its data on a FAT16 volume, its clocks from its own
@@ -19,6 +20,12 @@ GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
 # it (that needs a loop mount, and so sudo; this does not, it only reads one).
 SITE="${SITE:-$HOME/build/gopher-metal/probe/gopher/pristine.img}"
 PATH_WANTED="${1:-/}"
+
+# Cookie-free GET routes, from judge_gopher.py's own list. /version is left out
+# on purpose: it reports live memory and names the build, so the two sides
+# differ by design.
+ROUTES="/ /driving /tutorial /chess /steve-resume /steve-resume.pdf \
+/safari_download /nope /drivingX /login /login/full /admin"
 VMM="$HERE/zig-out/bin/metal-vmm"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -26,6 +33,10 @@ trap 'rm -rf "$WORK"' EXIT
 [ -f "$GUESTS/gopher.elf" ] || { echo "no $GUESTS/gopher.elf; in gopher-metal: ./port.sh && zig build gopher"; exit 1; }
 [ -f "$SITE" ] || { echo "no volume at $SITE; set SITE=<image with the site on it>"; exit 1; }
 
+failed=0
+
+compare() {
+  local PATH_WANTED="$1"
 cp "$SITE" "$WORK/ours.img"
 began=$(date +%s%N)
 PEER_BODY="$WORK/ours.body" "$VMM" "$GUESTS/gopher.elf" "$WORK/ours.img" "" "$PATH_WANTED" > "$WORK/ours.log" 2>&1
@@ -48,23 +59,28 @@ wait $qemu_pid
 theirs=$(( ($? - 1) / 2 ))
 qemu_ms=$(( ($(date +%s%N) - began) / 1000000 ))
 
-status=$(sed -n 's/^peer: \([0-9]*\).*/\1/p' "$WORK/ours.log")
-printf 'GET %s\n' "$PATH_WANTED"
-printf '  here        %s %s bytes, exit %s  (%s ms)\n' "$status" "$(wc -c < "$WORK/ours.body")" "$ours" "$ours_ms"
-printf '  under QEMU  %s %s bytes, exit %s  (%s ms)\n' "$code" "$(wc -c < "$WORK/qemu.body")" "$theirs" "$qemu_ms"
+  local status bytes note
+  status=$(sed -n 's/^peer: \([0-9]*\).*/\1/p' "$WORK/ours.log")
+  bytes=$(wc -c < "$WORK/ours.body")
+  note="same"
+  cmp -s "$WORK/ours.body" "$WORK/qemu.body" || { failed=1; note="THE BODIES DIFFER"; }
+  { [ "$status" = "$code" ] && [ -n "$status" ]; } || { failed=1; note="$note, STATUS $status vs $code"; }
+  [ "$ours" = "$theirs" ] || { failed=1; note="$note, EXIT $ours vs $theirs"; }
+  # **THE GUEST'S OWN ACCOUNT OF THE CONNECTION**, which is where a difference
+  # between the two hypervisors shows up before it shows up in the page.
+  local a b
+  a=$(grep -a '^  tcp:' "$WORK/ours.log"); b=$(grep -a '^  tcp:' "$WORK/qemu.log")
+  [ "$a" = "$b" ] || { failed=1; note="$note, A DIFFERENT CONNECTION"; }
+  printf '  %-18s %-4s %7s bytes  %-22s %5s ms here, %5s under QEMU\n' \
+      "$PATH_WANTED" "$status" "$bytes" "$note" "$ours_ms" "$qemu_ms"
+}
 
-failed=0
-cmp -s "$WORK/ours.body" "$WORK/qemu.body" || { failed=1; echo "  the two bodies differ"; }
-[ "$status" = "$code" ] || { failed=1; echo "  the two statuses differ"; }
-[ "$ours" = "$theirs" ] || { failed=1; echo "  the two exit codes differ"; }
+echo "the same request, answered twice — here, and under QEMU to curl:"
+if [ "$PATH_WANTED" = all ]; then
+    for one in $ROUTES; do compare "$one"; done
+else
+    compare "$PATH_WANTED"
+fi
 
-# **THE GUEST'S OWN ACCOUNT OF THE CONNECTION**, which is where a difference
-# between the two hypervisors shows up before it shows up in the page.
-for side in ours qemu; do
-    printf '  %-5s %s\n' "$side" "$(grep -a '^  tcp:' "$WORK/$side.log" | sed 's/^  //')"
-done
-a=$(grep -a '^  tcp:' "$WORK/ours.log"); b=$(grep -a '^  tcp:' "$WORK/qemu.log")
-[ "$a" = "$b" ] || { failed=1; echo "  the guest had a different time of it on the two machines"; }
-
-[ $failed = 0 ] && echo "the same page, and the same connection, both ways" || echo "something differed"
+[ $failed = 0 ] && echo "every route: the same page, and the same connection, both ways" || echo "something differed"
 exit $failed
