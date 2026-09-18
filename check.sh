@@ -23,7 +23,7 @@ VMM="$HERE/zig-out/bin/metal-vmm"
 [ -x "$VMM" ] || { echo "no $VMM; run: zig build"; exit 1; }
 
 # probe:image
-CASES="block:fat16-write fat16:fat16-list fat16write:fat16-write vfat:fat16-write rng:fat16-write"
+CASES="block:fat16-write fat16:fat16-list fat16write:fat16-write vfat:fat16-write net:fat16-write rng:fat16-write"
 
 failed=0
 for one in $CASES; do
@@ -45,6 +45,7 @@ for one in $CASES; do
         -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
         -drive id=d,file="$WORK/qemu.img",format=raw,if=none \
         -device virtio-blk-device,drive=d \
+        -netdev user,id=n0 -device virtio-net-device,netdev=n0 \
         -cpu max -device virtio-rng-device > "$WORK/qemu.raw" 2>&1
     # **QEMU'S EXIT CODE IS NOT THE GUEST'S**: isa-debug-exit ends it with
     # `code << 1 | 1`, so the guest's 0 arrives as 1.

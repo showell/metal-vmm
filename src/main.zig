@@ -31,6 +31,7 @@ const linux = std.os.linux;
 const posix = std.posix;
 const kvm = @import("kvm.zig");
 const virtio = @import("virtio.zig");
+const net = @import("net.zig");
 
 /// How much RAM the guest gets. The probes were written against `-m 512`.
 const ram_bytes: usize = 512 * 1024 * 1024;
@@ -506,6 +507,12 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         block_device = block.device();
         machine.devices[0] = &block_device;
     }
+    // **THE WIRE ENDS HERE, ON PURPOSE.** There is always a network device,
+    // because the machine at the other end of it is this program and costs
+    // nothing when nobody talks to it.
+    var wire = net.Net{};
+    var net_device = wire.device();
+    machine.devices[1] = &net_device;
     return serve(vcpu, page, &machine);
 }
 

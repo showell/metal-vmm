@@ -91,15 +91,32 @@ pub const UsedElem = extern struct { id: u32, len: u32 };
 
 // ── one device on the transport ──────────────────────────────────────────────
 
-/// What a device does with a chain the driver offered. Answers how many bytes
-/// the device wrote into the guest's buffers, which is what goes on the used
-/// ring.
-pub const Serve = *const fn (context: *anyopaque, ram: []u8, chain: []const Desc) u32;
+/// One queue's state: what the driver told us about it, and how far along its
+/// available ring this device has read.
+pub const Queue = struct {
+    size: u32 = 0,
+    ready: u32 = 0,
+    desc: u64 = 0,
+    avail: u64 = 0,
+    used: u64 = 0,
+    last_avail: u16 = 0,
+};
+
+/// A chain of descriptors the driver offered, and the head to answer with.
+pub const Chain = struct { head: u16, links: []const Desc };
+
+/// **THE DOORBELL RANG.** What a device does about it is its own business: a
+/// block device serves every chain on the spot, while a network device's
+/// receive queue holds the buffers until a frame turns up for them.
+pub const Notified = *const fn (context: *anyopaque, device: *Device, ram: []u8, queue: u32) void;
 
 pub const Device = struct {
     id: u32,
+    /// What this device offers in feature word 0. VERSION_1 lives in word 1
+    /// and every device here offers it.
+    features_low: u32 = 0,
     context: *anyopaque,
-    serve: Serve,
+    notified: Notified,
     /// Read by the guest at offset 0x100 and up; a block device keeps its
     /// capacity here.
     config: [32]u8 = @splat(0),
@@ -110,14 +127,10 @@ pub const Device = struct {
     driver_features_sel: u32 = 0,
     interrupt_status: u32 = 0,
 
-    // The one queue this transport serves so far.
-    queue_size: u32 = 0,
-    queue_ready: u32 = 0,
-    desc_addr: u64 = 0,
-    avail_addr: u64 = 0,
-    used_addr: u64 = 0,
-    /// How far along the available ring this device has read.
-    last_avail: u16 = 0,
+    queue_sel: u32 = 0,
+    /// Two is enough for both devices here: a block device's one, and a
+    /// network device's receive and transmit.
+    queues: [2]Queue = .{ .{}, .{} },
 
     /// How many requests it has served, for a host that wants to say what a
     /// guest actually asked of it.
@@ -137,9 +150,9 @@ pub const Device = struct {
             .version => version,
             .device_id => self.id,
             .vendor_id => vendor_id,
-            .device_features => if (self.device_features_sel == 1) feature_version_1_high else 0,
+            .device_features => if (self.device_features_sel == 1) feature_version_1_high else self.features_low,
             .queue_num_max => queue_max,
-            .queue_ready => self.queue_ready,
+            .queue_ready => self.queues[self.pick()].ready,
             // **THE DRIVER READS THIS BACK TO SEE IF IT WAS ACCEPTED**, so a
             // device that only stored it would look like one that refused.
             .status => self.status,
@@ -153,23 +166,28 @@ pub const Device = struct {
             .device_features_sel => self.device_features_sel = value,
             .driver_features_sel => self.driver_features_sel = value,
             .driver_features => {}, // whatever it takes, it may have
-            .queue_sel => {}, // one queue so far, and it is queue 0
-            .queue_num => self.queue_size = value,
-            .queue_desc_lo => self.desc_addr = (self.desc_addr & 0xFFFFFFFF00000000) | value,
-            .queue_desc_hi => self.desc_addr = (self.desc_addr & 0xFFFFFFFF) | (@as(u64, value) << 32),
-            .queue_driver_lo => self.avail_addr = (self.avail_addr & 0xFFFFFFFF00000000) | value,
-            .queue_driver_hi => self.avail_addr = (self.avail_addr & 0xFFFFFFFF) | (@as(u64, value) << 32),
-            .queue_device_lo => self.used_addr = (self.used_addr & 0xFFFFFFFF00000000) | value,
-            .queue_device_hi => self.used_addr = (self.used_addr & 0xFFFFFFFF) | (@as(u64, value) << 32),
-            .queue_ready => self.queue_ready = value,
-            .queue_notify => self.drain(ram),
+            .queue_sel => self.queue_sel = value,
+            .queue_num => self.queues[self.pick()].size = value,
+            .queue_desc_lo => self.setLow(&self.queues[self.pick()].desc, value),
+            .queue_desc_hi => self.setHigh(&self.queues[self.pick()].desc, value),
+            .queue_driver_lo => self.setLow(&self.queues[self.pick()].avail, value),
+            .queue_driver_hi => self.setHigh(&self.queues[self.pick()].avail, value),
+            .queue_device_lo => self.setLow(&self.queues[self.pick()].used, value),
+            .queue_device_hi => self.setHigh(&self.queues[self.pick()].used, value),
+            .queue_ready => self.queues[self.pick()].ready = value,
+            .queue_notify => {
+                if (value < self.queues.len) self.notified(self.context, self, ram, value);
+                // The driver polls the used ring, but it also reads and
+                // acknowledges this — so a device that never set it would
+                // leave that path dead.
+                self.interrupt_status |= 1;
+            },
             .interrupt_ack => self.interrupt_status &= ~value,
             .status => {
                 // A write of zero is a reset, and the driver starts over.
                 if (value == 0) {
                     self.status = 0;
-                    self.queue_ready = 0;
-                    self.last_avail = 0;
+                    self.queues = .{ .{}, .{} };
                 } else {
                     // FEATURES_OK is the device's to grant. We take the only
                     // feature this guest asks for, so it is always granted.
@@ -180,53 +198,67 @@ pub const Device = struct {
         }
     }
 
-    /// Serves every chain the driver has offered since the last doorbell.
-    fn drain(self: *Device, ram: []u8) void {
-        if (self.queue_ready == 0 or self.queue_size == 0) return;
-        const size: u16 = @intCast(self.queue_size);
-        const avail_idx = readInt(u16, ram, self.avail_addr + 2);
-        while (self.last_avail != avail_idx) : (self.last_avail +%= 1) {
-            const head = readInt(u16, ram, self.avail_addr + 4 + @as(u64, self.last_avail % size) * 2);
-            var chain: [8]Desc = undefined;
-            const links = self.follow(ram, head, &chain);
-            const written = self.serve(self.context, ram, links);
-            self.complete(ram, size, head, written);
-            self.served += 1;
-        }
-        // The driver polls the used ring, but it also reads and acknowledges
-        // this — so a device that never set it would leave that path dead.
-        self.interrupt_status |= 1;
+    /// A queue index the driver asked for, clamped to what exists.
+    fn pick(self: *const Device) usize {
+        return @min(self.queue_sel, self.queues.len - 1);
     }
 
-    /// Reads a descriptor chain out of guest memory into `into`.
-    fn follow(self: *Device, ram: []u8, head: u16, into: []Desc) []const Desc {
-        var at = head;
-        var n: usize = 0;
-        while (n < into.len) {
-            const desc_at = self.desc_addr + @as(u64, at) * @sizeOf(Desc);
-            if (desc_at + @sizeOf(Desc) > ram.len) break;
-            into[n] = .{
-                .addr = readInt(u64, ram, desc_at),
-                .len = readInt(u32, ram, desc_at + 8),
-                .flags = readInt(u16, ram, desc_at + 12),
-                .next = readInt(u16, ram, desc_at + 14),
-            };
-            n += 1;
-            if (into[n - 1].flags & Desc.next_flag == 0) break;
-            at = into[n - 1].next;
-        }
-        return into[0..n];
+    fn setLow(_: *Device, field: *u64, value: u32) void {
+        field.* = (field.* & 0xFFFFFFFF00000000) | value;
     }
 
-    /// Puts the head back on the used ring, which is how the driver learns.
-    fn complete(self: *Device, ram: []u8, size: u16, head: u16, written: u32) void {
-        const used_idx = readInt(u16, ram, self.used_addr + 2);
-        const at = self.used_addr + 4 + @as(u64, used_idx % size) * @sizeOf(UsedElem);
+    fn setHigh(_: *Device, field: *u64, value: u32) void {
+        field.* = (field.* & 0xFFFFFFFF) | (@as(u64, value) << 32);
+    }
+
+    /// **THE NEXT CHAIN THE DRIVER OFFERED**, or null when it has offered
+    /// nothing new. Reading it does not answer it: a device may hold a buffer
+    /// for as long as it likes, which is exactly what a receive queue is for.
+    pub fn take(self: *Device, ram: []u8, index: u32, into: []Desc) ?Chain {
+        const q = &self.queues[index];
+        if (q.ready == 0 or q.size == 0) return null;
+        const size: u16 = @intCast(q.size);
+        if (q.last_avail == readInt(u16, ram, q.avail + 2)) return null;
+        const head = readInt(u16, ram, q.avail + 4 + @as(u64, q.last_avail % size) * 2);
+        q.last_avail +%= 1;
+        return .{ .head = head, .links = follow(ram, q.desc, head, into) };
+    }
+
+    /// Puts the head back on the used ring with what the device wrote, which
+    /// is how the driver learns the buffer is its own again.
+    pub fn complete(self: *Device, ram: []u8, index: u32, head: u16, written: u32) void {
+        const q = &self.queues[index];
+        const size: u16 = @intCast(q.size);
+        const used_idx = readInt(u16, ram, q.used + 2);
+        const at = q.used + 4 + @as(u64, used_idx % size) * @sizeOf(UsedElem);
         writeInt(u32, ram, at, head);
         writeInt(u32, ram, at + 4, written);
-        writeInt(u16, ram, self.used_addr + 2, used_idx +% 1);
+        writeInt(u16, ram, q.used + 2, used_idx +% 1);
+        self.served += 1;
     }
 };
+
+/// Reads a descriptor chain out of guest memory. A chain longer than `into`
+/// is cut short rather than followed forever: the driver writes the `next`
+/// links, and a loop in them is its bug, not a reason for this to hang.
+fn follow(ram: []u8, table: u64, head: u16, into: []Desc) []const Desc {
+    var at = head;
+    var n: usize = 0;
+    while (n < into.len) {
+        const desc_at = table + @as(u64, at) * @sizeOf(Desc);
+        if (desc_at + @sizeOf(Desc) > ram.len) break;
+        into[n] = .{
+            .addr = readInt(u64, ram, desc_at),
+            .len = readInt(u32, ram, desc_at + 8),
+            .flags = readInt(u16, ram, desc_at + 12),
+            .next = readInt(u16, ram, desc_at + 14),
+        };
+        n += 1;
+        if (into[n - 1].flags & Desc.next_flag == 0) break;
+        at = into[n - 1].next;
+    }
+    return into[0..n];
+}
 
 // ── guest memory, which is just our own with an offset ───────────────────────
 
@@ -275,17 +307,26 @@ pub const Block = struct {
     };
 
     pub fn device(self: *Block) Device {
-        var d = Device{ .id = device_id_block, .context = self, .serve = serve };
+        var d = Device{ .id = device_id_block, .context = self, .notified = notified };
         // Config space: the capacity in sectors, at offset 0.
         std.mem.writeInt(u64, d.config[0..8], self.image.len / sector_bytes, .little);
         return d;
     }
 
+    /// Every request waiting, served on the spot. A disk is fast enough here
+    /// that there is nothing to be gained by holding one.
+    fn notified(context: *anyopaque, d: *Device, ram: []u8, queue: u32) void {
+        const self: *Block = @ptrCast(@alignCast(context));
+        var links: [4]Desc = undefined;
+        while (d.take(ram, queue, &links)) |chain| {
+            d.complete(ram, queue, chain.head, self.serve(ram, chain.links));
+        }
+    }
+
     /// **THE SPEC'S THREE DESCRIPTORS**: a header the device reads, a data
     /// buffer, and a status byte the device writes. Anything else is refused
     /// rather than guessed at.
-    fn serve(context: *anyopaque, ram: []u8, chain: []const Desc) u32 {
-        const self: *Block = @ptrCast(@alignCast(context));
+    fn serve(self: *Block, ram: []u8, chain: []const Desc) u32 {
         if (chain.len != 3) return 0;
         const head = chain[0];
         const data = chain[1];

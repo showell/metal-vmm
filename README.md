@@ -56,7 +56,8 @@ into a layer**, and the host half is the emulator.
 | the exit door | **works** — 0xF4, and the guest's code becomes ours |
 | absent devices | **works** — reads answer zero, which is how a guest discovers nothing is there |
 | virtio-blk | **works** — the transport, one queue, and a disk image; judged against QEMU's own device |
-| virtio-net | next |
+| virtio-net | **works** — two queues, and a peer at the other end of the wire that answers DHCP |
+| TCP from the peer | next: what the HTTP probes need, and the last thing before determinism |
 | determinism | the point of all of it: a virtual clock, a seeded generator, device answers at chosen moments |
 | fault injection and replay | last, and the reason for the rest |
 
@@ -82,8 +83,13 @@ the argument is that nothing in that 100 ms came from anywhere but here.
   transcribed from `/usr/include/linux/kvm.h`, with their sizes asserted at
   compile time. An ioctl number carries its argument's size, so a structure a
   byte too long does not mis-parse; it fails with `EINVAL` and says nothing.
-- `src/main.zig` — the loader, the processor's starting state, the two
-  devices, and the loop that serves them.
+- `src/virtio.zig` — the transport both devices sit on, and the block device.
+- `src/net.zig` — the network device, and the machine at the other end of the
+  wire. **There is no tap device and no real network**: a host's network is an
+  input this program does not control, which is the one thing a deterministic
+  machine cannot have. The peer answers from a script instead.
+- `src/main.zig` — the loader, the processor's starting state, the serial port,
+  the exit door, and the loop that serves them.
 
 `zig build test` checks the parts that need no processor: the ELF loader, the
 note parsing, the devices' answers, and a fake guest that drives the block
@@ -97,12 +103,17 @@ and **the same disk image afterwards, byte for byte**. A device model that
 answers correctly and writes the wrong sector would pass everything else.
 
 ```
-PASS block       same words, same verdict (97 ms here, 122 ms under QEMU)
-PASS fat16       same words, same verdict (130 ms here, 156 ms under QEMU)
-PASS fat16write  same words, same verdict (640 ms here, 553 ms under QEMU)
-PASS vfat        same words, same verdict (2259 ms here, 1950 ms under QEMU)
-PASS rng         same words, same verdict (98 ms here, 126 ms under QEMU)
+PASS block       same words, same verdict (105 ms here, 195 ms under QEMU)
+PASS fat16       same words, same verdict (141 ms here, 162 ms under QEMU)
+PASS fat16write  same words, same verdict (613 ms here, 586 ms under QEMU)
+PASS vfat        same words, same verdict (2631 ms here, 2184 ms under QEMU)
+PASS net         same words, same verdict (106 ms here, 176 ms under QEMU)
+PASS rng         same words, same verdict (105 ms here, 141 ms under QEMU)
 ```
+
+The network one is the strongest of them: the guest asks for a lease and prints
+the address, mask, router, DNS and server it was given, and every one of those
+numbers has to match what QEMU's own DHCP server hands out.
 
 It earned its keep immediately: our first output had an invisible `0x01` at the
 head of it. The guest's serial init sets the divisor latch and writes the baud
