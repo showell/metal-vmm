@@ -9,10 +9,10 @@
 //! ours, and its exit code becomes ours.
 //!
 //! **THE POINT IS NOT SPEED; IT IS THAT WE OWN EVERY INPUT.** A guest here
-//! reads nothing this program did not give it, which is the first requirement
-//! for running the same program twice and getting the same run. Determinism,
-//! device emulation and fault injection all come later and all come from this
-//! one property, so the happy path is built first and kept honest.
+//! reads nothing this program did not give it — including what time it is,
+//! which is clock.zig's job and the reason this program's loader rewrites the
+//! guest's `rdtsc` instructions on the way in. Two runs of the same guest are
+//! the same run.
 //!
 //! What the guest expects, and what this therefore provides:
 //!
@@ -25,6 +25,9 @@
 //!   - **COM1 at 0x3F8**, whose line-status register must say the transmitter
 //!     is ready or it spins there forever.
 //!   - **The exit door at 0xF4**, which QEMU calls `isa-debug-exit`.
+//!   - **A clock**: an interval timer to calibrate against, a timestamp
+//!     counter, and a real-time clock if it wants the date. All three are one
+//!     counter — see clock.zig.
 
 const std = @import("std");
 const linux = std.os.linux;
@@ -32,6 +35,7 @@ const posix = std.posix;
 const kvm = @import("kvm.zig");
 const virtio = @import("virtio.zig");
 const net = @import("net.zig");
+const clock = @import("clock.zig");
 const wire = @import("peer.zig");
 
 /// How much RAM the guest gets. The probes were written against `-m 512`.
@@ -103,7 +107,49 @@ const ProgramHeader = extern struct {
 
     const load: u32 = 1;
     const note: u32 = 4;
+    const executable: u32 = 1;
 };
+
+/// What a loaded kernel amounts to: where to start it, and how many of its
+/// clock reads this program now answers.
+const Loaded = struct {
+    entry: u64,
+    clock_reads: usize,
+};
+
+/// **`rdtsc` DOES NOT EXIT, SO THE LOADER MAKES IT ONE.** It is two bytes,
+/// `0F 31`, and `out 0xE0, al` is also two bytes, `E6 E0` — so every
+/// timestamp read in the guest's text becomes an ordinary port write that
+/// lands in this program, which answers it from clock.zig and puts the value
+/// in EDX:EAX exactly as the instruction would have.
+///
+/// **THE FILE ON DISK IS NOT TOUCHED.** The substitution happens in the copy
+/// in guest memory, so QEMU still runs the same bytes and check.sh stays an
+/// honest oracle.
+///
+/// Two bytes is a short pattern to search for, and a `0F 31` that fell inside
+/// some other instruction's operand would corrupt the guest silently. Counted
+/// across nine of gopher-metal's kernels, the number of these pairs in the
+/// loadable segment equals the number of `rdtsc` instructions a disassembler
+/// finds, every time — 34 in the clock probe, 12 in stdhttp, none in rng.
+/// x86 leaves this pair unlikely to land on by accident, and these kernels
+/// keep no data in their text.
+fn rewriteClockReads(segment: []u8) usize {
+    const rdtsc = [2]u8{ 0x0F, 0x31 };
+    const out_to_us = [2]u8{ 0xE6, @as(u8, @intCast(tsc_port)) };
+    var found: usize = 0;
+    var at: usize = 0;
+    while (at + 2 <= segment.len) {
+        if (std.mem.eql(u8, segment[at..][0..2], &rdtsc)) {
+            @memcpy(segment[at..][0..2], &out_to_us);
+            found += 1;
+            at += 2;
+        } else {
+            at += 1;
+        }
+    }
+    return found;
+}
 
 const NoteHeader = extern struct {
     namesz: u32,
@@ -121,13 +167,14 @@ const LoadError = error{ NotAnElf, NotX86_64, NoPvhNote, DoesNotFit };
 /// answers the PVH entry point. **A segment is placed by `paddr`, not
 /// `vaddr`**: the kernel is linked to run at one address and loaded at
 /// another, and the loader's job is the second one.
-fn load(ram: []u8, image: []const u8) LoadError!u64 {
+fn load(ram: []u8, image: []const u8) LoadError!Loaded {
     if (image.len < @sizeOf(ElfHeader)) return error.NotAnElf;
     const head: *const ElfHeader = @ptrCast(@alignCast(image.ptr));
     if (!std.mem.eql(u8, head.ident[0..4], "\x7fELF")) return error.NotAnElf;
     if (head.ident[4] != 2 or head.machine != 62) return error.NotX86_64; // 64-bit, x86-64
 
     var entry: ?u64 = null;
+    var clock_reads: usize = 0;
     for (0..head.phnum) |i| {
         const at = head.phoff + i * head.phentsize;
         if (at + @sizeOf(ProgramHeader) > image.len) return error.NotAnElf;
@@ -145,6 +192,9 @@ fn load(ram: []u8, image: []const u8) LoadError!u64 {
                 // second boot into the same memory would not be, and this
                 // program is going to run guests over and over.
                 @memset(ram[to + in_file ..][0 .. in_memory - in_file], 0);
+                if (ph.flags & ProgramHeader.executable != 0) {
+                    clock_reads += rewriteClockReads(ram[to..][0..in_file]);
+                }
             },
             ProgramHeader.note => {
                 if (pvhEntry(image, ph.*)) |found| entry = found;
@@ -152,7 +202,7 @@ fn load(ram: []u8, image: []const u8) LoadError!u64 {
             else => {},
         }
     }
-    return entry orelse error.NoPvhNote;
+    return .{ .entry = entry orelse return error.NoPvhNote, .clock_reads = clock_reads };
 }
 
 /// The 32-bit entry address out of a PT_NOTE segment, if it names one.
@@ -298,78 +348,15 @@ const divisor_latch: u8 = 0x80;
 const transmitter_ready: u8 = 0x20 | 0x40;
 const exit_door: u16 = 0xF4;
 
-// ── the interval timer ───────────────────────────────────────────────────────
+/// **WHERE THE GUEST'S CLOCK READS ARRIVE.** Nothing on a PC decodes 0xE0, so
+/// a write there can only be one of the loader's substitutions — see
+/// `rewriteClockReads`.
+const tsc_port: u16 = 0xE0;
 
-const pit_channel0: u16 = 0x40;
-const pit_command: u16 = 0x43;
+// ── the interval timer ────────────────────────────────────────────────────────
 
-/// **THE FIRST INPUT THIS PROGRAM DOES NOT OWN**, and worth naming as such.
-///
-/// The guest measures how fast its timestamp counter runs by counting its
-/// ticks across a known number of the timer's, so the timer has to advance
-/// like a real one or the answer is nonsense and the guest refuses to boot.
-/// The only clock available to advance it by, today, is the host's — which
-/// means two runs of the same guest do not agree about how fast its processor
-/// is, and that is precisely the thing the next step of this project is for.
-/// When the timestamp counter itself becomes ours, this becomes a counter that
-/// advances by a fixed amount and the whole calibration turns deterministic.
-const Pit = struct {
-    /// The i8254's input frequency, which every guest that uses it knows.
-    const hz: u64 = 1_193_182;
-
-    began: i128 = 0,
-    reload: u16 = 0xFFFF,
-    /// Set by a latch command: the count is frozen for the next two reads.
-    latched: ?u16 = null,
-    /// Which half of the count the next read gives.
-    high_next: bool = false,
-    /// How many bytes of a reload value have been written.
-    written: u2 = 0,
-
-    fn now() i128 {
-        var ts: linux.timespec = undefined;
-        _ = linux.clock_gettime(.MONOTONIC, &ts);
-        return @as(i128, ts.sec) * std.time.ns_per_s + ts.nsec;
-    }
-
-    /// Where the count has got to, counting down from the reload value.
-    fn count(self: *const Pit) u16 {
-        const elapsed: u64 = @intCast(@max(0, now() - self.began));
-        const ticks: u64 = @intCast((@as(u128, elapsed) * hz) / std.time.ns_per_s);
-        return @truncate(@as(u64, self.reload) -% ticks);
-    }
-
-    fn command(self: *Pit, value: u8) void {
-        // Bits 5 and 4 say which bytes follow; zero means "latch the count".
-        if (value & 0x30 == 0) {
-            self.latched = self.count();
-            self.high_next = false;
-            return;
-        }
-        self.written = 0;
-        self.began = now();
-    }
-
-    fn write(self: *Pit, value: u8) void {
-        // The reload value arrives low byte first.
-        if (self.written == 0) {
-            self.reload = (self.reload & 0xFF00) | value;
-            self.written = 1;
-        } else {
-            self.reload = (@as(u16, value) << 8) | (self.reload & 0x00FF);
-            self.written = 0;
-            self.began = now();
-        }
-    }
-
-    fn read(self: *Pit) u8 {
-        const value = self.latched orelse self.count();
-        const byte: u8 = if (self.high_next) @truncate(value >> 8) else @truncate(value);
-        if (self.high_next) self.latched = null; // the latch lasts two reads
-        self.high_next = !self.high_next;
-        return byte;
-    }
-};
+const pit_channel0: u16 = clock.Pit.channel0_port;
+const pit_command: u16 = clock.Pit.command_port;
 
 const Machine = struct {
     stopped: ?u8 = null,
@@ -380,7 +367,11 @@ const Machine = struct {
     /// The line-control register, kept because bit 7 changes what the data
     /// port means.
     line_control: u8 = 0,
-    pit: Pit = .{},
+    /// **THE MACHINE'S TIME IS ITS OWN** (clock.zig): one counter that the
+    /// guest's own questions advance, and the three devices that report it.
+    time: clock.Clock = .{},
+    pit: clock.Pit = .{},
+    rtc: clock.Rtc = .{},
     /// **THE GUEST'S OWN WORDS ARE THE CLOCK HERE.** It polls memory, so
     /// nothing it does gives this program back control except a device
     /// register or a printed character — and a printed line is the only signal
@@ -407,8 +398,10 @@ const Machine = struct {
             com1_line_control => if (bytes.len > 0) {
                 self.line_control = bytes[0];
             },
-            pit_command => if (bytes.len > 0) self.pit.command(bytes[0]),
-            pit_channel0 => if (bytes.len > 0) self.pit.write(bytes[0]),
+            pit_command => if (bytes.len > 0) self.pit.command(bytes[0], self.time.ns),
+            pit_channel0 => if (bytes.len > 0) self.pit.write(bytes[0], self.time.ns),
+            clock.Rtc.index_port => if (bytes.len > 0) self.rtc.select(bytes[0]),
+            clock.Rtc.data_port => if (bytes.len > 0) self.rtc.store(bytes[0]),
             exit_door => self.stopped = if (bytes.len > 0) bytes[0] else 0,
             else => {}, // the rest of the UART's registers: written, not read
         }
@@ -466,7 +459,8 @@ const Machine = struct {
         if (bytes.len == 0) return;
         switch (port) {
             com1_line_status => bytes[0] = transmitter_ready,
-            pit_channel0 => bytes[0] = self.pit.read(),
+            pit_channel0 => bytes[0] = self.pit.read(self.time.ns),
+            clock.Rtc.data_port => bytes[0] = self.rtc.read(self.time.ns),
             else => {},
         }
     }
@@ -482,6 +476,18 @@ fn writeLittle(data: []u8, value: u64) void {
     for (data, 0..) |*b, i| b.* = @truncate(value >> @intCast(i * 8));
 }
 
+/// **THE GUEST ASKED WHAT TIME IT IS.** Its `rdtsc` became a write to
+/// `tsc_port` when it was loaded, and that instruction's whole effect is to
+/// put a 64-bit count in EDX:EAX — so that is what this does, leaving every
+/// other register exactly as the guest left it.
+fn answerClock(vcpu: linux.fd_t, ticks: u64) !void {
+    var regs: kvm.Regs = undefined;
+    _ = try kvm.call(vcpu, kvm.get_regs, @intFromPtr(&regs));
+    regs.rax = ticks & 0xFFFFFFFF;
+    regs.rdx = ticks >> 32;
+    _ = try kvm.call(vcpu, kvm.set_regs, @intFromPtr(&regs));
+}
+
 /// Runs until the guest stops, and answers what it stopped with.
 fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *Machine) !u8 {
     const run: *kvm.Run = @ptrCast(page.ptr);
@@ -495,11 +501,19 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
                 return error.KvmFailed;
             },
         }
+        // **EVERY EXIT IS A TICK OF THIS MACHINE'S CLOCK.** The guest asked
+        // the outside world for something, and in here that is the only thing
+        // that makes time pass — see clock.zig.
+        machine.time.asked();
         switch (@as(kvm.Exit, @enumFromInt(run.exit_reason))) {
             .io => {
                 const io = kvm.ioExit(page);
                 const data = kvm.ioData(page, io);
                 if (io.direction == kvm.io_out) {
+                    if (io.port == tsc_port) {
+                        try answerClock(vcpu, machine.time.ticks());
+                        continue;
+                    }
                     machine.out(io.port, data);
                     if (machine.stopped) |code| return code;
                 } else {
@@ -600,7 +614,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     };
     _ = try kvm.call(vm, kvm.set_user_memory_region, @intFromPtr(&region));
 
-    const entry = load(ram, image) catch |e| {
+    const loaded = load(ram, image) catch |e| {
         std.debug.print("metal-vmm: {s} is not a kernel this can start: {s}\n", .{ path, @errorName(e) });
         return 2;
     };
@@ -613,7 +627,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     const page = try posix.mmap(null, page_size, .{ .READ = true, .WRITE = true }, .{ .TYPE = .SHARED }, vcpu, 0);
 
     try describeProcessor(dev, vcpu);
-    try enterProtectedMode(vcpu, entry, start_info);
+    try enterProtectedMode(vcpu, loaded.entry, start_info);
 
     // **THE DEVICES GO IN THE FIRST SLOTS**, which is not what QEMU does (it
     // fills from the top) and does not matter: the guest scans every slot and
@@ -726,13 +740,28 @@ test "a segment is placed where it asks to be, and the note names the entry" {
     defer testing.allocator.free(ram);
     @memset(ram, 0xAA);
 
-    try testing.expectEqual(@as(u64, 0x100020), try load(ram, image));
+    try testing.expectEqual(@as(u64, 0x100020), (try load(ram, image)).entry);
     try testing.expectEqualStrings("kernel bytes", ram[0x100000..][0.."kernel bytes".len]);
     // **WHAT THE FILE DOES NOT CARRY IS ZEROED**, or a guest booted twice into
     // the same memory finds the last run's `.bss`.
     for (ram[0x100000 + "kernel bytes".len ..][0..16]) |b| try testing.expectEqual(@as(u8, 0), b);
     // And nothing before it was touched.
     try testing.expectEqual(@as(u8, 0xAA), ram[0x100000 - 1]);
+}
+
+test "every rdtsc in the guest's text becomes a question for us" {
+    var file: [512]u8 align(8) = undefined;
+    // Two real ones, and two near misses: 0F 30 is wrmsr, and the 31 0F pair
+    // in the middle is the same two bytes the other way round.
+    const body = "\x0f\x31\x0f\x30\x31\x0f\x0f\x31";
+    const image = fakeKernel(&file, 0x100000, 0x100000, body);
+    const ram = try testing.allocator.alloc(u8, 0x101000);
+    defer testing.allocator.free(ram);
+    @memset(ram, 0);
+
+    const loaded = try load(ram, image);
+    try testing.expectEqual(@as(usize, 2), loaded.clock_reads);
+    try testing.expectEqualSlices(u8, "\xe6\xe0\x0f\x30\x31\x0f\xe6\xe0", ram[0x100000..][0..body.len]);
 }
 
 test "a kernel with no PVH note is refused, rather than started at a guess" {

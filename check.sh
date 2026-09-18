@@ -7,8 +7,17 @@
 #   ./check.sh
 #
 # Each probe runs twice, each side on its own fresh copy of the image, and the
-# serial output is compared byte for byte. `rng` is the one exception: its
-# output is random on purpose, so only its verdict is compared.
+# serial output is compared byte for byte. Two probes are compared by verdict
+# alone, and for opposite reasons: `rng`'s output is random on purpose, and
+# `clock`'s output is a MEASUREMENT OF THE MACHINE IT RAN ON — QEMU's guest
+# reads today's date off the host and times a real processor, ours reads noon
+# on 2026-09-18 and times a processor that runs at exactly 2.5 GHz. What has to
+# agree is the guest's own cross-checks: the interval timer against the
+# real-time clock, all four register formats against each other, and the wall
+# clock against the edge it was anchored to.
+#
+# Reproducibility is a different question, and QEMU cannot answer it about
+# itself: that one is same.sh.
 #
 # The probes that need a step between boots — a Linux mount writing a file the
 # next boot reads — belong to gopher-metal's own runner and are not here.
@@ -24,7 +33,7 @@ VMM="$HERE/zig-out/bin/metal-vmm"
 
 # probe:image
 CASES="block:fat16-write fat16:fat16-list fat16write:fat16-write vfat:fat16-write \
-net:fat16-write http:fat16-write stdhttp:fat16-write rng:fat16-write"
+net:fat16-write http:fat16-write stdhttp:fat16-write rng:fat16-write clock:fat16-list"
 
 failed=0
 for one in $CASES; do
@@ -85,8 +94,9 @@ for one in $CASES; do
         grep -av "^  slot \|^  device at " "$WORK/$side.txt" > "$WORK/$side.cmp"
     done
 
-    if [ "$probe" = rng ]; then
-        # Random by design; what must agree is the verdict.
+    if [ "$probe" = rng ] || [ "$probe" = clock ]; then
+        # Random by design, or a measurement of two different machines by
+        # design; either way, what must agree is the verdict.
         a=$(tail -1 "$WORK/ours.txt"); b=$(tail -1 "$WORK/qemu.txt")
         [ "$a" = "$b" ] && [ "$ours" = "$theirs" ] && same=yes || same=no
     elif cmp -s "$WORK/ours.cmp" "$WORK/qemu.cmp" && [ "$ours" = "$theirs" ]; then
