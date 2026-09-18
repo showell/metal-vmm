@@ -37,6 +37,7 @@ const virtio = @import("virtio.zig");
 const net = @import("net.zig");
 const clock = @import("clock.zig");
 const entropy = @import("entropy.zig");
+const disk = @import("disk.zig");
 const wire = @import("peer.zig");
 
 /// How much RAM the guest gets. The probes were written against `-m 512`.
@@ -566,19 +567,6 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
 
 // ── putting it together ──────────────────────────────────────────────────────
 
-/// The disk image, mapped so the guest's writes reach the file — which is what
-/// QEMU does unless told otherwise. A caller that wants the image untouched
-/// copies it first, as gopher-metal's own runner already does.
-fn mapDisk(path: [*:0]const u8) ![]align(std.heap.page_size_min) u8 {
-    const opened = linux.open(path, .{ .ACCMODE = .RDWR }, 0);
-    if (linux.errno(opened) != .SUCCESS) return error.CannotOpen;
-    const fd: linux.fd_t = @intCast(opened);
-    defer _ = linux.close(fd);
-    const size = linux.lseek(fd, 0, linux.SEEK.END);
-    if (linux.errno(size) != .SUCCESS or size == 0) return error.CannotSize;
-    return posix.mmap(null, size, .{ .READ = true, .WRITE = true }, .{ .TYPE = .SHARED }, fd, 0);
-}
-
 /// The file, mapped rather than read: it is only ever looked at, and the
 /// kernels are megabytes.
 fn mapFile(path: [*:0]const u8) ![]align(std.heap.page_size_min) const u8 {
@@ -653,11 +641,13 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     var machine = Machine{ .ram = ram };
     var block: virtio.Block = undefined;
     var block_device: virtio.Device = undefined;
+    var drive: ?disk.Disk = null;
     if (disk_path) |on_disk| {
-        block = .{ .image = mapDisk(on_disk) catch |e| {
+        drive = disk.Disk.open(on_disk) catch |e| {
             std.debug.print("metal-vmm: cannot open the disk: {s}\n", .{@errorName(e)});
             return 2;
-        } };
+        };
+        block = .{ .image = drive.?.bytes, .dirty = drive.?.dirty };
         block_device = block.device();
         machine.devices[0] = &block_device;
     }
@@ -681,6 +671,15 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     }
 
     const code = try serve(vcpu, page, &machine);
+    // **THE FILE LEARNS WHAT HAPPENED ONLY NOW**, and only the sectors the
+    // guest actually wrote. A run that never gets here leaves the image as it
+    // found it — see disk.zig.
+    if (drive) |*on_disk| {
+        _ = on_disk.writeBack() catch |e| {
+            std.debug.print("metal-vmm: the disk would not take the run's writes: {s}\n", .{@errorName(e)});
+            return 1;
+        };
+    }
     // **WHAT THE CLIENT GOT, IN ONE LINE**, so a run here can be compared with
     // a run under QEMU where curl says the same thing.
     if (fetch != null) {
@@ -706,6 +705,7 @@ const testing = std.testing;
 test {
     _ = @import("clock.zig");
     _ = @import("entropy.zig");
+    _ = @import("disk.zig");
     _ = @import("virtio.zig");
     _ = @import("net.zig");
     _ = @import("peer.zig");

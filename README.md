@@ -61,8 +61,8 @@ into a layer**, and the host half is the emulator.
 | the clock | **works, and is ours** — the interval timer, the real-time clock and `rdtsc` all read one counter that only the guest's own questions advance |
 | a run that repeats | **works** — same guest, same words, same disk, same measured processor speed, every time |
 | entropy that repeats | **works** — a seeded virtio-rng, and a processor with no `RDRAND` to go behind its back |
-| a disk that does not have to be a file | next: copy-on-write in memory, so a run can be replayed |
-| fault injection | last, and the reason for the rest |
+| a disk the run cannot spoil | **works** — mapped private, the changed sectors written back at the end and only then |
+| fault injection | next, and the reason for the rest |
 
 A boot costs about 100 ms, most of it spent zeroing the guest's `.bss`. QEMU's
 `microvm` boots the same kernel in about 130. **Speed is not the argument** —
@@ -150,6 +150,9 @@ in `clock`, 12 in `stdhttp`, 2 in `block`, none in `rng`.
   that report it. **Read this one first if you read only one.**
 - `src/entropy.zig` — the seeded generator and the device that hands it out.
   **The seed is the run's name.**
+- `src/disk.zig` — the image, mapped private, and the record of which sectors
+  the run changed. A run reads the image it started with; a run that crashes
+  leaves it alone.
 - `src/virtio.zig` — the transport the devices sit on, and the block device.
 - `src/net.zig` — the network card: two queues, and the asymmetry between them.
 - `src/peer.zig` — the machine at the other end of the wire: DHCP, and a TCP
@@ -216,7 +219,10 @@ cost is the kernel's, not ours: a `ReleaseFast` build of this program runs
 
 `./same.sh` asks the question QEMU cannot answer about itself — whether a run
 **repeats**. Same guest twice, and the words, the exit code and the disk all
-have to match byte for byte.
+have to match byte for byte. It can ask that of a guest that writes because the
+image is mapped private: every run starts from the bytes the file holds, and
+the sectors the guest changed go back into it at the end of the run and not
+before.
 
 ```
 SAME    clock       10 lines, verdict 0 (1375 ms, then 1390 ms)

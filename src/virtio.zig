@@ -18,6 +18,7 @@
 //! that never raises one would leave that code untested.
 
 const std = @import("std");
+const disk = @import("disk.zig");
 
 /// Where the guest looks: 32 slots of 512 bytes from 0xFEB00000, which is what
 /// QEMU's `microvm` gives it and therefore what its driver scans.
@@ -289,6 +290,9 @@ pub const Block = struct {
     /// is what QEMU does unless told otherwise. A caller that wants the image
     /// untouched copies it first.
     image: []u8,
+    /// One bit per sector, if anybody is keeping that record — see disk.zig.
+    /// The device does not know or care what it is for.
+    dirty: ?[]u8 = null,
     reads: u64 = 0,
     writes: u64 = 0,
 
@@ -351,6 +355,7 @@ pub const Block = struct {
             },
             type_out => {
                 @memcpy(self.image[@intCast(at)..][0..bytes.len], bytes);
+                if (self.dirty) |bits| disk.mark(bits, sector, (bytes.len + sector_bytes - 1) / sector_bytes);
                 self.writes += 1;
             },
             else => answer = status_unsupported,
