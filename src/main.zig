@@ -30,6 +30,7 @@ const std = @import("std");
 const linux = std.os.linux;
 const posix = std.posix;
 const kvm = @import("kvm.zig");
+const virtio = @import("virtio.zig");
 
 /// How much RAM the guest gets. The probes were written against `-m 512`.
 const ram_bytes: usize = 512 * 1024 * 1024;
@@ -282,7 +283,14 @@ fn enterProtectedMode(vcpu: linux.fd_t, entry: u64, start_info: u64) !void {
 // ── the devices it cannot boot without ───────────────────────────────────────
 
 const com1: u16 = 0x3F8;
+const com1_line_control: u16 = com1 + 3;
 const com1_line_status: u16 = com1 + 5;
+/// **THE DIVISOR LATCH.** With this bit set in the line-control register, a
+/// write to the data port sets the baud rate instead of sending a byte. The
+/// guest's serial init writes 0x01 there, and a model that did not know this
+/// printed it: every line of output began with an invisible control character,
+/// which is exactly the kind of thing only a second implementation catches.
+const divisor_latch: u8 = 0x80;
 /// Both "the holding register is empty" and "the transmitter is idle": the
 /// guest spins on the first, and nothing here is ever busy.
 const transmitter_ready: u8 = 0x20 | 0x40;
@@ -290,6 +298,13 @@ const exit_door: u16 = 0xF4;
 
 const Machine = struct {
     stopped: ?u8 = null,
+    /// The devices in the virtio window, by slot. A slot with nothing in it
+    /// answers zero, which is how the guest's scan skips it.
+    devices: [virtio.slots]?*virtio.Device = @splat(null),
+    ram: []u8 = &.{},
+    /// The line-control register, kept because bit 7 changes what the data
+    /// port means.
+    line_control: u8 = 0,
     /// Reads of addresses no device answers. The guest looks for virtio in a
     /// window this program does not fill yet, and a window of zeros is what
     /// "nothing is plugged in there" looks like from inside.
@@ -297,7 +312,12 @@ const Machine = struct {
 
     fn out(self: *Machine, port: u16, bytes: []const u8) void {
         switch (port) {
-            com1 => _ = linux.write(1, bytes.ptr, bytes.len),
+            com1 => if (self.line_control & divisor_latch == 0) {
+                _ = linux.write(1, bytes.ptr, bytes.len);
+            },
+            com1_line_control => if (bytes.len > 0) {
+                self.line_control = bytes[0];
+            },
             exit_door => self.stopped = if (bytes.len > 0) bytes[0] else 0,
             else => {}, // the rest of the UART's registers: written, not read
         }
@@ -307,7 +327,19 @@ const Machine = struct {
     /// which is what a real machine does with an address nothing decodes. It is
     /// also how a guest discovers there is no device: virtio's magic value is
     /// the first thing it reads, and zero is not it.
-    fn memory(self: *Machine, is_write: bool, data: []u8) void {
+    fn memory(self: *Machine, addr: u64, is_write: bool, data: []u8) void {
+        if (virtio.inWindow(addr)) {
+            const slot: usize = @intCast((addr - virtio.window_base) / virtio.slot_stride);
+            const offset = (addr - virtio.window_base) % virtio.slot_stride;
+            if (self.devices[slot]) |device| {
+                if (is_write) {
+                    device.write(self.ram, offset, @truncate(readLittle(data)));
+                } else {
+                    writeLittle(data, device.read(offset, @intCast(data.len)));
+                }
+                return;
+            }
+        }
         self.absent += 1;
         if (!is_write) @memset(data, 0);
     }
@@ -318,9 +350,18 @@ const Machine = struct {
     }
 };
 
+fn readLittle(data: []const u8) u64 {
+    var value: u64 = 0;
+    for (data, 0..) |b, i| value |= @as(u64, b) << @intCast(i * 8);
+    return value;
+}
+
+fn writeLittle(data: []u8, value: u64) void {
+    for (data, 0..) |*b, i| b.* = @truncate(value >> @intCast(i * 8));
+}
+
 /// Runs until the guest stops, and answers what it stopped with.
-fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8) !u8 {
-    var machine = Machine{};
+fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *Machine) !u8 {
     const run: *kvm.Run = @ptrCast(page.ptr);
     while (true) {
         const rc = linux.ioctl(vcpu, kvm.run, 0);
@@ -345,7 +386,7 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8) !u8 {
             },
             .mmio => {
                 const m = kvm.mmioExit(page);
-                machine.memory(m.is_write != 0, m.data[0..@intCast(m.len)]);
+                machine.memory(m.phys_addr, m.is_write != 0, m.data[0..@intCast(m.len)]);
             },
             .hlt => return machine.stopped orelse 0,
             .shutdown => {
@@ -371,6 +412,19 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8) !u8 {
 
 // ── putting it together ──────────────────────────────────────────────────────
 
+/// The disk image, mapped so the guest's writes reach the file — which is what
+/// QEMU does unless told otherwise. A caller that wants the image untouched
+/// copies it first, as gopher-metal's own runner already does.
+fn mapDisk(path: [*:0]const u8) ![]align(std.heap.page_size_min) u8 {
+    const opened = linux.open(path, .{ .ACCMODE = .RDWR }, 0);
+    if (linux.errno(opened) != .SUCCESS) return error.CannotOpen;
+    const fd: linux.fd_t = @intCast(opened);
+    defer _ = linux.close(fd);
+    const size = linux.lseek(fd, 0, linux.SEEK.END);
+    if (linux.errno(size) != .SUCCESS or size == 0) return error.CannotSize;
+    return posix.mmap(null, size, .{ .READ = true, .WRITE = true }, .{ .TYPE = .SHARED }, fd, 0);
+}
+
 /// The file, mapped rather than read: it is only ever looked at, and the
 /// kernels are megabytes.
 fn mapFile(path: [*:0]const u8) ![]align(std.heap.page_size_min) const u8 {
@@ -386,11 +440,12 @@ fn mapFile(path: [*:0]const u8) ![]align(std.heap.page_size_min) const u8 {
 pub fn main(init: std.process.Init.Minimal) !u8 {
     const argv = init.args.vector;
     if (argv.len < 2) {
-        std.debug.print("usage: metal-vmm <kernel.elf> [command line for the guest]\n", .{});
+        std.debug.print("usage: metal-vmm <kernel.elf> [disk.img] [command line for the guest]\n", .{});
         return 2;
     }
     const path = argv[1];
-    const command_line = if (argv.len > 2) std.mem.span(argv[2]) else "";
+    const disk_path: ?[*:0]const u8 = if (argv.len > 2 and argv[2][0] != 0) argv[2] else null;
+    const command_line = if (argv.len > 3) std.mem.span(argv[3]) else "";
 
     const image = mapFile(path) catch |e| {
         std.debug.print("metal-vmm: cannot read {s}: {s}\n", .{ path, @errorName(e) });
@@ -436,7 +491,22 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
 
     try describeProcessor(dev, vcpu);
     try enterProtectedMode(vcpu, entry, start_info);
-    return serve(vcpu, page);
+
+    // **THE DEVICES GO IN THE FIRST SLOTS**, which is not what QEMU does (it
+    // fills from the top) and does not matter: the guest scans every slot and
+    // takes the first of the kind it wants.
+    var machine = Machine{ .ram = ram };
+    var block: virtio.Block = undefined;
+    var block_device: virtio.Device = undefined;
+    if (disk_path) |on_disk| {
+        block = .{ .image = mapDisk(on_disk) catch |e| {
+            std.debug.print("metal-vmm: cannot open the disk: {s}\n", .{@errorName(e)});
+            return 2;
+        } };
+        block_device = block.device();
+        machine.devices[0] = &block_device;
+    }
+    return serve(vcpu, page, &machine);
 }
 
 // ── the parts that can be checked without a processor ────────────────────────
@@ -539,10 +609,21 @@ test "a segment that does not fit in the guest's memory is refused" {
 test "an absent device reads as zero and swallows writes" {
     var machine = Machine{};
     var data = [_]u8{ 1, 2, 3, 4 };
-    machine.memory(false, &data);
+    machine.memory(0xDEAD0000, false, &data);
     try testing.expectEqualSlices(u8, &.{ 0, 0, 0, 0 }, &data);
-    machine.memory(true, &data);
+    machine.memory(0xDEAD0000, true, &data);
     try testing.expectEqual(@as(u64, 2), machine.absent);
+}
+
+test "a baud-rate write is not a character" {
+    // The guest's serial init sets the divisor latch and writes 0x01 to the
+    // data port. Printing that byte put an invisible 0x01 at the head of every
+    // run, and only a comparison with another machine showed it.
+    var machine = Machine{};
+    machine.out(com1_line_control, &.{divisor_latch});
+    machine.out(com1, &.{0x01});
+    machine.out(com1_line_control, &.{0x03}); // 8N1, latch off
+    try testing.expectEqual(@as(u8, 0x03), machine.line_control);
 }
 
 test "the line status register always says the transmitter is free" {

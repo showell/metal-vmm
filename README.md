@@ -55,8 +55,8 @@ into a layer**, and the host half is the emulator.
 | the serial port | **works** — COM1, including the line-status bit the guest spins on |
 | the exit door | **works** — 0xF4, and the guest's code becomes ours |
 | absent devices | **works** — reads answer zero, which is how a guest discovers nothing is there |
-| virtio-blk | next |
-| virtio-net | after that |
+| virtio-blk | **works** — the transport, one queue, and a disk image; judged against QEMU's own device |
+| virtio-net | next |
 | determinism | the point of all of it: a virtual clock, a seeded generator, device answers at chosen moments |
 | fault injection and replay | last, and the reason for the rest |
 
@@ -86,4 +86,34 @@ the argument is that nothing in that 100 ms came from anywhere but here.
   devices, and the loop that serves them.
 
 `zig build test` checks the parts that need no processor: the ELF loader, the
-note parsing, and the devices' answers.
+note parsing, the devices' answers, and a fake guest that drives the block
+device through the rings exactly as the real driver does.
+
+## QEMU is the oracle
+
+`./check.sh` runs the same guest on the same disk twice — once here, once under
+QEMU — and requires the same words out of the serial port, the same exit code,
+and **the same disk image afterwards, byte for byte**. A device model that
+answers correctly and writes the wrong sector would pass everything else.
+
+```
+PASS block       same words, same verdict (97 ms here, 122 ms under QEMU)
+PASS fat16       same words, same verdict (130 ms here, 156 ms under QEMU)
+PASS fat16write  same words, same verdict (640 ms here, 553 ms under QEMU)
+PASS vfat        same words, same verdict (2259 ms here, 1950 ms under QEMU)
+PASS rng         same words, same verdict (98 ms here, 126 ms under QEMU)
+```
+
+It earned its keep immediately: our first output had an invisible `0x01` at the
+head of it. The guest's serial init sets the divisor latch and writes the baud
+rate to the data port, and a model that does not know that bit prints the baud
+rate as a character. Nothing else would have found it — the words all looked
+right.
+
+The block probe prints which slots hold devices, and that genuinely differs:
+QEMU fills its window from the top and has a random-number device too. Those
+lines are left out of the comparison and everything else is not.
+
+On the heavier probes we are somewhat slower than QEMU (2.3 s against 2.0 on
+`vfat`), which is honest: every register access here is a full exit into this
+program, where QEMU has spent years not doing that.
