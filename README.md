@@ -562,11 +562,19 @@ other pin the user had is gone — silently, with the client told 204. It is the
 same shape as everything else in this list: an error treated as "there is
 nothing there".
 
-Sweeping the 218 requests a pin makes, 25 of them told the client **204 while
-the volume lost the bytes a clean pin leaves behind**. That is indirect
-evidence — this machine has no way to read one file out of a FAT16 volume and
-the page does not render the group — so the code above is the finding and the
-sweep is corroboration. The fix is one line: tell "no such file", which
+**The sweep did not corroborate this, and an earlier version of this section
+said it did.** Refusing each of the 218 requests a pin makes, 25 runs told the
+client 204 while the pinned file ended up without the new pin in it — but
+reading the file's sector out of both volumes afterwards shows the old pin
+intact (`general\n`, not `metal-talk\n`). Those runs failed to *add* a pin;
+they did not destroy one. The same case run against the pre-fix kernel gives
+byte-identical output, which is the test that should have been run first.
+
+So the finding is the code above and nothing else: `catch ""` on a read whose
+result is written back **will** destroy the set whenever that read fails for
+any reason other than the file being absent. Making a disk produce that
+particular failure at that particular call is a harder aim than this machine
+can currently take. The fix is one line either way: tell "no such file", which
 legitimately means no pins, apart from every other error, which does not.
 
 ### "It answered" is a weaker question than "is it sound"
