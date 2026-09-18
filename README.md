@@ -56,8 +56,10 @@ into a layer**, and the host half is the emulator.
 | the exit door | **works** — 0xF4, and the guest's code becomes ours |
 | absent devices | **works** — reads answer zero, which is how a guest discovers nothing is there |
 | virtio-blk | **works** — the transport, one queue, and a disk image; judged against QEMU's own device |
-| virtio-net | **works** — two queues, and a peer at the other end of the wire that answers DHCP |
-| TCP from the peer | next: what the HTTP probes need, and the last thing before determinism |
+| virtio-net | **works** — two queues, and a peer at the other end of the wire |
+| the interval timer | **works** — enough of the i8254 for the guest to measure its own clock |
+| TCP from the peer | **works** — it connects to the guest, fetches, and gets what curl gets |
+| determinism | next, and the reason for all of it |
 | determinism | the point of all of it: a virtual clock, a seeded generator, device answers at chosen moments |
 | fault injection and replay | last, and the reason for the rest |
 
@@ -76,6 +78,12 @@ the argument is that nothing in that 100 ms came from anywhere but here.
   is a triple fault three instructions later. This was the first bug.
 - **A memory map it can believe**, because it sizes every heap from it.
 - **COM1's line-status register**, or it spins forever waiting to print.
+- **An interval timer that advances.** The guest measures its own processor's
+  speed by counting its timestamp ticks across a known number of the timer's,
+  and refuses to boot if the answer is not a plausible clock rate. That timer
+  is the **one input this program does not yet own** — it advances off the
+  host's clock, so two runs disagree about how fast the guest's processor is.
+  That is exactly what the next step fixes.
 
 ## Reading it
 
@@ -84,10 +92,11 @@ the argument is that nothing in that 100 ms came from anywhere but here.
   compile time. An ioctl number carries its argument's size, so a structure a
   byte too long does not mis-parse; it fails with `EINVAL` and says nothing.
 - `src/virtio.zig` — the transport both devices sit on, and the block device.
-- `src/net.zig` — the network device, and the machine at the other end of the
-  wire. **There is no tap device and no real network**: a host's network is an
-  input this program does not control, which is the one thing a deterministic
-  machine cannot have. The peer answers from a script instead.
+- `src/net.zig` — the network card: two queues, and the asymmetry between them.
+- `src/peer.zig` — the machine at the other end of the wire: DHCP, and a TCP
+  client that fetches one thing. **There is no tap device and no real
+  network**, deliberately — a host's network is an input this program does not
+  control, which is the one thing a deterministic machine cannot have.
 - `src/main.zig` — the loader, the processor's starting state, the serial port,
   the exit door, and the loop that serves them.
 
@@ -103,13 +112,21 @@ and **the same disk image afterwards, byte for byte**. A device model that
 answers correctly and writes the wrong sector would pass everything else.
 
 ```
-PASS block       same words, same verdict (105 ms here, 195 ms under QEMU)
-PASS fat16       same words, same verdict (141 ms here, 162 ms under QEMU)
-PASS fat16write  same words, same verdict (613 ms here, 586 ms under QEMU)
-PASS vfat        same words, same verdict (2631 ms here, 2184 ms under QEMU)
-PASS net         same words, same verdict (106 ms here, 176 ms under QEMU)
-PASS rng         same words, same verdict (105 ms here, 141 ms under QEMU)
+PASS block       same words, same verdict (105 ms here, 143 ms under QEMU)
+PASS fat16       same words, same verdict (134 ms here, 157 ms under QEMU)
+PASS fat16write  same words, same verdict (580 ms here, 564 ms under QEMU)
+PASS vfat        same words, same verdict (2281 ms here, 1956 ms under QEMU)
+PASS net         same words, same verdict (100 ms here, 129 ms under QEMU)
+PASS http        same words, same verdict (230 ms here, 1025 ms under QEMU)
+PASS stdhttp     same words, same verdict (235 ms here, 1029 ms under QEMU)
+PASS rng         same words, same verdict (129 ms here, 135 ms under QEMU)
 ```
+
+The HTTP ones compare two clients: the peer written here, and curl through
+QEMU's forwarded port. Both fetch `/probe` and both have to come back with the
+same status and the same body — which, for `stdhttp`, means **zig's own
+`std.http.Server`, unmodified, answering a TCP client written here, on a
+machine with no operating system, under a hypervisor written here.**
 
 The network one is the strongest of them: the guest asks for a lease and prints
 the address, mask, router, DNS and server it was given, and every one of those

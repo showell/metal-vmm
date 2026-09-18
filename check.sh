@@ -23,7 +23,8 @@ VMM="$HERE/zig-out/bin/metal-vmm"
 [ -x "$VMM" ] || { echo "no $VMM; run: zig build"; exit 1; }
 
 # probe:image
-CASES="block:fat16-write fat16:fat16-list fat16write:fat16-write vfat:fat16-write net:fat16-write rng:fat16-write"
+CASES="block:fat16-write fat16:fat16-list fat16write:fat16-write vfat:fat16-write \
+net:fat16-write http:fat16-write stdhttp:fat16-write rng:fat16-write"
 
 failed=0
 for one in $CASES; do
@@ -32,24 +33,40 @@ for one in $CASES; do
     elf="$GUESTS/$probe.elf"
     [ -f "$elf" ] || { echo "SKIP $probe (no $elf)"; continue; }
 
+    # **THE HTTP PROBES NEED A CLIENT.** Ours is the peer inside the program;
+    # QEMU's is curl through a forwarded port. Both fetch the same path, and
+    # what each one got is compared as one more line of output.
+    fetch=""
+    case "$probe" in http|stdhttp) fetch="/probe" ;; esac
+
     cp "$image" "$WORK/ours.img"
     began=$(date +%s%N)
-    "$VMM" "$elf" "$WORK/ours.img" > "$WORK/ours.txt" 2>&1
+    "$VMM" "$elf" "$WORK/ours.img" "" "$fetch" > "$WORK/ours.txt" 2>&1
     ours=$?
     ours_ms=$(( ($(date +%s%N) - began) / 1000000 ))
 
     cp "$image" "$WORK/qemu.img"
     began=$(date +%s%N)
+    netdev="user,id=n0"
+    port=$(( 20000 + RANDOM % 20000 ))
+    [ -n "$fetch" ] && netdev="user,id=n0,hostfwd=tcp:127.0.0.1:$port-:80"
     qemu-system-x86_64 -M microvm,rtc=on,pit=on -kernel "$elf" -nographic -no-reboot -m 512 \
         -global virtio-mmio.force-legacy=false \
         -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
         -drive id=d,file="$WORK/qemu.img",format=raw,if=none \
         -device virtio-blk-device,drive=d \
-        -netdev user,id=n0 -device virtio-net-device,netdev=n0 \
-        -cpu max -device virtio-rng-device > "$WORK/qemu.raw" 2>&1
+        -netdev "$netdev" -device virtio-net-device,netdev=n0 \
+        -cpu max -device virtio-rng-device > "$WORK/qemu.raw" 2>&1 &
+    qemu_pid=$!
+    if [ -n "$fetch" ]; then
+        code=$(curl -sS --max-time 30 --retry 40 --retry-delay 1 --retry-connrefused \
+            -o "$WORK/body" -w '%{http_code}' "http://127.0.0.1:$port$fetch" 2>/dev/null)
+    fi
+    wait $qemu_pid
     # **QEMU'S EXIT CODE IS NOT THE GUEST'S**: isa-debug-exit ends it with
     # `code << 1 | 1`, so the guest's 0 arrives as 1.
     theirs=$(( ($? - 1) / 2 ))
+    [ -n "$fetch" ] && printf 'peer: %s "%s"\n' "$code" "$(cat "$WORK/body")" >> "$WORK/qemu.raw"
     qemu_ms=$(( ($(date +%s%N) - began) / 1000000 ))
     # **ITS FIRMWARE TALKS ON THE SAME SERIAL PORT.** SeaBIOS prints a banner
     # and escape codes before handing the machine over, and the last thing it

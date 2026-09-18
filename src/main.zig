@@ -32,6 +32,7 @@ const posix = std.posix;
 const kvm = @import("kvm.zig");
 const virtio = @import("virtio.zig");
 const net = @import("net.zig");
+const wire = @import("peer.zig");
 
 /// How much RAM the guest gets. The probes were written against `-m 512`.
 const ram_bytes: usize = 512 * 1024 * 1024;
@@ -297,6 +298,79 @@ const divisor_latch: u8 = 0x80;
 const transmitter_ready: u8 = 0x20 | 0x40;
 const exit_door: u16 = 0xF4;
 
+// ── the interval timer ───────────────────────────────────────────────────────
+
+const pit_channel0: u16 = 0x40;
+const pit_command: u16 = 0x43;
+
+/// **THE FIRST INPUT THIS PROGRAM DOES NOT OWN**, and worth naming as such.
+///
+/// The guest measures how fast its timestamp counter runs by counting its
+/// ticks across a known number of the timer's, so the timer has to advance
+/// like a real one or the answer is nonsense and the guest refuses to boot.
+/// The only clock available to advance it by, today, is the host's — which
+/// means two runs of the same guest do not agree about how fast its processor
+/// is, and that is precisely the thing the next step of this project is for.
+/// When the timestamp counter itself becomes ours, this becomes a counter that
+/// advances by a fixed amount and the whole calibration turns deterministic.
+const Pit = struct {
+    /// The i8254's input frequency, which every guest that uses it knows.
+    const hz: u64 = 1_193_182;
+
+    began: i128 = 0,
+    reload: u16 = 0xFFFF,
+    /// Set by a latch command: the count is frozen for the next two reads.
+    latched: ?u16 = null,
+    /// Which half of the count the next read gives.
+    high_next: bool = false,
+    /// How many bytes of a reload value have been written.
+    written: u2 = 0,
+
+    fn now() i128 {
+        var ts: linux.timespec = undefined;
+        _ = linux.clock_gettime(.MONOTONIC, &ts);
+        return @as(i128, ts.sec) * std.time.ns_per_s + ts.nsec;
+    }
+
+    /// Where the count has got to, counting down from the reload value.
+    fn count(self: *const Pit) u16 {
+        const elapsed: u64 = @intCast(@max(0, now() - self.began));
+        const ticks: u64 = @intCast((@as(u128, elapsed) * hz) / std.time.ns_per_s);
+        return @truncate(@as(u64, self.reload) -% ticks);
+    }
+
+    fn command(self: *Pit, value: u8) void {
+        // Bits 5 and 4 say which bytes follow; zero means "latch the count".
+        if (value & 0x30 == 0) {
+            self.latched = self.count();
+            self.high_next = false;
+            return;
+        }
+        self.written = 0;
+        self.began = now();
+    }
+
+    fn write(self: *Pit, value: u8) void {
+        // The reload value arrives low byte first.
+        if (self.written == 0) {
+            self.reload = (self.reload & 0xFF00) | value;
+            self.written = 1;
+        } else {
+            self.reload = (@as(u16, value) << 8) | (self.reload & 0x00FF);
+            self.written = 0;
+            self.began = now();
+        }
+    }
+
+    fn read(self: *Pit) u8 {
+        const value = self.latched orelse self.count();
+        const byte: u8 = if (self.high_next) @truncate(value >> 8) else @truncate(value);
+        if (self.high_next) self.latched = null; // the latch lasts two reads
+        self.high_next = !self.high_next;
+        return byte;
+    }
+};
+
 const Machine = struct {
     stopped: ?u8 = null,
     /// The devices in the virtio window, by slot. A slot with nothing in it
@@ -306,6 +380,19 @@ const Machine = struct {
     /// The line-control register, kept because bit 7 changes what the data
     /// port means.
     line_control: u8 = 0,
+    pit: Pit = .{},
+    /// **THE GUEST'S OWN WORDS ARE THE CLOCK HERE.** It polls memory, so
+    /// nothing it does gives this program back control except a device
+    /// register or a printed character — and a printed line is the only signal
+    /// that says "I am listening now". gopher-metal's own judge waits for the
+    /// same line before it connects.
+    said: [128]u8 = undefined,
+    said_len: usize = 0,
+    /// What to ask the guest for once it says so, and whether it has been asked.
+    request: ?[]const u8 = null,
+    asked: bool = false,
+    card: ?*net.Net = null,
+    card_device: ?*virtio.Device = null,
     /// Reads of addresses no device answers. The guest looks for virtio in a
     /// window this program does not fill yet, and a window of zeros is what
     /// "nothing is plugged in there" looks like from inside.
@@ -315,13 +402,42 @@ const Machine = struct {
         switch (port) {
             com1 => if (self.line_control & divisor_latch == 0) {
                 _ = linux.write(1, bytes.ptr, bytes.len);
+                self.listen(bytes);
             },
             com1_line_control => if (bytes.len > 0) {
                 self.line_control = bytes[0];
             },
+            pit_command => if (bytes.len > 0) self.pit.command(bytes[0]),
+            pit_channel0 => if (bytes.len > 0) self.pit.write(bytes[0]),
             exit_door => self.stopped = if (bytes.len > 0) bytes[0] else 0,
             else => {}, // the rest of the UART's registers: written, not read
         }
+    }
+
+    /// Keeps the line the guest is printing, and connects to it when that line
+    /// says it is ready to be connected to.
+    fn listen(self: *Machine, bytes: []const u8) void {
+        for (bytes) |b| {
+            if (b == '\n') {
+                self.consider();
+                self.said_len = 0;
+                continue;
+            }
+            if (self.said_len < self.said.len) {
+                self.said[self.said_len] = b;
+                self.said_len += 1;
+            }
+        }
+    }
+
+    fn consider(self: *Machine) void {
+        if (self.asked) return;
+        const request = self.request orelse return;
+        if (std.mem.indexOf(u8, self.said[0..self.said_len], "listening on port 80") == null) return;
+        const card = self.card orelse return;
+        const device = self.card_device orelse return;
+        self.asked = true;
+        _ = card.connect(device, self.ram, request);
     }
 
     /// **A DEVICE THAT IS NOT THERE READS AS ZERO AND SWALLOWS WRITES**,
@@ -345,9 +461,14 @@ const Machine = struct {
         if (!is_write) @memset(data, 0);
     }
 
-    fn in(_: *Machine, port: u16, bytes: []u8) void {
+    fn in(self: *Machine, port: u16, bytes: []u8) void {
         @memset(bytes, 0);
-        if (port == com1_line_status and bytes.len > 0) bytes[0] = transmitter_ready;
+        if (bytes.len == 0) return;
+        switch (port) {
+            com1_line_status => bytes[0] = transmitter_ready,
+            pit_channel0 => bytes[0] = self.pit.read(),
+            else => {},
+        }
     }
 };
 
@@ -441,12 +562,13 @@ fn mapFile(path: [*:0]const u8) ![]align(std.heap.page_size_min) const u8 {
 pub fn main(init: std.process.Init.Minimal) !u8 {
     const argv = init.args.vector;
     if (argv.len < 2) {
-        std.debug.print("usage: metal-vmm <kernel.elf> [disk.img] [command line for the guest]\n", .{});
+        std.debug.print("usage: metal-vmm <kernel.elf> [disk.img] [command line] [path to fetch]\n", .{});
         return 2;
     }
     const path = argv[1];
     const disk_path: ?[*:0]const u8 = if (argv.len > 2 and argv[2][0] != 0) argv[2] else null;
     const command_line = if (argv.len > 3) std.mem.span(argv[3]) else "";
+    const fetch: ?[]const u8 = if (argv.len > 4 and argv[4][0] != 0) std.mem.span(argv[4]) else null;
 
     const image = mapFile(path) catch |e| {
         std.debug.print("metal-vmm: cannot read {s}: {s}\n", .{ path, @errorName(e) });
@@ -510,10 +632,31 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // **THE WIRE ENDS HERE, ON PURPOSE.** There is always a network device,
     // because the machine at the other end of it is this program and costs
     // nothing when nobody talks to it.
-    var wire = net.Net{};
-    var net_device = wire.device();
+    var card = net.Net{};
+    var net_device = card.device();
     machine.devices[1] = &net_device;
-    return serve(vcpu, page, &machine);
+    machine.card = &card;
+    machine.card_device = &net_device;
+
+    var request_buf: [256]u8 = undefined;
+    if (fetch) |target| {
+        machine.request = std.fmt.bufPrint(&request_buf, "GET {s} HTTP/1.1\r\nHost: 10.0.2.15\r\nConnection: close\r\n\r\n", .{target}) catch null;
+    }
+
+    const code = try serve(vcpu, page, &machine);
+    // **WHAT THE CLIENT GOT, IN ONE LINE**, so a run here can be compared with
+    // a run under QEMU where curl says the same thing.
+    if (fetch != null) {
+        const got = card.fetched();
+        var line: [512]u8 = undefined;
+        // Trailing newlines are trimmed because the shell trims them too, and
+        // this line is compared against one built from curl's output.
+        const text = std.fmt.bufPrint(&line, "peer: {d} \"{s}\"\n", .{
+            got.status(), std.mem.trimEnd(u8, got.body(), "\r\n"),
+        }) catch "peer: ?\n";
+        _ = linux.write(1, text.ptr, text.len);
+    }
+    return code;
 }
 
 // ── the parts that can be checked without a processor ────────────────────────
