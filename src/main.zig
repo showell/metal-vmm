@@ -845,6 +845,9 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
             return 2;
         };
         block = .{ .image = drive.?.bytes, .dirty = drive.?.dirty };
+        // `DISK_TRACE=1` prints every request the guest makes, which is how a
+        // question like "why is one chat message eighty writes" gets answered.
+        if (init.environ.getPosix("DISK_TRACE")) |_| block.trace = true;
         block_device = block.device();
         machine.devices[0] = &block_device;
     }

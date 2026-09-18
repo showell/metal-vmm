@@ -453,6 +453,74 @@ The host contract says a failed request is logged and the connection closed —
 `server.zig` does the same on Linux — so this is a design decision to revisit
 rather than a defect, but it is a decision with no error page behind it.
 
+### The multi-file path, where the client was told the wrong thing
+
+Creating a chat topic writes several files. `./zig-out/bin/metal-vmm` with
+`DISK_WRITES_ONLY=1 DISK_REFUSE=n` refuses the nth of its **83 writes**, one
+run each, and every one of those volumes is then **booted again** and asked
+whether the topic is listed and whether it opens:
+
+```
+  56 runs  route:ok           client:200   listed:1  topic page:200    #24..#83
+  17 runs  route:WriteFailed  client:none  listed:0  topic page:200    #1..#19
+   4 runs  route:ok           client:200   listed:0  topic page:none   #50, #59, #67, #80
+   3 runs  route:WriteFailed  client:none  listed:1  topic page:200    #20, #22, #23
+```
+
+**The four-run row is a bad one, and all four refused the same thing: a write
+to sector 2180 — the FAT's second copy.** The client is told `200
+{"conv":"1_2","sid":"metal-talk"}`. The next boot says:
+
+```
+  fat cache: FatsDisagree
+FAIL: the FAT could not be held in memory
+```
+
+Not "that topic is missing" — **the volume will not mount at all.** The site is
+down. And the error was reported to nobody.
+
+The swallowing is one line of the application, `zig-server/src/chat.zig`:
+
+```zig
+// Announce the new topic where the partner already watches (best-effort).
+_ = store.appendMessage(io, alloc, bus, …, note, "") catch {};
+```
+
+The topic itself was created. The *announcement* of it into the general
+conversation is best-effort, so its failure is discarded — and on this machine
+that append is the one that touches the FAT. `catch {}` on a write is the same
+line on Linux, where it silently drops the announcement instead; the volume
+damage is this filesystem's mirroring, but **the ignored error is the
+application's, on both.**
+
+The three-run row is the mirror image: the write failed after the topic was
+durable, so the client got no response at all for something that did happen. A
+user who retries gets a duplicate.
+
+### Why one chat message is eighty-two writes
+
+`DISK_TRACE=1` prints every request the guest makes. One message:
+
+```
+368 requests: 286 reads, 82 writes
+  writes:   58  directory + data
+            12  FAT, first copy
+            12  FAT, second copy
+  reads:   157  directory + data
+           125  FAT, second copy
+```
+
+**The FAT writes are two sectors, written twenty-four times.** Every cluster
+allocation flushes the whole cached FAT sector to *every copy* immediately
+(`fatSet`, "in every copy of the FAT"), so twelve allocations cost
+twenty-four writes, and a chat message allocates in several files at once — the
+transcript, its sidecars, the per-user cursor. The other 58 are those files'
+contents and their directory entries.
+
+The 125 reads of the FAT's second copy are the mount checking that the copies
+agree, sector by sector, before it caches the first — which is what makes the
+defect above fatal rather than invisible.
+
 ### The pitfall that cost a retransmission
 
 The first run of the real server reported **1 timeout** where curl through QEMU

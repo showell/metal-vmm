@@ -297,6 +297,9 @@ pub const Block = struct {
     /// **AND THE REQUESTS IT WILL NOT SERVE** — see faults.zig. Left alone it
     /// serves every one of them.
     refusals: faults.Drive = .{},
+    /// Every request, written out as it happens, for a caller asking where a
+    /// guest's disk traffic actually goes. Off unless somebody asks.
+    trace: bool = false,
     reads: u64 = 0,
     writes: u64 = 0,
 
@@ -352,6 +355,13 @@ pub const Block = struct {
 
         const kind = readInt(u32, ram, head.addr);
         const sector = readInt(u64, ram, head.addr + 8);
+        if (self.trace) {
+            var line: [64]u8 = undefined;
+            const text = std.fmt.bufPrint(&line, "{s} {d} {d}\n", .{
+                if (kind == type_out) "w" else "r", sector, buffer(ram, data).len / sector_bytes,
+            }) catch "";
+            _ = std.os.linux.write(2, text.ptr, text.len);
+        }
         const at = sector * sector_bytes;
         const bytes = buffer(ram, data);
 
