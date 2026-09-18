@@ -19,6 +19,7 @@
 
 const std = @import("std");
 const disk = @import("disk.zig");
+const faults = @import("faults.zig");
 
 /// Where the guest looks: 32 slots of 512 bytes from 0xFEB00000, which is what
 /// QEMU's `microvm` gives it and therefore what its driver scans.
@@ -293,6 +294,9 @@ pub const Block = struct {
     /// One bit per sector, if anybody is keeping that record — see disk.zig.
     /// The device does not know or care what it is for.
     dirty: ?[]u8 = null,
+    /// **AND THE REQUESTS IT WILL NOT SERVE** — see faults.zig. Left alone it
+    /// serves every one of them.
+    refusals: faults.Drive = .{},
     reads: u64 = 0,
     writes: u64 = 0,
 
@@ -337,6 +341,14 @@ pub const Block = struct {
         const data = chain[1];
         const status = chain[2];
         if (head.len < @sizeOf(Header) or status.len < 1) return 0;
+
+        // **A REFUSED REQUEST TOUCHES NOTHING**: no bytes move, no sector is
+        // marked, and the guest gets the one thing a real disk gives it when
+        // it cannot do the work.
+        if (!self.refusals.serves()) {
+            writeInt(u8, ram, status.addr, status_ioerr);
+            return 1;
+        }
 
         const kind = readInt(u32, ram, head.addr);
         const sector = readInt(u64, ram, head.addr + 8);

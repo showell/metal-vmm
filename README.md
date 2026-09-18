@@ -63,7 +63,7 @@ into a layer**, and the host half is the emulator.
 | entropy that repeats | **works** — a seeded virtio-rng, and a processor with no `RDRAND` to go behind its back |
 | a disk the run cannot spoil | **works** — mapped private, the changed sectors written back at the end and only then |
 | fault injection on the wire | **works** — lose the guest's nth frame, or one in n, and watch its own timers deal with it |
-| fault injection on the disk | next: the same idea, one bit per sector already recorded |
+| fault injection on the disk | **works** — refuse the guest's nth request, or one in n, and see what it says |
 
 A boot costs about 100 ms, most of it spent zeroing the guest's `.bss`. QEMU's
 `microvm` boots the same kernel in about 130. **Speed is not the argument** —
@@ -257,6 +257,33 @@ round-trip time, and so a different timer.
 **The wire does not lose what the peer sends**, only what the guest sends. The
 peer is a test fixture with no timers of its own, so a frame lost on the way in
 would only hang the run, which would say nothing about the guest.
+
+### And the disk can refuse
+
+Same idea one layer over: `DISK_REFUSE=3` answers the guest's third request
+with the I/O error a real disk gives when it cannot do the work, and the
+guest's own `fat16.zig` turns that into `ReadFailed`. `./flaky.sh` sweeps it,
+and because every run is reproducible the sweep can be **exhaustive** rather
+than a sample:
+
+```
+$ ./flaky.sh fat16 all
+fat16 makes 709 disk requests; an untouched run: exit 0 — PASS
+refusing each of the first 709, one run each:
+   701 runs  (#8..#708)  exit 1 — FAIL: the file would not read
+     3 runs  (#5..#7)    exit 1 — FAIL: EFI/BOOT/BOOTX64.EFI would not open
+     2 runs  (#1..#2)    exit 1 — FAIL: the partition table would not read
+     1 runs  (#709)      exit 1 — FAIL: the lookup failed
+     1 runs  (#4)        exit 1 — FAIL: the root directory would not list
+     1 runs  (#3)        exit 1 — FAIL: the volume would not mount
+```
+
+709 runs, 1 minute 46. **Every one of them failed cleanly, and every one named
+the right layer** — the partition table for the first two, the volume for the
+third, the directory for the fourth, the open for the next three, the read for
+the rest. No hang, no wrong answer, and no run that carried on as though
+nothing had happened. That is a statement about a guest's error paths that you
+can only make by trying all of them.
 
 ## The other oracle: yesterday's run
 

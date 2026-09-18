@@ -579,36 +579,42 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
 
 // ── putting it together ──────────────────────────────────────────────────────
 
-/// **THE WIRE TAKES ITS ORDERS FROM THE ENVIRONMENT**, not from a flag: which
-/// frames to eat (`WIRE_EAT=3` or `WIRE_EAT=3,9`), a rate to eat them at
-/// (`WIRE_LOSS=4`, one frame in four), and how long a frame takes to reach the
-/// guest (`WIRE_LATENCY_US=250`). Nothing set is a wire that carries
-/// everything at once, which is what every probe in check.sh runs on.
-fn tellTheWire(line: *faults.Wire, environ: std.process.Environ) void {
-    if (environ.getPosix("WIRE_EAT")) |list| {
-        var at: usize = 0;
-        var numbers = std.mem.tokenizeScalar(u8, list, ',');
-        while (numbers.next()) |one| {
-            if (at >= line.lose.len) break;
-            line.lose[at] = std.fmt.parseInt(u32, one, 10) catch continue;
-            at += 1;
-        }
-    }
-    if (environ.getPosix("WIRE_LOSS")) |n| line.loss = std.fmt.parseInt(u32, n, 10) catch 0;
+/// **THE FAULTS TAKE THEIR ORDERS FROM THE ENVIRONMENT**, not from a flag:
+/// which of the guest's frames to eat (`WIRE_EAT=3` or `WIRE_EAT=3,9`), a rate
+/// to eat them at (`WIRE_LOSS=4`, one frame in four), how long a frame takes to
+/// reach the guest (`WIRE_LATENCY_US=250`), and which of its disk requests come
+/// back refused (`DISK_REFUSE=3,9`, `DISK_REFUSE_RATE=100`). Nothing set is a
+/// machine that works perfectly, which is what check.sh runs on.
+fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, environ: std.process.Environ) void {
+    numbers(&line.lost, environ, "WIRE_EAT");
+    numbers(&drive.refused, environ, "DISK_REFUSE");
+    if (environ.getPosix("WIRE_LOSS")) |n| line.lost.rate = std.fmt.parseInt(u32, n, 10) catch 0;
+    if (environ.getPosix("DISK_REFUSE_RATE")) |n| drive.refused.rate = std.fmt.parseInt(u32, n, 10) catch 0;
     if (environ.getPosix("WIRE_LATENCY_US")) |n| {
         line.latency_ns = (std.fmt.parseInt(u64, n, 10) catch 0) * std.time.ns_per_us;
     }
 }
 
-/// One line on the error stream, so a sweep can read what it did. **THE
+fn numbers(schedule: *faults.Schedule, environ: std.process.Environ, name: []const u8) void {
+    const list = environ.getPosix(name) orelse return;
+    var at: usize = 0;
+    var each = std.mem.tokenizeScalar(u8, list, ',');
+    while (each.next()) |one| {
+        if (at >= schedule.named.len) break;
+        schedule.named[at] = std.fmt.parseInt(u32, one, 10) catch continue;
+        at += 1;
+    }
+}
+
+/// One line on the error stream, so a sweep can read what a run did. **THE
 /// GUEST'S OWN CLOCK IS THE INTERESTING NUMBER**: a lost frame costs it a
 /// retransmission timeout, and that shows up here and nowhere else.
-fn reportTheWire(line: *const faults.Wire, ns: u64) void {
+fn reportFaults(what: []const u8, of: []const u8, s: *const faults.Schedule, ns: ?u64) void {
     var text: [256]u8 = undefined;
-    var written = std.fmt.bufPrint(&text, "wire: {d} frames sent, {d} lost", .{ line.sent, line.eaten_count }) catch return;
+    var written = std.fmt.bufPrint(&text, "{s}: {d} {s}, {d} {s}", .{ what, s.seen, of, s.picked_count, pickedWord(what) }) catch return;
     var at = written.len;
-    const shown = @min(line.eaten_count, line.eaten.len);
-    for (line.eaten[0..@intCast(shown)], 0..) |n, i| {
+    const shown = @min(s.picked_count, s.picked.len);
+    for (s.picked[0..@intCast(shown)], 0..) |n, i| {
         written = std.fmt.bufPrint(text[at..], "{s}{d}", .{ if (i == 0) " (#" else ", #", n }) catch break;
         at += written.len;
     }
@@ -616,13 +622,19 @@ fn reportTheWire(line: *const faults.Wire, ns: u64) void {
         text[at] = ')';
         at += 1;
     }
-    written = std.fmt.bufPrint(text[at..], ", {d} ms of the guest's time", .{ns / std.time.ns_per_ms}) catch return;
-    at += written.len;
+    if (ns) |elapsed| {
+        written = std.fmt.bufPrint(text[at..], ", {d} ms of the guest's time", .{elapsed / std.time.ns_per_ms}) catch return;
+        at += written.len;
+    }
     if (at < text.len) {
         text[at] = '\n';
         at += 1;
     }
     _ = linux.write(2, &text, at);
+}
+
+fn pickedWord(what: []const u8) []const u8 {
+    return if (std.mem.eql(u8, what, "wire")) "lost" else "refused";
 }
 
 /// The file, mapped rather than read: it is only ever looked at, and the
@@ -723,7 +735,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     var dice_device = dice.device();
     machine.devices[2] = &dice_device;
 
-    tellTheWire(&card.line, init.environ);
+    tellTheFaults(&card.line, &block.refusals, init.environ);
 
     var request_buf: [256]u8 = undefined;
     if (fetch) |target| {
@@ -734,7 +746,8 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // **WHAT THE WIRE DID, IF IT WAS ASKED TO DO ANYTHING**, on the error
     // stream: a run with a perfect wire says nothing, so the probes' output
     // stays comparable with QEMU's.
-    if (card.line.configured()) reportTheWire(&card.line, machine.time.ns);
+    if (card.line.configured()) reportFaults("wire", "frames sent", &card.line.lost, machine.time.ns);
+    if (block.refusals.configured()) reportFaults("disk", "requests", &block.refusals.refused, machine.time.ns);
     // **THE FILE LEARNS WHAT HAPPENED ONLY NOW**, and only the sectors the
     // guest actually wrote. A run that never gets here leaves the image as it
     // found it — see disk.zig.
