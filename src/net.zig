@@ -17,6 +17,7 @@
 const std = @import("std");
 const virtio = @import("virtio.zig");
 const wire = @import("peer.zig");
+const faults = @import("faults.zig");
 
 /// VIRTIO_NET_F_MAC: the card's address is in config space. The guest asks for
 /// this one by name and refuses a device that does not offer it.
@@ -49,6 +50,13 @@ pub const Net = struct {
     dropped: u64 = 0,
     /// The machine at the other end of it.
     peer: wire.Peer = .{},
+    /// **AND THE WIRE BETWEEN THEM**, which is allowed to be unhelpful — see
+    /// faults.zig. Left alone it loses nothing and delays nothing.
+    line: faults.Wire = .{},
+    /// The machine's time as of this exit. The pump sets it at the top of
+    /// every exit, so a doorbell handled later in the same exit has the right
+    /// answer without being handed one.
+    now: u64 = 0,
 
     pub fn device(self: *Net) virtio.Device {
         var d = virtio.Device{
@@ -72,18 +80,33 @@ pub const Net = struct {
     }
 
     /// One frame from the guest: the virtio header, then the ethernet frame.
-    /// If the peer has an answer, it goes back at once — the guest's receive
-    /// buffers were posted before it ever transmitted.
+    /// **THE WIRE GETS A SAY BEFORE THE PEER DOES** — a frame it eats never
+    /// happened, and the guest's own retransmission timer is what has to
+    /// notice.
     fn speak(self: *Net, d: *virtio.Device, ram: []u8, buf: []const u8) void {
         if (buf.len <= @sizeOf(Header)) return;
         self.sent += 1;
+        if (!self.line.carries()) return;
         const frame = buf[@sizeOf(Header)..];
-        if (self.peer.answer(frame)) |reply| {
-            if (!self.deliver(d, ram, reply)) self.dropped += 1;
-        }
+        if (self.peer.answer(frame)) |reply| self.line.hold(reply, self.now);
         // One frame arriving can mean two to send: see `Peer.more`.
-        while (self.peer.more()) |another| {
-            if (!self.deliver(d, ram, another)) self.dropped += 1;
+        while (self.peer.more()) |another| self.line.hold(another, self.now);
+        self.arrivals(d, ram);
+    }
+
+    /// **THE MACHINE'S HEARTBEAT FOR THIS DEVICE.** The guest polls memory, so
+    /// a frame that is not delivered during an exit is not delivered at all.
+    /// Every exit is therefore an opportunity, and this takes it.
+    pub fn pump(self: *Net, d: *virtio.Device, ram: []u8, now: u64) void {
+        self.now = now;
+        self.arrivals(d, ram);
+    }
+
+    /// Everything the wire has finished carrying, into the guest's parked
+    /// buffers.
+    fn arrivals(self: *Net, d: *virtio.Device, ram: []u8) void {
+        while (self.line.due(self.now)) |frame| {
+            if (!self.deliver(d, ram, frame)) self.dropped += 1;
         }
     }
 
@@ -111,7 +134,9 @@ pub const Net = struct {
     /// this program opens a connection, because a client that started on its
     /// own would race the guest's own setup.
     pub fn connect(self: *Net, d: *virtio.Device, ram: []u8, request: []const u8) bool {
-        return self.deliver(d, ram, self.peer.open(request));
+        self.line.hold(self.peer.open(request), self.now);
+        self.arrivals(d, ram);
+        return true;
     }
 
     pub fn fetched(self: *const Net) *const wire.Tcp {

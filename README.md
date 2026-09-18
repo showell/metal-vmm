@@ -62,7 +62,8 @@ into a layer**, and the host half is the emulator.
 | a run that repeats | **works** — same guest, same words, same disk, same measured processor speed, every time |
 | entropy that repeats | **works** — a seeded virtio-rng, and a processor with no `RDRAND` to go behind its back |
 | a disk the run cannot spoil | **works** — mapped private, the changed sectors written back at the end and only then |
-| fault injection | next, and the reason for the rest |
+| fault injection on the wire | **works** — lose the guest's nth frame, or one in n, and watch its own timers deal with it |
+| fault injection on the disk | next: the same idea, one bit per sector already recorded |
 
 A boot costs about 100 ms, most of it spent zeroing the guest's `.bss`. QEMU's
 `microvm` boots the same kernel in about 130. **Speed is not the argument** —
@@ -153,6 +154,7 @@ in `clock`, 12 in `stdhttp`, 2 in `block`, none in `rng`.
 - `src/disk.zig` — the image, mapped private, and the record of which sectors
   the run changed. A run reads the image it started with; a run that crashes
   leaves it alone.
+- `src/faults.zig` — what this machine is allowed to do to its guest.
 - `src/virtio.zig` — the transport the devices sit on, and the block device.
 - `src/net.zig` — the network card: two queues, and the asymmetry between them.
 - `src/peer.zig` — the machine at the other end of the wire: DHCP, and a TCP
@@ -214,6 +216,47 @@ which is honest: every register access here — and now every clock read too —
 a full exit into this program, where QEMU has spent years not doing that. That
 cost is the kernel's, not ours: a `ReleaseFast` build of this program runs
 `vfat` in the same 4 s as the debug one, so `zig build`'s default stays debug.
+
+## Being unhelpful on purpose
+
+A hypervisor that owns every input can choose to withhold one, and a
+deterministic one can do it to a recipe. The wire will eat what the guest
+sends — a numbered frame (`WIRE_EAT=3`, or `3,9`), or one frame in n
+(`WIRE_LOSS=4`) — and it will hold what comes back (`WIRE_LATENCY_US=250`).
+
+**Losing frame number n is a better knob than a loss rate.** A rate explores
+randomly; a number explores exhaustively, and the table is a map of which
+frames this guest can survive losing. `./lossy.sh` draws it, one run per frame:
+
+```
+eaten     sent   exit  guest ms  verdict, and what the client got
+nothing   7      0     177       PASS — 200 "hello from no Linux"
+#1        1      1     164       FAIL: no DHCP lease, so there is no address to listen on
+#2        2      1     165       FAIL: no DHCP lease, so there is no address to listen on
+#3        8      0     377       PASS — 200 "hello from no Linux" (+200 ms: a retransmission timeout)
+#4        7      0     177       PASS — 200 "hello from no Linux"
+#5        9      0     377       PASS — 200 "hello from no Linux" (+200 ms: a retransmission timeout)
+#6        8      0     377       PASS — 200 "hello from no Linux" (+200 ms: a retransmission timeout)
+#7        7      0     177       PASS — 200 "hello from no Linux"
+```
+
+Read the last column: it is **the guest's own clock**, and the 200 ms is the
+guest's own retransmission timeout — `min_rto_ns` in its `tcp.zig` — happening
+in front of you. The rows that cost nothing are frames whose loss the next one
+covers.
+
+The first two rows are a real defect in the guest, found by this table rather
+than argued for: **gopher-metal's `dhcp.acquire` sends its DISCOVER once and
+never retransmits.** One lost frame and the machine has no address. Its TCP
+handles loss; its DHCP does not.
+
+Running the same sweep against the `stdhttp` guest gives the same shape with a
+1,000 ms cost instead of 200 — the same stack with a different measured
+round-trip time, and so a different timer.
+
+**The wire does not lose what the peer sends**, only what the guest sends. The
+peer is a test fixture with no timers of its own, so a frame lost on the way in
+would only hang the run, which would say nothing about the guest.
 
 ## The other oracle: yesterday's run
 

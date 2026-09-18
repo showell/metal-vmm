@@ -38,6 +38,7 @@ const net = @import("net.zig");
 const clock = @import("clock.zig");
 const entropy = @import("entropy.zig");
 const disk = @import("disk.zig");
+const faults = @import("faults.zig");
 const wire = @import("peer.zig");
 
 /// How much RAM the guest gets. The probes were written against `-m 512`.
@@ -442,6 +443,16 @@ const Machine = struct {
         }
     }
 
+    /// **EVERY EXIT IS A CHANCE TO DELIVER SOMETHING.** The guest polls
+    /// memory and gives this program control at no other moment, so a wire
+    /// that holds a frame for a while has to be asked, over and over, whether
+    /// it is done holding it.
+    fn pump(self: *Machine) void {
+        const card = self.card orelse return;
+        const device = self.card_device orelse return;
+        card.pump(device, self.ram, self.time.ns);
+    }
+
     fn consider(self: *Machine) void {
         if (self.asked) return;
         const request = self.request orelse return;
@@ -524,6 +535,7 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
         // the outside world for something, and in here that is the only thing
         // that makes time pass — see clock.zig.
         machine.time.asked();
+        machine.pump();
         switch (@as(kvm.Exit, @enumFromInt(run.exit_reason))) {
             .io => {
                 const io = kvm.ioExit(page);
@@ -566,6 +578,52 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
 }
 
 // ── putting it together ──────────────────────────────────────────────────────
+
+/// **THE WIRE TAKES ITS ORDERS FROM THE ENVIRONMENT**, not from a flag: which
+/// frames to eat (`WIRE_EAT=3` or `WIRE_EAT=3,9`), a rate to eat them at
+/// (`WIRE_LOSS=4`, one frame in four), and how long a frame takes to reach the
+/// guest (`WIRE_LATENCY_US=250`). Nothing set is a wire that carries
+/// everything at once, which is what every probe in check.sh runs on.
+fn tellTheWire(line: *faults.Wire, environ: std.process.Environ) void {
+    if (environ.getPosix("WIRE_EAT")) |list| {
+        var at: usize = 0;
+        var numbers = std.mem.tokenizeScalar(u8, list, ',');
+        while (numbers.next()) |one| {
+            if (at >= line.lose.len) break;
+            line.lose[at] = std.fmt.parseInt(u32, one, 10) catch continue;
+            at += 1;
+        }
+    }
+    if (environ.getPosix("WIRE_LOSS")) |n| line.loss = std.fmt.parseInt(u32, n, 10) catch 0;
+    if (environ.getPosix("WIRE_LATENCY_US")) |n| {
+        line.latency_ns = (std.fmt.parseInt(u64, n, 10) catch 0) * std.time.ns_per_us;
+    }
+}
+
+/// One line on the error stream, so a sweep can read what it did. **THE
+/// GUEST'S OWN CLOCK IS THE INTERESTING NUMBER**: a lost frame costs it a
+/// retransmission timeout, and that shows up here and nowhere else.
+fn reportTheWire(line: *const faults.Wire, ns: u64) void {
+    var text: [256]u8 = undefined;
+    var written = std.fmt.bufPrint(&text, "wire: {d} frames sent, {d} lost", .{ line.sent, line.eaten_count }) catch return;
+    var at = written.len;
+    const shown = @min(line.eaten_count, line.eaten.len);
+    for (line.eaten[0..@intCast(shown)], 0..) |n, i| {
+        written = std.fmt.bufPrint(text[at..], "{s}{d}", .{ if (i == 0) " (#" else ", #", n }) catch break;
+        at += written.len;
+    }
+    if (shown > 0 and at < text.len) {
+        text[at] = ')';
+        at += 1;
+    }
+    written = std.fmt.bufPrint(text[at..], ", {d} ms of the guest's time", .{ns / std.time.ns_per_ms}) catch return;
+    at += written.len;
+    if (at < text.len) {
+        text[at] = '\n';
+        at += 1;
+    }
+    _ = linux.write(2, &text, at);
+}
 
 /// The file, mapped rather than read: it is only ever looked at, and the
 /// kernels are megabytes.
@@ -665,12 +723,18 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     var dice_device = dice.device();
     machine.devices[2] = &dice_device;
 
+    tellTheWire(&card.line, init.environ);
+
     var request_buf: [256]u8 = undefined;
     if (fetch) |target| {
         machine.request = std.fmt.bufPrint(&request_buf, "GET {s} HTTP/1.1\r\nHost: 10.0.2.15\r\nConnection: close\r\n\r\n", .{target}) catch null;
     }
 
     const code = try serve(vcpu, page, &machine);
+    // **WHAT THE WIRE DID, IF IT WAS ASKED TO DO ANYTHING**, on the error
+    // stream: a run with a perfect wire says nothing, so the probes' output
+    // stays comparable with QEMU's.
+    if (card.line.configured()) reportTheWire(&card.line, machine.time.ns);
     // **THE FILE LEARNS WHAT HAPPENED ONLY NOW**, and only the sectors the
     // guest actually wrote. A run that never gets here leaves the image as it
     // found it — see disk.zig.
