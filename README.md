@@ -533,6 +533,42 @@ survives. Which has an unpleasant corollary: propagating the error honestly
 makes the damage certain**. The reaction path does everything right and loses
 the volume; the upload path is saved by carrying on.
 
+### "It answered" is a weaker question than "is it sound"
+
+Every sweep so far asked what the client was told and whether the next boot
+worked. `./sound.sh <image>` asks a third thing, by borrowing Linux's `fsck`
+for a filesystem this machine has no fsck of its own for. Refusing each of the
+upload's 22 writes and checking the volume afterwards:
+
+```
+before any upload: 48 files, 64/32167 clusters
+after a clean one:  51 files, 67/32167 clusters
+
+  #1..#4    client:200   Reclaimed 1 unused cluster (2048 bytes)
+  #5        client:200   Orphaned long file name part "upload-bytes"
+  #7, #17   client:500   FATs differ but appear to be intact
+  #8..#13   client:500   Reclaimed 1 unused cluster (2048 bytes)
+  #14, #15  client:500   Orphaned long file name part "ds" / "general.uploads"
+  #20..#22  client:500   Orphaned long file name part "…173edb.png"
+```
+
+Three kinds of litter, and **the client was told 200 for the first five of
+them**:
+
+- **a leaked cluster** — marked allocated in the FAT, referenced by nothing.
+  Every failed upload costs 2 KB that never comes back;
+- **an orphaned long file name** — a directory entry written across several
+  slots with no commit point, so a failure leaves the name without the entry
+  behind it;
+- **FATs that differ** — the mirror defect above, seen from outside.
+
+None of this is exotic: FAT16 has no journal, so an interrupted operation
+leaves work half done and an fsck is how it gets tidied. The point is the
+second half of that sentence. **A reported write failure is not a crash** —
+the code knows the write failed and could free the cluster it just allocated —
+and **this machine has no fsck**. On Linux the same application sits on a
+journalling filesystem that a boot will check. On bare metal it sits on this.
+
 ### Why one chat message is eighty-two writes
 
 `DISK_TRACE=1` prints every request the guest makes. One message:
