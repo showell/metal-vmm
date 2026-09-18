@@ -43,11 +43,12 @@ const rx_queue: u32 = 0;
 const tx_queue: u32 = 1;
 
 pub const Net = struct {
-    /// Frames the guest sent, frames handed to the guest, and frames that had
-    /// nowhere to go because the guest had posted no buffer.
+    /// Frames the guest sent, frames handed to the guest, and the times a
+    /// frame had to wait on the wire because the guest had no buffer free for
+    /// it yet.
     sent: u64 = 0,
     received: u64 = 0,
-    dropped: u64 = 0,
+    waited: u64 = 0,
     /// The machine at the other end of it.
     peer: wire.Peer = .{},
     /// **AND THE WIRE BETWEEN THEM**, which is allowed to be unhelpful — see
@@ -103,10 +104,16 @@ pub const Net = struct {
     }
 
     /// Everything the wire has finished carrying, into the guest's parked
-    /// buffers.
+    /// buffers — as far as the guest has buffers. **A FRAME THE GUEST CANNOT
+    /// TAKE YET STAYS ON THE WIRE**; the next exit is another chance, and
+    /// there are ten thousand of those a second.
     fn arrivals(self: *Net, d: *virtio.Device, ram: []u8) void {
-        while (self.line.due(self.now)) |frame| {
-            if (!self.deliver(d, ram, frame)) self.dropped += 1;
+        while (self.line.ready(self.now)) |frame| {
+            if (!self.deliver(d, ram, frame)) {
+                self.waited += 1;
+                return;
+            }
+            self.line.take();
         }
     }
 
@@ -148,12 +155,17 @@ pub const Net = struct {
 
 const testing = std.testing;
 
-test "a frame with nowhere to go is dropped, not lost track of" {
+test "a frame with nowhere to go waits on the wire rather than vanishing" {
     var card = Net{};
     var ram = [_]u8{0} ** 256;
     var d = card.device();
-    // No receive buffers have been posted, so delivery fails and says so.
+    // No receive buffers have been posted, so delivery fails and says so...
     try testing.expect(!card.deliver(&d, &ram, &.{ 1, 2, 3 }));
+    // ...and a frame the wire is carrying is still there afterwards.
+    card.line.hold(&.{ 1, 2, 3 }, 0);
+    card.arrivals(&d, &ram);
+    try testing.expectEqual(@as(u64, 1), card.waited);
+    try testing.expectEqualSlices(u8, &.{ 1, 2, 3 }, card.line.ready(0).?);
 }
 
 test "the card reports the address the guest prints, and the feature it wants" {

@@ -64,6 +64,7 @@ into a layer**, and the host half is the emulator.
 | a disk the run cannot spoil | **works** — mapped private, the changed sectors written back at the end and only then |
 | fault injection on the wire | **works** — lose the guest's nth frame, or one in n, and watch its own timers deal with it |
 | fault injection on the disk | **works** — refuse the guest's nth request, or one in n, and see what it says |
+| the real server as the guest | **works** — angry-gopher's own route table, serving its own site, page identical to curl's |
 
 A boot costs about 100 ms, most of it spent zeroing the guest's `.bss`. QEMU's
 `microvm` boots the same kernel in about 130. **Speed is not the argument** —
@@ -284,6 +285,60 @@ third, the directory for the fourth, the open for the next three, the read for
 the rest. No hang, no wrong answer, and no run that carried on as though
 nothing had happened. That is a statement about a guest's error paths that you
 can only make by trying all of them.
+
+## The real server
+
+Probes were the right subject for building a machine. `gopher.elf` is the
+reason it exists: **angry-gopher's own route table**, compiled from its own
+source for a machine with no operating system — its data on a FAT16 volume, its
+clocks from its own hardware, `std.http.Server` over a TCP stack it brought
+with it. A 24 MB kernel that is, on Linux, a web application.
+
+```
+$ ./site.sh
+GET /
+  here        200 13668 bytes, exit 0  (1628 ms)
+  under QEMU  200 13668 bytes, exit 0  (7215 ms)
+  ours  tcp: 0 timeouts sent something again, 0 window probes, ...
+  qemu  tcp: 0 timeouts sent something again, 0 window probes, ...
+the same page, and the same connection, both ways
+```
+
+13,668 bytes of the site's index page, fetched by the TCP client in `peer.zig`,
+identical to what curl gets from the same kernel under QEMU. The guest's own
+closing counters are compared too, because **that is where a difference between
+the two hypervisors shows up before it shows up in the page** — and on the
+first run it did.
+
+And with the wire eating one frame per run:
+
+```
+  eat #none   exit=0   13668 bytes  same page  retransmits: 0   1220 ms
+  eat #1      exit=1       0 bytes  no lease   (dhcp does not retransmit)
+  eat #2      exit=1       0 bytes  no lease   (dhcp does not retransmit)
+  eat #3      exit=0   13668 bytes  same page  retransmits: 1   1420 ms   ← a 200 ms timeout
+  eat #4      exit=0   13668 bytes  same page  retransmits: 0   1220 ms
+  eat #5..#16 exit=0   13668 bytes  same page  retransmits: 1   ~1235 ms  ← dupacks, ~15 ms
+```
+
+The last rows are the guest's **fast retransmit** — `dupacks_before_resend = 3`
+in its own `tcp.zig`, a path that until now had never run. Three duplicate
+acknowledgements from the peer and it resends immediately instead of waiting
+out the timer, which is the difference between the 200 ms row and the 15 ms
+ones. (Its counter prints both kinds as "timeouts", which flatters the timer.)
+
+### The pitfall that cost a retransmission
+
+The first run of the real server reported **1 timeout** where curl through QEMU
+reported 0, and the cause was ours: 30 of 51 frames on the way to the guest had
+nowhere to go. A guest emptying a whole HTTP response into one doorbell has not
+polled for a while, so its receive buffers are all in our hands, and the card
+was **dropping** frames that found no buffer free.
+
+There is no congestion on this wire. A frame that vanishes here is one this
+program invented, and the guest pays a retransmission timeout for it. A frame
+with nowhere to go now **waits on the wire** and goes in at the next exit, of
+which there are ten thousand a second.
 
 ## The other oracle: yesterday's run
 

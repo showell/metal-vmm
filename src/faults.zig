@@ -67,9 +67,11 @@ pub const Schedule = struct {
 
 /// As much as an ethernet frame can hold, which is all the peer ever sends.
 const frame_bytes: usize = 1514;
-/// How many frames can be in flight on the wire at once. The peer answers one
-/// frame with at most two, so this is generous.
-const in_flight: usize = 8;
+/// How many frames can be in flight on the wire at once. A guest emptying a
+/// whole HTTP response into one doorbell is answered segment by segment, and
+/// every one of those answers waits here until the guest has a buffer free for
+/// it, so this is deeper than the two the peer produces per frame.
+const in_flight: usize = 64;
 
 const Held = struct {
     due_ns: u64 = 0,
@@ -126,12 +128,24 @@ pub const Wire = struct {
 
     /// The next frame that has arrived, or nothing. In the order they were
     /// sent: a wire does not reorder unless it is asked to.
-    pub fn due(self: *Wire, now: u64) ?[]const u8 {
+    ///
+    /// **IT STAYS ON THE WIRE UNTIL SOMEBODY TAKES IT.** The guest may have no
+    /// receive buffer free at this instant — it posts them and recycles them
+    /// as it polls, and a guest in the middle of emptying a response has not
+    /// polled for a while. A real card in that position holds the frame in its
+    /// FIFO for the microsecond it takes; dropping it instead invents a loss
+    /// that nothing on this wire could have caused, and the guest pays a
+    /// retransmission timeout for our impatience.
+    pub fn ready(self: *Wire, now: u64) ?[]const u8 {
         if (self.first >= self.next) return null;
         const slot = &self.held[self.first % in_flight];
         if (slot.due_ns > now) return null;
-        self.first += 1;
         return slot.bytes[0..slot.len];
+    }
+
+    /// The frame `ready` offered has been delivered.
+    pub fn take(self: *Wire) void {
+        if (self.first < self.next) self.first += 1;
     }
 };
 
@@ -194,10 +208,14 @@ test "a frame arrives when the wire says, and in the order it was sent" {
     var w = Wire{ .latency_ns = 1_000 };
     w.hold("first", 0);
     w.hold("second", 0);
-    try testing.expect(w.due(500) == null); // not yet
-    try testing.expectEqualStrings("first", w.due(1_000).?);
-    try testing.expectEqualStrings("second", w.due(1_000).?);
-    try testing.expect(w.due(2_000) == null);
+    try testing.expect(w.ready(500) == null); // not yet
+    try testing.expectEqualStrings("first", w.ready(1_000).?);
+    // Still there until somebody takes it: the guest may have had no buffer.
+    try testing.expectEqualStrings("first", w.ready(1_000).?);
+    w.take();
+    try testing.expectEqualStrings("second", w.ready(1_000).?);
+    w.take();
+    try testing.expect(w.ready(2_000) == null);
 }
 
 /// **THE DISK, WHEN IT WILL NOT.** virtio-blk answers every request with a
@@ -227,5 +245,5 @@ test "a wire with nothing configured is a wire that does nothing" {
     for (0..100) |_| try testing.expect(d.serves());
     for (0..100) |_| try testing.expect(w.carries());
     w.hold("now", 12345);
-    try testing.expectEqualStrings("now", w.due(12345).?);
+    try testing.expectEqualStrings("now", w.ready(12345).?);
 }

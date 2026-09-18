@@ -637,6 +637,16 @@ fn pickedWord(what: []const u8) []const u8 {
     return if (std.mem.eql(u8, what, "wire")) "lost" else "refused";
 }
 
+/// What the client got, for a caller that wants to diff it against another
+/// client's.
+fn writeOut(path: [:0]const u8, bytes: []const u8) void {
+    const opened = linux.open(path.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
+    if (linux.errno(opened) != .SUCCESS) return;
+    const fd: linux.fd_t = @intCast(opened);
+    defer _ = linux.close(fd);
+    _ = linux.write(fd, bytes.ptr, bytes.len);
+}
+
 /// The file, mapped rather than read: it is only ever looked at, and the
 /// kernels are megabytes.
 fn mapFile(path: [*:0]const u8) ![]align(std.heap.page_size_min) const u8 {
@@ -761,12 +771,18 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // a run under QEMU where curl says the same thing.
     if (fetch != null) {
         const got = card.fetched();
+        // **A REAL PAGE DOES NOT FIT ON A LINE.** The probes answer with a
+        // sentence and the line below is compared against curl's; a guest
+        // serving an actual site answers with kilobytes, so the body goes to a
+        // file when one is asked for (`PEER_BODY=/path`) and the line says how
+        // much there was.
+        if (init.environ.getPosix("PEER_BODY")) |into| writeOut(into, got.body());
         var line: [512]u8 = undefined;
         // Trailing newlines are trimmed because the shell trims them too, and
         // this line is compared against one built from curl's output.
-        const text = std.fmt.bufPrint(&line, "peer: {d} \"{s}\"\n", .{
-            got.status(), std.mem.trimEnd(u8, got.body(), "\r\n"),
-        }) catch "peer: ?\n";
+        const body = std.mem.trimEnd(u8, got.body(), "\r\n");
+        const text = std.fmt.bufPrint(&line, "peer: {d} \"{s}\"\n", .{ got.status(), body }) catch
+            std.fmt.bufPrint(&line, "peer: {d}, {d} bytes\n", .{ got.status(), body.len }) catch "peer: ?\n";
         _ = linux.write(1, text.ptr, text.len);
     }
     return code;
