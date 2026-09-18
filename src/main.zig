@@ -675,6 +675,7 @@ fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, environ: std.process.
     numbers(&drive.refused, environ, "DISK_REFUSE");
     if (environ.getPosix("WIRE_LOSS")) |n| line.lost.rate = std.fmt.parseInt(u32, n, 10) catch 0;
     if (environ.getPosix("DISK_REFUSE_RATE")) |n| drive.refused.rate = std.fmt.parseInt(u32, n, 10) catch 0;
+    if (environ.getPosix("DISK_WRITES_ONLY")) |_| drive.writes_only = true;
     if (environ.getPosix("WIRE_LATENCY_US")) |n| {
         line.latency_ns = (std.fmt.parseInt(u64, n, 10) catch 0) * std.time.ns_per_us;
     }
@@ -741,6 +742,16 @@ fn reportFaultsWith(what: []const u8, of: []const u8, s: *const faults.Schedule,
 
 fn pickedWord(what: []const u8) []const u8 {
     return if (std.mem.eql(u8, what, "wire")) "lost" else "refused";
+}
+
+fn readAll(path: [:0]const u8, into: []u8) ?[]const u8 {
+    const opened = linux.open(path.ptr, .{ .ACCMODE = .RDONLY }, 0);
+    if (linux.errno(opened) != .SUCCESS) return null;
+    const fd: linux.fd_t = @intCast(opened);
+    defer _ = linux.close(fd);
+    const n = linux.read(fd, into.ptr, into.len);
+    if (linux.errno(n) != .SUCCESS or n == 0) return null;
+    return into[0..n];
 }
 
 /// What the client got, for a caller that wants to diff it against another
@@ -853,8 +864,16 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
 
     tellTheFaults(&card.line, &block.refusals, init.environ);
 
-    var request_buf: [256]u8 = undefined;
-    if (fetch) |target| {
+    // **WHAT THE PEER ASKS FOR.** A path is enough for a probe; a server with
+    // a login and a chat wants a whole request, cookie and body and all, so
+    // `PEER_REQUEST=<file>` sends those bytes exactly as they are.
+    var request_buf: [8192]u8 = undefined;
+    if (init.environ.getPosix("PEER_REQUEST")) |from| {
+        machine.request = readAll(from, &request_buf) orelse {
+            std.debug.print("metal-vmm: cannot read the request in {s}\n", .{from});
+            return 2;
+        };
+    } else if (fetch) |target| {
         machine.request = std.fmt.bufPrint(&request_buf, "GET {s} HTTP/1.1\r\nHost: 10.0.2.15\r\nConnection: close\r\n\r\n", .{target}) catch null;
     }
 
@@ -888,6 +907,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         // file when one is asked for (`PEER_BODY=/path`) and the line says how
         // much there was.
         if (init.environ.getPosix("PEER_BODY")) |into| writeOut(into, got.body());
+        if (init.environ.getPosix("PEER_RESPONSE")) |into| writeOut(into, got.whole());
         var line: [512]u8 = undefined;
         // Trailing newlines are trimmed because the shell trims them too, and
         // this line is compared against one built from curl's output.

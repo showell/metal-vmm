@@ -167,19 +167,25 @@ pub const Tcp = struct {
         return frame;
     }
 
+    /// Everything that came back, status line and headers included — which is
+    /// what a caller checking a redirect's Location needs.
+    pub fn whole(self: *const Tcp) []const u8 {
+        return self.reply[0..self.reply_len];
+    }
+
     /// What came back, headers and all.
     pub fn body(self: *const Tcp) []const u8 {
-        const whole = self.reply[0..self.reply_len];
-        const at = std.mem.indexOf(u8, whole, "\r\n\r\n") orelse return "";
-        return whole[at + 4 ..];
+        const all = self.reply[0..self.reply_len];
+        const at = std.mem.indexOf(u8, all, "\r\n\r\n") orelse return "";
+        return all[at + 4 ..];
     }
 
     /// The status line's code, or zero if there is not one.
     pub fn status(self: *const Tcp) u16 {
-        const whole = self.reply[0..self.reply_len];
-        const space = std.mem.indexOfScalar(u8, whole, ' ') orelse return 0;
-        if (space + 4 > whole.len) return 0;
-        return std.fmt.parseInt(u16, whole[space + 1 ..][0..3], 10) catch 0;
+        const all = self.reply[0..self.reply_len];
+        const space = std.mem.indexOfScalar(u8, all, ' ') orelse return 0;
+        if (space + 4 > all.len) return 0;
+        return std.fmt.parseInt(u16, all[space + 1 ..][0..3], 10) catch 0;
     }
 
     fn segment(self: *Tcp, out: []u8, flags: u8, data: []const u8) []const u8 {

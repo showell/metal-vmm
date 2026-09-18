@@ -414,6 +414,45 @@ as the site's home page.
 Neither of those is a bug in this hypervisor. Both are what it was built to
 find.
 
+### The write path, which is the half that matters
+
+A `GET` only reads. `PEER_REQUEST=<file>` sends whole request bytes instead of
+a path, so the peer can post a chat message with a signed session cookie — and
+**one chat message is 82 disk writes**. `DISK_WRITES_ONLY=1` makes
+`DISK_REFUSE=n` mean the nth *write*, because a guest reads a hundred sectors
+for every one it saves and counting all of them is a blunt way to aim.
+
+Refusing each of those 82 writes in turn:
+
+| | |
+|---|---|
+| writes #1–#22 | the route answers **`WriteFailed`**, the host closes the connection, the client gets nothing at all, and the message is not on the volume |
+| writes #24–#82 | the client is told **303 See Other** and the message *is* on the volume |
+
+The second row is the one worth checking rather than believing, because "the
+client was told it worked" is exactly where silent loss hides. So each of those
+volumes was **booted a second time** and asked to read the conversation back,
+and asked for `/chat/recent`, which is rendered from the sidecar rather than
+the transcript:
+
+```
+clean: the transcript reads back as 116 bytes, message present: 1
+  write #24  told the client 303; reading back: 116 bytes, message: 1, same as clean: yes
+  ... #30 #40 #50 #60 #70 #82, all the same
+  Recent: 3373 bytes, same as clean, every time
+```
+
+**angry-gopher does not lie about a save.** When it says 303 the message is
+there and both views agree with a clean run; when it cannot save, it says
+`WriteFailed` and does not claim otherwise. That is a negative result, and it
+is the one worth having.
+
+The weak spot is what the *client* sees on that failure: the connection closes
+with no response at all, so a browser shows a network error rather than a page.
+The host contract says a failed request is logged and the connection closed —
+`server.zig` does the same on Linux — so this is a design decision to revisit
+rather than a defect, but it is a decision with no error page behind it.
+
 ### The pitfall that cost a retransmission
 
 The first run of the real server reported **1 timeout** where curl through QEMU

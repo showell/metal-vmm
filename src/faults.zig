@@ -234,13 +234,19 @@ pub const Drive = struct {
     /// between "the 133rd read" and "the directory".
     sectors: [8]u64 = @splat(0),
     kinds: [8]u8 = @splat(0),
+    /// **COUNT ONLY THE WRITES.** A guest reads a hundred sectors for every
+    /// one it writes, so "refuse the nth request" is a blunt way to aim at the
+    /// moment something is being saved. With this set, reads are served and
+    /// not counted, and n means the nth write.
+    writes_only: bool = false,
 
     pub fn configured(self: *const Drive) bool {
-        return self.refused.configured();
+        return self.refused.configured() or self.writes_only;
     }
 
     /// **IS THIS ONE SERVED?** Called once per request, in order.
     pub fn serves(self: *Drive, sector: u64, writing: bool) bool {
+        if (self.writes_only and !writing) return true;
         const at = self.refused.picked_count;
         if (!self.refused.picks()) return true;
         if (at < self.sectors.len) {
