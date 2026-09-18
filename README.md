@@ -1,5 +1,14 @@
 # metal-vmm
 
+**PARKED 2026-09-18, all green.** Ten milestones in one day: a guest boots,
+mounts a disk, takes a lease, serves HTTP, keeps its own clock, draws its own
+entropy, and can be lied to on purpose about any of it. Nine probes agree with
+QEMU and repeat themselves exactly, and angry-gopher's real server runs on it
+and serves pages byte-identical to curl's. What it found is in
+**Being unhelpful on purpose** below — one defect in the application, three in
+the bare-metal layer, one of which bricks a volume. Read that section first if
+you are picking this up again.
+
 A virtual machine monitor of our own, aimed at one kind of guest: a small
 freestanding kernel that polls, runs on one core, and takes its clock as an
 argument. [gopher-metal](https://github.com/showell/gopher-metal)'s probes and
@@ -532,6 +541,33 @@ survives. Which has an unpleasant corollary: propagating the error honestly
 *aborts* the request, so nothing flushes again, so **correct error handling
 makes the damage certain**. The reaction path does everything right and loses
 the volume; the upload path is saved by carrying on.
+
+### The bookmark that eats your bookmarks
+
+`chat_state.zig` is documented best-effort throughout — "a failed write just
+loses the bookmark for that visit" — and for a bookmark that is a fair trade.
+Four of its five swallowed errors are exactly that. The fifth is not:
+
+```zig
+pub fn setSessionPinned(…) void {
+    const existing = readPinnedFile(io, alloc, uid, conv_key) catch "";
+    const cur = parsePinned(alloc, existing) catch return;
+    …                       // rebuild the set with sid added or removed
+    Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = body.items }) catch {};
+```
+
+**A failed *read* of the pinned file becomes an empty pinned set, and then the
+file is overwritten from it.** Pin one session while that read fails and every
+other pin the user had is gone — silently, with the client told 204. It is the
+same shape as everything else in this list: an error treated as "there is
+nothing there".
+
+Sweeping the 218 requests a pin makes, 25 of them told the client **204 while
+the volume lost the bytes a clean pin leaves behind**. That is indirect
+evidence — this machine has no way to read one file out of a FAT16 volume and
+the page does not render the group — so the code above is the finding and the
+sweep is corroboration. The fix is one line: tell "no such file", which
+legitimately means no pins, apart from every other error, which does not.
 
 ### "It answered" is a weaker question than "is it sound"
 
