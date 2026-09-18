@@ -9,10 +9,12 @@
 #
 #   ./same.sh
 #
-# The `clock` probe is the one that makes this a real question. It prints the
-# rate it measured for its own processor and the wall-clock time it read off
-# the chip, and until the clock in clock.zig was ours, both were a measurement
-# of this box on this afternoon and no two runs agreed.
+# Two probes make this a real question rather than a formality. `clock` prints
+# the rate it measured for its own processor and the wall-clock time it read
+# off the chip; `rng` prints sixteen bytes it drew and the bit statistics of
+# four thousand more. Until clock.zig and entropy.zig existed, every one of
+# those numbers was a measurement of this box on this afternoon, and no two
+# runs agreed.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
@@ -24,8 +26,9 @@ VMM="$HERE/zig-out/bin/metal-vmm"
 [ -x "$VMM" ] || { echo "no $VMM; run: zig build"; exit 1; }
 
 # probe:image
-CASES="clock:fat16-list block:fat16-write fat16:fat16-list fat16write:fat16-write \
-vfat:fat16-write net:fat16-write http:fat16-write stdhttp:fat16-write"
+CASES="clock:fat16-list rng:fat16-list block:fat16-write fat16:fat16-list \
+fat16write:fat16-write vfat:fat16-write net:fat16-write http:fat16-write \
+stdhttp:fat16-write"
 
 failed=0
 for one in $CASES; do
@@ -65,6 +68,10 @@ done
 if [ -f "$GUESTS/clock.elf" ]; then
     "$VMM" "$GUESTS/clock.elf" > "$WORK/clock.txt" 2>&1
     grep -a '^tsc_hz \|^unix \|^civil ' "$WORK/clock.txt" | sed 's/^/        /'
+fi
+if [ -f "$GUESTS/rng.elf" ]; then
+    "$VMM" "$GUESTS/rng.elf" > "$WORK/rng.txt" 2>&1
+    grep -a 'draw:' "$WORK/rng.txt" | sed 's/^ */        /'
 fi
 
 [ $failed = 0 ] && echo "every probe ran the same way twice" || echo "something drifted"

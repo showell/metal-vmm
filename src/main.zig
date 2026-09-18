@@ -36,6 +36,7 @@ const kvm = @import("kvm.zig");
 const virtio = @import("virtio.zig");
 const net = @import("net.zig");
 const clock = @import("clock.zig");
+const entropy = @import("entropy.zig");
 const wire = @import("peer.zig");
 
 /// How much RAM the guest gets. The probes were written against `-m 512`.
@@ -267,13 +268,30 @@ fn writeGdt(ram: []u8) void {
     @memcpy(ram[at..][0..@sizeOf(@TypeOf(table))], std.mem.asBytes(&table));
 }
 
-/// Tells the processor what kind of processor it is, by asking this one.
-/// Without it the guest cannot enter long mode — see `kvm.get_supported_cpuid`.
+/// Tells the processor what kind of processor it is, by asking this one —
+/// minus the two instructions that would let the guest reach outside this
+/// program for entropy. Without any of it the guest cannot enter long mode;
+/// see `kvm.get_supported_cpuid`.
 fn describeProcessor(dev: linux.fd_t, vcpu: linux.fd_t) !void {
     var buffer: kvm.CpuidBuffer = undefined;
     buffer.head = .{ .nent = kvm.max_cpuid_entries };
     _ = try kvm.call(dev, kvm.get_supported_cpuid, @intFromPtr(&buffer));
+    for (buffer.entries[0..buffer.head.nent]) |*e| forgetTheDice(e);
     _ = try kvm.call(vcpu, kvm.set_cpuid2, @intFromPtr(&buffer));
+}
+
+/// **A MACHINE WITH `RDRAND` HAS AN INPUT NOBODY CAN INTERCEPT.** The
+/// instruction does not exit, cannot be trapped, and answers from the
+/// processor's own noise — and the guest mixes its answer into every draw it
+/// makes, so leaving it in would make every draw unrepeatable however good the
+/// device in entropy.zig is. So this machine does not have it: the bits are
+/// cleared out of the CPUID the vCPU is given, and the guest, which is built
+/// to find sources rather than to assume them, uses virtio-rng instead.
+fn forgetTheDice(e: *kvm.CpuidEntry) void {
+    const rdrand: u32 = 1 << 30; // leaf 1, ECX
+    const rdseed: u32 = 1 << 18; // leaf 7 subleaf 0, EBX
+    if (e.function == 1) e.ecx &= ~rdrand;
+    if (e.function == 7 and e.index == 0) e.ebx &= ~rdseed;
 }
 
 /// What the processor was doing when it gave up, which is the only thing worth
@@ -651,6 +669,11 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     machine.devices[1] = &net_device;
     machine.card = &card;
     machine.card_device = &net_device;
+    // **AND THERE IS ALWAYS ENTROPY**, for the same reason: it is ours, it is
+    // seeded, and it costs nothing when nobody draws from it.
+    var dice = entropy.Entropy{};
+    var dice_device = dice.device();
+    machine.devices[2] = &dice_device;
 
     var request_buf: [256]u8 = undefined;
     if (fetch) |target| {
@@ -676,6 +699,17 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
 // ── the parts that can be checked without a processor ────────────────────────
 
 const testing = std.testing;
+
+// **THE OTHER FILES' TESTS DO NOT RUN UNLESS SOMETHING NAMES THEM.** A test
+// build has no entry point, so `main` is never analysed and neither is
+// anything only it mentions.
+test {
+    _ = @import("clock.zig");
+    _ = @import("entropy.zig");
+    _ = @import("virtio.zig");
+    _ = @import("net.zig");
+    _ = @import("peer.zig");
+}
 
 /// A tiny ELF with one loadable segment and one PVH note, built by hand so the
 /// loader can be checked without a kernel to hand.

@@ -60,8 +60,8 @@ into a layer**, and the host half is the emulator.
 | TCP from the peer | **works** — it connects to the guest, fetches, and gets what curl gets |
 | the clock | **works, and is ours** — the interval timer, the real-time clock and `rdtsc` all read one counter that only the guest's own questions advance |
 | a run that repeats | **works** — same guest, same words, same disk, same measured processor speed, every time |
-| a seeded random device | next: `rng` is the last probe whose words are not reproducible |
-| a disk that does not have to be a file | after that: copy-on-write in memory, so a run can be replayed |
+| entropy that repeats | **works** — a seeded virtio-rng, and a processor with no `RDRAND` to go behind its back |
+| a disk that does not have to be a file | next: copy-on-write in memory, so a run can be replayed |
 | fault injection | last, and the reason for the rest |
 
 A boot costs about 100 ms, most of it spent zeroing the guest's `.bss`. QEMU's
@@ -84,6 +84,12 @@ the argument is that nothing in that 100 ms came from anywhere but here.
   timer's, and refuses to boot if the answer is not a plausible clock rate.
 - **A real-time clock**, if it is asked to say what day it is — the MC146818
   at 0x70/0x71, in whichever of its four register formats it is asked for.
+- **Entropy**, because it mints session tokens with it and will not invent one
+  out of a clock. It takes that from virtio-rng and from `RDRAND`, mixed — and
+  **this machine deliberately has no `RDRAND`**, because one unrepeatable
+  source in the mix makes every draw unrepeatable. The bits are cleared out of
+  the CPUID the vCPU is given, and the guest, which looks for its sources
+  rather than assuming them, uses the device.
 
 ## Time is measured in questions
 
@@ -142,7 +148,9 @@ in `clock`, 12 in `stdhttp`, 2 in `block`, none in `rng`.
   byte too long does not mis-parse; it fails with `EINVAL` and says nothing.
 - `src/clock.zig` — the machine's time: one counter, and the three devices
   that report it. **Read this one first if you read only one.**
-- `src/virtio.zig` — the transport both devices sit on, and the block device.
+- `src/entropy.zig` — the seeded generator and the device that hands it out.
+  **The seed is the run's name.**
+- `src/virtio.zig` — the transport the devices sit on, and the block device.
 - `src/net.zig` — the network card: two queues, and the asymmetry between them.
 - `src/peer.zig` — the machine at the other end of the wire: DHCP, and a TCP
   client that fetches one thing. **There is no tap device and no real
@@ -166,12 +174,12 @@ answers correctly and writes the wrong sector would pass everything else.
 PASS block       same words, same verdict (104 ms here, 128 ms under QEMU)
 PASS fat16       same words, same verdict (163 ms here, 150 ms under QEMU)
 PASS fat16write  same words, same verdict (878 ms here, 495 ms under QEMU)
-PASS vfat        same words, same verdict (4137 ms here, 1927 ms under QEMU)
+PASS vfat        same words, same verdict (4247 ms here, 1998 ms under QEMU)
 PASS net         same words, same verdict (118 ms here, 135 ms under QEMU)
 PASS http        same words, same verdict (123 ms here, 1023 ms under QEMU)
 PASS stdhttp     same words, same verdict (128 ms here, 1025 ms under QEMU)
 PASS rng         same words, same verdict (98 ms here, 126 ms under QEMU)
-PASS clock       same words, same verdict (1335 ms here, 9740 ms under QEMU)
+PASS clock       same words, same verdict (1341 ms here, 8333 ms under QEMU)
 ```
 
 `rng` and `clock` are compared by verdict rather than by words, for opposite
@@ -211,22 +219,25 @@ cost is the kernel's, not ours: a `ReleaseFast` build of this program runs
 have to match byte for byte.
 
 ```
-SAME    clock       10 lines, verdict 0 (1236 ms, then 1224 ms)
-SAME    block       9 lines, verdict 0 (101 ms, then 112 ms)
-SAME    fat16       7 lines, verdict 0 (158 ms, then 156 ms)
-SAME    fat16write  7 lines, verdict 0 (873 ms, then 879 ms)
-SAME    vfat        6 lines, verdict 0 (3622 ms, then 4097 ms)
-SAME    net         9 lines, verdict 0 (99 ms, then 103 ms)
-SAME    http        7 lines, verdict 0 (127 ms, then 124 ms)
-SAME    stdhttp     8 lines, verdict 0 (131 ms, then 123 ms)
+SAME    clock       10 lines, verdict 0 (1375 ms, then 1390 ms)
+SAME    rng          6 lines, verdict 0 (105 ms, then 113 ms)
+SAME    block       10 lines, verdict 0 (106 ms, then 119 ms)
+SAME    fat16        7 lines, verdict 0 (170 ms, then 167 ms)
+SAME    fat16write   7 lines, verdict 0 (1010 ms, then 968 ms)
+SAME    vfat         6 lines, verdict 0 (3706 ms, then 3652 ms)
+SAME    net          9 lines, verdict 0 (112 ms, then 105 ms)
+SAME    http         7 lines, verdict 0 (127 ms, then 129 ms)
+SAME    stdhttp      8 lines, verdict 0 (161 ms, then 159 ms)
         tsc_hz 2500014511
         unix 1789732802
         civil 2026-9-18 12:0:2
+        first draw: 35555648620a99592de40231899298e5
 ```
 
-Those last three lines are the point. `tsc_hz` is what the guest measured about
-its own processor, `unix` and `civil` are what it read off the clock chip, and
-all three are the same on every run on every day.
+Those last four lines are the point. `tsc_hz` is what the guest measured about
+its own processor, `unix` and `civil` are what it read off the clock chip, the
+draw is sixteen bytes it will mint a session token out of — and all of them are
+the same on every run on every day.
 
 The `clock` probe is the one that makes this a real question, and it had never
 booted here before this step because it needs a real-time clock. It calibrates

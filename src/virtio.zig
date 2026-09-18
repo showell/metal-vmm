@@ -35,6 +35,7 @@ const vendor_id: u32 = 0x6D766D6D; // "mvmm"
 
 pub const device_id_block: u32 = 2;
 pub const device_id_net: u32 = 1;
+pub const device_id_entropy: u32 = 4;
 
 const Reg = enum(u64) {
     magic = 0x000,
