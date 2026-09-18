@@ -497,6 +497,42 @@ The three-run row is the mirror image: the write failed after the topic was
 durable, so the client got no response at all for something that did happen. A
 user who retries gets a duplicate.
 
+### One refused write to the mirror, and the volume never mounts again
+
+The same sector keeps turning up. Three more paths, swept the same way:
+
+| | writes | what happens |
+|---|---|---|
+| a reaction | 7 | every failure reported as `WriteFailed`, client gets nothing — **honest** |
+| an image upload | 22 | #1–#5 recover and answer 200 with a working image; #6–#22 answer the client a real **500** — the only path here that does |
+| a new topic | 83 | the four `catch {}` runs above |
+
+But underneath all three is one thing, and it is not the application's:
+
+```
+  new_topic  refuse write #2   (sector 2180): next boot WILL NOT MOUNT
+  new_topic  refuse write #50  (sector 2180): next boot WILL NOT MOUNT
+  react      refuse write #5   (sector 2180): next boot WILL NOT MOUNT
+  upload     refuse write #2   (sector 2180): next boot mounts
+```
+
+Sector 2180 is the FAT's second copy. `fatSet` writes the cached sector to
+every copy in turn; if the second write fails, the first has already landed and
+**nothing puts it back**. `cacheFat` then refuses to mount a volume whose
+copies disagree — deliberately, so that no tool silently "repairs" a volume
+someone else has an opinion about. Those two reasonable decisions meet here:
+
+**one failed write to the mirror leaves a volume that will never mount again,
+and there is no repair path.**
+
+The upload row is why the rule is exact rather than statistical. A refused
+mirror write is permanent **unless something flushes that sector again
+afterwards** — the upload does, later in the same request, and the volume
+survives. Which has an unpleasant corollary: propagating the error honestly
+*aborts* the request, so nothing flushes again, so **correct error handling
+makes the damage certain**. The reaction path does everything right and loses
+the volume; the upload path is saved by carrying on.
+
 ### Why one chat message is eighty-two writes
 
 `DISK_TRACE=1` prints every request the guest makes. One message:
