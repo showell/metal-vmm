@@ -351,11 +351,49 @@ gopher makes 141 disk requests; an untouched run: exit 0 — PASS — client got
 The 129 loud failures are right: the FAT is read at boot, and a machine that
 cannot read it should say so and stop. Two rows are not right.
 
-**`exit 124` is a hang.** Refusing request #133 or #134 leaves the machine
-alive and silent: it answers `GET /` correctly, prints its per-request report,
-and then never reaches its closing summary and never exits. Two minutes, against
-a 1.6 s baseline. No message, no crash — the failure mode with nothing to
-debug from. The recipe is exact, which is the point: `DISK_REFUSE=133`.
+**`exit 124` was a hang, and it turned out not to be a deadlock at all.**
+Refusing request #133 leaves the machine answering `GET /` correctly and then
+never exiting. The watchdog below names the loop, and the diff against a clean
+run names the cause in one line:
+
+```
+-   serving until stopped
++   serving 1 request(s), as gopher-metal.conf says
+```
+
+**Request #133 is the read of `gopher-metal.conf`.** `readConfig` says
+`readFileAlloc(...) catch return conf`, so a disk that refuses the read is
+indistinguishable from a volume with no config file on it — and the default
+for `requests` is *forever*. The machine served its one request and then waited
+for the next one, exactly as instructed. Every malformed *line* in that file is
+a loud `serial.fail`; the failed *read* is silent. Careful about content,
+careless about access.
+
+That is the same defect as the one below, one layer up: `io.zig` turns the I/O
+error into `FileNotFound`, and `catch return conf` then cannot tell "there is no
+config" from "I could not read the config".
+
+### A hang is a number
+
+A machine whose time is its guest's curiosity can count a hang exactly, so it
+does: so many exits with nothing printed and no doorbell rung and the run stops
+and says where the guest is.
+
+```
+metal-vmm: the guest has printed nothing and rung no doorbell for 1000000 exits
+           (101126 ms of its own time). It is here:
+         rip 00000000001c6f7e  rbx 000000000137de30  rsp 000000000137d4d0
+         possibly called from, innermost first:
+           00000000001c59a4     ← stream.pump
+           00000000001c6ef0     ← gopher.streamTurn
+           ...
+```
+
+There are no frame pointers, so that is a guess: any word on the stack pointing
+into the kernel's own **executable sections** is probably a return address. The
+sections matter — a guest's stack lives in its `.bss`, so a filter that takes
+the whole loaded image calls every stack word a caller. Feed the addresses to
+`addr2line -f -C -e <kernel.elf>`.
 
 **And the short pages are a 200.** Refusing #138 gets the client 7,801 bytes
 ending in:

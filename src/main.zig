@@ -118,7 +118,47 @@ const ProgramHeader = extern struct {
 const Loaded = struct {
     entry: u64,
     clock_reads: usize,
+    /// **WHERE THE KERNEL'S CODE IS**, which is how a word on the stack can be
+    /// told from a return address. Not the loaded image's range: a guest's
+    /// stack lives in its own `.bss`, so most of the image is data and every
+    /// stack word would look like a caller.
+    text_lo: u64 = 0,
+    text_hi: u64 = 0,
 };
+
+/// One section header, for the one thing this program wants from them.
+const SectionHeader = extern struct {
+    name: u32,
+    type: u32,
+    flags: u64,
+    addr: u64,
+    offset: u64,
+    size: u64,
+    link: u32,
+    info: u32,
+    alignment: u64,
+    entsize: u64,
+
+    const executable: u64 = 4; // SHF_EXECINSTR
+};
+
+/// The address range of everything a guest can execute. A kernel with its
+/// section headers stripped answers nothing, and a caller that gets nothing
+/// simply does not guess at stacks.
+fn textRange(image: []const u8, head: *const ElfHeader) struct { lo: u64, hi: u64 } {
+    var lo: u64 = 0;
+    var hi: u64 = 0;
+    if (head.shentsize != @sizeOf(SectionHeader)) return .{ .lo = 0, .hi = 0 };
+    for (0..head.shnum) |i| {
+        const at = head.shoff + i * head.shentsize;
+        if (at + @sizeOf(SectionHeader) > image.len) break;
+        const sh: *const SectionHeader = @ptrCast(@alignCast(image.ptr + at));
+        if (sh.flags & SectionHeader.executable == 0 or sh.addr == 0) continue;
+        if (lo == 0 or sh.addr < lo) lo = sh.addr;
+        if (sh.addr + sh.size > hi) hi = sh.addr + sh.size;
+    }
+    return .{ .lo = lo, .hi = hi };
+}
 
 /// **`rdtsc` DOES NOT EXIT, SO THE LOADER MAKES IT ONE.** It is two bytes,
 /// `0F 31`, and `out 0xE0, al` is also two bytes, `E6 E0` — so every
@@ -178,6 +218,7 @@ fn load(ram: []u8, image: []const u8) LoadError!Loaded {
 
     var entry: ?u64 = null;
     var clock_reads: usize = 0;
+    const text = textRange(image, head);
     for (0..head.phnum) |i| {
         const at = head.phoff + i * head.phentsize;
         if (at + @sizeOf(ProgramHeader) > image.len) return error.NotAnElf;
@@ -205,7 +246,7 @@ fn load(ram: []u8, image: []const u8) LoadError!Loaded {
             else => {},
         }
     }
-    return .{ .entry = entry orelse return error.NoPvhNote, .clock_reads = clock_reads };
+    return .{ .entry = entry orelse return error.NoPvhNote, .clock_reads = clock_reads, .text_lo = text.lo, .text_hi = text.hi };
 }
 
 /// The 32-bit entry address out of a PT_NOTE segment, if it names one.
@@ -296,9 +337,30 @@ fn forgetTheDice(e: *kvm.CpuidEntry) void {
     if (e.function == 7 and e.index == 0) e.ebx &= ~rdseed;
 }
 
+/// **WHO CALLED IT**, as far as a stack can be guessed: with no frame
+/// pointers there is no backtrace, but any word on the stack that points into
+/// the kernel's own image is almost certainly a return address, and a handful
+/// of those is enough to name the loop a guest is stuck in.
+///
+///     addr2line -f -C -e <kernel.elf> <address>
+fn callers(ram: []const u8, rsp: u64, text: Text) void {
+    if (text.hi == 0 or rsp + 8 > ram.len) return;
+    std.debug.print("         possibly called from, innermost first:\n", .{});
+    var at = rsp;
+    var found: usize = 0;
+    while (at + 8 <= ram.len and at < rsp + 4096 and found < 10) : (at += 8) {
+        const word = readLittle(ram[@intCast(at)..][0..8]);
+        if (word < text.lo or word >= text.hi) continue;
+        std.debug.print("           {x:0>16}\n", .{word});
+        found += 1;
+    }
+}
+
 /// What the processor was doing when it gave up, which is the only thing worth
 /// knowing about a triple fault.
-fn report(vcpu: linux.fd_t) void {
+const Text = struct { lo: u64, hi: u64 };
+
+fn report(vcpu: linux.fd_t, ram: []const u8, text: Text) void {
     var regs: kvm.Regs = undefined;
     var sregs: kvm.Sregs = undefined;
     if (kvm.call(vcpu, kvm.get_regs, @intFromPtr(&regs))) |_| {
@@ -309,6 +371,7 @@ fn report(vcpu: linux.fd_t) void {
                     "         cs {{ base {x}, limit {x}, l {d}, db {d} }}\n",
                 .{ regs.rip, regs.rbx, regs.rsp, sregs.cr0, sregs.cr3, sregs.cr4, sregs.efer, sregs.cs.base, sregs.cs.limit, sregs.cs.l, sregs.cs.db },
             );
+            callers(ram, regs.rsp, text);
         } else |_| {}
     } else |_| {}
 }
@@ -404,6 +467,11 @@ const Machine = struct {
     asked: bool = false,
     card: ?*net.Net = null,
     card_device: ?*virtio.Device = null,
+    /// **EXITS SINCE THE GUEST LAST DID ANYTHING.** A character printed or a
+    /// device doorbell rung is progress; reading the clock and polling memory
+    /// is not. A machine whose time is its guest's curiosity can count a hang
+    /// exactly — see `patience`.
+    quiet: u64 = 0,
     /// Reads of addresses no device answers. The guest looks for virtio in a
     /// window this program does not fill yet, and a window of zeros is what
     /// "nothing is plugged in there" looks like from inside.
@@ -414,6 +482,7 @@ const Machine = struct {
             com1 => if (self.line_control & divisor_latch == 0) {
                 _ = linux.write(1, bytes.ptr, bytes.len);
                 self.listen(bytes);
+                self.quiet = 0;
             },
             com1_line_control => if (bytes.len > 0) {
                 self.line_control = bytes[0];
@@ -474,6 +543,7 @@ const Machine = struct {
             if (self.devices[slot]) |device| {
                 if (is_write) {
                     device.write(self.ram, offset, @truncate(readLittle(data)));
+                    self.quiet = 0;
                 } else {
                     writeLittle(data, device.read(offset, @intCast(data.len)));
                 }
@@ -518,8 +588,13 @@ fn answerClock(vcpu: linux.fd_t, ticks: u64) !void {
     _ = try kvm.call(vcpu, kvm.set_regs, @intFromPtr(&regs));
 }
 
+/// How long a guest may go without printing anything or touching a device
+/// before this program calls it stuck. Generous: the heaviest probe here goes
+/// a few tens of thousands of exits between doorbells while it works.
+const patience: u64 = 1_000_000;
+
 /// Runs until the guest stops, and answers what it stopped with.
-fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *Machine) !u8 {
+fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *Machine, text: Text) !u8 {
     const run: *kvm.Run = @ptrCast(page.ptr);
     while (true) {
         const rc = linux.ioctl(vcpu, kvm.run, 0);
@@ -536,6 +611,16 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
         // that makes time pass — see clock.zig.
         machine.time.asked();
         machine.pump();
+        // **A HANG IS A RUN THAT STOPS MAKING PROGRESS**, and on this machine
+        // that is a number rather than a feeling: so many exits with nothing
+        // printed and no doorbell rung. Saying where the guest is beats being
+        // killed by a timeout with nothing to show for it.
+        machine.quiet += 1;
+        if (machine.quiet > patience) {
+            std.debug.print("metal-vmm: the guest has printed nothing and rung no doorbell for {d} exits ({d} ms of its own time). It is here:\n", .{ patience, machine.time.ns / std.time.ns_per_ms });
+            report(vcpu, machine.ram, text);
+            return error.GuestStuck;
+        }
         switch (@as(kvm.Exit, @enumFromInt(run.exit_reason))) {
             .io => {
                 const io = kvm.ioExit(page);
@@ -558,7 +643,7 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
             .hlt => return machine.stopped orelse 0,
             .shutdown => {
                 std.debug.print("metal-vmm: the guest shut down (a triple fault, most likely)\n", .{});
-                report(vcpu);
+                report(vcpu, machine.ram, text);
                 return error.GuestFaulted;
             },
             .fail_entry => {
@@ -606,10 +691,24 @@ fn numbers(schedule: *faults.Schedule, environ: std.process.Environ, name: []con
     }
 }
 
+/// What was done to this run, if anything was.
+fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void {
+    if (card.line.configured()) reportFaults("wire", "frames sent", &card.line.lost, ns);
+    if (block.refusals.configured()) {
+        const shown: usize = @intCast(@min(block.refusals.refused.picked_count, block.refusals.sectors.len));
+        reportFaultsWith("disk", "requests", &block.refusals.refused, ns, block.refusals.sectors[0..shown], block.refusals.kinds[0..shown]);
+    }
+}
+
 /// One line on the error stream, so a sweep can read what a run did. **THE
 /// GUEST'S OWN CLOCK IS THE INTERESTING NUMBER**: a lost frame costs it a
 /// retransmission timeout, and that shows up here and nowhere else.
 fn reportFaults(what: []const u8, of: []const u8, s: *const faults.Schedule, ns: ?u64) void {
+    reportFaultsWith(what, of, s, ns, null, null);
+}
+
+/// The same line, plus what each refused request was asking for.
+fn reportFaultsWith(what: []const u8, of: []const u8, s: *const faults.Schedule, ns: ?u64, sectors: ?[]const u64, kinds: ?[]const u8) void {
     var text: [256]u8 = undefined;
     var written = std.fmt.bufPrint(&text, "{s}: {d} {s}, {d} {s}", .{ what, s.seen, of, s.picked_count, pickedWord(what) }) catch return;
     var at = written.len;
@@ -617,6 +716,13 @@ fn reportFaults(what: []const u8, of: []const u8, s: *const faults.Schedule, ns:
     for (s.picked[0..@intCast(shown)], 0..) |n, i| {
         written = std.fmt.bufPrint(text[at..], "{s}{d}", .{ if (i == 0) " (#" else ", #", n }) catch break;
         at += written.len;
+        if (sectors) |where| {
+            if (i < where.len) {
+                const kind: u8 = if (kinds) |k| k[i] else '?';
+                written = std.fmt.bufPrint(text[at..], ", a {s} of sector {d}", .{ if (kind == 'w') "write" else "read", where[i] }) catch break;
+                at += written.len;
+            }
+        }
     }
     if (shown > 0 and at < text.len) {
         text[at] = ')';
@@ -752,12 +858,17 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         machine.request = std.fmt.bufPrint(&request_buf, "GET {s} HTTP/1.1\r\nHost: 10.0.2.15\r\nConnection: close\r\n\r\n", .{target}) catch null;
     }
 
-    const code = try serve(vcpu, page, &machine);
+    // **A RUN THAT ENDS BADLY STILL SAYS WHAT WAS DONE TO IT.** The faults
+    // below are the first thing anybody reads after a guest gets stuck, so
+    // they are reported before the error goes anywhere.
+    const code = serve(vcpu, page, &machine, .{ .lo = loaded.text_lo, .hi = loaded.text_hi }) catch |e| {
+        reportRun(&card, &block, machine.time.ns);
+        return e;
+    };
     // **WHAT THE WIRE DID, IF IT WAS ASKED TO DO ANYTHING**, on the error
     // stream: a run with a perfect wire says nothing, so the probes' output
     // stays comparable with QEMU's.
-    if (card.line.configured()) reportFaults("wire", "frames sent", &card.line.lost, machine.time.ns);
-    if (block.refusals.configured()) reportFaults("disk", "requests", &block.refusals.refused, machine.time.ns);
+    reportRun(&card, &block, machine.time.ns);
     // **THE FILE LEARNS WHAT HAPPENED ONLY NOW**, and only the sectors the
     // guest actually wrote. A run that never gets here leaves the image as it
     // found it — see disk.zig.

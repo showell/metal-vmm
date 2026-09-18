@@ -183,14 +183,14 @@ test "two users of the same idea do not move each other's dice" {
     wire.lost.rate = 3;
     drive.refused.rate = 3;
     var alone: [60]bool = undefined;
-    for (&alone) |*x| x.* = drive.serves();
+    for (&alone) |*x| x.* = drive.serves(0, false);
 
     var together = Drive{};
     together.refused.rate = 3;
     var mixed: [60]bool = undefined;
     for (&mixed) |*x| {
         _ = wire.carries(); // the wire is busy at the same time
-        x.* = together.serves();
+        x.* = together.serves(0, false);
     }
     try testing.expectEqualSlices(bool, &alone, &mixed);
 }
@@ -198,10 +198,13 @@ test "two users of the same idea do not move each other's dice" {
 test "the disk refuses the request it was told to refuse" {
     var d = Drive{};
     d.refused.named[0] = 2;
-    try testing.expect(d.serves());
-    try testing.expect(!d.serves());
-    try testing.expect(d.serves());
+    try testing.expect(d.serves(10, false));
+    try testing.expect(!d.serves(11, true));
+    try testing.expect(d.serves(12, false));
     try testing.expectEqual(@as(u64, 1), d.refused.picked_count);
+    // And it remembers what was being asked for, not just when.
+    try testing.expectEqual(@as(u64, 11), d.sectors[0]);
+    try testing.expectEqual(@as(u8, 'w'), d.kinds[0]);
 }
 
 test "a frame arrives when the wire says, and in the order it was sent" {
@@ -226,14 +229,25 @@ pub const Drive = struct {
     /// Which of the guest's requests come back refused. 1 is the first request
     /// it ever makes, read or write.
     refused: Schedule = .init(0x64_69_73_6B_64_69_63_65), // "diskdice"
+    /// **WHAT IT WAS ASKING FOR**, for the ones refused: a request number on
+    /// its own says when, and a sector says what — which is the difference
+    /// between "the 133rd read" and "the directory".
+    sectors: [8]u64 = @splat(0),
+    kinds: [8]u8 = @splat(0),
 
     pub fn configured(self: *const Drive) bool {
         return self.refused.configured();
     }
 
     /// **IS THIS ONE SERVED?** Called once per request, in order.
-    pub fn serves(self: *Drive) bool {
-        return !self.refused.picks();
+    pub fn serves(self: *Drive, sector: u64, writing: bool) bool {
+        const at = self.refused.picked_count;
+        if (!self.refused.picks()) return true;
+        if (at < self.sectors.len) {
+            self.sectors[@intCast(at)] = sector;
+            self.kinds[@intCast(at)] = if (writing) 'w' else 'r';
+        }
+        return false;
     }
 };
 
@@ -242,7 +256,7 @@ test "a wire with nothing configured is a wire that does nothing" {
     var d = Drive{};
     try testing.expect(!w.configured());
     try testing.expect(!d.configured());
-    for (0..100) |_| try testing.expect(d.serves());
+    for (0..100) |_| try testing.expect(d.serves(0, false));
     for (0..100) |_| try testing.expect(w.carries());
     w.hold("now", 12345);
     try testing.expectEqualStrings("now", w.ready(12345).?);

@@ -345,7 +345,7 @@ pub const Block = struct {
         // **A REFUSED REQUEST TOUCHES NOTHING**: no bytes move, no sector is
         // marked, and the guest gets the one thing a real disk gives it when
         // it cannot do the work.
-        if (!self.refusals.serves()) {
+        if (!self.refusals.serves(readInt(u64, ram, head.addr + 8), readInt(u32, ram, head.addr) == type_out)) {
             writeInt(u8, ram, status.addr, status_ioerr);
             return 1;
         }
