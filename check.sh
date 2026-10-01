@@ -16,6 +16,13 @@
 # real-time clock, all four register formats against each other, and the wall
 # clock against the edge it was anchored to.
 #
+# **QEMU HERE EMULATES THE PROCESSOR IN SOFTWARE** (no `-accel kvm`, so its
+# default, TCG). That keeps the oracle independent of the hardware this program
+# drives, and it makes the two timings different kinds of number: a device
+# access costs QEMU a function call and costs us a full exit through KVM, while
+# plain computation runs at the processor's speed here and at an interpreter's
+# under QEMU.
+#
 # Reproducibility is a different question, and QEMU cannot answer it about
 # itself: that one is same.sh.
 #
@@ -106,7 +113,7 @@ for one in $CASES; do
     fi
 
     if [ "$same" = yes ]; then
-        printf 'PASS %-11s same words, same verdict (%s ms here, %s ms under QEMU)\n' \
+        printf 'PASS %-11s same words, same verdict (%s ms here, %s ms under QEMU's software CPU)\n' \
             "$probe" "$ours_ms" "$qemu_ms"
     else
         failed=1

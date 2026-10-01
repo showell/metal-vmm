@@ -221,11 +221,17 @@ The block probe prints which slots hold devices, and that genuinely differs:
 QEMU fills its window from the top and has a random-number device too. Those
 lines are left out of the comparison and everything else is not.
 
-On the heavier probes we are slower than QEMU (4.1 s against 1.9 on `vfat`),
-which is honest: every register access here — and now every clock read too — is
-a full exit into this program, where QEMU has spent years not doing that. That
-cost is the kernel's, not ours: a `ReleaseFast` build of this program runs
-`vfat` in the same 4 s as the debug one, so `zig build`'s default stays debug.
+On the disk-heavy probes we are slower than QEMU (4.1 s against 1.9 on
+`vfat`), and that comparison is between two different kinds of machine:
+`check.sh` runs QEMU **without** `-accel kvm`, so QEMU emulates the processor in
+software. Every device access costs it a function call, where here it costs a
+full exit through KVM, and on this box KVM is itself running inside a virtual
+machine. `vfat` makes 44,193 disk requests and about 221,000 exits, 88,000 of
+them clock reads, so it is all device access. Measured on 2026-10-01, `vfat`
+takes 1.7-2.0 s under QEMU's software processor, 3.3-3.4 s under QEMU with
+`-accel kvm`, and 4.15 s here; `clock`, which is mostly computation, takes
+8.3 s, 4.6 s and 1.2 s. A `ReleaseFast` build of this program runs `vfat` in the
+same 4 s as the debug one, so `zig build`'s default stays debug.
 
 ## Being unhelpful on purpose
 
