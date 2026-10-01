@@ -113,7 +113,7 @@ for one in $CASES; do
     fi
 
     if [ "$same" = yes ]; then
-        printf 'PASS %-11s same words, same verdict (%s ms here, %s ms under QEMU's software CPU)\n' \
+        printf 'PASS %-11s same words, same verdict (%s ms here, %s ms under QEMU, software CPU)\n' \
             "$probe" "$ours_ms" "$qemu_ms"
     else
         failed=1
