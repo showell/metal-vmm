@@ -38,14 +38,29 @@ trap 'rm -rf "$WORK"' EXIT
 VMM="$HERE/zig-out/bin/metal-vmm"
 [ -x "$VMM" ] || { echo "no $VMM; run: zig build"; exit 1; }
 
-# probe:image
+# probe:image. The image `fat32` is a fresh volume made below.
 CASES="block:fat16-write fat16:fat16-list fat16write:fat16-write vfat:fat16-write \
-net:fat16-write http:fat16-write stdhttp:fat16-write rng:fat16-write clock:fat16-list"
+net:fat16-write http:fat16-write stdhttp:fat16-write rng:fat16-write clock:fat16-list \
+vfat:fat32 append:fat32"
+
+# **FAT32, ON A VOLUME MADE HERE**, as gopher-metal's runner makes its own
+# (`FAT=32 probe/run.sh`): 512-byte sectors and clusters, enough clusters to be
+# FAT32, and a FAT bigger than one device request. Prod's data is FAT32, so
+# this is the format the devices here must not get wrong. One format, copied to
+# both sides: mkfs stamps the volume with the time it ran.
+command -v mkfs.vfat > /dev/null || { echo "FAIL mkfs.vfat is not installed, and the FAT32 cases need it"; exit 1; }
+mkfs.vfat -F 32 -S 512 -s 1 -n GOPHER -C "$WORK/fat32.blank" 40960 > /dev/null 2>&1 \
+    || { echo "FAIL mkfs.vfat could not make the FAT32 volume"; exit 1; }
 
 failed=0
 for one in $CASES; do
     probe="${one%%:*}"
     image="$IMAGES/${one##*:}.disk"
+    name="$probe"
+    if [ "${one##*:}" = fat32 ]; then
+        image="$WORK/fat32.blank"
+        name="$probe/fat32"
+    fi
     elf="$GUESTS/$probe.elf"
     [ -f "$elf" ] || { echo "SKIP $probe (no $elf)"; continue; }
 
@@ -97,8 +112,16 @@ for one in $CASES; do
     # is a difference between two machines, not between two device models, so
     # those lines are left out of the comparison and everything else — the
     # capacity, the boot signature, the sector written and read back — is not.
+    #
+    # **APPEND STAMPS ITS FILES WITH THE WALL CLOCK**, which is noon on
+    # 2026-09-18 here and today under QEMU, by design (README: "the wall clock
+    # is a decision"). So its clock line is left out, and its two disks, which
+    # differ in those stamps, are each judged by fsck.vfat instead of by each
+    # other; vfat/fat32 is the byte-for-byte FAT32 comparison.
+    stamped=no
+    [ "$probe" = append ] && stamped=yes
     for side in ours qemu; do
-        grep -av "^  slot \|^  device at " "$WORK/$side.txt" > "$WORK/$side.cmp"
+        grep -av "^  slot \|^  device at \|^  wall clock " "$WORK/$side.txt" > "$WORK/$side.cmp"
     done
 
     if [ "$probe" = rng ] || [ "$probe" = clock ]; then
@@ -114,19 +137,29 @@ for one in $CASES; do
 
     if [ "$same" = yes ]; then
         printf 'PASS %-11s same words, same verdict (%s ms here, %s ms under QEMU, software CPU)\n' \
-            "$probe" "$ours_ms" "$qemu_ms"
+            "$name" "$ours_ms" "$qemu_ms"
     else
         failed=1
-        printf 'FAIL %-11s ours exited %s, QEMU %s\n' "$probe" "$ours" "$theirs"
+        printf 'FAIL %-11s ours exited %s, QEMU %s\n' "$name" "$ours" "$theirs"
         diff -a "$WORK/qemu.cmp" "$WORK/ours.cmp" | head -12 | sed 's/^/       /'
     fi
 
     # **AND THE DISK EACH ONE LEFT BEHIND.** A device that answers right and
     # writes the wrong sector would pass everything above.
-    if ! cmp -s "$WORK/ours.img" "$WORK/qemu.img"; then
+    if [ $stamped = no ] && ! cmp -s "$WORK/ours.img" "$WORK/qemu.img"; then
         failed=1
-        echo "     $probe: the two disks differ after the run"
+        echo "     $name: the two disks differ after the run"
         cmp "$WORK/ours.img" "$WORK/qemu.img" | head -3 | sed 's/^/       /'
+    fi
+    # A volume both sides wrote alike could still be wrong alike: dosfstools
+    # judges what each side wrote.
+    if [ "$image" = "$WORK/fat32.blank" ]; then
+        for side in ours qemu; do
+            fsck.vfat -n "$WORK/$side.img" > "$WORK/fsck.txt" 2>&1 && continue
+            failed=1
+            echo "     $name: fsck.vfat rejects the volume written by $side"
+            grep -av "^fsck.fat\|^$" "$WORK/fsck.txt" | head -5 | sed 's/^/       /'
+        done
     fi
 done
 

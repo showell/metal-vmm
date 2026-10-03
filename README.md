@@ -195,7 +195,16 @@ PASS http        same words, same verdict (123 ms here, 1023 ms under QEMU)
 PASS stdhttp     same words, same verdict (128 ms here, 1025 ms under QEMU)
 PASS rng         same words, same verdict (98 ms here, 126 ms under QEMU)
 PASS clock       same words, same verdict (1341 ms here, 8333 ms under QEMU)
+PASS vfat/fat32  same words, same verdict (140 ms here, 193 ms under QEMU, software CPU)
+PASS append/fat32 same words, same verdict (8000 ms here, 11351 ms under QEMU, software CPU)
 ```
+
+**The last two are FAT32** (added 2026-10-03; prod's data is FAT32): a fresh
+volume made by `mkfs.vfat`, written by gopher-metal's own probes, and judged by
+`fsck.vfat` as well as by QEMU. `append` stamps its files with the wall clock,
+which differs between the two sides by design, so its clock line is left out
+and its two disks are each judged by `fsck.vfat` rather than compared;
+`vfat/fat32` is the byte-for-byte one.
 
 `rng` and `clock` are compared by verdict rather than by words, for opposite
 reasons: one is random on purpose, and the other is a measurement of the
