@@ -94,6 +94,11 @@ pub const Rough = struct {
     /// The most of its request it puts in one segment, below the MSS the
     /// guest announced (`Tcp.send_mss`); that MSS alone, if null.
     mss: ?usize = null,
+    /// **IT SENDS PAST THE GUEST'S WINDOW** (`PEER_IGNORE_WINDOW`), all it
+    /// has released at once, as a careless or hostile client does; what the
+    /// guest throws away its timer sends again. A plain client keeps to the
+    /// window the guest last offered.
+    ignore_window: bool = false,
     /// **ITS OWN RETRANSMISSION TIMER RUNS** (RFC 6298): set when the wire
     /// may lose or damage what it sends. A peer whose frames always arrive
     /// never needs to send one twice, so without this the run is the run it

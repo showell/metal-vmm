@@ -74,7 +74,10 @@ pub fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, rough: *wire.Roug
     numbers(&line.peer_damaged, k, "PEER_DAMAGE");
     if (k.get("PEER_LOSS")) |n| line.peer_lost.rate = std.fmt.parseInt(u32, n, 10) catch 0;
     if (k.get("PEER_DAMAGE_RATE")) |n| line.peer_damaged.rate = std.fmt.parseInt(u32, n, 10) catch 0;
-    rough.retransmits = line.hurtsPeer();
+    // **A CLIENT THAT IGNORES THE WINDOW** sends what the guest must throw
+    // away, so its timer runs to send it again.
+    if (k.get("PEER_IGNORE_WINDOW")) |_| rough.ignore_window = true;
+    rough.retransmits = line.hurtsPeer() or rough.ignore_window;
     // **THE PEER'S OWN MISBEHAVIOUR** (peer.zig, `Rough`): times in
     // microseconds of the machine's clock from when it opened, sizes in
     // bytes of the answer.
@@ -152,11 +155,11 @@ pub const FakeEnv = struct {
 test "the knobs reach the wire, the disk and the peer, a seed's or the environment's alike" {
     var by_hand = knobs.Knobs{};
     by_hand.overlay(FakeEnv{ .pairs = &.{
-        .{ "WIRE_EAT", "3,9" },      .{ "PEER_EAT", "2" },         .{ "WIRE_LATENCY_US", "250" },
-        .{ "DISK_REFUSE", "4" },     .{ "DISK_WRITES_ONLY", "1" }, .{ "PEER_RESET_AT", "3000" },
-        .{ "PEER_FLOOD", "4" },      .{ "PEER_MSS", "100" },       .{ "DISK_CUT_AFTER", "7" },
-        .{ "DISK_TEAR", "2" },       .{ "DISK_TEAR_KEEP", "3" },   .{ "DISK_BAD_SECTOR", "2180,x,7" },
-        .{ "DISK_READS_ONLY", "1" },
+        .{ "WIRE_EAT", "3,9" },      .{ "PEER_EAT", "2" },           .{ "WIRE_LATENCY_US", "250" },
+        .{ "DISK_REFUSE", "4" },     .{ "DISK_WRITES_ONLY", "1" },   .{ "PEER_RESET_AT", "3000" },
+        .{ "PEER_FLOOD", "4" },      .{ "PEER_MSS", "100" },         .{ "DISK_CUT_AFTER", "7" },
+        .{ "DISK_TEAR", "2" },       .{ "DISK_TEAR_KEEP", "3" },     .{ "DISK_BAD_SECTOR", "2180,x,7" },
+        .{ "DISK_READS_ONLY", "1" }, .{ "PEER_IGNORE_WINDOW", "1" },
     } });
     var line = faults.Wire{};
     var drive = faults.Drive{};
@@ -168,6 +171,7 @@ test "the knobs reach the wire, the disk and the peer, a seed's or the environme
     try testing.expectEqual(@as(u32, 4), drive.refused.named[0]);
     try testing.expect(drive.writes_only);
     try testing.expect(drive.reads_only);
+    try testing.expect(rough.ignore_window and rough.retransmits);
     try testing.expectEqualSlices(u64, &.{ 2180, 7 }, drive.bad[0..drive.bad_len]);
     try testing.expectEqual(@as(?u64, 7), drive.cut_after);
     try testing.expectEqual(@as(?u64, 2), drive.tear);

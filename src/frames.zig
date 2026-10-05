@@ -34,6 +34,8 @@ pub const Segment = struct {
     dst_port: u16,
     /// The MSS option, on a SYN that carries one (RFC 9293 §3.7.1).
     mss: ?u16 = null,
+    /// The window it offers: how much more it will take past `ack`.
+    window: u16 = 0,
 };
 
 /// **THE MOST ONE SEGMENT CARRIES HERE**: an ethernet frame's 1500 bytes
@@ -98,6 +100,7 @@ pub fn tcpIn(frame: []const u8) ?Segment {
         .src_port = readBe16(tcp[0..2]),
         .dst_port = readBe16(tcp[2..4]),
         .mss = if (tcp[13] & flag_syn != 0) mssOption(tcp[20..offset]) else null,
+        .window = readBe16(tcp[14..16]),
     };
 }
 

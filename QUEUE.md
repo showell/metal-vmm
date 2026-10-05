@@ -286,7 +286,7 @@ crash on the peer's own input.
     reset sent"), as the wire reports what it lost. The same for any knob
     whose moment passes unused (`PEER_VANISH_AFTER` past the answer's
     length, `PEER_SHUT_AFTER` likewise, `PEER_EAT` past the last frame).
-39. **(metal-vmm) The last three of tcp.zig's eighteen, on the real kernel.**
+39. **(a) done (CC): `PEER_IGNORE_WINDOW=1`, and a plain client now keeps to the guest's window (P2's first half), which only a request larger than the window notices.** **(metal-vmm) The last three of tcp.zig's eighteen, on the real kernel.**
     (a) **a peer sends past the window**: the peer keeps to the guest's
     window (its sends stop at the guest's shut 16 KB buffer, and a 20 KB
     request then deadlocks until the guest's idle timeout). A knob for a
@@ -317,7 +317,7 @@ From the peer's review (`docs/reviews/REVIEW-peer.md`), most urgent first:
 - **P1. TIME-WAIT, and closed ports that answer.** A finished, refused or
   unopened client is silent where a real host acknowledges a repeated FIN
   or resets. The guest is blamed for giving up: seed 23953's class.
-- **P2. The guest's window, kept and probed.** The peer ignores SND.WND and
+- **P2. The guest's window, kept (CC, with item 39a) and probed (not yet: a zero window waits on the guest's own update).** The peer ignores SND.WND and
   never probes, so a request larger than the guest's 16 KiB free window
   loses its tail for good, and the guest is blamed after `idle_ns`.
 - **P3. Recovery like a real client's.** No RTT sample, a 1 s floor, no

@@ -135,6 +135,10 @@ pub const Tcp = struct {
     /// in its SYN-ACK, or 536 if it announced nothing, and never more than a
     /// frame holds (RFC 9293 §3.7.1). `Rough.mss` may make it smaller.
     send_mss: usize = default_mss,
+    /// **SND.WND**: the window the guest last offered, from SND.UNA. A plain
+    /// client sends nothing past it (RFC 9293 §3.8.6); one that ignores it
+    /// (`Rough.ignore_window`) sends everything at once.
+    snd_wnd: u32 = 65535,
     opened_at: u64 = 0,
     /// The retransmission timer: when it goes off, and how long the next
     /// wait is.
@@ -184,13 +188,19 @@ pub const Tcp = struct {
                 if (s.flags & flag_syn == 0 or s.flags & flag_ack == 0) return null;
                 self.ack = s.seq +% 1; // their SYN takes one too
                 self.send_mss = std.math.clamp(@as(usize, s.mss orelse default_mss), 1, most_data);
+                self.snd_wnd = s.window;
                 self.state = .established;
                 self.owes_empty = self.request.len == 0;
                 self.acknowledged(self.seq, now);
                 return self.segment(out, flag_ack, "");
             },
             .established, .closing, .fin_wait => {
-                if (s.flags & flag_ack != 0) self.acknowledged(s.ack, now);
+                if (s.flags & flag_ack != 0) {
+                    self.acknowledged(s.ack, now);
+                    // The window counts from what it acknowledges, so an
+                    // acknowledgement older than SND.UNA says nothing of it.
+                    if (s.ack == self.una) self.snd_wnd = s.window;
+                }
                 // **IN ORDER ONLY.** Anything else is re-acknowledged, which
                 // asks for what we are missing — the same rule the guest's own
                 // table follows.
@@ -281,6 +291,14 @@ pub const Tcp = struct {
         return self.request[within..][0..n];
     }
 
+    /// How much more the guest's window has room for past SND.NXT; all of it
+    /// for a client that ignores the window.
+    fn windowRoom(self: *const Tcp) usize {
+        if (self.rough.ignore_window) return std.math.maxInt(usize);
+        const in_flight = self.seq -% self.una;
+        return self.snd_wnd -| in_flight;
+    }
+
     /// The next thing this client has to say without being spoken to, if
     /// anything: its next request's bytes, or, after the last answer of a
     /// client that asked more than once, its FIN. Called after every
@@ -294,7 +312,9 @@ pub const Tcp = struct {
         }
         const from = self.sent();
         if (from < self.released()) {
-            const data = self.chunk(from);
+            const next = self.chunk(from);
+            const data = next[0..@min(next.len, self.windowRoom())];
+            if (data.len == 0) return null; // the window is full: wait for it
             const frame = self.segment(out, flag_ack | flag_psh, data);
             self.seq +%= @intCast(data.len);
             self.arm(now);
@@ -745,14 +765,52 @@ test "a request larger than a segment goes at the MSS the guest announced, or 53
         const syn_ack = if (c.mss) |m| fakeSynAck(&theirs, 5000, syn.seq +% 1, m) else fakeSegment(&theirs, flag_syn | flag_ack, 5000, syn.seq +% 1, "");
         _ = peer.answer(syn_ack, 0).?;
         var got: usize = 0;
-        while (peer.more(0)) |frame| {
-            const seg = tcpIn(frame).?;
-            try testing.expect(verifies(frame));
-            try testing.expect(seg.data.len <= c.each);
-            if (got + c.each <= request.len) try testing.expectEqual(c.each, seg.data.len);
-            try testing.expectEqualSlices(u8, request[got..][0..seg.data.len], seg.data);
-            got += seg.data.len;
+        while (got < request.len) {
+            // A window's worth at a time: the guest acknowledges all of it,
+            // and offers fakeSegment's 8192 again. 8192 is a whole number
+            // of no segment size here, so a short segment ends each window.
+            const window_start = got;
+            while (peer.more(0)) |frame| {
+                const seg = tcpIn(frame).?;
+                try testing.expect(verifies(frame));
+                try testing.expect(seg.data.len <= c.each);
+                const window_left = 8192 - (got - window_start);
+                if (got + c.each <= request.len and window_left >= c.each) try testing.expectEqual(c.each, seg.data.len);
+                try testing.expectEqualSlices(u8, request[got..][0..seg.data.len], seg.data);
+                got += seg.data.len;
+            }
+            try testing.expect(got > window_start);
+            _ = peer.answer(fakeSegment(&theirs, flag_ack, 5001, syn.seq +% 1 +% @as(u32, @intCast(got)), ""), 0);
         }
         try testing.expectEqual(request.len, got);
     }
+}
+
+test "a plain client keeps to the guest's window; one that ignores it sends everything" {
+    var request: [20 * 1024]u8 = undefined;
+    for (&request, 0..) |*b, i| b.* = @truncate('a' + i % 26);
+    var theirs: [2048]u8 = undefined;
+
+    // The guest offers 8192 in its SYN-ACK (fakeSegment's window).
+    var plain = Peer{};
+    const syn = tcpIn(plain.open(&request, 0)).?;
+    _ = plain.answer(fakeSynAck(&theirs, 5000, syn.seq +% 1, 1460), 0).?;
+    var sent: usize = 0;
+    while (plain.more(0)) |frame| sent += tcpIn(frame).?.data.len;
+    try testing.expectEqual(@as(usize, 8192), sent); // five of 1460, and 892
+    // It acknowledges 4000 and offers 8192 again: 4000 more go.
+    _ = plain.answer(fakeSegment(&theirs, flag_ack, 5001, syn.seq +% 1 +% 4000, ""), 0);
+    var more: usize = 0;
+    while (plain.more(0)) |frame| more += tcpIn(frame).?.data.len;
+    try testing.expectEqual(@as(usize, 4000), more);
+    // An old acknowledgement offering a larger window says nothing of it.
+    _ = plain.answer(fakeTo(&theirs, 49152, flag_ack, 5001, syn.seq +% 1 +% 100, ""), 0);
+    try testing.expect(plain.more(0) == null);
+
+    var careless = Peer{ .rough = .{ .ignore_window = true } };
+    const syn2 = tcpIn(careless.open(&request, 0)).?;
+    _ = careless.answer(fakeSynAck(&theirs, 5000, syn2.seq +% 1, 1460), 0).?;
+    var all: usize = 0;
+    while (careless.more(0)) |frame| all += tcpIn(frame).?.data.len;
+    try testing.expectEqual(request.len, all);
 }
