@@ -86,7 +86,7 @@ From the review (`docs/reviews/REVIEW-interrupts.md`), most urgent first:
    `if_flag`, so `cli; hlt` resumes past the `hlt` later, which no PC does.
 11. **Done (CC).** **A vector is in service only once injected (M2).** The not-ready branch
     of `rest` strands a vector in service and ends the run; untested.
-12. **BAR accesses split into aligned dwords (M3).** A QWORD unmask of an
+12. **Done (CC; the MSI-X half in item 4).** **BAR accesses split into aligned dwords (M3).** A QWORD unmask of an
     MSI-X entry leaves it masked; a QWORD `queue_desc` write keeps the stale
     high half. The MSI-X half folds into item 4.
 13. **Queues that do not exist read as absent (M5).** A `queue_select` past

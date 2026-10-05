@@ -301,8 +301,39 @@ pub const Function = struct {
         return value;
     }
 
+    /// The common configuration's fields (virtio 1.2 §4.1.4.3), where each
+    /// is and how wide; a 64-bit address is two 32-bit halves.
+    const common_fields = [_]struct { at: u8, len: u8 }{
+        .{ .at = 0x00, .len = 4 }, .{ .at = 0x04, .len = 4 }, .{ .at = 0x08, .len = 4 },
+        .{ .at = 0x0C, .len = 4 }, .{ .at = 0x10, .len = 2 }, .{ .at = 0x12, .len = 2 },
+        .{ .at = 0x14, .len = 1 }, .{ .at = 0x15, .len = 1 }, .{ .at = 0x16, .len = 2 },
+        .{ .at = 0x18, .len = 2 }, .{ .at = 0x1A, .len = 2 }, .{ .at = 0x1C, .len = 2 },
+        .{ .at = 0x1E, .len = 2 }, .{ .at = 0x20, .len = 4 }, .{ .at = 0x24, .len = 4 },
+        .{ .at = 0x28, .len = 4 }, .{ .at = 0x2C, .len = 4 }, .{ .at = 0x30, .len = 4 },
+        .{ .at = 0x34, .len = 4 },
+    };
+
+    /// **A STORE IS SPLIT OVER THE FIELDS IT COVERS**, lowest first, and
+    /// changes only the bytes it wrote of each: so one 64-bit store sets
+    /// both halves of a queue's address (§4.1.3.1 lets a driver make it
+    /// either way), and a byte changes only its byte.
     fn commonWrite(self: *Function, ram: []u8, offset: u64, len: u32, value: u64) void {
-        _ = len;
+        for (common_fields) |field| {
+            const lo = @max(offset, field.at);
+            const hi = @min(offset + len, @as(u64, field.at) + field.len);
+            if (lo >= hi) continue;
+            var merged = self.commonRead(field.at, field.len);
+            for (lo..hi) |at| {
+                const byte = (value >> @intCast((at - offset) * 8)) & 0xFF;
+                const shift: u6 = @intCast((at - field.at) * 8);
+                merged = (merged & ~(@as(u64, 0xFF) << shift)) | (byte << shift);
+            }
+            self.commonField(ram, field.at, merged);
+        }
+    }
+
+    /// One whole field of the common configuration, written.
+    fn commonField(self: *Function, ram: []u8, offset: u64, value: u64) void {
         const d = self.device;
         const sel = @min(d.queue_sel, d.queues.len - 1);
         const q = &d.queues[sel];
@@ -1452,4 +1483,26 @@ test "an unaligned write lands only on the bytes of the data register it covers"
     bus.out(data_port - 1, &.{ 0xAA, 0x06, 0x00, 0xFF });
     try testing.expectEqual(@as(u16, 0x0006), f.command);
     try testing.expectEqual(@as(u32, 0x8000_0804), bus.address);
+}
+
+test "the common configuration at other widths: a 64-bit address in one store, a byte by itself" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    const f = g.open(2).?;
+    try g.store(u16, f.common + 0x16, 0);
+    try g.store(u64, f.common + 0x20, 0x0000_0001_2345_6000);
+    try testing.expectEqual(@as(u64, 0x0000_0001_2345_6000), m.card_device.queues[0].desc);
+    try g.store(u64, f.common + 0x28, 0x0000_0002_0000_7000);
+    try testing.expectEqual(@as(u64, 0x0000_0002_0000_7000), try g.load(u64, f.common + 0x28));
+    // One dword over queue_select and queue_size sets both.
+    try g.store(u32, f.common + 0x16, (@as(u32, 64) << 16) | 1);
+    try testing.expectEqual(@as(u32, 1), m.card_device.queue_sel);
+    try testing.expectEqual(@as(u32, 64), m.card_device.queues[1].size);
+    // A byte of queue_size changes that byte and not the other.
+    try g.store(u8, f.common + 0x19, 0x01);
+    try testing.expectEqual(@as(u32, 0x0140), m.card_device.queues[1].size);
+    // The read-only ones stay as they were.
+    try g.store(u16, f.common + 0x12, 99);
+    try testing.expectEqual(@as(u16, 2), try g.load(u16, f.common + 0x12));
 }
