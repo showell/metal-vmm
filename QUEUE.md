@@ -155,6 +155,75 @@ bottom.
     given-way slot's ISS+1 revive it? gopher-metal is read-only to you; the
     box and Steve decide.
 
+25. **A review of the peer, as a TCP** (write `docs/reviews/REVIEW-peer.md`;
+    fixes become items, as item 1's did). The peer is half of every verdict:
+    when it is wrong, a run blames the guest for the peer's mistake. This
+    happened today in gopher-metal's simulator: its model client went
+    silent after TIME-WAIT, where a real host sends a reset (RFC 9293
+    §3.10.7.1), and the table was faulted for giving up on it (seed 23953,
+    gopher-metal `02de06f`). Read `peer.zig` against RFC 9293, 6298 and
+    5961 the way item 1 read pci.zig against PCI 3.0: closed and TIME-WAIT
+    behavior, what a segment for no connection gets, retransmission and
+    Karn's rule, window probes, FIN in every state, item 20's several
+    clients. For each difference, say whether the guest can reach it and
+    which verdict it would make wrong.
+26. **The guest's input never kills the VMM: a fuzzer over the models.**
+    H1 (item 8) was a panic on `inl $0xCFD`. Drive every guest-facing model
+    from a seeded stream of what a guest could do, without a vCPU: port and
+    width at random over 0xCF8/0xCFC, COM1, the PIT, the RTC, 0xE0/0xE1;
+    mmio and BAR reads and writes at any offset and width; virtqueues laid
+    out wrong (descriptor chains that loop, run past the queue size, point
+    outside guest memory, indirect descriptors, a zero-length buffer);
+    APIC MSRs with any value. Each step either answers or is refused as the
+    spec says; nothing panics, nothing reads past guest memory, and the
+    same seed makes the same trace. `zig build fuzz -Dseeds=n`; a seed that
+    finds something stays as a named test, as gopher-metal's regressions do.
+27. **A power cut, and a torn write** (the disk's half of "does the volume
+    boot again"). Today a disk request is answered or refused whole. Add,
+    each by a knob and in `FAULT_SEED`'s ranges: `DISK_CUT_AFTER=n`, the
+    machine stops dead after the guest's nth write, and the image keeps
+    only what was written before it (`disk.zig` already writes back only
+    at the end, so this is the run ending early with the writes up to n);
+    and `DISK_TEAR=n`, the nth multi-sector write lands only its first k
+    sectors before the cut. The box then boots the image again and runs
+    `sound.sh` on it: that is how a FAT volume's crash consistency gets
+    measured, which no run here has done. Unit tests on `disk.zig` with a
+    hand-fed request stream.
+28. **Determinism, enforced by a test.** CLOUD_WORK.md's first rule says
+    nothing reads the host's clock or randomness; nothing checks it. A test
+    in `zig build test` that reads `src/*.zig` and fails on any use of the
+    host's time or entropy (`std.time.timestamp`, `nanoTimestamp`,
+    `Instant`, `std.crypto.random`, `getrandom`, `clock_gettime`, and the
+    like) outside an allowlist with a one-line reason each, so a change
+    that slips one in is refused, not reviewed.
+29. **Split the three long files** (the ~1000-line rule: `main.zig` 1820,
+    `peer.zig` 1635, `pci.zig` 1551). Along the seams they already have:
+    main.zig's knob parsing and end-of-run reports apart from its run loop;
+    peer.zig's `Rough` and `Plan` apart from the plain client; pci.zig's
+    MSI-X and the virtio-pci capabilities apart from configuration space.
+    No behavior changes: the tests move with their code, and the box's
+    gates are the check. Do this after 25 and 26, which read these files.
+30. **The machine's state, saved and restored** (groundwork for the
+    explorer: Antithesis branches many runs from one prefix instead of
+    booting each from scratch). The device side first, which is all
+    logic: every model (clock, APIC, PCI and MSI-X, the virtqueues'
+    positions, serial, PIT, RTC, entropy, the faults' and the peer's state,
+    the coverage table) gets a snapshot it can be restored from, and a test
+    per model that a run restored at step k goes on exactly as the
+    uninterrupted run did. The vCPU's registers and guest memory are the
+    box's half (KVM_GET_REGS and friends); write down under Questions what
+    the box would need to call, and do not guess at the ioctls.
+31. **What a run cost, in the guest's time.** The box measures wall time;
+    an explorer will care about guest time and exits. End every run that
+    did anything with one line on stderr: exits by kind (port, mmio, MSR,
+    halt), guest nanoseconds, frames each way, disk requests, and the
+    longest stretch of guest time with no exit at all. Keep it pure: a
+    counter struct the run loop bumps and a formatter with tests.
+32. **Your proposals.** When 22-31 are done, read the README's "Being
+    unhelpful on purpose" and "The real server" sections and propose (under
+    Proposed, one line each on why) the next five faults or checks you
+    think would find the most in gopher.elf. Then take the first one.
+
 ## Proposed
 
 *(CC adds items here, one line each on why.)*
@@ -233,6 +302,10 @@ this machine survives.
 ## Answers
 
 *(The box answers here, on `interrupts`.)*
+
+**2026-10-05, the box: item 21 merged (`44f6522`)**: 160/160, check.sh,
+same.sh, site.sh all and rest.sh all green. Items 22-32 are yours, in order;
+Steve wants a long queue, so do not stop between them.
 
 **2026-10-05, the box: items 18-20 merged (`f66becf`)**: 156/156, check.sh,
 same.sh, site.sh all and rest.sh all green. Item 21 is yours. The box puts
