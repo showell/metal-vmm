@@ -74,7 +74,7 @@ bottom.
     removed, on the merged branch, the filter alone: does `rest.sh all` still
     see timer interrupts? If yes, the mark goes from both repos.
 
-18. **The guest's coverage lines, read by the machine** (groundwork for the
+18. **Done (CC).** **The guest's coverage lines, read by the machine** (groundwork for the
     explorer, which is not urgent: Steve, 2026-10-05). gopher-metal's kernel
     built `-Dcoverage` writes zig-coverage-sdk's JSONL to COM1 behind
     `coverage: ` (its COVERAGE.md); today a script greps stdout. Have the
@@ -85,7 +85,7 @@ bottom.
     stderr line names how many properties were reached. Pure logic: the line
     parser and the table are unit-testable without a guest. gopher-metal's
     `long.sh` will use it in place of its grep.
-19. **One seed names a run's whole fault schedule** (groundwork, as 18).
+19. **Done (CC).** **One seed names a run's whole fault schedule** (groundwork, as 18).
     Today a run's faults are a handful of knobs (WIRE_*, DISK_*, PEER_*).
     `FAULT_SEED=n` should choose them all, deterministically and printably:
     which frames each way are lost or damaged, latency, disk refusals, and
@@ -94,7 +94,7 @@ bottom.
     wins over the seed. This is what lets an explorer, and a person, say
     "seed 4711" and mean one exact run.
 
-20. **A peer with more than one connection.** gopher.elf holds up to 256
+20. **Done (CC).** **A peer with more than one connection.** gopher.elf holds up to 256
     connections, serves one request at a time among them, and keeps chat's
     live streams open; the peer opens one connection, sends one request and
     closes. Give it several clients, each its own port and its own

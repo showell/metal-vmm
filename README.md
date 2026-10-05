@@ -357,9 +357,48 @@ times are microseconds after it opens, sizes are bytes of the answer:
 | `PEER_SHUT_AFTER=n`, `PEER_SHUT_FOR_US=us` | shuts its receive window once it has `n` bytes, takes nothing while it is shut, then says it is open |
 | `PEER_MSS=n` | sends its request `n` bytes a segment |
 
+**And more than one client** (`peer.zig`, `Plan`), for a guest that holds
+many connections:
+
+| knob | the peer |
+|---|---|
+| `PEER_CLIENTS=n` | is `n` clients (8 at most), each on its own port and sequence numbers |
+| `PEER_CLIENT_GAP_US=us` | opens each a gap after the last (1 ms by default) |
+| `PEER_REQUEST=a,b,...` | gives each client its own request file; one past the list asks the last |
+| `PEER_ASKS=k` | has each ask `k` times on one connection, the next when the last answer is whole (by its length or its chunks), then close it itself |
+
+A client whose answer has neither a length nor chunks, such as a stream,
+reads it until the server closes, and holds its connection open meanwhile.
+The `Rough` knobs above are the first client's alone; the others behave. A
+run with more than one conversation ends with a line for each client: its
+status, how many answers came whole, how many bytes, and how it ended.
+
 With none of these set the peer is the plain client it always was, frame for
 frame, and no run here changes. The guest's coverage properties these reach
 are gopher-metal's to measure (its `coverage/floor-metal.txt`).
+
+### One seed for all of it
+
+`FAULT_SEED=n` turns all of these knobs at once, each family by its own
+chance and from a documented range (the table in `knobs.zig`), so "seed 4711"
+names one exact run. A knob set by hand wins over the seed. A seeded run
+says first, on the error stream, what it chose, as the knobs that repeat it
+without the seed:
+
+    metal-vmm: FAULT_SEED=4711 is WIRE_EAT=12 WIRE_LATENCY_US=8143 PEER_FLOOD=3 PEER_FLOOD_GAP_US=212998
+
+### What the guest says it reached
+
+A gopher-metal kernel built `-Dcoverage` prints zig-coverage-sdk's JSONL on
+COM1 behind `coverage: ` (its COVERAGE.md). The serial port here reads those
+lines as they are printed (`coverage.zig`) and keeps a table of every
+property: its kind, how often it was seen true and false, and the exit and
+virtual time of the first of each. `COVERAGE_OUT=<file>` keeps the lines out
+of stdout and appends them to that file as plain JSONL, for the SDK's
+`tools/report.py`; without it stdout is the guest's bytes exactly. A run
+that printed any ends with one line on the error stream:
+
+    metal-vmm: coverage: 7 of 23 properties reached (6 hold, 0 broken), from 412 lines over 1 boots
 
 ### And the disk can refuse
 
