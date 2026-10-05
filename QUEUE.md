@@ -41,7 +41,7 @@ bottom.
    with the PBA's bits, the function mask and per-entry masks, and the
    config-change vector (`msix_config`). gopher-metal uses entry 0 for every
    queue, so behavior there must not change (item 2's tests hold it).
-5. **The APIC, closer to the SDM.** The TPR's effect on what is delivered
+5. **Done (CC).** **The APIC, closer to the SDM.** The TPR's effect on what is delivered
    (the processor priority), several vectors pending across priority classes,
    EOI with more waiting, a deadline in the past firing at once, a deadline
    of zero disarming, and the timer's one-shot and periodic modes (initial
@@ -79,7 +79,7 @@ From the review (`docs/reviews/REVIEW-interrupts.md`), most urgent first:
 8. **Config-data port accesses at any offset and width (H1).** `inl $0xCFD`
    panics this program (integer overflow, `pci.zig:350`): a guest's input
    kills the VMM, which an explorer will find first.
-9. **The deadline timer between halts (H2).** `tick` runs only in `rest`, so
+9. **Done in item 5 (CC).** **The deadline timer between halts (H2).** `tick` runs only in `rest`, so
    a deadline passed while running reads back unchanged and is lost when
    rewritten; gopher-metal wakes less often here than on a droplet.
 10. **A halt with interrupts off stops the machine (M1).** `rest` ignores

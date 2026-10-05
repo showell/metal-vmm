@@ -173,10 +173,13 @@ register.
   the mmio window's own; only the registers in front differ. The guest asks a
   bus when there is one and never mixes the two, so on this machine the mmio
   window is empty.
-- **a local APIC** (`apic.zig`): the registers the guest starts it with, the
-  timer in TSC-deadline mode, and the vectors waiting. KVM's own APIC would
-  keep the host's time, so the vCPU has none in the kernel, and every
-  interrupt is injected from here (`KVM_INTERRUPT`).
+- **a local APIC** (`apic.zig`): its registers, its timer in TSC-deadline,
+  one-shot and periodic modes, and the vectors waiting and in service, taken
+  by priority class as the task priority allows. KVM's own APIC would keep
+  the host's time, so the vCPU has none in the kernel, and every interrupt is
+  injected from here (`KVM_INTERRUPT`). The timer catches up to the machine's
+  time whenever the guest can see it — a register, an MSR, a halt — so a
+  deadline that passed while the guest ran has fired by the time it looks.
 - **a halt is an event, not a wait.** At the guest's `hlt` the clock moves
   straight to the earlier of the timer's deadline and the next frame due on
   the wire; the wire is pumped (a frame delivered is an MSI-X message); the

@@ -607,7 +607,7 @@ const Machine = struct {
         };
         if (self.bus != null and apic.inWindow(addr)) {
             const offset = addr - apic.base;
-            if (is_write) self.lapic.write(offset, @truncate(readLittle(data))) else writeLittle(data, self.lapic.read(offset));
+            if (is_write) self.lapic.write(offset, @truncate(readLittle(data)), self.time.ns) else writeLittle(data, self.lapic.read(offset, self.time.ns));
             return;
         }
         if (virtio.inWindow(addr)) {
@@ -712,10 +712,9 @@ const Wake = union(enum) {
 /// next frame. A frame due already but undelivered has no buffer to go to,
 /// and waits for the guest, not the clock.
 fn wakes(lapic: *apic.Apic, now: u64, frame_due: ?u64) Wake {
-    lapic.tick((clock.Clock{ .ns = now }).ticks());
+    lapic.tick(now);
     if (lapic.next()) |v| return .{ .take = v };
-    var wake: ?u64 = null;
-    if (lapic.timerDue()) |due| wake = clock.nsAt(due);
+    var wake = lapic.timerDue();
     if (frame_due) |due| if (due > now) {
         wake = if (wake) |w| @min(w, due) else due;
     };
@@ -773,7 +772,7 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
                         var regs: kvm.Regs = undefined;
                         _ = try kvm.call(vcpu, kvm.get_regs, @intFromPtr(&regs));
                         machine.msrs += 1;
-                        _ = machine.lapic.writeMsr(@truncate(regs.rcx), (regs.rdx << 32) | (regs.rax & 0xFFFF_FFFF));
+                        _ = machine.lapic.writeMsr(@truncate(regs.rcx), (regs.rdx << 32) | (regs.rax & 0xFFFF_FFFF), machine.time.ns);
                         continue;
                     }
                     machine.out(io.port, data);
@@ -803,7 +802,7 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
             .rdmsr => {
                 machine.msrs += 1;
                 const m = kvm.msrExit(page);
-                if (machine.lapic.readMsr(m.index)) |v| {
+                if (machine.lapic.readMsr(m.index, machine.time.ns)) |v| {
                     m.data = v;
                     m.@"error" = 0;
                 } else m.@"error" = 1;
@@ -811,7 +810,7 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
             .wrmsr => {
                 machine.msrs += 1;
                 const m = kvm.msrExit(page);
-                m.@"error" = if (machine.lapic.writeMsr(m.index, m.data)) 0 else 1;
+                m.@"error" = if (machine.lapic.writeMsr(m.index, m.data, machine.time.ns)) 0 else 1;
             },
             .shutdown => {
                 std.debug.print("metal-vmm: the guest shut down (a triple fault, most likely)\n", .{});
@@ -1298,29 +1297,29 @@ test "the exit door stops the machine with the guest's own code" {
 /// 0x41 in TSC-deadline mode, nothing armed.
 fn startedApic() apic.Apic {
     var a = apic.Apic{};
-    _ = a.writeMsr(apic.msr_apic_base, a.readMsr(apic.msr_apic_base).? | (1 << 11));
-    a.write(0x0F0, 0x100 | 0xFF);
-    a.write(0x320, 0x41 | (2 << 17));
+    _ = a.writeMsr(apic.msr_apic_base, a.readMsr(apic.msr_apic_base, 0).? | (1 << 11), 0);
+    a.write(0x0F0, 0x100 | 0xFF, 0);
+    a.write(0x320, 0x41 | (2 << 17), 0);
     return a;
 }
 
 test "a vector already waiting is taken at once, and no time passes" {
     var a = startedApic();
-    _ = a.writeMsr(apic.msr_tsc_deadline, 1_000_000);
+    _ = a.writeMsr(apic.msr_tsc_deadline, 1_000_000, 0);
     a.raise(0x40);
     try testing.expectEqual(Wake{ .take = 0x40 }, wakes(&a, 5_000, 6_000));
 }
 
 test "a deadline before the next frame: the clock goes to the deadline, and the timer fires there" {
     var a = startedApic();
-    _ = a.writeMsr(apic.msr_tsc_deadline, 25_000); // 10 µs at 2.5 GHz
+    _ = a.writeMsr(apic.msr_tsc_deadline, 25_000, 0); // 10 µs at 2.5 GHz
     try testing.expectEqual(Wake{ .move_to = 10_000 }, wakes(&a, 1_000, 50_000));
     try testing.expectEqual(Wake{ .take = 0x41 }, wakes(&a, 10_000, 50_000));
 }
 
 test "a frame before the deadline: the clock goes to the frame" {
     var a = startedApic();
-    _ = a.writeMsr(apic.msr_tsc_deadline, 250_000); // 100 µs
+    _ = a.writeMsr(apic.msr_tsc_deadline, 250_000, 0); // 100 µs
     try testing.expectEqual(Wake{ .move_to = 40_000 }, wakes(&a, 1_000, 40_000));
 }
 
@@ -1331,7 +1330,7 @@ test "a frame due already but undelivered does not wake the guest" {
     try testing.expectEqual(Wake.never, wakes(&a, 5_000, 5_000));
     try testing.expectEqual(Wake.never, wakes(&a, 5_000, 1_000));
     // With a deadline, the deadline is what wakes it.
-    _ = a.writeMsr(apic.msr_tsc_deadline, 25_000);
+    _ = a.writeMsr(apic.msr_tsc_deadline, 25_000, 0);
     try testing.expectEqual(Wake{ .move_to = 10_000 }, wakes(&a, 5_000, 1_000));
 }
 
@@ -1340,7 +1339,7 @@ test "a deadline between two nanoseconds: the first nanosecond at or past it" {
     // At 2.5 ticks a nanosecond, tick 26 falls between 10 ns (tick 25) and
     // 11 ns (tick 27.5, read as 27). The timer fires when rdtsc would first
     // answer 26 or more: at 11 ns, not at 10.
-    _ = a.writeMsr(apic.msr_tsc_deadline, 26);
+    _ = a.writeMsr(apic.msr_tsc_deadline, 26, 0);
     try testing.expectEqual(Wake{ .move_to = 11 }, wakes(&a, 0, null));
     try testing.expectEqual(@as(u64, 25), (clock.Clock{ .ns = 10 }).ticks());
     try testing.expectEqual(Wake{ .move_to = 11 }, wakes(&a, 10, null)); // not yet
@@ -1349,7 +1348,7 @@ test "a deadline between two nanoseconds: the first nanosecond at or past it" {
 
 test "a deadline already past fires without moving the clock" {
     var a = startedApic();
-    _ = a.writeMsr(apic.msr_tsc_deadline, 100);
+    _ = a.writeMsr(apic.msr_tsc_deadline, 100, 0);
     try testing.expectEqual(Wake{ .take = 0x41 }, wakes(&a, 1_000_000, null));
 }
 
@@ -1358,15 +1357,15 @@ test "nothing armed and nothing on the wire: nothing can wake it" {
     try testing.expectEqual(Wake.never, wakes(&a, 1_000, null));
 }
 
-test "an APIC never enabled delivers nothing, even when its timer would fire" {
+test "an APIC never enabled delivers nothing, and its timer cannot wake the guest" {
     var a = apic.Apic{};
-    a.write(0x320, 0x41 | (2 << 17));
-    _ = a.writeMsr(apic.msr_tsc_deadline, 25_000);
+    // Software-disabled (SVR bit 8 clear, as after a reset), every LVT entry
+    // is masked and stays masked (SDM §11.4.7.2): the timer may count, but
+    // it cannot interrupt, so it is not something a halt waits for.
+    a.write(0x320, 0x41 | (2 << 17), 0);
+    _ = a.writeMsr(apic.msr_tsc_deadline, 25_000, 0);
     a.raise(0x40);
-    // The deadline still moves the clock; when it passes there is nothing
-    // the guest could be woken by.
-    try testing.expectEqual(Wake{ .move_to = 10_000 }, wakes(&a, 0, null));
-    try testing.expectEqual(Wake.never, wakes(&a, 10_000, null));
+    try testing.expectEqual(Wake.never, wakes(&a, 0, null));
 }
 
 test "a vector in service holds the others until EOI" {
@@ -1375,6 +1374,6 @@ test "a vector in service holds the others until EOI" {
     try testing.expectEqual(Wake{ .take = 0x40 }, wakes(&a, 0, null));
     a.raise(0x40);
     try testing.expectEqual(Wake.never, wakes(&a, 0, null));
-    a.write(0x0B0, 0);
+    a.write(0x0B0, 0, 0);
     try testing.expectEqual(Wake{ .take = 0x40 }, wakes(&a, 0, null));
 }

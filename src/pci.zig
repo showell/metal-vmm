@@ -528,8 +528,8 @@ test "the capability list leads to the four windows and MSI-X" {
 test "MSI-X: masked, the message waits; unmasked, it reaches the APIC" {
     var bus = Bus{};
     var lapic = apic.Apic{};
-    _ = lapic.writeMsr(apic.msr_apic_base, lapic.readMsr(apic.msr_apic_base).? | (1 << 11));
-    lapic.write(0x0F0, 0x1FF);
+    _ = lapic.writeMsr(apic.msr_apic_base, lapic.readMsr(apic.msr_apic_base, 0).? | (1 << 11), 0);
+    lapic.write(0x0F0, 0x1FF, 0);
     var context: u8 = 0;
     var d = virtio.Device{ .id = virtio.device_id_net, .context = &context, .notified = nothing };
     const f = bus.plug(1, &d, &lapic);
@@ -833,9 +833,9 @@ const Machine = struct {
         _ = self.bus.plug(1, &self.block, &self.lapic);
         _ = self.bus.plug(2, &self.card_device, &self.lapic);
         _ = self.bus.plug(3, &self.dice_device, &self.lapic);
-        _ = self.lapic.writeMsr(apic.msr_apic_base, self.lapic.readMsr(apic.msr_apic_base).? | (1 << 11));
-        self.lapic.write(0x0F0, 0x1FF);
-        self.lapic.write(0x320, 0x41 | (2 << 17));
+        _ = self.lapic.writeMsr(apic.msr_apic_base, self.lapic.readMsr(apic.msr_apic_base, 0).? | (1 << 11), 0);
+        self.lapic.write(0x0F0, 0x1FF, 0);
+        self.lapic.write(0x320, 0x41 | (2 << 17), 0);
     }
 };
 
@@ -940,7 +940,7 @@ test "a completion is an MSI-X message, and the APIC delivers its vector until E
     // In service until the handler's EOI: a second completion waits.
     try g.offer(up.doorbell, 0, 0);
     try testing.expect(m.lapic.next() == null);
-    m.lapic.write(0x0B0, 0);
+    m.lapic.write(0x0B0, 0, 0);
     try testing.expectEqual(@as(?u8, FakeGuest.wake_vector), m.lapic.next());
 }
 
@@ -1041,7 +1041,7 @@ test "each queue's own entry, and its own vector" {
     try testing.expectEqual(@as(u16, 2), try setVector(&g, f, 1, 2));
     m.bus.functions[2].?.completed(1);
     try testing.expectEqual(@as(?u8, 0x52), m.lapic.next());
-    m.lapic.write(0x0B0, 0);
+    m.lapic.write(0x0B0, 0, 0);
     m.bus.functions[2].?.completed(0);
     try testing.expectEqual(@as(?u8, 0x51), m.lapic.next());
 }
@@ -1117,7 +1117,7 @@ test "the function's mask holds every entry's message, and the pending bits show
     g.cfgWrite16(2, f.msix_cap + 2, control & ~@as(u16, 0x4000));
     try testing.expectEqual(@as(u64, 0), try g.load(u64, pba));
     try testing.expectEqual(@as(?u8, 0x52), m.lapic.next()); // the higher vector first
-    m.lapic.write(0x0B0, 0);
+    m.lapic.write(0x0B0, 0, 0);
     try testing.expectEqual(@as(?u8, 0x51), m.lapic.next());
 }
 
@@ -1133,7 +1133,7 @@ test "an entry's own mask holds only its own message" {
     fn2.completed(0);
     fn2.completed(1);
     try testing.expectEqual(@as(?u8, 0x52), m.lapic.next());
-    m.lapic.write(0x0B0, 0);
+    m.lapic.write(0x0B0, 0, 0);
     try testing.expect(m.lapic.next() == null);
     try g.store(u32, f.msix_entry.? + 16 + 12, 0);
     try testing.expectEqual(@as(?u8, 0x51), m.lapic.next());
