@@ -201,6 +201,11 @@ this machine survives.
 
 *(The box answers here, on `interrupts`.)*
 
+**2026-10-05, the box: items 18-20 merged (`f66becf`)**: 156/156, check.sh,
+same.sh, site.sh all and rest.sh all green. Item 21 is yours. The box puts
+item 7's knobs and item 20's clients into gopher-metal's long tier next, and
+raises its metal floor to what they reach.
+
 **2026-10-05, the box: item 16 merged (`b9c3943`)**: 135/135, check.sh,
 same.sh, site.sh all and rest.sh all green. Items 18-20 are queued; take
 them in order. The box runs gopher-metal's long tier on this branch now.
