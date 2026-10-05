@@ -29,8 +29,8 @@ const forbidden = [_][]const u8{
 /// **THE EXCEPTIONS, EACH WITH ITS REASON.** A file and a spelling it may
 /// use; anything else in that file is still refused.
 const allowed = [_]struct { file: []const u8, spelling: []const u8, why: []const u8 }{
-    .{ .file = "main.zig", .spelling = "rdseed", .why = "names the CPUID bit forgetTheDice clears, so the guest cannot ask the host for entropy" },
-    .{ .file = "main.zig", .spelling = "rdrand", .why = "names the CPUID bit forgetTheDice clears" },
+    .{ .file = "processor.zig", .spelling = "rdseed", .why = "names the CPUID bit forgetTheDice clears, so the guest cannot ask the host for entropy" },
+    .{ .file = "processor.zig", .spelling = "rdrand", .why = "names the CPUID bit forgetTheDice clears" },
 };
 
 /// This file spells every forbidden word, in its list.
@@ -171,8 +171,8 @@ test "the scanner: code is caught, comments are not, and the allowlist is per fi
     try testing.expectEqualStrings("std.time.nanoTimestamp", found[0].spelling);
     try testing.expectEqualStrings("std.crypto.random", found[1].spelling);
     try testing.expectEqualStrings("rdrand", found[2].spelling);
-    // main.zig may name rdrand (forgetTheDice's CPUID bit); nothing else.
-    try testing.expectEqual(@as(usize, 2), scan("main.zig", source, &found));
+    // processor.zig may name rdrand (forgetTheDice's CPUID bit); nothing else.
+    try testing.expectEqual(@as(usize, 2), scan("processor.zig", source, &found));
 }
 
 test "every exception has a reason" {

@@ -1,0 +1,146 @@
+//! **WHAT A RUN SAYS AT ITS END**, on the error stream: what was done to it
+//! (the wire's, the peer's and the disk's faults), how it rested, where the
+//! power was cut, and what coverage the guest reported.
+
+const std = @import("std");
+const kvm = @import("kvm.zig");
+const virtio = @import("virtio.zig");
+const net = @import("net.zig");
+const clock = @import("clock.zig");
+const entropy = @import("entropy.zig");
+const disk = @import("disk.zig");
+const faults = @import("faults.zig");
+const wire = @import("peer.zig");
+const apic = @import("apic.zig");
+const coverage = @import("coverage.zig");
+const knobs = @import("knobs.zig");
+const pci = @import("pci.zig");
+const main = @import("main.zig");
+const linux = std.os.linux;
+const Machine = main.Machine;
+const settings = @import("settings.zig");
+const loader = @import("loader.zig");
+const processor = @import("processor.zig");
+const halt = @import("halt.zig");
+const testing = std.testing;
+
+const tellTheFaults = settings.tellTheFaults;
+const count = settings.count;
+const knob = settings.knob;
+const numbers = settings.numbers;
+const FakeEnv = settings.FakeEnv;
+const ElfHeader = loader.ElfHeader;
+const ProgramHeader = loader.ProgramHeader;
+const Rewritten = loader.Rewritten;
+const Loaded = loader.Loaded;
+const SectionHeader = loader.SectionHeader;
+const textRange = loader.textRange;
+const rewriteDeadlineWrites = loader.rewriteDeadlineWrites;
+const rewriteClockReads = loader.rewriteClockReads;
+const rewriteMarked = loader.rewriteMarked;
+const NoteHeader = loader.NoteHeader;
+const LoadError = loader.LoadError;
+const load = loader.load;
+const pvhEntry = loader.pvhEntry;
+const tsc_port = loader.tsc_port;
+const msr_port = loader.msr_port;
+const fakeKernel = loader.fakeKernel;
+const describeProcessor = processor.describeProcessor;
+const forgetTheDice = processor.forgetTheDice;
+const sayTheApic = processor.sayTheApic;
+const hideTheHostsTime = processor.hideTheHostsTime;
+const owned_msrs = processor.owned_msrs;
+const msr_tsc = processor.msr_tsc;
+const msrFilter = processor.msrFilter;
+const ownTheMsrs = processor.ownTheMsrs;
+const deniedByFilter = processor.deniedByFilter;
+const Rested = halt.Rested;
+const Cpu = halt.Cpu;
+const Wake = halt.Wake;
+const wakes = halt.wakes;
+const startedApic = halt.startedApic;
+
+/// What the power cut left, on the error stream: which write, and for a torn
+/// one how much of it landed.
+pub fn reportCut(cut: faults.Drive.Cut) void {
+    if (cut.landed < cut.of) {
+        std.debug.print("metal-vmm: the power was cut in the guest's write {d}: {d} of its {d} sectors from sector {d} landed\n", .{ cut.write, cut.landed, cut.of, cut.sector });
+    } else {
+        std.debug.print("metal-vmm: the power was cut after the guest's write {d} (sector {d}, {d} sectors)\n", .{ cut.write, cut.sector, cut.of });
+    }
+}
+
+/// The run's coverage, if its guest printed any: the last line on the error
+/// stream.
+pub fn reportCoverage(machine: *const Machine) void {
+    var buf: [256]u8 = undefined;
+    if (machine.serial.summary(&buf)) |line| std.debug.print("{s}", .{line});
+}
+
+/// What was done to this run, if anything was.
+/// The PC-shaped machine's halts and interrupts, on the error stream.
+pub fn reportRest(machine: *const Machine) void {
+    var messages: u64 = 0;
+    for (machine.bus.?.functions) |f| if (f) |g| {
+        messages += g.msix.messages;
+    };
+    std.debug.print("metal-vmm: {d} halts skipped {d} ms; {d} interrupts taken ({d} timer, {d} MSI-X messages); {d} APIC MSR accesses\n", .{
+        machine.halts,             machine.halted_ns / std.time.ns_per_ms, machine.lapic.taken,
+        machine.lapic.timer_fired, messages,                               machine.msrs,
+    });
+}
+
+pub fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void {
+    if (card.line.configured()) reportFaults("wire", "frames sent", &card.line.lost, ns);
+    if (card.line.peer_lost.configured()) reportFaults("peer", "frames sent", &card.line.peer_lost, ns);
+    if (card.line.peer_damaged.configured()) reportFaults("peer damage", "frames sent", &card.line.peer_damaged, ns);
+    if (block.refusals.configured()) {
+        const shown: usize = @intCast(@min(block.refusals.refused.picked_count, block.refusals.sectors.len));
+        reportFaultsWith("disk", "requests", &block.refusals.refused, ns, block.refusals.sectors[0..shown], block.refusals.kinds[0..shown]);
+    }
+}
+
+/// One line on the error stream, so a sweep can read what a run did. **THE
+/// GUEST'S OWN CLOCK IS THE INTERESTING NUMBER**: a lost frame costs it a
+/// retransmission timeout, and that shows up here and nowhere else.
+pub fn reportFaults(what: []const u8, of: []const u8, s: *const faults.Schedule, ns: ?u64) void {
+    reportFaultsWith(what, of, s, ns, null, null);
+}
+
+/// The same line, plus what each refused request was asking for.
+pub fn reportFaultsWith(what: []const u8, of: []const u8, s: *const faults.Schedule, ns: ?u64, sectors: ?[]const u64, kinds: ?[]const u8) void {
+    var text: [256]u8 = undefined;
+    var written = std.fmt.bufPrint(&text, "{s}: {d} {s}, {d} {s}", .{ what, s.seen, of, s.picked_count, pickedWord(what) }) catch return;
+    var at = written.len;
+    const shown = @min(s.picked_count, s.picked.len);
+    for (s.picked[0..@intCast(shown)], 0..) |n, i| {
+        written = std.fmt.bufPrint(text[at..], "{s}{d}", .{ if (i == 0) " (#" else ", #", n }) catch break;
+        at += written.len;
+        if (sectors) |where| {
+            if (i < where.len) {
+                const kind: u8 = if (kinds) |k| k[i] else '?';
+                written = std.fmt.bufPrint(text[at..], ", a {s} of sector {d}", .{ if (kind == 'w') "write" else "read", where[i] }) catch break;
+                at += written.len;
+            }
+        }
+    }
+    if (shown > 0 and at < text.len) {
+        text[at] = ')';
+        at += 1;
+    }
+    if (ns) |elapsed| {
+        written = std.fmt.bufPrint(text[at..], ", {d} ms of the guest's time", .{elapsed / std.time.ns_per_ms}) catch return;
+        at += written.len;
+    }
+    if (at < text.len) {
+        text[at] = '\n';
+        at += 1;
+    }
+    _ = linux.write(2, &text, at);
+}
+
+pub fn pickedWord(what: []const u8) []const u8 {
+    if (std.mem.eql(u8, what, "wire") or std.mem.eql(u8, what, "peer")) return "lost";
+    if (std.mem.eql(u8, what, "peer damage")) return "damaged";
+    return "refused";
+}

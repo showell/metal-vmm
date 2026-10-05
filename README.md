@@ -224,12 +224,24 @@ round trip is longer than the table's least timeout.
 - `src/faults.zig` — what this machine is allowed to do to its guest.
 - `src/virtio.zig` — the transport the devices sit on, and the block device.
 - `src/net.zig` — the network card: two queues, and the asymmetry between them.
-- `src/peer.zig` — the machine at the other end of the wire: DHCP, and a TCP
-  client that fetches one thing. **There is no tap device and no real
-  network**, deliberately — a host's network is an input this program does not
-  control, which is the one thing a deterministic machine cannot have.
-- `src/main.zig` — the loader, the processor's starting state, the serial port,
-  the exit door, and the loop that serves them.
+- `src/peer.zig` — the machine at the other end of the wire: DHCP, its
+  clients, how many and how they misbehave. **There is no tap device and no
+  real network**, deliberately — a host's network is an input this program
+  does not control, which is the one thing a deterministic machine cannot
+  have. `src/client.zig` is one client as a TCP, `src/response.zig` where an
+  HTTP answer ends, `src/frames.zig` the frames on the wire.
+- `src/pci.zig` — the PC-shaped machine's bus; `src/virtio_pci.zig` a virtio
+  device as a function on it; `src/msix.zig` its MSI-X; `src/apic.zig` the
+  local APIC its messages and timer reach.
+- `src/main.zig` — the processor's starting state, the serial port, the exit
+  door, and the loop that serves them. Beside it: `src/loader.zig` (the ELF,
+  and the marked instructions rewritten), `src/processor.zig` (CPUID and the
+  MSRs this program answers), `src/halt.zig` (what wakes a halted guest),
+  `src/settings.zig` (the knobs, into the faults; `src/knobs.zig` for a
+  seed's), and `src/reports.zig` (what a run says at its end).
+- `src/coverage.zig` — the guest's coverage lines, one run's and many runs'.
+- `src/fuzz.zig` — every model above under seeded guest input;
+  `src/determinism.zig` — the first rule, checked.
 
 `zig build test` checks the parts that need no processor: the ELF loader, the
 note parsing, the devices' answers, and a fake guest that drives the block

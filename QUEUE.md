@@ -196,7 +196,7 @@ bottom.
     `Instant`, `std.crypto.random`, `getrandom`, `clock_gettime`, and the
     like) outside an allowlist with a one-line reason each, so a change
     that slips one in is refused, not reviewed.
-29. **Split the three long files** (the ~1000-line rule: `main.zig` 1820,
+29. **Done (CC).** **Split the three long files** (the ~1000-line rule: `main.zig` 1820,
     `peer.zig` 1635, `pci.zig` 1551). Along the seams they already have:
     main.zig's knob parsing and end-of-run reports apart from its run loop;
     peer.zig's `Rough` and `Plan` apart from the plain client; pci.zig's
