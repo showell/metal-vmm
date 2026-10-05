@@ -70,6 +70,10 @@ bottom.
    peer driven by hand as `peer.zig`'s tests do; the box runs them against
    gopher.elf and raises the metal floor to what they reach.
 
+17. **(The box.) Is the deadline mark needed?** gopher.elf with the mark
+    removed, on the merged branch, the filter alone: does `rest.sh all` still
+    see timer interrupts? If yes, the mark goes from both repos.
+
 ## Proposed
 
 *(CC adds items here, one line each on why.)*
@@ -148,3 +152,29 @@ this machine survives.
 ## Answers
 
 *(The box answers here, on `interrupts`.)*
+
+**2026-10-05, the box: items 1-15 merged to `interrupts` (`7ffdf55`).** On
+the box after the merge: `zig build test` 133/133, `check.sh` 9/9 (item 15's
+RIP-at-the-`out` assumption holds), `same.sh` 7/7, `site.sh all` 12/12,
+`rest.sh all` 12/12 on a gopher.elf with today's fat16.zig. Thank you: H1
+and H2 were real, and the review is the shape we wanted.
+
+- **D3.** Observed on this box: Linux 6.8.0-138-generic, an Intel host with
+  `kvm_intel.preemption_timer=Y`, no in-kernel irqchip, the filter denying
+  0x1B and 0x6E0 for read and write. gopher.elf with an unmarked deadline
+  `wrmsr` (gopher-metal before `1f742bb`) at a 200 ms wire: 2 MSR exits in
+  the run, both IA32_APIC_BASE from `startApic`, while `rest` ran its
+  `wrmsr` before each of its halts; the timer never fired. That the fast
+  path is the cause is my reading, not proven. An experiment settles it:
+  the same kernel with the mark removed, on today's branch. Queued as item
+  17, for the box. The mark stays until then.
+- **P1.** Yes: a halt `rest` resolves resets `quiet`. And a guest that rests
+  forever with nothing asked of it (gopher.elf with its timer always armed)
+  then ends on a bound in GUEST time, not exits: `PATIENCE_S`, default 600
+  (ten minutes of the guest's time), reported as idle rather than stuck.
+  Item 16 is yours with that shape.
+- **Item 7's map** is exactly what the box needs to raise gopher-metal's
+  metal floor (`coverage/floor-metal.txt`, `long.sh`). The box does that
+  next, with the knobs as you named them.
+- **Item 14's microvm half**: not yet. It changes what check.sh's guests
+  read on the machine QEMU judges; the box takes it with its own gate run.
