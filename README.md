@@ -503,6 +503,13 @@ against gopher.elf here):
 
     metal-vmm: disk: bad sector 2180 refused N of M requests (#n, a write of sector 2180; ...)
 
+**And a byte can rot.** `DISK_ROT=2180,7` (with `,0x40` for another mask
+than one bit) serves every read of sector 2180 with its byte 7 changed, and
+an "ok": the image is untouched, and once the guest writes the sector again
+it holds what was written. fat16.zig checks nothing it reads, so this is how
+a FAT entry pointing somewhere else, or a directory entry gone wrong, is
+handed to it. A seed draws it one time in eight, last of all its knobs.
+
 The one PASS under a refusal is #1, the GPT header: `vfat` reads any failure to
 find a partition table as "no table" and mounts sector 0, which on this bare
 volume is right. On a partitioned disk the same fallback fails the mount, so the

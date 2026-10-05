@@ -105,6 +105,12 @@ pub fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void
     var buf: [2048]u8 = undefined;
     std.debug.print("{s}", .{unspent(&card.line, &card.peer, &block.refusals, &buf)});
     if (peerEnd(&card.peer.tcp)) |line| std.debug.print("{s}", .{line});
+    const d = &block.refusals;
+    if (d.rot_sector) |at| if (d.rotted > 0) {
+        std.debug.print("metal-vmm: disk: sector {d} rotted (byte {d}, mask 0x{x:0>2}) in {d} reads{s}\n", .{
+            at, d.rot_byte, d.rot_mask, d.rotted, if (d.rot_healed) ", then the guest wrote it again" else "",
+        });
+    };
 }
 
 /// **WHEN THE PEER ITSELF LET THE PAGE GO** (REVIEW-peer.md S1): the first
@@ -236,6 +242,9 @@ pub fn unspent(line: *const faults.Wire, peer: *const wire.Peer, drive: *const f
     }
     if (drive.cut_after) |n| if (drive.cut == null) {
         w(buf, &at, "DISK_CUT_AFTER={d} never came: the guest wrote {d} times", .{ n, drive.writes });
+    };
+    if (drive.rot_sector) |sector| if (drive.rotted == 0) {
+        w(buf, &at, "DISK_ROT={d},{d} never came: the guest never read sector {d}{s}", .{ sector, drive.rot_byte, sector, if (drive.rot_healed) " before writing it" else "" });
     };
     if (drive.tear) |n| if (drive.cut == null) {
         w(buf, &at, "DISK_TEAR={d} never came: the guest made {d} writes of more than one sector", .{ n, drive.multi_writes });

@@ -446,6 +446,7 @@ pub const Block = struct {
         } else switch (kind) {
             type_in => {
                 @memcpy(bytes, self.image[@intCast(at)..][0..bytes.len]);
+                self.refusals.rotInto(sector, bytes);
                 written = @intCast(bytes.len);
                 self.reads += 1;
             },
@@ -455,6 +456,7 @@ pub const Block = struct {
                 const sectors = (bytes.len + sector_bytes - 1) / sector_bytes;
                 const landed = @min(bytes.len, self.refusals.lands(sector, sectors) * sector_bytes);
                 @memcpy(self.image[@intCast(at)..][0..landed], bytes[0..landed]);
+                self.refusals.rewrote(sector, (landed + sector_bytes - 1) / sector_bytes);
                 if (self.dirty) |bits| disk.mark(bits, sector, (landed + sector_bytes - 1) / sector_bytes);
                 self.writes += 1;
             },

@@ -34,6 +34,7 @@
 //! | `PEER_FLOOD` | 1/4 | 1-8 SYNs, `PEER_FLOOD_GAP_US` 10,000-400,000 |
 //! | `PEER_SHUT_AFTER` | 1/4 | 1-20,000 bytes, `PEER_SHUT_FOR_US` 10,000-5,000,000 |
 //! | `PEER_MSS` | 1/4 | 1-1460 |
+//! | `DISK_ROT` | 1/8 | sector 0-4095, byte 0-511 (drawn last) |
 //!
 //! `PEER_FLOOD_AT_US`, `PEER_DAMAGE_RATE` and `DISK_REFUSE_RATE` are
 //! never drawn: a seed's flood starts with the client, and a seed's peer
@@ -56,7 +57,7 @@ pub const names = [_][]const u8{
     "DISK_CUT_AFTER",     "DISK_TEAR",         "DISK_TEAR_KEEP",   "PEER_RESET_AT",
     "PEER_RESET_OFF",     "PEER_VANISH_AFTER", "PEER_FLOOD",       "PEER_FLOOD_GAP_US",
     "PEER_FLOOD_AT_US",   "PEER_SHUT_AFTER",   "PEER_SHUT_FOR_US", "PEER_MSS",
-    "PEER_IGNORE_WINDOW",
+    "PEER_IGNORE_WINDOW", "DISK_ROT",
 };
 
 fn index(comptime name: []const u8) usize {
@@ -131,6 +132,8 @@ pub const Knobs = struct {
             k.number(index("PEER_SHUT_FOR_US"), r.intRangeAtMost(u64, 10_000, 5_000_000));
         }
         if (chance(r, 4)) k.number(index("PEER_MSS"), r.intRangeAtMost(u64, 1, 1460));
+        // Drawn last, so every knob above is what each seed always drew.
+        if (chance(r, 8)) k.pair(index("DISK_ROT"), r.uintLessThan(u64, 4096), r.uintLessThan(u64, 512));
         return k;
     }
 
@@ -140,6 +143,13 @@ pub const Knobs = struct {
 
     fn number(self: *Knobs, i: usize, n: u64) void {
         const written = std.fmt.bufPrint(self.text[self.used..], "{d}", .{n}) catch unreachable;
+        self.drawn[i] = .{ .at = @intCast(self.used), .len = @intCast(written.len) };
+        self.used += written.len;
+    }
+
+    /// Two numbers, `a,b`.
+    fn pair(self: *Knobs, i: usize, a: u64, b: u64) void {
+        const written = std.fmt.bufPrint(self.text[self.used..], "{d},{d}", .{ a, b }) catch unreachable;
         self.drawn[i] = .{ .at = @intCast(self.used), .len = @intCast(written.len) };
         self.used += written.len;
     }
@@ -252,6 +262,12 @@ test "every value a seed draws is in its documented range" {
         try inRange(k.get("DISK_CUT_AFTER"), 1, 100);
         try inRange(k.get("DISK_TEAR"), 1, 20);
         try inRange(k.get("DISK_TEAR_KEEP"), 1, 7);
+        if (k.get("DISK_ROT")) |v| {
+            var parts = std.mem.splitScalar(u8, v, ',');
+            try inRange(parts.next(), 0, 4095);
+            try inRange(parts.next(), 0, 511);
+            try testing.expect(parts.next() == null);
+        }
         // A seed cuts the power one way or the other, never both.
         try testing.expect(k.get("DISK_CUT_AFTER") == null or k.get("DISK_TEAR") == null);
         // A reset's offset only with a reset; a flood's gap only with a flood.

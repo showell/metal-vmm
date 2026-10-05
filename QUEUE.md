@@ -320,7 +320,7 @@ order without waiting; the box answers when he is back).
     what the run wrote, and `sound.sh` and a second boot can judge a
     multi-request run. A crash, a timeout and `GuestStuck` still leave the
     image as it was. A test of each.
-43. **(metal-vmm) F2, silent rot on read** (`DISK_ROT=sector,byte`), as you
+43. **Done (CC; `sweep.sh` now excuses a page that differs under `DISK_ROT`, as under the other disk faults).** **(metal-vmm) F2, silent rot on read** (`DISK_ROT=sector,byte`), as you
     proposed it, in `FAULT_SEED`'s ranges.
 44. **(metal-vmm) F3, a write cache and whether the guest flushes**
     (`VIRTIO_BLK_F_FLUSH` offered; `DISK_CACHE=1` holds acknowledged
