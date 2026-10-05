@@ -85,8 +85,8 @@ box's scripts check, ask how to check it here:
 
 ## Git is the channel
 
-- **Push to the branch your session is given.** Never to `master`, and never
-  to `interrupts`, which is the box's.
+- **Push to the branch your session is given** (see "The branches"). Never
+  to `master`, `interrupts` or `antithesis-sdk`, which are the box's.
 - **Rebase on `origin/interrupts` before every push.** The box merges your
   branch, so a stale base costs it a conflict.
 - **One topic per commit.** Its message says what changed and why, what you
@@ -99,6 +99,55 @@ box's scripts check, ask how to check it here:
 - **The box answers on `interrupts`:** in `QUEUE.md` under "Answers", in a
   `docs/reviews/REVIEW-*.md` file, or in the merge itself. Fetch it to see
   them.
+
+## The branches, all of them
+
+Two repos, one queue (this repo's `QUEUE.md`, on `interrupts`). Nothing else
+is live; if you see a branch not listed here, ask under Questions before
+building on it.
+
+| repo | branch | whose | what |
+|---|---|---|---|
+| metal-vmm | `interrupts` | the box | the base: you branch from it, the box merges into it |
+| metal-vmm | `claude/<your session's name>` | you | your work, rebased on `origin/interrupts` |
+| metal-vmm | `master` | the box | untouched until Steve merges `interrupts` |
+| gopher-metal | `antithesis-sdk` | the box | the base for the simulators: branch from it, the box merges into it |
+| gopher-metal | `claude/<your session's name>` | you | simulator work, rebased on `origin/antithesis-sdk` |
+| gopher-metal | `master` | the box | **what serves lynrummy.com. Never push, never branch from it.** |
+
+Use the same `claude/<name>` in both repos. Each QUEUE.md item says which
+repo it is in; an item in gopher-metal is merged there, and its answer comes
+here like any other.
+
+## gopher-metal: the simulators
+
+Since 2026-10-05 you work in gopher-metal too, on the **simulators and
+properties only**: `src/tcp_sim.zig`, `src/fat_sim.zig`, `src/properties.zig`,
+new simulators beside them, their regression seeds, and `coverage/floor-sim.txt`
+(raise it; never lower it without a line in QUEUE.md saying why). Read its
+`CLAUDE.md` on `antithesis-sdk` (master's still says a cloud session stops:
+it predates this) and its `COVERAGE.md`, then `TCP_TESTING.md`.
+
+**Why the simulators exist: they keep the layers honest.** A simulator drives
+only pure logic, code that needs no driver, no device, and no clock but the
+one it is handed. `tcp.zig` is simulated because it is a layer with nothing
+below it; a module that reaches into `io.zig` cannot be, and that is a fact
+about the module, not a gap in the simulator. So:
+
+- **Never mock I/O to reach a module.** Propose the seam instead, under
+  Proposed: which pure decision comes out, what I/O stays behind. The box
+  decides, because the module serves lynrummy.com.
+- **A failing seed is the code's or the simulator's, and you say which.** A
+  model that is wrong blames the code for its own mistake (seed 23953 did:
+  the model client went silent after TIME-WAIT, gopher-metal `02de06f`).
+  Read the RFC, not the model, before calling it the code's.
+- **A simulator finds; it does not fix the code it drives.** A defect in
+  `tcp.zig`, `fat16.zig` or any module the kernel runs is a seed kept as a
+  named regression test, failing, plus a line under Questions. The box fixes
+  it and decides whether it needs a new image for the site.
+- `zig build test` there takes about a minute; `zig build properties
+  -Dseeds=n` sweeps. Run the sweep at a size your container can afford and
+  say the size in the commit.
 
 ## Limits
 
