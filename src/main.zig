@@ -371,6 +371,7 @@ fn describeProcessor(dev: linux.fd_t, vcpu: linux.fd_t, pc: bool) !void {
     for (buffer.entries[0..buffer.head.nent]) |*e| {
         forgetTheDice(e);
         if (pc) sayTheApic(e);
+        if (pc) hideTheHostsTime(e);
     }
     _ = try kvm.call(vcpu, kvm.set_cpuid2, @intFromPtr(&buffer));
 }
@@ -400,17 +401,55 @@ fn sayTheApic(e: *kvm.CpuidEntry) void {
     e.ecx &= ~@as(u32, 1 << 21); // x2APIC
 }
 
-/// **THE APIC'S MSRS ARE OURS.** With no interrupt controller in the kernel,
-/// KVM would answer IA32_APIC_BASE itself and drop IA32_TSC_DEADLINE on the
-/// floor. A filter that denies the two sends every access to them here.
-fn ownTheApicMsrs(vm: linux.fd_t) !void {
+/// **THE HOST'S TIME HAS OTHER DOORS THAN `rdtsc`**, and the PC-shaped
+/// machine says it has none of them: no `rdtscp` and no `rdpid` (which read
+/// IA32_TSC_AUX beside the host's counter), no IA32_TSC_ADJUST, no MPERF and
+/// APERF, and none of KVM's own paravirtual features, kvmclock among them.
+/// With the bits clear, KVM makes the two instructions undefined; the MSRs
+/// are behind the filter (`ownTheMsrs`).
+fn hideTheHostsTime(e: *kvm.CpuidEntry) void {
+    if (e.function == 0x8000_0001) e.edx &= ~@as(u32, 1 << 27); // RDTSCP
+    if (e.function == 7 and e.index == 0) {
+        e.ebx &= ~@as(u32, 1 << 1); // IA32_TSC_ADJUST
+        e.ecx &= ~@as(u32, 1 << 22); // RDPID
+    }
+    if (e.function == 6) e.ecx &= ~@as(u32, 1 << 0); // MPERF and APERF
+    if (e.function == 0x4000_0001) e.eax = 0; // KVM's features: kvmclock and the rest
+}
+
+/// **THE MSRS THIS MACHINE ANSWERS ITSELF**, by a filter that denies them to
+/// KVM so every access exits here. The APIC's two: with no interrupt
+/// controller in the kernel, KVM would answer IA32_APIC_BASE itself and drop
+/// IA32_TSC_DEADLINE on the floor. And every MSR that reads the host's
+/// time: IA32_TSC, which this machine answers from its own clock, and the
+/// rest, which it refuses with a #GP, as a processor without them does.
+const owned_msrs = [_]struct { base: u32, n: u32 }{
+    .{ .base = apic.msr_apic_base, .n = 1 },
+    .{ .base = apic.msr_tsc_deadline, .n = 1 },
+    .{ .base = msr_tsc, .n = 3 }, // IA32_TSC, and kvmclock's first two (0x11, 0x12)
+    .{ .base = 0x3B, .n = 1 }, // IA32_TSC_ADJUST
+    .{ .base = 0xE7, .n = 2 }, // IA32_MPERF, IA32_APERF
+    .{ .base = 0xC000_0103, .n = 1 }, // IA32_TSC_AUX
+    .{ .base = 0x4B56_4D00, .n = 8 }, // KVM's own, kvmclock's second pair among them
+};
+const msr_tsc: u32 = 0x10;
+
+fn msrFilter() kvm.MsrFilter {
+    const deny = struct {
+        const bits = [1]u8{0}; // one bit an MSR, 0 denies; eight is enough
+    };
+    var filter = kvm.MsrFilter{};
+    for (owned_msrs, 0..) |r, i| {
+        std.debug.assert(r.n <= 8);
+        filter.ranges[i] = .{ .flags = kvm.msr_filter_read | kvm.msr_filter_write, .nmsrs = r.n, .base = r.base, .bitmap = &deny.bits };
+    }
+    return filter;
+}
+
+fn ownTheMsrs(vm: linux.fd_t) !void {
     var cap = kvm.EnableCap{ .cap = kvm.cap_x86_user_space_msr, .args = .{ kvm.msr_exit_reason_filter, 0, 0, 0 } };
     _ = try kvm.call(vm, kvm.enable_cap, @intFromPtr(&cap));
-    const deny = [1]u8{0};
-    var filter = kvm.MsrFilter{};
-    const both = kvm.msr_filter_read | kvm.msr_filter_write;
-    filter.ranges[0] = .{ .flags = both, .nmsrs = 1, .base = apic.msr_apic_base, .bitmap = &deny };
-    filter.ranges[1] = .{ .flags = both, .nmsrs = 1, .base = apic.msr_tsc_deadline, .bitmap = &deny };
+    var filter = msrFilter();
     _ = try kvm.call(vm, kvm.set_msr_filter, @intFromPtr(&filter));
 }
 
@@ -568,6 +607,13 @@ const Machine = struct {
     /// window this program does not fill yet, and a window of zeros is what
     /// "nothing is plugged in there" looks like from inside.
     absent: u64 = 0,
+
+    /// An MSR the filter sent here, read: IA32_TSC from this machine's own
+    /// clock, the APIC's from the APIC, and null (a #GP) for the rest.
+    fn readMsr(self: *Machine, index: u32) ?u64 {
+        if (index == msr_tsc) return self.time.ticks();
+        return self.lapic.readMsr(index, self.time.ns);
+    }
 
     fn out(self: *Machine, port: u16, bytes: []const u8) void {
         if (self.bus) |bus| if (pci.isPort(port)) return bus.out(port, bytes);
@@ -861,7 +907,7 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
             .rdmsr => {
                 machine.msrs += 1;
                 const m = kvm.msrExit(page);
-                if (machine.lapic.readMsr(m.index, machine.time.ns)) |v| {
+                if (machine.readMsr(m.index)) |v| {
                     m.data = v;
                     m.@"error" = 0;
                 } else m.@"error" = 1;
@@ -869,7 +915,7 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
             .wrmsr => {
                 machine.msrs += 1;
                 const m = kvm.msrExit(page);
-                m.@"error" = if (machine.lapic.writeMsr(m.index, m.data, machine.time.ns)) 0 else 1;
+                m.@"error" = if (machine.lapic.writeMsr(m.index, m.data, machine.time.ns)) 0 else 1; // IA32_TSC's write among the refused
             },
             .shutdown => {
                 std.debug.print("metal-vmm: the guest shut down (a triple fault, most likely)\n", .{});
@@ -1083,7 +1129,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // a droplet. Unset is the microvm-shaped machine check.sh compares with
     // QEMU's microvm.
     const pc = if (init.environ.getPosix("TRANSPORT")) |t| std.mem.eql(u8, t, "pci") else false;
-    if (pc) ownTheApicMsrs(vm) catch |e| {
+    if (pc) ownTheMsrs(vm) catch |e| {
         std.debug.print("metal-vmm: this KVM will not hand over the APIC's MSRs ({s}): TRANSPORT=pci needs Linux 5.10 or later\n", .{@errorName(e)});
         return 2;
     };
@@ -1508,4 +1554,54 @@ test "a marked deadline write becomes a port write, and its place is recorded" {
     try testing.expectEqualSlices(u8, "\x90" ++ d ++ "\xe6\xe1" ++ "\x0f\x30", ram[0x100000..][0..body.len]);
     try testing.expectEqualSlices(u64, &.{0x100000 + 6}, loaded.deadlines.at[0..loaded.deadlines.len]);
     try testing.expectEqual(@as(usize, 0), loaded.clocks.len);
+}
+
+test "the PC-shaped machine's CPUID offers no other way to the host's time" {
+    var entries = [_]kvm.CpuidEntry{
+        .{ .function = 0x8000_0001, .index = 0, .flags = 0, .eax = 0, .ebx = 0, .ecx = 0, .edx = 0xFFFF_FFFF, .padding = @splat(0) },
+        .{ .function = 7, .index = 0, .flags = 0, .eax = 0, .ebx = 0xFFFF_FFFF, .ecx = 0xFFFF_FFFF, .edx = 0, .padding = @splat(0) },
+        .{ .function = 6, .index = 0, .flags = 0, .eax = 0, .ebx = 0, .ecx = 0xFFFF_FFFF, .edx = 0, .padding = @splat(0) },
+        .{ .function = 0x4000_0001, .index = 0, .flags = 0, .eax = 0xFFFF_FFFF, .ebx = 0, .ecx = 0, .edx = 0, .padding = @splat(0) },
+    };
+    for (&entries) |*e| hideTheHostsTime(e);
+    try testing.expectEqual(@as(u32, 0), entries[0].edx & (1 << 27));
+    try testing.expectEqual(@as(u32, 0), entries[1].ebx & (1 << 1));
+    try testing.expectEqual(@as(u32, 0), entries[1].ecx & (1 << 22));
+    try testing.expectEqual(@as(u32, 0), entries[2].ecx & 1);
+    try testing.expectEqual(@as(u32, 0), entries[3].eax);
+    // Nothing else is touched.
+    try testing.expectEqual(~@as(u32, 1 << 27), entries[0].edx);
+    try testing.expectEqual(~@as(u32, 1 << 1), entries[1].ebx);
+}
+
+/// What KVM does with a filter whose ranges' bitmaps are all zero: an MSR in
+/// a range is denied to it, and so exits here.
+fn deniedByFilter(filter: *const kvm.MsrFilter, index: u32) bool {
+    for (filter.ranges) |r| {
+        if (r.nmsrs == 0 or index < r.base or index >= r.base + r.nmsrs) continue;
+        const bit = index - r.base;
+        if (r.bitmap.?[bit / 8] & (@as(u8, 1) << @intCast(bit % 8)) == 0) return true;
+    }
+    return false;
+}
+
+test "every MSR that reads the host's time, and the APIC's, exits here; others do not" {
+    const filter = msrFilter();
+    for ([_]u32{ 0x1B, 0x6E0, 0x10, 0x11, 0x12, 0x3B, 0xE7, 0xE8, 0xC000_0103, 0x4B56_4D00, 0x4B56_4D01, 0x4B56_4D07 }) |m| {
+        try testing.expect(deniedByFilter(&filter, m));
+    }
+    for ([_]u32{ 0xC000_0080, 0x1A0, 0x13, 0xE6, 0xE9, 0x4B56_4D08, 0xC000_0102 }) |m| {
+        try testing.expect(!deniedByFilter(&filter, m));
+    }
+}
+
+test "IA32_TSC reads this machine's clock; the others are refused" {
+    var machine = Machine{};
+    machine.time.ns = 4_000;
+    try testing.expectEqual(@as(?u64, 10_000), machine.readMsr(msr_tsc));
+    for ([_]u32{ 0x11, 0x12, 0x3B, 0xE7, 0xE8, 0xC000_0103, 0x4B56_4D00 }) |m| {
+        try testing.expect(machine.readMsr(m) == null);
+        try testing.expect(!machine.lapic.writeMsr(m, 1, 0));
+    }
+    try testing.expect(!machine.lapic.writeMsr(msr_tsc, 0, 0));
 }

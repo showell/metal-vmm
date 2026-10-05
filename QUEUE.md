@@ -92,7 +92,7 @@ From the review (`docs/reviews/REVIEW-interrupts.md`), most urgent first:
 13. **Done (CC).** **Queues that do not exist read as absent (M5).** A `queue_select` past
     the last aliases the last queue, and `num_queues` is 2 for one-queue
     devices; virtio 1.2 §4.1.4.3.2 requires `queue_size` 0.
-14. **The host's time behind the filter, on both machines (D1).** `rdtscp`,
+14. **Done for TRANSPORT=pci (CC); the microvm half is the box's call.** **The host's time behind the filter, on both machines (D1).** `rdtscp`,
     IA32_TSC, TSC_ADJUST, MPERF/APERF and kvmclock still read the host; the
     microvm half changes check.sh's guests, so it is the box's to merge.
 15. **Done (CC; check.sh first, see Questions).** **Ports 0xE0/0xE1 answer only the rewritten instructions, and the
