@@ -41,6 +41,9 @@ const writeBe32 = frames.writeBe32;
 const fakeSegment = frames.fakeSegment;
 const verifies = frames.verifies;
 const fakeTo = frames.fakeTo;
+const most_data = frames.most_data;
+const default_mss = frames.default_mss;
+const fakeSynAck = frames.fakeSynAck;
 
 pub fn earliest(a: ?u64, b: ?u64) ?u64 {
     const x = a orelse return b;
@@ -128,6 +131,10 @@ pub const Tcp = struct {
     answers: u32 = 0,
 
     rough: Rough = .{},
+    /// **THE MOST ONE SEGMENT OF OURS MAY CARRY**: what the guest announced
+    /// in its SYN-ACK, or 536 if it announced nothing, and never more than a
+    /// frame holds (RFC 9293 §3.7.1). `Rough.mss` may make it smaller.
+    send_mss: usize = default_mss,
     opened_at: u64 = 0,
     /// The retransmission timer: when it goes off, and how long the next
     /// wait is.
@@ -176,6 +183,7 @@ pub const Tcp = struct {
             .syn_sent => {
                 if (s.flags & flag_syn == 0 or s.flags & flag_ack == 0) return null;
                 self.ack = s.seq +% 1; // their SYN takes one too
+                self.send_mss = std.math.clamp(@as(usize, s.mss orelse default_mss), 1, most_data);
                 self.state = .established;
                 self.owes_empty = self.request.len == 0;
                 self.acknowledged(self.seq, now);
@@ -263,11 +271,13 @@ pub const Tcp = struct {
         return self.seq -% (self.iss +% 1) -% @intFromBool(self.fin_sent);
     }
 
-    /// The bytes from `from` on that one segment may carry: up to `Rough.mss`,
-    /// within one request, and no further than is released.
+    /// The bytes from `from` on that one segment may carry: up to the MSS
+    /// the guest announced and `Rough.mss`, within one request, and no
+    /// further than is released.
     fn chunk(self: *const Tcp, from: usize) []const u8 {
         const within = from % self.request.len;
-        const n = @min(self.rough.mss orelse self.request.len, self.request.len - within, self.released() - from);
+        const most = @min(self.rough.mss orelse self.send_mss, self.send_mss);
+        const n = @min(most, self.request.len - within, self.released() - from);
         return self.request[within..][0..n];
     }
 
@@ -712,4 +722,37 @@ test "a timeout during the second request sends the second request's bytes again
     const again = tcpIn(peer.due(peer.wakeAt().?).?).?;
     try testing.expectEqual(@as(u32, 1011), again.seq);
     try testing.expectEqualStrings("GET ", again.data);
+}
+
+test "a request larger than a segment goes at the MSS the guest announced, or 536" {
+    // Item 37: a 20 KB request panicked the peer, which sent it in one
+    // segment through its 2048-byte scratch.
+    var request: [20 * 1024]u8 = undefined;
+    for (&request, 0..) |*b, i| b.* = @truncate('a' + i % 26);
+    const cases = [_]struct { mss: ?u16, rough: ?usize, each: usize }{
+        .{ .mss = null, .rough = null, .each = 536 },
+        .{ .mss = 1460, .rough = null, .each = 1460 },
+        .{ .mss = 9000, .rough = null, .each = 1460 }, // no more than a frame holds
+        .{ .mss = 100, .rough = null, .each = 100 },
+        .{ .mss = 0, .rough = null, .each = 1 },
+        .{ .mss = 1460, .rough = 300, .each = 300 }, // PEER_MSS is smaller still
+        .{ .mss = 200, .rough = 300, .each = 200 }, // but never larger than announced
+    };
+    for (cases) |c| {
+        var peer = Peer{ .rough = .{ .mss = c.rough } };
+        var theirs: [2048]u8 = undefined;
+        const syn = tcpIn(peer.open(&request, 0)).?;
+        const syn_ack = if (c.mss) |m| fakeSynAck(&theirs, 5000, syn.seq +% 1, m) else fakeSegment(&theirs, flag_syn | flag_ack, 5000, syn.seq +% 1, "");
+        _ = peer.answer(syn_ack, 0).?;
+        var got: usize = 0;
+        while (peer.more(0)) |frame| {
+            const seg = tcpIn(frame).?;
+            try testing.expect(verifies(frame));
+            try testing.expect(seg.data.len <= c.each);
+            if (got + c.each <= request.len) try testing.expectEqual(c.each, seg.data.len);
+            try testing.expectEqualSlices(u8, request[got..][0..seg.data.len], seg.data);
+            got += seg.data.len;
+        }
+        try testing.expectEqual(request.len, got);
+    }
 }

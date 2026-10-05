@@ -3,7 +3,9 @@
 //! applied to the PCI bus and its functions' BARs, the virtio-mmio window,
 //! the APIC and its MSRs, the
 //! virtqueues behind them laid out any way at all, the serial port's reader,
-//! and the interval timer and the real-time clock.
+//! and the interval timer and the real-time clock. And the peer's side: its
+//! clients, asking requests of any size, answered by whatever segments a
+//! guest might send them (item 37 was a 20 KB request it could not send).
 //!
 //! What must hold for every seed:
 //!   - nothing panics: an overflow, a read past guest memory, an `unreachable`
@@ -25,6 +27,8 @@ const net = @import("net.zig");
 const entropy = @import("entropy.zig");
 const clock = @import("clock.zig");
 const coverage = @import("coverage.zig");
+const peer_zig = @import("peer.zig");
+const frames = @import("frames.zig");
 
 /// Guest memory: small, so that random addresses land inside it often.
 const ram_bytes = 64 * 1024;
@@ -44,7 +48,9 @@ pub const test_seeds = 64;
 /// Seeds that found something, kept so it stays found. Each names what it was.
 pub const regressions = [_]u64{
     // A queue size past 16 bits, from the mmio register: virtio.zig narrowed
-    // it in `take` (now `Queue.usableSize`).
+    // it in `take` (now `Queue.usableSize`). And on the peer's half (steps
+    // past 400), item 37: a request larger than the peer's 2048-byte frame,
+    // sent in one segment.
     1,
     // A device-config read past its 32 bytes underflowed (virtio.zig, `read`).
     // A ring index 65,535 ahead walked every chain for one doorbell (`take`).
@@ -73,6 +79,8 @@ const World = struct {
     serial: coverage.Serial = .{},
     pit: clock.Pit = .{},
     rtc: clock.Rtc = .{},
+    peer: peer_zig.Peer = .{},
+    request: [24 * 1024]u8 = undefined,
     now: u64 = 0,
     hash: std.hash.Wyhash = .init(0),
 
@@ -147,6 +155,15 @@ pub fn run(seed: u64) u64 {
             8 => if (r.boolean()) timers(w, r) else mmio(w, r),
             else => r.bytes(w.ram[r.uintLessThan(usize, ram_bytes - 64)..][0..r.uintLessThan(usize, 64)]),
         }
+    }
+    // **THE PEER'S HALF, ON DICE OF ITS OWN**, so that adding it left every
+    // seed above, the regressions among them, the run it was.
+    var peer_prng = std.Random.DefaultPrng.init(seed ^ 0x70_65_65_72); // "peer"
+    const pr = peer_prng.random();
+    for (0..steps) |step| {
+        current_step = steps + step;
+        w.now += pr.uintLessThan(u64, 5_000_000);
+        peerSide(w, pr);
     }
     return w.hash.final();
 }
@@ -291,6 +308,54 @@ fn wire(w: *World, r: std.Random) void {
     w.card.line.hold(frame[0..n], w.now);
     w.card.pump(&w.card_device, &w.ram, w.now);
     w.note(w.card.received);
+}
+
+/// **THE PEER, SPOKEN TO BY A GUEST THAT MAY SAY ANYTHING.** The first
+/// time, its clients and how rough the first one is, and a request of any
+/// size up to 24 KB; then segments to one of its clients (a SYN-ACK to the first
+/// client with any MSS, anything acknowledging anything, data, a FIN, a reset) or
+/// any bytes at all, and whatever it says back and on its own by now.
+fn peerSide(w: *World, r: std.Random) void {
+    const p = &w.peer;
+    if (p.opened_at == null) {
+        const n = r.uintLessThan(usize, w.request.len);
+        r.bytes(w.request[0..n]);
+        p.rough = .{
+            .mss = if (r.boolean()) r.uintLessThan(usize, 3000) else null,
+            .retransmits = r.boolean(),
+            .reset_after_ns = if (r.uintLessThan(u8, 4) == 0) r.uintLessThan(u64, 50_000_000) else null,
+            .reset_off = if (r.boolean()) r.int(u32) else 0,
+            .vanish_after = if (r.uintLessThan(u8, 4) == 0) r.uintLessThan(usize, 70_000) else null,
+            .flood = if (r.uintLessThan(u8, 4) == 0) r.uintLessThan(u32, 40) else 0,
+            .flood_gap_ns = r.uintLessThan(u64, 2_000_000),
+            .shut_after = if (r.uintLessThan(u8, 4) == 0) r.uintLessThan(usize, 70_000) else null,
+            .shut_for_ns = r.uintLessThan(u64, 50_000_000),
+        };
+        p.plan = .{ .clients = r.intRangeAtMost(u8, 1, peer_zig.max_clients), .asks = r.intRangeAtMost(u32, 1, 3), .gap_ns = r.uintLessThan(u64, 2_000_000) };
+        w.note(p.open(w.request[0..n], w.now).len);
+        return;
+    }
+    var out: [2048]u8 = undefined;
+    const i = r.uintLessThan(usize, @max(p.opened, 1));
+    const c = p.client(i);
+    const seq = if (r.boolean()) c.ack else @as(u32, @truncate(pick(r)));
+    const ack = if (r.boolean()) c.seq else @as(u32, @truncate(pick(r)));
+    var data: [1400]u8 = undefined;
+    const len = if (r.boolean()) 0 else r.uintLessThan(usize, data.len);
+    r.bytes(data[0..len]);
+    const frame = switch (r.uintLessThan(u8, 4)) {
+        0 => frames.fakeSynAck(&out, seq, ack, @truncate(pick(r))),
+        1 => frames.fakeTo(&out, c.port, r.int(u8), seq, ack, data[0..len]),
+        2 => frames.fakeTo(&out, c.port, frames.flag_ack | (if (r.boolean()) frames.flag_fin else 0), seq, ack, data[0..len]),
+        else => raw: {
+            r.bytes(out[0..len]);
+            break :raw out[0..len];
+        },
+    };
+    if (p.answer(frame, w.now)) |back| w.note(back.len);
+    for (0..64) |_| w.note((p.more(w.now) orelse break).len);
+    for (0..64) |_| w.note((p.due(w.now) orelse break).len);
+    w.note(p.wakeAt() orelse 0);
 }
 
 /// Bytes on COM1, the coverage prefix among them.

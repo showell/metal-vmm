@@ -267,7 +267,7 @@ turn; gopher-metal's long.sh now runs seven rough-peer scenarios, and its
 metal floor is 15 of tcp.zig's 18). These are urgent before 25-36: 37 is a
 crash on the peer's own input.
 
-37. **(metal-vmm) The peer's segment outgrows its buffer: a panic.**
+37. **Done (CC). Every segment of the peer's is at most the MSS the guest's SYN-ACK announced (536 if none, 1460 at most), and `PEER_MSS` only lowers it. A request of up to 1460 bytes to a guest announcing 1460, which gopher-metal's tcp.zig does, is one segment as before; a larger one is now several. fuzz.zig has a peer half on its own dice, which finds this at seed 1 with the fix undone.** **(metal-vmm) The peer's segment outgrows its buffer: a panic.**
     `PEER_REQUEST=<20 KB request>` with no `PEER_MSS` panics the VMM:
     `index out of bounds: index 8246, len 2048` at `peer.zig:740` (`build`,
     from `Tcp.more` via `segment`). The peer sends as much as the guest's

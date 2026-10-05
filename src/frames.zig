@@ -32,7 +32,16 @@ pub const Segment = struct {
     data: []const u8,
     src_port: u16,
     dst_port: u16,
+    /// The MSS option, on a SYN that carries one (RFC 9293 §3.7.1).
+    mss: ?u16 = null,
 };
+
+/// **THE MOST ONE SEGMENT CARRIES HERE**: an ethernet frame's 1500 bytes
+/// less the IP and TCP headers. The peer sends no more, whatever the guest
+/// announces.
+pub const most_data: usize = 1460;
+/// What a peer may send when the guest announced no MSS (RFC 9293 §3.7.1).
+pub const default_mss: usize = 536;
 
 /// The window it offers: one it never actually fills, or none.
 pub const window_open: u16 = 64240;
@@ -88,7 +97,27 @@ pub fn tcpIn(frame: []const u8) ?Segment {
         .data = tcp[offset..],
         .src_port = readBe16(tcp[0..2]),
         .dst_port = readBe16(tcp[2..4]),
+        .mss = if (tcp[13] & flag_syn != 0) mssOption(tcp[20..offset]) else null,
     };
+}
+
+/// The MSS option among a SYN's options, if it is there and well formed.
+fn mssOption(options: []const u8) ?u16 {
+    var at: usize = 0;
+    while (at < options.len) {
+        switch (options[at]) {
+            0 => return null, // the end of the list
+            1 => at += 1, // padding
+            else => {
+                if (at + 1 >= options.len) return null;
+                const len = options[at + 1];
+                if (len < 2 or at + len > options.len) return null;
+                if (options[at] == 2 and len == 4) return readBe16(options[at + 2 ..][0..2]);
+                at += len;
+            },
+        }
+    }
+    return null;
 }
 
 pub const ethertype_ipv4: u16 = 0x0800;
@@ -183,6 +212,17 @@ pub fn fakeSegment(out: []u8, flags: u8, seq: u32, ack: u32, data: []const u8) [
     return wrap(out, 6, guest_ip, server_ip, tcp_len);
 }
 
+/// A guest's SYN-ACK announcing `mss`, as gopher-metal's tcp.zig sends one.
+pub fn fakeSynAck(out: []u8, seq: u32, ack: u32, mss: u16) []const u8 {
+    const option = [4]u8{ 2, 4, @truncate(mss >> 8), @truncate(mss) };
+    const frame = fakeSegment(out, flag_syn | flag_ack, seq, ack, &option);
+    const tcp = out[34..frame.len];
+    tcp[12] = 6 << 4; // the option is header, not data
+    writeBe16(tcp[16..18], 0);
+    writeBe16(tcp[16..18], pseudoChecksum(guest_ip, server_ip, 6, tcp));
+    return frame;
+}
+
 /// A segment's TCP checksum adds up, as the guest checks it.
 pub fn verifies(frame: []const u8) bool {
     const ip = frame[14..34];
@@ -196,4 +236,27 @@ pub fn fakeTo(out: []u8, port: u16, flags: u8, seq: u32, ack: u32, data: []const
     writeBe16(out[34 + 16 ..][0..2], 0);
     writeBe16(out[34 + 16 ..][0..2], pseudoChecksum(guest_ip, server_ip, 6, out[34..frame.len]));
     return frame;
+}
+
+test "a SYN's MSS option is read, and anything malformed is none" {
+    var out: [128]u8 = undefined;
+    const plain = fakeSegment(&out, flag_syn | flag_ack, 1, 2, "");
+    try std.testing.expect(tcpIn(plain).?.mss == null);
+    const announced = tcpIn(fakeSynAck(&out, 1, 2, 1460)).?;
+    try std.testing.expectEqual(@as(?u16, 1460), announced.mss);
+    try std.testing.expectEqualStrings("", announced.data);
+    try std.testing.expect(verifies(fakeSynAck(&out, 1, 2, 1460)));
+    // A guest's SYN-ACK with options: padding, the MSS, the end.
+    const cases = [_]struct { options: []const u8, mss: ?u16 }{
+        .{ .options = &.{ 2, 4, 0x05, 0xB4 }, .mss = 1460 },
+        .{ .options = &.{ 1, 1, 1, 1, 2, 4, 0x02, 0x18, 0, 0, 0, 0 }, .mss = 536 },
+        .{ .options = &.{ 3, 3, 7, 1, 2, 4, 0x01, 0x00 }, .mss = 256 },
+        .{ .options = &.{ 2, 3, 5, 0 }, .mss = null },
+        .{ .options = &.{ 9, 0, 2, 4 }, .mss = null },
+        .{ .options = &.{ 2, 40, 1, 1 }, .mss = null },
+        .{ .options = &.{ 0, 0, 2, 4, 1, 1, 0, 0 }, .mss = null },
+    };
+    for (cases) |c| {
+        try std.testing.expectEqual(c.mss, mssOption(c.options));
+    }
 }

@@ -91,7 +91,8 @@ pub const Rough = struct {
     /// still shut (RFC 9293 §3.8.6.1).
     shut_after: ?usize = null,
     shut_for_ns: u64 = 0,
-    /// The most of its request it puts in one segment; all of it, if null.
+    /// The most of its request it puts in one segment, below the MSS the
+    /// guest announced (`Tcp.send_mss`); that MSS alone, if null.
     mss: ?usize = null,
     /// **ITS OWN RETRANSMISSION TIMER RUNS** (RFC 6298): set when the wire
     /// may lose or damage what it sends. A peer whose frames always arrive
