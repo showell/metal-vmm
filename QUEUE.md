@@ -9,9 +9,8 @@ bottom.
 - **The PC-shaped machine (`TRANSPORT=pci`) works**: gopher.elf halts between
   frames and wakes on MSI-X and the APIC timer, deterministically, on every
   route (`rest.sh all`, a gate in gopher-metal's `gates.sh` on its branch
-  `antithesis-sdk`). It was built in an
-  afternoon, and only the paths gopher-metal walks were tested. That is
-  what this queue is for.
+  `antithesis-sdk`). It was built in an afternoon, and only the paths
+  gopher-metal walks were tested. That is what this queue is for.
 - **Steve's direction**: the cover-every-scenario budget goes here, not to
   QEMU, which stays on the happy path. The explorer comes later.
 
