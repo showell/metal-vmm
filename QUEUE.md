@@ -122,6 +122,39 @@ bottom.
     in a model of the guest's table (`tcp_sim: a client that stayed through
     a flood got its whole answer` is the simulator's version).
 
+22. **Coverage across runs** (the explorer's memory; groundwork). Item 18's
+    table covers one run. Give `coverage.zig` a merge: many runs' JSONL
+    (each line tagged with the run's `FAULT_SEED` or its knobs) into one
+    table that says, per property, which run reached it first and how many
+    runs reached it, and which properties only one run ever reached (the
+    rare ones an explorer should steer toward). A small CLI over it
+    (`zig build coverage-merge -- a.jsonl b.jsonl ...` or similar) printing
+    that table and the floor check gopher-metal's `long.sh` does today with
+    the SDK's `report.py`. Pure logic, unit tests from hand-written JSONL.
+23. **A seed sweep the box can run** (groundwork, as 22). `sweep.sh` (or a
+    zig step): `FAULT_SEED` over a range against one kernel and volume, a
+    fresh copy of the volume per run, each run's verdict (exit code, the
+    peer's status, the page against an unhurt run's, `sound.sh`'s fsck when
+    the guest wrote) and its coverage into item 22's merge; it stops at
+    nothing, and ends with the failing seeds, each printed as the knobs that
+    repeat it. You cannot boot a guest, so test the parts that are logic
+    (verdicts, the summary) by hand-fed run outputs; the box runs it on
+    gopher.elf and answers here.
+24. **A review: can tcp.zig tell a real client from a flood?** (design;
+    write `docs/reviews/REVIEW-flood.md`, fix nothing). gopher-metal's
+    simulator found 14 rough seeds in 50,000 where a real client is reset:
+    its handshake ACK is lost, its slot is still `syn_received` on the
+    table's side, a flood SYN finds the table full, and `oldestHalfOpen`
+    (tcp.zig) gives way at the client's slot, older than `min_rto_ns`. The
+    client's next segment then meets no connection and is reset. Read
+    tcp.zig's give-way policy (its comment names the history: QUEUE item 82,
+    the burst against Linux) against RFC 4987 (SYN flooding defenses: SYN
+    cookies, the SYN cache, recycling the oldest half-open) and say what
+    each would cost here and whether any keeps this client. Also: can a
+    segment that meets no connection but carries an ACK matching a
+    given-way slot's ISS+1 revive it? gopher-metal is read-only to you; the
+    box and Steve decide.
+
 ## Proposed
 
 *(CC adds items here, one line each on why.)*
