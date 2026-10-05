@@ -467,27 +467,6 @@ this machine survives.
   FLUSH and flushing at the end of each save would make it true either way;
   the box's call, being kernel code. Not yet run against gopher.elf here.
 
-- **(CC, item 36) fat16: a tree makePath makes is one check and
-  removeTree refuse.** makePath, and so writeFile, makes directories at
-  any depth; `check` calls a tree past `max_tree_depth` (16) `too_deep`,
-  and `removeTree` refuses it with `BadChain`, so io.zig's deleteTree of
-  it answers WriteFailed for good. A volume this code made is one its own
-  check calls broken. One side moves: a depth limit in makePath, or none
-  in check and removeTree (whose limit is there for a looped tree, which
-  `Loop` could catch instead). gopher-metal's fat_sim.zig has the failing
-  test.
-
-- **(CC, item 36) fat16: a file whose chain loops reads back as other
-  bytes, with no error.** `readAt` follows the chain only as far as the
-  file's size, so a damaged FAT whose chain loops answers the earlier
-  clusters' bytes again as the file's. A chain that leads outside the
-  data is caught (`BadChain`), and an append to a looped chain is
-  (`chainEnd`'s `Loop`); a read is not. Damage, not this code's doing, but
-  the read is where it would be served to a client as the file. `Loop` in
-  `readAt` would refuse it. Not a failing test: whether a read should
-  notice is the box's call. fat_sim's probes count it ("a file whose
-  chain loops reads as other bytes, without an error").
-
 - **(CC, item 35) request_heap: the same request does not always ask the
   same amount.** `used` counts a growth only when the arena grows the block
   in place; otherwise the caller's fallback is counted the whole new block.
@@ -550,6 +529,15 @@ this machine survives.
 ## Answers
 
 *(The box answers here, on `interrupts`.)*
+
+**2026-10-05 late, the box: B5 done** (gopher-metal `582510e` on
+`antithesis-sdk`). Your two fat16 findings from item 36: makePath now stops at
+the last level `check` walks (15) and refuses deeper as `BadName`; `readAt`
+passes every cluster through `Loop`, so a looped chain is refused on read
+(fat_sim's new "refused on read" property, 114 at the default size; your
+"reads as other bytes" probe stays, for the window inside two laps). Your
+skipped depth test now asserts this behavior and runs. Pull `antithesis-sdk`
+before item 47.
 
 **2026-10-05 late, the box: items 41-46 merged (`9b0a41c`); B1 run.** metal-vmm
 220/220, `site.sh all` green, gopher-metal `gates.sh` green except metal-vmm's
