@@ -101,18 +101,26 @@ pub const Net = struct {
     pub fn pump(self: *Net, d: *virtio.Device, ram: []u8, now: u64) void {
         self.now = now;
         // What the peer says unspoken to — a timer of its own, a flood, a
-        // reset — goes on the wire first, at this instant.
-        while (self.peer.due(now)) |frame| self.line.hold(frame, now);
+        // reset — goes on the wire first, at this instant, **AS FAR AS THE
+        // WIRE HAS ROOM**: what is left waits for the guest to take frames,
+        // rather than pushing out ones already in flight.
+        while (self.line.room() > 0) {
+            const frame = self.peer.due(now) orelse break;
+            self.line.hold(frame, now);
+        }
         self.arrivals(d, ram);
     }
 
     /// **WHEN SOMETHING NEXT HAPPENS ON THIS SIDE OF THE WIRE**, strictly
     /// after `now`, once `pump` has run at `now`: a frame arriving, or the
-    /// peer acting on its own (the pump let it act on everything due by
-    /// `now`). A frame due already and still waiting has no buffer to go
-    /// to, and waits for the guest, not the clock.
+    /// peer acting on its own. A frame due already and still waiting has no
+    /// buffer to go to, and waits for the guest, not the clock; so does
+    /// the peer, when it is due already and the wire was full.
     pub fn nextDue(self: *const Net, now: u64) ?u64 {
         var at = self.peer.wakeAt();
+        if (at) |a| if (a <= now) {
+            at = null;
+        };
         if (self.line.nextDue()) |due| if (due > now) {
             at = if (at) |a| @min(a, due) else due;
         };
@@ -234,4 +242,21 @@ test "with nothing configured, nothing on this side ever happens on its own" {
     try testing.expect(card.nextDue(0) == null);
     card.pump(&d, &ram, 1000 * std.time.ns_per_s);
     try testing.expect(card.nextDue(1000 * std.time.ns_per_s) == null);
+}
+
+test "the peer sends no faster than the wire has room, and waits for the guest without stalling a halt" {
+    var card = Net{};
+    card.peer.rough = .{ .flood = 200, .flood_gap_ns = 0 };
+    var ram = [_]u8{0} ** 256;
+    var d = card.device();
+    _ = card.connect(&d, &ram, "GET"); // the client's SYN: one frame in flight
+    card.pump(&d, &ram, 0);
+    try testing.expectEqual(@as(usize, 0), card.line.room()); // full, none pushed out
+    try testing.expectEqual(@as(u32, 63), card.peer.flooded);
+    // The rest are due already, and wait for room: nothing for a halt to
+    // move the clock to.
+    try testing.expect(card.nextDue(0) == null);
+    for (0..10) |_| card.line.take();
+    card.pump(&d, &ram, 1);
+    try testing.expectEqual(@as(u32, 73), card.peer.flooded);
 }

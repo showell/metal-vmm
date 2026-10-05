@@ -164,6 +164,12 @@ pub const Wire = struct {
         return slot.bytes[0..slot.len];
     }
 
+    /// How many more frames it can hold before a new one pushes out the
+    /// oldest.
+    pub fn room(self: *const Wire) usize {
+        return in_flight - (self.next - self.first);
+    }
+
     /// When the oldest frame in flight arrives, if one is.
     pub fn nextDue(self: *const Wire) ?u64 {
         if (self.first >= self.next) return null;

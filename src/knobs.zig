@@ -33,6 +33,11 @@
 //! | `PEER_SHUT_AFTER` | 1/4 | 1-20,000 bytes, `PEER_SHUT_FOR_US` 10,000-5,000,000 |
 //! | `PEER_MSS` | 1/4 | 1-1460 |
 //!
+//! `PEER_FLOOD_AT_US`, `PEER_DAMAGE_RATE` and `DISK_REFUSE_RATE` are
+//! never drawn: a seed's flood starts with the client, and a seed's peer
+//! damage and disk refusals are named, not rated. Set by hand, they print
+//! with the rest.
+//!
 //! The peer's ranges are gopher-metal's `tcp_sim.zig` `Rough`'s and
 //! `Scenario`'s, where they have one.
 
@@ -43,8 +48,8 @@ pub const names = [_][]const u8{
     "WIRE_EAT",          "WIRE_LOSS",        "WIRE_LATENCY_US",   "PEER_EAT",
     "PEER_LOSS",         "PEER_DAMAGE",      "PEER_DAMAGE_RATE",  "DISK_REFUSE",
     "DISK_REFUSE_RATE",  "DISK_WRITES_ONLY", "PEER_RESET_AT",     "PEER_RESET_OFF",
-    "PEER_VANISH_AFTER", "PEER_FLOOD",       "PEER_FLOOD_GAP_US", "PEER_SHUT_AFTER",
-    "PEER_SHUT_FOR_US",  "PEER_MSS",
+    "PEER_VANISH_AFTER", "PEER_FLOOD",       "PEER_FLOOD_GAP_US", "PEER_FLOOD_AT_US",
+    "PEER_SHUT_AFTER",   "PEER_SHUT_FOR_US", "PEER_MSS",
 };
 
 fn index(comptime name: []const u8) usize {
@@ -198,7 +203,11 @@ test "different seeds turn different knobs, and every knob is turned by some see
         last_len = f.len;
     }
     for (turned, names) |t, n| {
-        if (!t and !std.mem.eql(u8, n, "PEER_DAMAGE_RATE") and !std.mem.eql(u8, n, "DISK_REFUSE_RATE")) {
+        // Three knobs only a person sets: a seed's runs keep to the flood
+        // and rates of the table above.
+        if (!t and !std.mem.eql(u8, n, "PEER_DAMAGE_RATE") and !std.mem.eql(u8, n, "DISK_REFUSE_RATE") and
+            !std.mem.eql(u8, n, "PEER_FLOOD_AT_US"))
+        {
             std.debug.print("never turned: {s}\n", .{n});
             return error.TestUnexpectedResult;
         }

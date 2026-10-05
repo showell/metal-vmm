@@ -353,7 +353,7 @@ times are microseconds after it opens, sizes are bytes of the answer:
 | `PEER_RESET_AT=us` | resets the connection then, if it is open, at its next sequence number; then answers anything with a reset |
 | `PEER_RESET_OFF=n` | puts that reset `n` past it instead, inside the guest's window, which must challenge it |
 | `PEER_VANISH_AFTER=n` | neither sends nor hears once it has `n` bytes of the answer |
-| `PEER_FLOOD=n`, `PEER_FLOOD_GAP_US=us` | sends `n` SYNs from 198.51.100.x that never finish, from the opening, `us` apart (10 ms by default) |
+| `PEER_FLOOD=n`, `PEER_FLOOD_GAP_US=us`, `PEER_FLOOD_AT_US=us` | sends `n` SYNs that never finish (up to 25,536), each from its own address in 198.51.100.x and port, `us` apart (10 ms by default), starting `PEER_FLOOD_AT_US` after the opening (at once by default); a thousand fills gopher.zig's 256 slots four times over |
 | `PEER_SHUT_AFTER=n`, `PEER_SHUT_FOR_US=us` | shuts its receive window once it has `n` bytes, takes nothing while it is shut, then says it is open |
 | `PEER_MSS=n` | sends its request `n` bytes a segment |
 
@@ -372,6 +372,11 @@ reads it until the server closes, and holds its connection open meanwhile.
 The `Rough` knobs above are the first client's alone; the others behave. A
 run with more than one conversation ends with a line for each client: its
 status, how many answers came whole, how many bytes, and how it ended.
+
+**The peer sends no faster than the wire has room.** The wire holds 64
+frames and drops the oldest when a 65th comes; what the peer has to say on
+its own (a flood, a timer) waits for room instead, so a flood with no gap
+arrives as fast as the guest takes it, not mostly lost.
 
 With none of these set the peer is the plain client it always was, frame for
 frame, and no run here changes. The guest's coverage properties these reach
