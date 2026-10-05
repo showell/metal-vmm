@@ -311,26 +311,26 @@ crash on the peer's own input.
 **Next, after 22-40** (2026-10-05 evening; Steve is away, so take these in
 order without waiting; the box answers when he is back).
 
-41. **(metal-vmm) The peer review's findings, P1-P5 and S1**, in the order
+41. **Done (CC): P1 (TIME-WAIT, closed ports), P2 (persist probes, WL1/WL2; the window itself in 39a), P3 with P5 (RFC 6298 timing, fast retransmit, go-back; RFC 5961 resets), and P6, P7 in the same lines; S1 (`sweep.sh` now excuses a page the peer itself gave up or vanished from, by a stderr line; `sweep_test.sh` has a seed for it). P4 waits for the box.** **(metal-vmm) The peer review's findings, P1-P5 and S1**, in the order
     `REVIEW-peer.md` gives: P1 first (the 23953 class: a finished peer goes
     silent where TIME-WAIT answers), then P2, P3 with P5, S1. P4 waits for
     the box's gates, as the review says.
-42. **(metal-vmm) An idle end writes the disk back.** Yes to your item 40
+42. **Done (CC, `keepsWrites` in main.zig, with its test).** **(metal-vmm) An idle end writes the disk back.** Yes to your item 40
     question: an idle end is a normal end for a server, so the image keeps
     what the run wrote, and `sound.sh` and a second boot can judge a
     multi-request run. A crash, a timeout and `GuestStuck` still leave the
     image as it was. A test of each.
-43. **(metal-vmm) F2, silent rot on read** (`DISK_ROT=sector,byte`), as you
+43. **Done (CC; `sweep.sh` now excuses a page that differs under `DISK_ROT`, as under the other disk faults).** **(metal-vmm) F2, silent rot on read** (`DISK_ROT=sector,byte`), as you
     proposed it, in `FAULT_SEED`'s ranges.
-44. **(metal-vmm) F3, a write cache and whether the guest flushes**
+44. **Done (CC, `cache.zig`; `DISK_CACHE=1` as the spec has it, `DISK_CACHE=lie` for a disk that lies; the answer for gopher.elf under Questions).** **(metal-vmm) F3, a write cache and whether the guest flushes**
     (`VIRTIO_BLK_F_FLUSH` offered; `DISK_CACHE=1` holds acknowledged
     writes until a flush; item 27's power cut loses what was not flushed).
     Offering the feature changes what the guest negotiates, so it is off
     unless the knob is set: `check.sh` holds the default machine to QEMU.
-45. **(metal-vmm) F4, a client that retries what got no answer**
+45. **Done (CC, `Rough.retry`; whether the volume holds the message once is the box's).** **(metal-vmm) F4, a client that retries what got no answer**
     (`PEER_RETRY=1`), with the run's end saying how many times the request
     was sent; whether the volume holds the message once is the box's check.
-46. **(metal-vmm) F5, the calendar as a knob** (`RTC_BOOTS_AT=unix`).
+46. **Done (CC, `Rtc.from`).** **(metal-vmm) F5, the calendar as a knob** (`RTC_BOOTS_AT=unix`).
 47. **(gopher-metal) REVIEW-flood's option 4, revival, in tcp.zig.**
     Steve ruled yes (2026-10-05): build it for merging. The box reviews the
     diff and merges it into `antithesis-sdk`; it reaches the site only in
@@ -455,6 +455,17 @@ this machine survives.
 ## Questions
 
 *(For the box or Steve. Take the next item; do not wait.)*
+
+- **(CC, item 44) gopher-metal never flushes, and never negotiates FLUSH.**
+  Its virtio driver (`negotiate`, `want_low`) asks for no feature in word 0
+  and its block requests are only `blk_t_in` and `blk_t_out`. So under
+  `DISK_CACHE=1` it gets write-through, as virtio 1.1 §5.2.5.1 promises,
+  and loses nothing: the honest answer on this machine. On a disk whose
+  cache lies (`DISK_CACHE=lie`, and many consumer drives), every write since
+  boot is at the mercy of the power, and "303 means saved" (README, "The
+  write path") holds only as far as the drive keeps its word. Negotiating
+  FLUSH and flushing at the end of each save would make it true either way;
+  the box's call, being kernel code. Not yet run against gopher.elf here.
 
 - **(CC, item 36) fat16: a tree makePath makes is one check and
   removeTree refuse.** makePath, and so writeFile, makes directories at

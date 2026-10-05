@@ -104,6 +104,41 @@ pub fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void
     }
     var buf: [2048]u8 = undefined;
     std.debug.print("{s}", .{unspent(&card.line, &card.peer, &block.refusals, &buf)});
+    if (peerEnd(&card.peer.tcp)) |line| std.debug.print("{s}", .{line});
+    if (card.peer.rough.retry > 0)
+        std.debug.print("metal-vmm: the first client sent its request {d} times (PEER_RETRY={d})\n", .{ card.peer.sends(), card.peer.rough.retry });
+    if (block.cache) |c| {
+        var line: [256]u8 = undefined;
+        std.debug.print("{s}", .{c.line(&line, block.refusals.cut != null)});
+    }
+    const d = &block.refusals;
+    if (d.rot_sector) |at| if (d.rotted > 0) {
+        std.debug.print("metal-vmm: disk: sector {d} rotted (byte {d}, mask 0x{x:0>2}) in {d} reads{s}\n", .{
+            at, d.rot_byte, d.rot_mask, d.rotted, if (d.rot_healed) ", then the guest wrote it again" else "",
+        });
+    };
+}
+
+/// **WHEN THE PEER ITSELF LET THE PAGE GO** (REVIEW-peer.md S1): the first
+/// client gave up, having sent the same thing too often unanswered, or
+/// vanished as `PEER_VANISH_AFTER` asked. A run whose page is missing for
+/// either reason missed it through the peer's own doing, and sweep.sh
+/// excuses it by this line. Nothing for any other end.
+pub fn peerEnd(c: *const wire.Tcp) ?[]const u8 {
+    return switch (c.state) {
+        .gave_up => "metal-vmm: the first client gave up: it sent the same thing too often, unanswered\n",
+        .gone => "metal-vmm: the first client vanished, as PEER_VANISH_AFTER asked\n",
+        else => null,
+    };
+}
+
+test "the peer's own end is said when it gave up or vanished, and only then" {
+    var c = wire.Tcp{};
+    for (std.enums.values(wire.Tcp.State)) |state| {
+        c.state = state;
+        const said = peerEnd(&c);
+        try testing.expectEqual(state == .gave_up or state == .gone, said != null);
+    }
 }
 
 /// **WHAT THE CLIENT GOT**, as main prints it on stdout at any end that is
@@ -213,6 +248,9 @@ pub fn unspent(line: *const faults.Wire, peer: *const wire.Peer, drive: *const f
     }
     if (drive.cut_after) |n| if (drive.cut == null) {
         w(buf, &at, "DISK_CUT_AFTER={d} never came: the guest wrote {d} times", .{ n, drive.writes });
+    };
+    if (drive.rot_sector) |sector| if (drive.rotted == 0) {
+        w(buf, &at, "DISK_ROT={d},{d} never came: the guest never read sector {d}{s}", .{ sector, drive.rot_byte, sector, if (drive.rot_healed) " before writing it" else "" });
     };
     if (drive.tear) |n| if (drive.cut == null) {
         w(buf, &at, "DISK_TEAR={d} never came: the guest made {d} writes of more than one sector", .{ n, drive.multi_writes });

@@ -135,7 +135,9 @@ seconds-edges — takes 1.3 s here against 9.7 s under QEMU.
 
 **And the wall clock is a decision.** The machine boots at noon on 2026-09-18,
 every time, so the dates a guest writes into a filesystem are the same dates on
-every run.
+every run. `RTC_BOOTS_AT=unix` makes it another instant, as decided: the last
+second of 32-bit time (`2147483647`), the end of a century (`4102444799`), a
+leap day's eve (`1835395199`), anything from 1970 to 9999.
 
 ### `rdtsc` does not exit, so the loader makes it one
 
@@ -201,7 +203,9 @@ million exits without printing or ringing a doorbell is stuck. On the
 PC-shaped one each halt starts that count again, and a guest that rests with
 nothing to do ends on a bound in its own time instead: `PATIENCE_S` seconds
 (600 by default) with nothing printed and no doorbell rung, reported as
-idle.
+idle. An idle end is a server's normal end: the disk keeps what the run
+wrote and the client's lines are printed, as at any other end. A guest that
+is stuck or faults leaves the image as it was.
 
 With a 5 ms wire each route halts a few times and takes timer and MSI-X
 interrupts both. At 200 ms, `/` halts 361 times, 356 woken by the timer at
@@ -378,6 +382,7 @@ times are microseconds after it opens, sizes are bytes of the answer:
 | `PEER_VANISH_AFTER=n` | neither sends nor hears once it has `n` bytes of the answer |
 | `PEER_FLOOD=n`, `PEER_FLOOD_GAP_US=us`, `PEER_FLOOD_AT_US=us` | sends `n` SYNs that never finish (up to 25,536), each from its own address in 198.51.100.x and port, `us` apart (10 ms by default), starting `PEER_FLOOD_AT_US` after the opening (at once by default); a thousand fills gopher.zig's 256 slots four times over |
 | `PEER_SHUT_AFTER=n`, `PEER_SHUT_FOR_US=us` | shuts its receive window once it has `n` bytes, takes nothing while it is shut, then says it is open |
+| `PEER_RETRY=n` | asks again, on a new connection, what got no answer at all (closed or reset before a byte came), up to `n` times, as a browser does; the run ends saying how many times the request was sent |
 | `PEER_IGNORE_WINDOW=1` | sends all its request at once, past the window the guest offered, and sends again what the guest threw away; a plain client keeps to the window |
 | `PEER_MSS=n` | sends its request `n` bytes a segment (never more than the guest's announced MSS, which it keeps to anyway: 536 if it announced none, 1460 at most) |
 
@@ -421,7 +426,8 @@ without the seed:
 PC-shaped machine. A seed fails if its exit is not the unhurt run's, it
 broke a coverage property, the volume it wrote is not sound (`sound.sh`), or
 its page is not the unhurt run's when nothing it did excuses that (a reset,
-a vanished peer and a refused disk request do). It stops at nothing, merges
+a vanished peer, a refused disk request and a peer that gave up do: the run
+says the last on stderr). It stops at nothing, merges
 every run's coverage (`FLOOR=<file>` to gate on one), and ends with the
 failing seeds as the knobs that repeat them. `./sweep_test.sh` checks its
 verdicts against a fake machine told in advance what each seed does.
@@ -499,6 +505,23 @@ ends saying which requests it refused, in this form (it has not yet been run
 against gopher.elf here):
 
     metal-vmm: disk: bad sector 2180 refused N of M requests (#n, a write of sector 2180; ...)
+
+**And a byte can rot.** `DISK_ROT=2180,7` (with `,0x40` for another mask
+than one bit) serves every read of sector 2180 with its byte 7 changed, and
+an "ok": the image is untouched, and once the guest writes the sector again
+it holds what was written. fat16.zig checks nothing it reads, so this is how
+a FAT entry pointing somewhere else, or a directory entry gone wrong, is
+handed to it. A seed draws it one time in eight, last of all its knobs.
+
+**And the disk can hold its writes.** `DISK_CACHE=1` offers
+VIRTIO_BLK_F_FLUSH and keeps a write cache: if the guest negotiates FLUSH
+its writes are acknowledged before they are kept, a flush keeps them, and a
+power cut (`DISK_CUT_AFTER`, `DISK_TEAR`) loses every write since the last
+flush. A guest that does not negotiate FLUSH is promised write-through
+(virtio 1.1 §5.2.5.1) and loses nothing. `DISK_CACHE=lie` holds writes
+either way, as a disk that lies about its cache does. The run ends saying
+which, and how many writes a cut lost. Off unless asked: offering FLUSH
+changes what the guest negotiates.
 
 The one PASS under a refusal is #1, the GPT header: `vfat` reads any failure to
 find a partition table as "no table" and mounts sector 0, which on this bare

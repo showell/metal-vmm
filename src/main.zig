@@ -42,6 +42,7 @@ const faults = @import("faults.zig");
 const wire = @import("peer.zig");
 const apic = @import("apic.zig");
 const cost = @import("cost.zig");
+const cache = @import("cache.zig");
 const coverage = @import("coverage.zig");
 const knobs = @import("knobs.zig");
 const pci = @import("pci.zig");
@@ -313,6 +314,8 @@ pub const Machine = struct {
     cost: cost.Cost = .{},
     /// The disk's faults, watched for a power cut.
     drive: ?*const faults.Drive = null,
+    /// The disk's write cache (`DISK_CACHE`), which a power cut empties.
+    write_cache: ?*cache.Cache = null,
     /// **THE SERIAL PORT READS THE GUEST'S COVERAGE LINES** (coverage.zig),
     /// and with `COVERAGE_OUT` sends them to this file instead of stdout.
     serial: coverage.Serial = .{},
@@ -549,6 +552,8 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
         // **THE POWER WENT OUT IN THE LAST EXIT** (faults.zig, `Drive.cut`):
         // the guest runs no further, and the image keeps what landed.
         if (machine.drive) |d| if (d.cut) |cut| {
+            // A write cache loses what was never flushed with it.
+            if (machine.write_cache) |c| c.lose();
             reportCut(cut);
             return machine.stopped orelse 0;
         };
@@ -693,6 +698,22 @@ fn readAll(path: [:0]const u8, into: []u8) ?[]const u8 {
 
 /// What the client got, for a caller that wants to diff it against another
 /// client's.
+/// **WHICH ENDS KEEP WHAT THE GUEST WROTE** (QUEUE.md item 42): one that
+/// ended as the guest meant, by its exit door or a power cut it was dealt,
+/// and an idle one, which is a server's normal end. Not a crash, a guest
+/// that faulted or got stuck, or anything KVM refused: the image is left as
+/// it was found, and a timeout from outside never gets here at all.
+fn keepsWrites(e: anyerror) bool {
+    return e == error.GuestIdle;
+}
+
+test "an idle end keeps the guest's writes; a stuck, faulted or failed one does not" {
+    try testing.expect(keepsWrites(error.GuestIdle));
+    for ([_]anyerror{ error.GuestStuck, error.GuestFaulted, error.KvmFailed, error.Unhandled }) |e| {
+        try testing.expect(!keepsWrites(e));
+    }
+}
+
 /// **WHAT THE CLIENT GOT, IN ONE LINE** on stdout, so a run here can be
 /// compared with a run under QEMU where curl says the same thing; and its
 /// body and whole answer to files, when asked (`PEER_BODY`, `PEER_RESPONSE`).
@@ -857,6 +878,27 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         std.debug.print("metal-vmm: FAULT_SEED={d} is {s}\n", .{ seed, turned.format(&line) });
     }
     tellTheFaults(&card.line, &block.refusals, &card.peer.rough, &turned);
+    // **THE CALENDAR AS A KNOB** (`RTC_BOOTS_AT=unix`): the day the chip
+    // boots on, from 1970 to 9999. Every run with it boots on that instant.
+    if (turned.get("RTC_BOOTS_AT")) |text| {
+        const at = std.fmt.parseInt(i64, text, 10) catch -1;
+        if (at < 0 or at > clock.last_boot) {
+            std.debug.print("metal-vmm: RTC_BOOTS_AT={s} is not a time from 1970 to 9999\n", .{text});
+            return 2;
+        }
+        machine.rtc.from = at;
+    }
+    // **A WRITE CACHE, AND FLUSH OFFERED**, only when asked: offering the
+    // feature changes what the guest negotiates, and check.sh holds the
+    // default machine to QEMU's.
+    var write_cache: cache.Cache = undefined;
+    defer if (block.cache) |c| c.deinit();
+    if (turned.get("DISK_CACHE")) |how| if (block.image.len > 0) {
+        write_cache = .{ .gpa = std.heap.page_allocator, .image = block.image, .lies = std.mem.eql(u8, how, "lie") };
+        block.cache = &write_cache;
+        block_device.features_low |= virtio.feature_blk_flush;
+        machine.write_cache = &write_cache;
+    };
     if (count(init.environ, "PATIENCE_S")) |seconds| machine.patience_ns = seconds * std.time.ns_per_s;
     // **COVERAGE LINES TO A FILE OF THEIR OWN**, appended: each boot of a
     // sweep adds its lines to the same JSONL, as the judge's do.
@@ -923,8 +965,15 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         reports.cost(&machine, &card, &block);
         reportCoverage(&machine);
         // **AN IDLE END IS A SERVER'S NORMAL END**: a guest serving more than
-        // one request always ends this way, so it says what the client got
-        // as any end does. The error, and so the exit code, still says idle.
+        // one request always ends this way, so its disk keeps what it wrote
+        // and it says what the client got, as any end does. The error, and so
+        // the exit code, still says idle.
+        if (keepsWrites(e)) if (drive) |*on_disk| {
+            _ = on_disk.writeBack() catch |w| {
+                std.debug.print("metal-vmm: the disk would not take the run's writes: {s}\n", .{@errorName(w)});
+                return 1;
+            };
+        };
         if (e == error.GuestIdle and fetch != null) theClient(init.environ, &card.peer);
         return e;
     };
@@ -972,6 +1021,7 @@ test {
     _ = @import("determinism.zig");
     _ = @import("snapshot.zig");
     _ = @import("cost.zig");
+    _ = @import("cache.zig");
     _ = @import("settings.zig");
     _ = @import("reports.zig");
     _ = @import("loader.zig");

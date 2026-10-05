@@ -43,6 +43,8 @@ pub const tsc_hz: u64 = 2_500_000_000;
 /// A guest that writes a file dates it from here, which is what makes the
 /// disk it leaves behind the same disk on every run.
 pub const boots_at: i64 = 1_789_732_800;
+/// The last instant a chip of two BCD digits and a century can say.
+pub const last_boot: i64 = 253_402_300_799; // 9999-12-31 23:59:59
 
 pub const Clock = struct {
     /// Nanoseconds since the machine started.
@@ -210,6 +212,9 @@ pub const Rtc = struct {
 
     /// BCD, 24-hour: what a PC's chip reports unless someone changes it.
     status_b: u8 = hour24_mode,
+    /// **THE INSTANT IT BOOTS**: `boots_at`, unless the run names another
+    /// (`RTC_BOOTS_AT=unix`), from 1970 to the end of 9999.
+    from: i64 = boots_at,
     index: u8 = 0,
 
     /// Port 0x70. Bit 7 is the NMI mask, which belongs to the chipset and not
@@ -228,13 +233,14 @@ pub const Rtc = struct {
     pub fn read(self: *const Rtc, ns: u64) u8 {
         const binary = self.status_b & binary_mode != 0;
         const hour24 = self.status_b & hour24_mode != 0;
-        const c = civilFromUnix(boots_at + @as(i64, @intCast(ns / std.time.ns_per_s)));
+        const now = self.from + @as(i64, @intCast(ns / std.time.ns_per_s));
+        const c = civilFromUnix(now);
         return switch (self.index) {
             reg_seconds => encode(c.second, binary),
             reg_minutes => encode(c.minute, binary),
             reg_hours => hours(c.hour, binary, hour24),
             // 1970-01-01 was a Thursday, and the chip counts Sunday as 1.
-            reg_weekday => encode(@intCast(@mod(@divFloor(boots_at + @as(i64, @intCast(ns / std.time.ns_per_s)), 86400) + 4, 7) + 1), binary),
+            reg_weekday => encode(@intCast(@mod(@divFloor(now, 86400) + 4, 7) + 1), binary),
             reg_day => encode(c.day, binary),
             reg_month => encode(c.month, binary),
             reg_year => encode(@intCast(@mod(c.year, 100)), binary),
@@ -390,4 +396,33 @@ test "the calendar agrees with times computed elsewhere" {
         try testing.expectEqual(k.mi, c.minute);
         try testing.expectEqual(k.s, c.second);
     }
+}
+
+test "the calendar as a knob: the chip boots when it is told, and rolls over as the calendar does" {
+    const Case = struct { from: i64, after_s: u64, y: u8, m: u8, d: u8, h: u8, mi: u8, s: u8, century: u8, weekday: u8 };
+    const cases = [_]Case{
+        // 2038-01-19 03:14:07, the last second of a signed 32-bit time, and one past it.
+        .{ .from = 2_147_483_647, .after_s = 1, .y = 38, .m = 1, .d = 19, .h = 3, .mi = 14, .s = 8, .century = 20, .weekday = 3 },
+        // 2099-12-31 23:59:59, and the century turns.
+        .{ .from = 4_102_444_799, .after_s = 1, .y = 0, .m = 1, .d = 1, .h = 0, .mi = 0, .s = 0, .century = 21, .weekday = 6 },
+        // 2028-02-28 23:59:59: a leap day follows.
+        .{ .from = 1_835_395_199, .after_s = 1, .y = 28, .m = 2, .d = 29, .h = 0, .mi = 0, .s = 0, .century = 20, .weekday = 3 },
+        // 1970-01-01, the epoch itself.
+        .{ .from = 0, .after_s = 0, .y = 70, .m = 1, .d = 1, .h = 0, .mi = 0, .s = 0, .century = 19, .weekday = 5 },
+    };
+    for (cases) |c| {
+        var rtc = Rtc{ .from = c.from, .status_b = Rtc.binary_mode | Rtc.hour24_mode };
+        const ns = c.after_s * std.time.ns_per_s;
+        const want = [_][2]u8{
+            .{ Rtc.reg_year, c.y },          .{ Rtc.reg_month, c.m },         .{ Rtc.reg_day, c.d },
+            .{ Rtc.reg_hours, c.h },         .{ Rtc.reg_minutes, c.mi },      .{ Rtc.reg_seconds, c.s },
+            .{ Rtc.reg_century, c.century }, .{ Rtc.reg_weekday, c.weekday },
+        };
+        for (want) |w| {
+            rtc.select(w[0]);
+            try testing.expectEqual(w[1], rtc.read(ns));
+        }
+    }
+    // Left alone, it is the machine's own boot, as always.
+    try testing.expectEqual(boots_at, (Rtc{}).from);
 }

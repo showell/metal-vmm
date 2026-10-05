@@ -89,6 +89,7 @@ pub fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, rough: *wire.Roug
     if (knob(k, "PEER_FLOOD_GAP_US")) |us| rough.flood_gap_ns = us * std.time.ns_per_us;
     if (knob(k, "PEER_SHUT_AFTER")) |n| rough.shut_after = @intCast(n);
     if (knob(k, "PEER_SHUT_FOR_US")) |us| rough.shut_for_ns = us * std.time.ns_per_us;
+    if (knob(k, "PEER_RETRY")) |n| rough.retry = @intCast(@min(n, 100));
     if (knob(k, "PEER_MSS")) |n| if (n > 0) {
         rough.mss = @intCast(n);
     };
@@ -106,6 +107,17 @@ pub fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, rough: *wire.Roug
     if (k.get("DISK_REFUSE_RATE")) |n| drive.refused.rate = std.fmt.parseInt(u32, n, 10) catch 0;
     if (k.get("DISK_WRITES_ONLY")) |_| drive.writes_only = true;
     if (k.get("DISK_READS_ONLY")) |_| drive.reads_only = true;
+    if (k.get("DISK_ROT")) |text| {
+        var parts = std.mem.splitScalar(u8, text, ',');
+        const sector = std.fmt.parseInt(u64, parts.next() orelse "", 10) catch null;
+        const byte = std.fmt.parseInt(u16, parts.next() orelse "", 10) catch null;
+        if (sector != null and byte != null and byte.? < 512) {
+            drive.rot_sector = sector;
+            drive.rot_byte = byte.?;
+            if (parts.next()) |m| drive.rot_mask = std.fmt.parseInt(u8, m, 0) catch drive.rot_mask;
+            if (drive.rot_mask == 0) drive.rot_mask = 0x01;
+        }
+    }
     if (k.get("DISK_BAD_SECTOR")) |list| {
         var each = std.mem.tokenizeScalar(u8, list, ',');
         while (each.next()) |one| {
@@ -183,7 +195,7 @@ test "the knobs reach the wire, the disk and the peer, a seed's or the environme
         .{ "DISK_REFUSE", "4" },     .{ "DISK_WRITES_ONLY", "1" },   .{ "PEER_RESET_AT", "3000" },
         .{ "PEER_FLOOD", "4" },      .{ "PEER_MSS", "100" },         .{ "DISK_CUT_AFTER", "7" },
         .{ "DISK_TEAR", "2" },       .{ "DISK_TEAR_KEEP", "3" },     .{ "DISK_BAD_SECTOR", "2180,x,7" },
-        .{ "DISK_READS_ONLY", "1" }, .{ "PEER_IGNORE_WINDOW", "1" },
+        .{ "DISK_READS_ONLY", "1" }, .{ "PEER_IGNORE_WINDOW", "1" }, .{ "DISK_ROT", "2180,7,0x40" },
     } });
     var line = faults.Wire{};
     var drive = faults.Drive{};
@@ -196,6 +208,9 @@ test "the knobs reach the wire, the disk and the peer, a seed's or the environme
     try testing.expect(drive.writes_only);
     try testing.expect(drive.reads_only);
     try testing.expect(rough.ignore_window and rough.retransmits);
+    try testing.expectEqual(@as(?u64, 2180), drive.rot_sector);
+    try testing.expectEqual(@as(u16, 7), drive.rot_byte);
+    try testing.expectEqual(@as(u8, 0x40), drive.rot_mask);
     try testing.expectEqualSlices(u64, &.{ 2180, 7 }, drive.bad[0..drive.bad_len]);
     try testing.expectEqual(@as(?u64, 7), drive.cut_after);
     try testing.expectEqual(@as(?u64, 2), drive.tear);

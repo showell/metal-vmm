@@ -60,6 +60,8 @@ run() {
 
 status_of() { sed -n 's/^peer: \([0-9]*\).*/\1/p' "$WORK/$1.log" | head -1; }
 knobs_of() { sed -n 's/^metal-vmm: FAULT_SEED=[0-9]* is //p' "$WORK/$1.log" | head -1; }
+# The peer's own end, when it let the page go itself (REVIEW-peer.md S1).
+peer_end_of() { sed -n 's/^metal-vmm: the first client \(gave up\|vanished\).*/\1/p' "$WORK/$1.log" | head -1; }
 broken_of() { sed -n 's/^metal-vmm: coverage: .*, \([0-9]*\) broken).*/\1/p' "$WORK/$1.log" | tail -1; }
 
 # verdict <name>: "ok", "differs (allowed: ...)", or "FAIL: ..." for one run
@@ -76,9 +78,12 @@ verdict() {
     "$SOUND" "$WORK/$name.img" > "$WORK/$name.sound" 2>&1 || why="$why, the volume is not sound"
   fi
   if [ "$status" != "$(status_of unhurt)" ] || ! cmp -s "$WORK/$name.body" "$WORK/unhurt.body"; then
-    for k in PEER_RESET_AT PEER_VANISH_AFTER DISK_REFUSE DISK_CUT_AFTER DISK_TEAR; do
+    for k in PEER_RESET_AT PEER_VANISH_AFTER DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DISK_ROT; do
       case " $knobs" in *" $k="*) excuse="$excuse${excuse:+, }$k" ;; esac
     done
+    local gone
+    gone=$(peer_end_of "$name")
+    [ -z "$gone" ] || excuse="$excuse${excuse:+, }the peer $gone"
     [ -n "$excuse" ] || why="$why, not the page (status ${status:-none})"
   fi
   if [ -n "$why" ]; then echo "FAIL: ${why#, }"

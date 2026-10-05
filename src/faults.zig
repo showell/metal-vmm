@@ -307,6 +307,17 @@ pub const Drive = struct {
     bad_sectors: [8]u64 = @splat(0),
     bad_kinds: [8]u8 = @splat(0),
 
+    /// **SILENT ROT** (`DISK_ROT=sector,byte[,mask]`): every read of the
+    /// sector is served with that byte XORed by `mask` (one bit, 0x01, by
+    /// default), and says "ok", as a disk whose cell decayed does. Until the
+    /// guest writes the sector again, which heals it. The image is never
+    /// touched. `rotted` counts the reads it spoiled.
+    rot_sector: ?u64 = null,
+    rot_byte: u16 = 0,
+    rot_mask: u8 = 0x01,
+    rot_healed: bool = false,
+    rotted: u64 = 0,
+
     /// **THE POWER IS CUT AFTER THE GUEST'S NTH WRITE** (`DISK_CUT_AFTER`):
     /// that write lands, nothing after it does, and the machine stops at the
     /// end of the exit it happened in. The image keeps what was written before
@@ -333,7 +344,7 @@ pub const Drive = struct {
 
     pub fn configured(self: *const Drive) bool {
         return self.refused.configured() or self.writes_only or self.reads_only or self.bad_len != 0 or
-            self.cut_after != null or self.tear != null;
+            self.cut_after != null or self.tear != null or self.rot_sector != null;
     }
 
     /// **HOW MUCH OF THIS WRITE LANDS**, in sectors, for a write of `sectors`
@@ -352,6 +363,24 @@ pub const Drive = struct {
             self.cut = .{ .write = self.writes, .sector = sector, .landed = sectors, .of = sectors };
         };
         return sectors;
+    }
+
+    /// The bytes of a read of `sectors` from `sector`, just copied: the
+    /// rotted byte spoiled if it is among them.
+    pub fn rotInto(self: *Drive, sector: u64, bytes: []u8) void {
+        const at = self.rot_sector orelse return;
+        if (self.rot_healed or at < sector) return;
+        const off = (at - sector) * 512 + self.rot_byte;
+        if (off >= bytes.len) return;
+        bytes[@intCast(off)] ^= self.rot_mask;
+        self.rotted += 1;
+    }
+
+    /// A write of `sectors` from `sector` landed: a rotted sector among them
+    /// holds what was written now.
+    pub fn rewrote(self: *Drive, sector: u64, sectors: u64) void {
+        const at = self.rot_sector orelse return;
+        if (at >= sector and at - sector < sectors) self.rot_healed = true;
     }
 
     /// **IS THIS ONE SERVED?** Called once per request of `sectors` sectors
@@ -441,6 +470,27 @@ test "a bad sector leaves the schedule's count where it was" {
         if (i == 3) try testing.expect(a and !b) else try testing.expectEqual(a, b);
     }
     try testing.expectEqual(@as(u32, 4), with.refused.picked[0]);
+}
+
+test "a rotted byte spoils every read of its sector, says ok, and a write heals it" {
+    var d = Drive{ .rot_sector = 10, .rot_byte = 3, .rot_mask = 0x80 };
+    var buf: [4 * 512]u8 = @splat(0);
+    d.rotInto(8, &buf); // sectors 8..11: the rotted one is the third
+    try testing.expectEqual(@as(u8, 0x80), buf[2 * 512 + 3]);
+    var one: [512]u8 = @splat(0x11);
+    d.rotInto(11, &one); // past it
+    d.rotInto(9, &one); // before it, and too short to reach it
+    try testing.expectEqual(@as(u8, 0x11), one[3]);
+    d.rotInto(10, &one);
+    try testing.expectEqual(@as(u8, 0x91), one[3]);
+    try testing.expectEqual(@as(u64, 2), d.rotted);
+    d.rewrote(9, 1); // another sector
+    d.rewrote(8, 4); // its own
+    var after: [512]u8 = @splat(0);
+    d.rotInto(10, &after);
+    try testing.expectEqual(@as(u8, 0), after[3]);
+    try testing.expectEqual(@as(u64, 2), d.rotted);
+    try testing.expect(d.configured());
 }
 
 test "the power is cut after the nth write, which lands whole" {
