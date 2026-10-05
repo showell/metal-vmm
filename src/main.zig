@@ -173,12 +173,12 @@ fn textRange(image: []const u8, head: *const ElfHeader) struct { lo: u64, hi: u6
 /// **ONLY A MARKED READ.** Two bytes is too short a pattern: gopher.elf
 /// (2026-10-05) has 87 `0F 31` pairs in its text and 77 `rdtsc`s, and
 /// rewriting the other ten, inside other instructions' operands, stopped the
-/// guest on an invalid opcode. gopher-metal's `tsc.read` puts a 7-byte NOP
-/// whose displacement spells "mvmc" right before its `rdtsc`; this rewrites
-/// the `rdtsc` after that mark and nothing else. A guest that reads the
+/// guest on an invalid opcode. gopher-metal's `tsc.read` puts
+/// `mov $"mvmc", %ecx` (`B9 6D 76 6D 63`) right before its `rdtsc`; this
+/// rewrites the `rdtsc` after that mark and nothing else. A guest that reads the
 /// counter without the mark reads the host's, which this does not see.
 fn rewriteClockReads(segment: []u8) usize {
-    const mark = [_]u8{ 0x0F, 0x1F, 0x80, 'm', 'v', 'm', 'c' };
+    const mark = [_]u8{ 0xB9, 'm', 'v', 'm', 'c' };
     const marked_rdtsc = mark ++ [2]u8{ 0x0F, 0x31 };
     const out_to_us = [2]u8{ 0xE6, @as(u8, @intCast(tsc_port)) };
     var found: usize = 0;
@@ -1012,7 +1012,7 @@ test "every marked rdtsc in the guest's text becomes a question for us" {
     // Two marked reads, and two near misses: an unmarked 0F 31, which may sit
     // inside another instruction and must be left alone, and the mark before
     // 0F 30 (wrmsr).
-    const m = "\x0f\x1f\x80mvmc";
+    const m = "\xb9mvmc";
     const body = m ++ "\x0f\x31" ++ "\x0f\x31" ++ m ++ "\x0f\x30" ++ m ++ "\x0f\x31";
     const image = fakeKernel(&file, 0x100000, 0x100000, body);
     const ram = try testing.allocator.alloc(u8, 0x101000);
