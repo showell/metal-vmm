@@ -239,7 +239,7 @@ does.
     client holding a stream; the oracles follow (every client that stayed
     got its whole answer; a held stream is not given up on while its client
     reads). This is item 20's peer, on the simulator's side.
-34. **(gopher-metal) A simulator for the page cache.** `page_cache.zig` is
+34. **Done (CC, gopher-metal `86c7cae`): `page_sim.zig`, twelve properties on the floor, nothing found in page_cache.zig (five planted bugs each caught). `build.zig` gained `-Dpage-seeds` (100 by default) and page_sim in the catalog and the tests.** **(gopher-metal) A simulator for the page cache.** `page_cache.zig` is
     pure (it imports only `std`, 417 lines) and has no properties. Drive it
     with seeded reads, writes and whole-file writes against a reference map
     of what each file holds; the oracle is that every read returns the
