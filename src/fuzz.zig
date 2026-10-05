@@ -325,6 +325,7 @@ fn peerSide(w: *World, r: std.Random) void {
             .retransmits = r.boolean(),
             .ignore_window = r.boolean(),
             .retry = r.uintLessThan(u8, 3),
+            .drip_ns = if (r.uintLessThan(u8, 4) == 0) r.uintLessThan(u64, 50_000_000) else null,
             .reset_after_ns = if (r.uintLessThan(u8, 4) == 0) r.uintLessThan(u64, 50_000_000) else null,
             .reset_off = if (r.boolean()) r.int(u32) else 0,
             .vanish_after = if (r.uintLessThan(u8, 4) == 0) r.uintLessThan(usize, 70_000) else null,

@@ -341,7 +341,7 @@ order without waiting; the box answers when he is back).
     flood outlasts it, measured. Say in the commit what the change costs
     the kernel (bytes, a branch on which path). This is the one place you
     change kernel code; on your branch, as always.
-48. **Your proposals again** when 41-47 are done, as in item 32: the next
+48. **Done (CC): H1-H5 under Proposed; H1 built (`PEER_DRIP_US`), not yet run against gopher.elf: with `PEER_CLIENTS` and `PEER_MSS=1` it asks how many slow clients keep a good one out.** **Your proposals again** when 41-47 are done, as in item 32: the next
     five, one line each on why, then take the first.
 
 ## Proposed
@@ -447,6 +447,30 @@ From item 36 (CC):
   fails to write" is reached about once in 160 failure points. A fault
   that refuses only the next write of more than one sector reaches it
   every time. test_disk.zig is not the simulators' to change.
+
+From item 48: the next five, most finding first (CC):
+
+- **H1. A slow client** (`PEER_DRIP_US=us`: each segment of the request a
+  gap after the last, with `PEER_MSS` to make them small). gopher.zig serves
+  only a whole request and lets go only of a connection silent for
+  `idle_ns`, so a client that is never silent and never done may hold its
+  slot for as long as it drips; with `PEER_CLIENTS`, how many such clients
+  it takes to keep a good one out is the measure. **Taken; see item 48.**
+- **H5. Pipelining** (`PEER_PIPELINE=1`: the second request sent with the
+  first). gopher.zig answers one request and closes with the second still
+  unread; whether the table sends a FIN or a reset then, and whether the
+  client still gets the whole first answer, is the case Apache's
+  lingering close exists for.
+- **H3. Frames that lie, from the peer** (`PEER_MANGLE=n`): an IP total
+  length past the frame, IP options, a fragment, a TCP data offset past
+  the segment, a zero window with data. The guest's parser sees only well
+  formed frames today; the VMM's fuzzer covers the VMM, not the guest.
+- **H2. A lease that ends** (`DHCP_LEASE_S=n`, the peer's offer): does
+  gopher-metal renew at T1 or rebind at T2? If not, a real network takes
+  its address back while it serves.
+- **H4. A simulator for `ready.zig`** (gopher-metal): whether a request
+  head is whole, over every split of the bytes, at the receive buffer's
+  edge, and past it (the 431 path).
 
 Folded into existing items rather than new ones: M4, L1, L2, L3 into item 4
 (MSI-X); L4 into item 5 (APIC); L5 (0xCF9) waits until a reset is something

@@ -104,6 +104,10 @@ pub const Rough = struct {
     /// followed by a new one asking the same, as a browser does, up to `n`
     /// times. The new one behaves.
     retry: u8 = 0,
+    /// **A SLOW CLIENT** (`PEER_DRIP_US`): each segment of its request goes
+    /// this long after the last, so it is never silent and never done for a
+    /// long time (with `PEER_MSS`, a byte at a time if asked).
+    drip_ns: ?u64 = null,
     /// **ITS OWN RETRANSMISSION TIMER RUNS** (RFC 6298): set when the wire
     /// may lose or damage what it sends. A peer whose frames always arrive
     /// never needs to send one twice, so without this the run is the run it

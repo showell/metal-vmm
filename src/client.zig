@@ -185,6 +185,8 @@ pub const Tcp = struct {
     /// While its window is shut, when it opens; and whether it has shut yet.
     shut_until: ?u64 = null,
     shut_ever: bool = false,
+    /// A slow client's next segment may go then (`Rough.drip_ns`).
+    drip_at: ?u64 = null,
     /// **IN TIME-WAIT UNTIL THEN**: it closed first, and the guest's FIN
     /// came. Its state is still `done`, as every run's report has it.
     time_wait_until: ?u64 = null,
@@ -424,6 +426,7 @@ pub const Tcp = struct {
         }
         const from = self.sent();
         if (from < self.released()) {
+            if (self.drip_at) |at| if (now < at) return null; // a slow client waits
             const next = self.chunk(from);
             const data = next[0..@min(next.len, self.windowRoom())];
             if (data.len == 0) {
@@ -435,6 +438,7 @@ pub const Tcp = struct {
             }
             const frame = self.segment(out, flag_ack | flag_psh, data);
             self.seq +%= @intCast(data.len);
+            if (self.rough.drip_ns) |gap| self.drip_at = now + gap;
             self.time(now);
             self.arm(now);
             return frame;
@@ -465,6 +469,10 @@ pub const Tcp = struct {
         if (self.shut_until) |at| if (now >= at) {
             self.shut_until = null;
             return self.segment(out, flag_ack, "");
+        };
+        if (self.dripDue()) |at| if (now >= at) {
+            if (self.more(now, out)) |frame| return frame;
+            self.drip_at = null;
         };
         if (self.persist_at) |at| if (now >= at) {
             self.persist_at = null;
@@ -522,7 +530,14 @@ pub const Tcp = struct {
 
     /// The next instant at which `due` will have something, if any.
     pub fn wakeAt(self: *const Tcp) ?u64 {
-        return earliest(earliest(earliest(self.resetAt(), self.shut_until), self.timer_at), self.persist_at);
+        return earliest(earliest(earliest(earliest(self.resetAt(), self.shut_until), self.timer_at), self.persist_at), self.dripDue());
+    }
+
+    /// When a slow client's next segment goes, if one is waiting.
+    fn dripDue(self: *const Tcp) ?u64 {
+        const at = self.drip_at orelse return null;
+        if (self.state != .established or self.sent() >= self.released()) return null;
+        return at;
     }
 
     fn resetAt(self: *const Tcp) ?u64 {
@@ -1246,4 +1261,29 @@ test "PEER_RETRY: an answer, even a short one, is not asked again" {
     _ = peer.answer(fakeSegment(&theirs, flag_fin | flag_ack | flag_psh, 5001, peer.tcp.seq, "HTTP/1.1 500"), 0).?;
     try testing.expect(peer.wakeAt() == null);
     try testing.expectEqual(@as(u32, 1), peer.sends());
+}
+
+test "PEER_DRIP_US: a slow client sends its request a segment a gap, never silent, never done till the end" {
+    var peer = Peer{};
+    var theirs: [2048]u8 = undefined;
+    const syn = tcpIn(peer.open("GET /slow HTTP/1.1\r\n\r\n", 0)).?;
+    peer.tcp.rough = .{ .mss = 4, .drip_ns = 3 * sec };
+    _ = peer.answer(fakeSegment(&theirs, flag_syn | flag_ack, 5000, syn.seq +% 1, ""), 0).?;
+    // One segment now, and no more until the gap is up.
+    const first = tcpIn(peer.more(0).?).?;
+    try testing.expectEqualStrings("GET ", first.data);
+    try testing.expect(peer.more(0) == null);
+    try testing.expectEqual(@as(?u64, 3 * sec), peer.wakeAt());
+    try testing.expect(peer.due(3 * sec - 1) == null);
+    var at: u64 = 3 * sec;
+    var got: [64]u8 = undefined;
+    var n: usize = 0;
+    while (peer.wakeAt()) |w| : (at = w) {
+        const seg = tcpIn(peer.due(w).?).?;
+        @memcpy(got[n..][0..seg.data.len], seg.data);
+        n += seg.data.len;
+        try testing.expect(peer.due(w) == null); // one a gap
+    }
+    try testing.expectEqualStrings("/slow HTTP/1.1\r\n\r\n", got[0..n]);
+    try testing.expectEqual(@as(u64, 5 * 3 * sec), at); // five more segments, three seconds apart
 }
