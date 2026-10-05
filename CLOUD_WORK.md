@@ -22,9 +22,10 @@ stands; read it, and `src/pci.zig` and `src/apic.zig`, before anything else.
   the default channel is git.
 - **The box Claude** works on Steve's development droplet, which has KVM and
   QEMU. It runs the guests: `check.sh`, `same.sh`, `site.sh`, `rest.sh`,
-  `lossy.sh` and the rest. It merges your branch into `interrupts` after
-  running them, and it owns gopher-metal, the guest side of every contract
-  here.
+  `lossy.sh` and the rest. It merges your branch into `interrupts` once the
+  unit tests pass and runs the guests alongside: they catch edge cases, which
+  come back to you as new items. It owns gopher-metal, the guest side of
+  every contract here.
 - **You (CC)**: logic, tests that run on ordinary Linux, adversarial reading,
   and design. You have no `/dev/kvm`, so no guest ever boots in your
   container. Do not try to get one.
