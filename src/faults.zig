@@ -273,8 +273,50 @@ pub const Drive = struct {
     /// not counted, and n means the nth write.
     writes_only: bool = false,
 
+    /// **THE POWER IS CUT AFTER THE GUEST'S NTH WRITE** (`DISK_CUT_AFTER`):
+    /// that write lands, nothing after it does, and the machine stops at the
+    /// end of the exit it happened in. The image keeps what was written before
+    /// it, as a disk does when the power goes: disk.zig writes back exactly the
+    /// sectors written. 1 is the first write.
+    cut_after: ?u64 = null,
+    /// **A TORN WRITE** (`DISK_TEAR`, `DISK_TEAR_KEEP`): the nth write of more
+    /// than one sector lands only its first `tear_keep` sectors, and the power
+    /// is cut there.
+    tear: ?u64 = null,
+    tear_keep: u64 = 1,
+    /// Writes served so far, all of them and those of several sectors.
+    writes: u64 = 0,
+    multi_writes: u64 = 0,
+    /// Once the power is cut: which write it was, and what of it landed.
+    cut: ?Cut = null,
+
+    pub const Cut = struct {
+        write: u64,
+        sector: u64,
+        landed: u64,
+        of: u64,
+    };
+
     pub fn configured(self: *const Drive) bool {
-        return self.refused.configured() or self.writes_only;
+        return self.refused.configured() or self.writes_only or self.cut_after != null or self.tear != null;
+    }
+
+    /// **HOW MUCH OF THIS WRITE LANDS**, in sectors, for a write of `sectors`
+    /// at `sector`: all of it, unless it is the one the power is cut after or
+    /// in. Called once per write the device serves, in order; never after the
+    /// cut.
+    pub fn lands(self: *Drive, sector: u64, sectors: u64) u64 {
+        self.writes += 1;
+        if (sectors > 1) self.multi_writes += 1;
+        if (self.tear) |n| if (sectors > 1 and self.multi_writes == n) {
+            const keep = @min(self.tear_keep, sectors - 1);
+            self.cut = .{ .write = self.writes, .sector = sector, .landed = keep, .of = sectors };
+            return keep;
+        };
+        if (self.cut_after) |n| if (self.writes == n) {
+            self.cut = .{ .write = self.writes, .sector = sector, .landed = sectors, .of = sectors };
+        };
+        return sectors;
     }
 
     /// **IS THIS ONE SERVED?** Called once per request, in order.
@@ -299,4 +341,25 @@ test "a wire with nothing configured is a wire that does nothing" {
     for (0..100) |_| try testing.expect(w.carries());
     w.hold("now", 12345);
     try testing.expectEqualStrings("now", w.ready(12345).?);
+}
+
+test "the power is cut after the nth write, which lands whole" {
+    var d = Drive{ .cut_after = 3 };
+    try testing.expectEqual(@as(u64, 2), d.lands(10, 2));
+    try testing.expectEqual(@as(u64, 1), d.lands(11, 1));
+    try testing.expect(d.cut == null);
+    try testing.expectEqual(@as(u64, 4), d.lands(20, 4));
+    try testing.expectEqual(Drive.Cut{ .write = 3, .sector = 20, .landed = 4, .of = 4 }, d.cut.?);
+}
+
+test "a torn write lands its first sectors only, counting writes of more than one" {
+    var d = Drive{ .tear = 2, .tear_keep = 3 };
+    _ = d.lands(1, 1); // one sector: not counted
+    try testing.expectEqual(@as(u64, 8), d.lands(2, 8)); // the first of several
+    try testing.expect(d.cut == null);
+    try testing.expectEqual(@as(u64, 3), d.lands(40, 8)); // the second: torn
+    try testing.expectEqual(Drive.Cut{ .write = 3, .sector = 40, .landed = 3, .of = 8 }, d.cut.?);
+    // A keep as large as the write still leaves its last sector unwritten.
+    var e = Drive{ .tear = 1, .tear_keep = 99 };
+    try testing.expectEqual(@as(u64, 1), e.lands(0, 2));
 }

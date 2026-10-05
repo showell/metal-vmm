@@ -13,8 +13,10 @@
 #   - it must break no coverage property (metal-vmm's "N broken");
 #   - a volume the guest wrote must still be a filesystem (sound.sh);
 #   - the page must be the unhurt run's, status and body, unless the seed
-#     reset the connection, made the peer vanish or refused a disk request,
-#     which may rightly cost the page: then it is "differs (allowed: ...)".
+#     reset the connection, made the peer vanish, refused a disk request or
+#     cut the power, which may rightly cost the page: then it is "differs
+#     (allowed: ...)". A cut volume must still be sound: that is FAT's crash
+#     consistency, measured.
 #
 # Every run's coverage goes to one JSONL, merged at the end (coverage-merge,
 # with FLOOR=<file> if set). The sweep ends with the failing seeds, each as
@@ -74,7 +76,7 @@ verdict() {
     "$SOUND" "$WORK/$name.img" > "$WORK/$name.sound" 2>&1 || why="$why, the volume is not sound"
   fi
   if [ "$status" != "$(status_of unhurt)" ] || ! cmp -s "$WORK/$name.body" "$WORK/unhurt.body"; then
-    for k in PEER_RESET_AT PEER_VANISH_AFTER DISK_REFUSE; do
+    for k in PEER_RESET_AT PEER_VANISH_AFTER DISK_REFUSE DISK_CUT_AFTER DISK_TEAR; do
       case " $knobs" in *" $k="*) excuse="$excuse${excuse:+, }$k" ;; esac
     done
     [ -n "$excuse" ] || why="$why, not the page (status ${status:-none})"

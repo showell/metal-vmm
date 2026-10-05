@@ -178,7 +178,7 @@ bottom.
     spec says; nothing panics, nothing reads past guest memory, and the
     same seed makes the same trace. `zig build fuzz -Dseeds=n`; a seed that
     finds something stays as a named test, as gopher-metal's regressions do.
-27. **A power cut, and a torn write** (the disk's half of "does the volume
+27. **Done (CC).** **A power cut, and a torn write** (the disk's half of "does the volume
     boot again"). Today a disk request is answered or refused whole. Add,
     each by a knob and in `FAULT_SEED`'s ranges: `DISK_CUT_AFTER=n`, the
     machine stops dead after the guest's nth write, and the image keeps

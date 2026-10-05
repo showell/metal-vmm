@@ -599,6 +599,8 @@ const Machine = struct {
     msrs: u64 = 0,
     /// Exits so far: with the time, when something happened.
     exits: u64 = 0,
+    /// The disk's faults, watched for a power cut.
+    drive: ?*const faults.Drive = null,
     /// **THE SERIAL PORT READS THE GUEST'S COVERAGE LINES** (coverage.zig),
     /// and with `COVERAGE_OUT` sends them to this file instead of stdout.
     serial: coverage.Serial = .{},
@@ -760,6 +762,16 @@ const SerialOut = struct {
     }
 };
 
+/// What the power cut left, on the error stream: which write, and for a torn
+/// one how much of it landed.
+fn reportCut(cut: faults.Drive.Cut) void {
+    if (cut.landed < cut.of) {
+        std.debug.print("metal-vmm: the power was cut in the guest's write {d}: {d} of its {d} sectors from sector {d} landed\n", .{ cut.write, cut.landed, cut.of, cut.sector });
+    } else {
+        std.debug.print("metal-vmm: the power was cut after the guest's write {d} (sector {d}, {d} sectors)\n", .{ cut.write, cut.sector, cut.of });
+    }
+}
+
 /// The run's coverage, if its guest printed any: the last line on the error
 /// stream.
 fn reportCoverage(machine: *const Machine) void {
@@ -885,6 +897,12 @@ const patience: u64 = 1_000_000;
 fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *Machine, text: Text) !u8 {
     const run: *kvm.Run = @ptrCast(page.ptr);
     while (true) {
+        // **THE POWER WENT OUT IN THE LAST EXIT** (faults.zig, `Drive.cut`):
+        // the guest runs no further, and the image keeps what landed.
+        if (machine.drive) |d| if (d.cut) |cut| {
+            reportCut(cut);
+            return machine.stopped orelse 0;
+        };
         const rc = linux.ioctl(vcpu, kvm.run, 0);
         switch (linux.errno(rc)) {
             .SUCCESS => {},
@@ -1026,6 +1044,15 @@ fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, rough: *wire.Rough, k
         rough.mss = @intCast(n);
     };
     numbers(&drive.refused, k, "DISK_REFUSE");
+    if (knob(k, "DISK_CUT_AFTER")) |n| if (n > 0) {
+        drive.cut_after = n;
+    };
+    if (knob(k, "DISK_TEAR")) |n| if (n > 0) {
+        drive.tear = n;
+    };
+    if (knob(k, "DISK_TEAR_KEEP")) |n| if (n > 0) {
+        drive.tear_keep = n;
+    };
     if (k.get("WIRE_LOSS")) |n| line.lost.rate = std.fmt.parseInt(u32, n, 10) catch 0;
     if (k.get("DISK_REFUSE_RATE")) |n| drive.refused.rate = std.fmt.parseInt(u32, n, 10) catch 0;
     if (k.get("DISK_WRITES_ONLY")) |_| drive.writes_only = true;
@@ -1247,6 +1274,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         // question like "why is one chat message eighty writes" gets answered.
         if (init.environ.getPosix("DISK_TRACE")) |_| block.trace = true;
         block_device = block.device();
+        machine.drive = &block.refusals;
         if (!pc) machine.devices[0] = &block_device;
     }
     // **THE WIRE ENDS HERE, ON PURPOSE.** There is always a network device,
@@ -1776,7 +1804,8 @@ test "the knobs reach the wire, the disk and the peer, a seed's or the environme
     by_hand.overlay(FakeEnv{ .pairs = &.{
         .{ "WIRE_EAT", "3,9" },  .{ "PEER_EAT", "2" },         .{ "WIRE_LATENCY_US", "250" },
         .{ "DISK_REFUSE", "4" }, .{ "DISK_WRITES_ONLY", "1" }, .{ "PEER_RESET_AT", "3000" },
-        .{ "PEER_FLOOD", "4" },  .{ "PEER_MSS", "100" },
+        .{ "PEER_FLOOD", "4" },  .{ "PEER_MSS", "100" },       .{ "DISK_CUT_AFTER", "7" },
+        .{ "DISK_TEAR", "2" },   .{ "DISK_TEAR_KEEP", "3" },
     } });
     var line = faults.Wire{};
     var drive = faults.Drive{};
@@ -1787,6 +1816,9 @@ test "the knobs reach the wire, the disk and the peer, a seed's or the environme
     try testing.expectEqual(@as(u64, 250 * std.time.ns_per_us), line.latency_ns);
     try testing.expectEqual(@as(u32, 4), drive.refused.named[0]);
     try testing.expect(drive.writes_only);
+    try testing.expectEqual(@as(?u64, 7), drive.cut_after);
+    try testing.expectEqual(@as(?u64, 2), drive.tear);
+    try testing.expectEqual(@as(u64, 3), drive.tear_keep);
     try testing.expect(rough.retransmits); // the peer's frames may be lost
     try testing.expectEqual(@as(?u64, 3000 * std.time.ns_per_us), rough.reset_after_ns);
     try testing.expectEqual(@as(u8, 4), rough.flood);

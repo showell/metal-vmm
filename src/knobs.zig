@@ -27,6 +27,8 @@
 //! | `PEER_LOSS` | 1/6 | one in 5-50 |
 //! | `PEER_DAMAGE` | 1/4 | one of the peer's frames 1-40 |
 //! | `DISK_REFUSE` | 1/4 | one request 1-100, writes only half the time |
+//! | `DISK_CUT_AFTER` | 1/6 | the power cut after write 1-100 |
+//! | `DISK_TEAR` | else 1/8 | multi-sector write 1-20 torn, `DISK_TEAR_KEEP` 1-7 sectors landing |
 //! | `PEER_RESET_AT` | 1/4 | 1,000-2,000,000 us; `PEER_RESET_OFF` 1-2000 half the time |
 //! | `PEER_VANISH_AFTER` | 1/4 | 1-60,000 bytes |
 //! | `PEER_FLOOD` | 1/4 | 1-8 SYNs, `PEER_FLOOD_GAP_US` 10,000-400,000 |
@@ -45,11 +47,12 @@ const std = @import("std");
 
 /// Every fault knob, in the order a schedule is printed.
 pub const names = [_][]const u8{
-    "WIRE_EAT",          "WIRE_LOSS",        "WIRE_LATENCY_US",   "PEER_EAT",
-    "PEER_LOSS",         "PEER_DAMAGE",      "PEER_DAMAGE_RATE",  "DISK_REFUSE",
-    "DISK_REFUSE_RATE",  "DISK_WRITES_ONLY", "PEER_RESET_AT",     "PEER_RESET_OFF",
-    "PEER_VANISH_AFTER", "PEER_FLOOD",       "PEER_FLOOD_GAP_US", "PEER_FLOOD_AT_US",
-    "PEER_SHUT_AFTER",   "PEER_SHUT_FOR_US", "PEER_MSS",
+    "WIRE_EAT",         "WIRE_LOSS",         "WIRE_LATENCY_US",  "PEER_EAT",
+    "PEER_LOSS",        "PEER_DAMAGE",       "PEER_DAMAGE_RATE", "DISK_REFUSE",
+    "DISK_REFUSE_RATE", "DISK_WRITES_ONLY",  "DISK_CUT_AFTER",   "DISK_TEAR",
+    "DISK_TEAR_KEEP",   "PEER_RESET_AT",     "PEER_RESET_OFF",   "PEER_VANISH_AFTER",
+    "PEER_FLOOD",       "PEER_FLOOD_GAP_US", "PEER_FLOOD_AT_US", "PEER_SHUT_AFTER",
+    "PEER_SHUT_FOR_US", "PEER_MSS",
 };
 
 fn index(comptime name: []const u8) usize {
@@ -101,6 +104,14 @@ pub const Knobs = struct {
         if (chance(r, 4)) {
             k.list(index("DISK_REFUSE"), r, 1, 1, 100);
             if (r.boolean()) k.number(index("DISK_WRITES_ONLY"), 1);
+        }
+        // A power cut, or a torn write: rarer, because a seed that cuts the
+        // power ends there, and most of a sweep should run to the end.
+        if (chance(r, 6)) {
+            k.number(index("DISK_CUT_AFTER"), r.intRangeAtMost(u64, 1, 100));
+        } else if (chance(r, 8)) {
+            k.number(index("DISK_TEAR"), r.intRangeAtMost(u64, 1, 20));
+            k.number(index("DISK_TEAR_KEEP"), r.intRangeAtMost(u64, 1, 7));
         }
         if (chance(r, 4)) {
             k.number(index("PEER_RESET_AT"), r.intRangeAtMost(u64, 1_000, 2_000_000));
@@ -233,6 +244,11 @@ test "every value a seed draws is in its documented range" {
         try inRange(k.get("PEER_SHUT_AFTER"), 1, 20_000);
         try inRange(k.get("PEER_SHUT_FOR_US"), 10_000, 5_000_000);
         try inRange(k.get("PEER_MSS"), 1, 1460);
+        try inRange(k.get("DISK_CUT_AFTER"), 1, 100);
+        try inRange(k.get("DISK_TEAR"), 1, 20);
+        try inRange(k.get("DISK_TEAR_KEEP"), 1, 7);
+        // A seed cuts the power one way or the other, never both.
+        try testing.expect(k.get("DISK_CUT_AFTER") == null or k.get("DISK_TEAR") == null);
         // A reset's offset only with a reset; a flood's gap only with a flood.
         if (k.get("PEER_RESET_OFF") != null) try testing.expect(k.get("PEER_RESET_AT") != null);
         try testing.expectEqual(k.get("PEER_FLOOD") != null, k.get("PEER_FLOOD_GAP_US") != null);

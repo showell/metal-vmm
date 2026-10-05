@@ -334,6 +334,14 @@ Running the same sweep against the `stdhttp` guest gives the same shape with a
 1,000 ms cost instead of 200 — the same stack with a different measured
 round-trip time, and so a different timer.
 
+**And the power can be cut.** `DISK_CUT_AFTER=n` lets the guest's nth write
+land, and then nothing: the request is never answered, the machine stops at
+the end of that exit, and the image keeps exactly what was written before
+the cut. `DISK_TEAR=n` (with `DISK_TEAR_KEEP=k`, 1 by default) tears the nth
+write of several sectors: only its first `k` land. Boot the image again and
+run `sound.sh` on it: that is how a FAT volume's crash consistency is
+measured, and `sweep.sh` does it for every seed that cuts the power.
+
 ### And the peer can misbehave
 
 **The wire can lose and damage what the peer sends too**: `PEER_EAT=n` (or

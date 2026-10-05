@@ -390,8 +390,13 @@ pub const Block = struct {
         var links: [4]Desc = undefined;
         var left = d.budget(queue);
         while (left > 0) : (left -= 1) {
+            // **NO POWER, NO DISK**: nothing more is taken, and the request
+            // the power was cut in is never answered.
+            if (self.refusals.cut != null) return;
             const chain = d.take(ram, queue, &links) orelse break;
-            d.complete(ram, queue, chain.head, self.serve(ram, chain.links));
+            const answer = self.serve(ram, chain.links);
+            if (self.refusals.cut != null) return;
+            d.complete(ram, queue, chain.head, answer);
         }
     }
 
@@ -444,8 +449,12 @@ pub const Block = struct {
                 self.reads += 1;
             },
             type_out => {
-                @memcpy(self.image[@intCast(at)..][0..bytes.len], bytes);
-                if (self.dirty) |bits| disk.mark(bits, sector, (bytes.len + sector_bytes - 1) / sector_bytes);
+                // As much as lands before the power goes, which is all of it
+                // unless this is the write it goes in.
+                const sectors = (bytes.len + sector_bytes - 1) / sector_bytes;
+                const landed = @min(bytes.len, self.refusals.lands(sector, sectors) * sector_bytes);
+                @memcpy(self.image[@intCast(at)..][0..landed], bytes[0..landed]);
+                if (self.dirty) |bits| disk.mark(bits, sector, (landed + sector_bytes - 1) / sector_bytes);
                 self.writes += 1;
             },
             else => answer = status_unsupported,
@@ -657,4 +666,67 @@ test "a block request with a sector or an address at the top of the range is an 
     _ = block.serve(&ram, &high);
     try testing.expectEqual(@as(u64, 0), block.reads);
     try testing.expectEqual(Block.status_ioerr, readInt(u8, &ram, 0x600));
+}
+
+test "a power cut: the write it comes after lands, nothing after it does, and nothing is answered" {
+    var image: [16 * 512]u8 = @splat(0);
+    var dirty: [2]u8 = @splat(0);
+    var block = Block{ .image = &image, .dirty = &dirty };
+    block.refusals.cut_after = 1;
+    var d = block.device();
+    var ram: [8192]u8 = @splat(0);
+    d.queues[0] = .{ .size = 8, .ready = 1, .desc = 0x100, .avail = 0x200, .used = 0x300 };
+    // Two writes offered at once: sector 2 from 0x1000, then sector 5 from 0x1200.
+    for (0..2) |r| {
+        const base = 0x100 + r * 3 * @sizeOf(Desc);
+        const header: u64 = 0x400 + r * 0x20;
+        const links = [_]Desc{
+            .{ .addr = header, .len = 16, .flags = Desc.next_flag, .next = @intCast(r * 3 + 1) },
+            .{ .addr = 0x1000 + r * 0x200, .len = 512, .flags = Desc.next_flag, .next = @intCast(r * 3 + 2) },
+            .{ .addr = 0x600 + r, .len = 1, .flags = Desc.write_flag, .next = 0 },
+        };
+        for (links, 0..) |l, i| {
+            const at = base + i * @sizeOf(Desc);
+            writeInt(u64, &ram, at, l.addr);
+            writeInt(u32, &ram, at + 8, l.len);
+            writeInt(u16, &ram, at + 12, l.flags);
+            writeInt(u16, &ram, at + 14, l.next);
+        }
+        writeInt(u32, &ram, header, Block.type_out);
+        writeInt(u64, &ram, header + 8, if (r == 0) 2 else 5);
+        writeInt(u16, &ram, 0x204 + r * 2, @intCast(r * 3));
+        @memset(ram[0x1000 + r * 0x200 ..][0..512], @intCast(0xA0 + r));
+    }
+    writeInt(u16, &ram, 0x202, 2);
+    d.notified(d.context, &d, &ram, 0);
+    try testing.expectEqual(@as(u8, 0xA0), image[2 * 512]); // the first landed
+    try testing.expectEqual(@as(u8, 0), image[5 * 512]); // the second did not
+    try testing.expect(disk.isDirty(&dirty, 2) and !disk.isDirty(&dirty, 5));
+    try testing.expectEqual(@as(u16, 0), readInt(u16, &ram, 0x302)); // nothing answered
+    // And a doorbell after the cut takes nothing.
+    d.notified(d.context, &d, &ram, 0);
+    try testing.expectEqual(@as(u8, 0), image[5 * 512]);
+}
+
+test "a torn write lands only its first sectors, and marks only those" {
+    var image: [16 * 512]u8 = @splat(0);
+    var dirty: [2]u8 = @splat(0);
+    var block = Block{ .image = &image, .dirty = &dirty };
+    block.refusals.tear = 1;
+    block.refusals.tear_keep = 2;
+    var ram: [8192]u8 = @splat(0);
+    @memset(ram[0x1000..][0 .. 4 * 512], 0xEE);
+    writeInt(u32, &ram, 0x400, Block.type_out);
+    writeInt(u64, &ram, 0x408, 3);
+    const links = [_]Desc{
+        .{ .addr = 0x400, .len = 16, .flags = Desc.next_flag, .next = 1 },
+        .{ .addr = 0x1000, .len = 4 * 512, .flags = Desc.next_flag, .next = 2 },
+        .{ .addr = 0x600, .len = 1, .flags = Desc.write_flag, .next = 0 },
+    };
+    _ = block.serve(&ram, &links);
+    try testing.expectEqual(@as(u8, 0xEE), image[3 * 512]);
+    try testing.expectEqual(@as(u8, 0xEE), image[5 * 512 - 1]);
+    try testing.expectEqual(@as(u8, 0), image[5 * 512]); // the third of four: not landed
+    try testing.expect(disk.isDirty(&dirty, 4) and !disk.isDirty(&dirty, 5));
+    try testing.expectEqual(@as(u64, 2), block.refusals.cut.?.landed);
 }
