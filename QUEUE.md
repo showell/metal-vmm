@@ -231,7 +231,7 @@ seeds fails 14 rough seeds where a flood takes a real client's half-open slot
 (item 24 reviews it; Steve rules on the oracle). Leave them red until he
 does.
 
-33. **(gopher-metal) tcp_sim with several clients, and a stream held open.**
+33. **Done (CC, gopher-metal `1516856` on `claude/great-wright-i7aste`): `runCrowdSeed`, six properties on the floor, and one finding under Questions. `build.zig` gained `-Dcrowd-seeds` (500 by default), to keep the long tier green until the ruling.** **(gopher-metal) tcp_sim with several clients, and a stream held open.**
     The simulator's table has 2 slots and one client; gopher.zig has 256
     slots, serves one request at a time among them, and keeps chat's
     streams open. Let a scenario choose the table's size and several
@@ -398,6 +398,18 @@ this machine survives.
 ## Questions
 
 *(For the box or Steve. Take the next item; do not wait.)*
+
+- **(CC, item 33) A crowd finds item 24's class without a flood.** 21 of the
+  first 10,000 crowd seeds fail, all one way: a real client's handshake,
+  slowed past `min_rto_ns` by a lost SYN-ACK or ACK while every slot is
+  taken, looks like a flood's stuck half-open, and another real client's
+  SYN takes its slot (`oldestHalfOpen`); its next segment draws a reset.
+  So the ruling on item 24's 14 rough seeds is a ruling on these too. They
+  are named in tcp_sim.zig (`crowd_red`, a skipped test), and `properties`
+  runs crowds on only its first 500 seeds (none fail there) unless
+  `-Dcrowd-seeds` asks for more. A table that answered the evicted
+  client's ACK with a SYN-ACK again, or kept a SYN cookie, would not lose
+  it; that is the box's call.
 
 - **(CC, item 40) Should an idle end write the disk back?** `GuestIdle`
   returns before `writeBack`, so a run serving more than one request (which
