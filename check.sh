@@ -132,7 +132,7 @@ for one in $CASES; do
     if [ "$probe" = rng ] || [ "$probe" = clock ]; then
         # Random by design, or a measurement of two different machines by
         # design; either way, what must agree is the verdict.
-        a=$(tail -1 "$WORK/ours.txt"); b=$(tail -1 "$WORK/qemu.txt")
+        a=$(tail -1 "$WORK/ours.cmp"); b=$(tail -1 "$WORK/qemu.cmp")
         [ "$a" = "$b" ] && [ "$ours" = "$theirs" ] && same=yes || same=no
     elif cmp -s "$WORK/ours.cmp" "$WORK/qemu.cmp" && [ "$ours" = "$theirs" ]; then
         same=yes
