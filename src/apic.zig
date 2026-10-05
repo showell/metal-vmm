@@ -24,6 +24,25 @@ pub fn inWindow(addr: u64) bool {
     return addr >= base and addr < base + size;
 }
 
+/// **WHAT AN MSI MESSAGE ASKS OF THIS APIC** (SDM §11.11): the vector it
+/// delivers here, or null when it is not for us. The address is 0xFEExxxxx
+/// with the destination in bits 19:12; it names a processor by APIC id
+/// (ours is 0, and 0xFF is all of them) unless both the redirection hint
+/// (bit 3) and the destination mode (bit 2) ask for a logical destination,
+/// which no destination names while our logical id is 0. The data's bits
+/// 10:8 are the delivery mode: fixed and lowest-priority are a vector, and
+/// the others (SMI, NMI, INIT, ExtINT) are not modeled.
+pub fn messageVector(address: u64, data: u32) ?u8 {
+    if (address >> 20 != 0xFEE) return null;
+    if (address & 0b1100 == 0b1100) return null;
+    const destination = (address >> 12) & 0xFF;
+    if (destination != 0 and destination != 0xFF) return null;
+    return switch ((data >> 8) & 7) {
+        0, 1 => @truncate(data),
+        else => null,
+    };
+}
+
 pub const msr_apic_base: u32 = 0x1B;
 pub const msr_tsc_deadline: u32 = 0x6E0;
 

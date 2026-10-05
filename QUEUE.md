@@ -36,7 +36,7 @@ bottom.
    passes); a deadline before the next frame and after it; a frame due but
    undeliverable (no buffer), which must not wake it; a deadline whose tick
    falls between nanoseconds (`clock.nsAt` rounds up); an APIC not enabled.
-4. **MSI-X as PCI 3.0 §6.8.2 has it.** Today it is one table entry, and any
+4. **Done (CC).** **MSI-X as PCI 3.0 §6.8.2 has it.** Today it is one table entry, and any
    queue vector but 0 reads back NO_VECTOR. Make it a table of N entries,
    with the PBA's bits, the function mask and per-entry masks, and the
    config-change vector (`msix_config`). gopher-metal uses entry 0 for every
