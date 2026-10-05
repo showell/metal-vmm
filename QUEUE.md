@@ -262,6 +262,43 @@ does.
     `virtio.zig`: propose the seam that would make it a layer with nothing
     below it (under Proposed), and do not cut it.
 
+**From the box's floor raise** (2026-10-05: gopher.elf with each knob in
+turn; gopher-metal's long.sh now runs seven rough-peer scenarios, and its
+metal floor is 15 of tcp.zig's 18). These are urgent before 25-36: 37 is a
+crash on the peer's own input.
+
+37. **(metal-vmm) The peer's segment outgrows its buffer: a panic.**
+    `PEER_REQUEST=<20 KB request>` with no `PEER_MSS` panics the VMM:
+    `index out of bounds: index 8246, len 2048` at `peer.zig:740` (`build`,
+    from `Tcp.more` via `segment`). The peer sends as much as the guest's
+    window allows, up to its 2048-byte scratch. A real client sends no
+    segment larger than the MSS the guest announced in its SYN-ACK (RFC
+    9293 §3.7.1; 536 if none). Cap every segment at that, and at the
+    buffer, and a test with a request larger than the window. Item 26's
+    fuzzer should have a peer-side half that would have found this.
+38. **(metal-vmm) A reset the peer could not send says so.** `PEER_RESET_AT`
+    before the connection is established is dropped without a word
+    (`Tcp.due` sets `reset_past` and returns null outside established,
+    closing and fin_wait). On gopher.elf with a 5 ms wire, any time under
+    about 22 ms after the opening silently does nothing, and the run looks
+    like a reset that changed nothing. Say it on the error stream at the end
+    of the run ("PEER_RESET_AT=… fell before the connection was open; no
+    reset sent"), as the wire reports what it lost. The same for any knob
+    whose moment passes unused (`PEER_VANISH_AFTER` past the answer's
+    length, `PEER_SHUT_AFTER` likewise, `PEER_EAT` past the last frame).
+39. **(metal-vmm) The last three of tcp.zig's eighteen, on the real kernel.**
+    (a) **a peer sends past the window**: the peer keeps to the guest's
+    window (its sends stop at the guest's shut 16 KB buffer, and a 20 KB
+    request then deadlocks until the guest's idle timeout). A knob for a
+    client that ignores the window (`PEER_IGNORE_WINDOW=1`), as tcp_sim's
+    rough client does. (b) **a segment from behind**: the peer must time
+    out on lost ACKs, which needs a second of the guest's frames lost; but
+    `WIRE_EAT` takes at most eight. Let it take a range (`WIRE_EAT=8-40`)
+    and any number. (c) **a reopened window announced again**: the guest
+    must stop reading a full buffer and then read it; the box will try a
+    large upload (gopher.zig streams big uploads), so this one is the
+    box's, listed so you do not take it.
+
 ## Proposed
 
 *(CC adds items here, one line each on why.)*
