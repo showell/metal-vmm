@@ -76,7 +76,7 @@ bottom.
 
 From the review (`docs/reviews/REVIEW-interrupts.md`), most urgent first:
 
-8. **Config-data port accesses at any offset and width (H1).** `inl $0xCFD`
+8. **Done (CC).** **Config-data port accesses at any offset and width (H1).** `inl $0xCFD`
    panics this program (integer overflow, `pci.zig:350`): a guest's input
    kills the VMM, which an explorer will find first.
 9. **Done in item 5 (CC).** **The deadline timer between halts (H2).** `tick` runs only in `rest`, so

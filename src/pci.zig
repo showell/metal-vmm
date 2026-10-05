@@ -442,24 +442,29 @@ pub const Bus = struct {
         };
     }
 
+    /// **A PORT ACCESS AT ANY OFFSET AND WIDTH.** The address register is a
+    /// whole dword at 0xCF8 and nothing narrower (§3.2.2.3.2). The data
+    /// register is four ports, 0xCFC-0xCFF, each one byte of the dword the
+    /// address names; an access that runs past 0xCFF reaches ports nothing
+    /// here decodes, which read all ones and swallow writes. So `inl $0xCFD`
+    /// is three bytes of configuration space and one of nothing.
     pub fn out(self: *Bus, port: u16, bytes: []const u8) void {
         if (port == address_port and bytes.len == 4) {
             self.address = std.mem.readInt(u32, bytes[0..4], .little);
             return;
         }
-        if (port < data_port) return;
+        var value: u32 = 0;
+        var mask: u32 = 0;
+        for (bytes, 0..) |b, i| {
+            const at = dataByte(port, i) orelse continue;
+            value |= @as(u32, b) << at;
+            mask |= @as(u32, 0xFF) << at;
+        }
+        if (mask == 0) return;
         const f = switch (self.selected()) {
             .function => |f| f,
             else => return,
         };
-        const shift: u5 = @intCast((port - data_port) * 8);
-        var value: u32 = 0;
-        var mask: u32 = 0;
-        for (bytes, 0..) |b, i| {
-            const at: u5 = @intCast(i * 8);
-            value |= @as(u32, b) << (shift + at);
-            mask |= @as(u32, 0xFF) << (shift + at);
-        }
         f.configWrite(@truncate(self.address & 0xFC), value, mask);
     }
 
@@ -468,10 +473,22 @@ pub const Bus = struct {
             std.mem.writeInt(u32, bytes[0..4], self.address, .little);
             return;
         }
-        if (port < data_port) return @memset(bytes, 0xFF);
         const dword = self.configDword();
-        const shift: u5 = @intCast((port - data_port) * 8);
-        for (bytes, 0..) |*b, i| b.* = @truncate(dword >> (shift + @as(u5, @intCast(i * 8))));
+        for (bytes, 0..) |*b, i| {
+            const at = dataByte(port, i) orelse {
+                b.* = 0xFF;
+                continue;
+            };
+            b.* = @truncate(dword >> at);
+        }
+    }
+
+    /// Where byte `i` of an access at `port` falls in the data register's
+    /// dword, as a shift; null when it is not one of its four ports.
+    fn dataByte(port: u16, i: usize) ?u5 {
+        const p = @as(usize, port) + i;
+        if (p < data_port or p >= data_port + 4) return null;
+        return @intCast((p - data_port) * 8);
     }
 
     /// **AN ACCESS TO SOME FUNCTION'S BAR**, wherever the guest put it, if
@@ -1386,4 +1403,53 @@ test "read-only registers keep their values, and unimplemented ones read zero" {
     // §6.1: reserved and unimplemented registers read zero.
     for ([_]u8{ 0x28, 0x38, 0x3C, 0xA0, 0xFC }) |r| try testing.expectEqual(@as(u32, 0), g.cfgRead32(2, r));
     for ([_]u8{ 0x04, 0x10, 0x2C, 0x34, 0x3C, 0xFC }) |r| try testing.expectEqual(@as(u32, 0), g.cfgRead32(0, r));
+}
+
+test "the data ports at every offset and width, the unaligned ones included" {
+    var bus = Bus{};
+    var lapic = apic.Apic{};
+    var context: u8 = 0;
+    var d = virtio.Device{ .id = virtio.device_id_net, .context = &context, .notified = nothing };
+    _ = bus.plug(1, &d, &lapic);
+    var addr: [4]u8 = undefined;
+    std.mem.writeInt(u32, &addr, 0x8000_0000 | (1 << 11), .little); // vendor and device
+    bus.out(address_port, &addr);
+    const dword: u32 = 0x1041_1AF4;
+    for ([_]usize{ 1, 2, 4 }) |width| {
+        for (0..8) |k| {
+            const port: u16 = address_port + @as(u16, @intCast(k));
+            var got: [4]u8 = undefined;
+            bus.in(port, got[0..width]);
+            for (0..width) |i| {
+                const p = port + i;
+                const want: u8 = if (port == address_port and width == 4)
+                    @truncate(@as(u32, 0x8000_0800) >> @intCast(i * 8))
+                else if (p >= data_port and p < data_port + 4)
+                    @truncate(dword >> @intCast((p - data_port) * 8))
+                else
+                    0xFF;
+                try testing.expectEqual(want, got[i]);
+            }
+            // A write anywhere leaves the address register as it was, unless
+            // it is the whole dword at 0xCF8.
+            if (!(port == address_port and width == 4)) bus.out(port, got[0..width]);
+            try testing.expectEqual(@as(u32, 0x8000_0800), bus.address);
+        }
+    }
+}
+
+test "an unaligned write lands only on the bytes of the data register it covers" {
+    var bus = Bus{};
+    var lapic = apic.Apic{};
+    var context: u8 = 0;
+    var d = virtio.Device{ .id = virtio.device_id_net, .context = &context, .notified = nothing };
+    const f = bus.plug(1, &d, &lapic);
+    var addr: [4]u8 = undefined;
+    std.mem.writeInt(u32, &addr, 0x8000_0000 | (1 << 11) | 0x04, .little); // command
+    bus.out(address_port, &addr);
+    // Four bytes at 0xCFB: one before the data register, three in it. The
+    // command register is the first two: 0x06 lands, the rest is status.
+    bus.out(data_port - 1, &.{ 0xAA, 0x06, 0x00, 0xFF });
+    try testing.expectEqual(@as(u16, 0x0006), f.command);
+    try testing.expectEqual(@as(u32, 0x8000_0804), bus.address);
 }
