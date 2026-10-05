@@ -956,6 +956,7 @@ test {
     _ = @import("knobs.zig");
     _ = @import("fuzz.zig");
     _ = @import("determinism.zig");
+    _ = @import("snapshot.zig");
     _ = @import("settings.zig");
     _ = @import("reports.zig");
     _ = @import("loader.zig");

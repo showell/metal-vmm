@@ -203,7 +203,7 @@ bottom.
     MSI-X and the virtio-pci capabilities apart from configuration space.
     No behavior changes: the tests move with their code, and the box's
     gates are the check. Do this after 25 and 26, which read these files.
-30. **The machine's state, saved and restored** (groundwork for the
+30. **Done for the device side (CC, `snapshot.zig`); the box's half is under Questions.** **The machine's state, saved and restored** (groundwork for the
     explorer: Antithesis branches many runs from one prefix instead of
     booting each from scratch). The device side first, which is all
     logic: every model (clock, APIC, PCI and MSI-X, the virtqueues'
@@ -410,6 +410,34 @@ this machine survives.
   and why, and whether the "allowed" rule (a page may differ under
   PEER_RESET_AT, PEER_VANISH_AFTER or DISK_REFUSE) is the rule you want.
   KEEP=<dir> keeps every run's log, page and the coverage JSONL.
+
+- **(CC, item 30) What the box's half of a snapshot must hold**, named by
+  what it is, not by ioctl: the devices' half is `snapshot.zig`, a value
+  copy of every model restored in place, plus the disk's bytes.
+  1. **The general registers**, RIP and RFLAGS among them.
+  2. **The special registers**: segments, descriptor tables, CR0, CR2-CR4,
+     CR8, EFER, and the APIC base as KVM keeps it.
+  3. **The FPU, SSE and extended state** (XSAVE, and XCR0). gopher-metal is
+     soft-float, but nothing stops a guest from using them.
+  4. **The MSRs KVM answers itself** (not the filtered ones, which are
+     apic.zig's): at least the SYSCALL MSRs, FS and GS bases, TSC_AUX, and
+     whatever the guest wrote. Listing which ones KVM holds for this VM is
+     part of the box's half.
+  5. **The vCPU's events**: an interrupt or exception mid-injection, the
+     interrupt shadow (an `sti` or `mov ss` just executed), NMI state. A
+     snapshot taken between `KVM_INTERRUPT` and the entry that takes it must
+     not lose the vector.
+  6. **The run structure's own flags this program sets**:
+     `request_interrupt_window`, and whether an exit was completed (a port
+     read answered, or a rewritten `out` whose RIP KVM skips on the next
+     entry). The simplest rule is to snapshot only between exits, after the
+     answer is written, which is where this program's loop already is.
+  7. **Guest memory**, 512 MiB. A full copy is about 0.1 s here. A
+     copy-on-write mapping, or KVM's dirty-page log, would make a branch
+     cheap. Which one is the box's call.
+  8. **And no host time anywhere.** The TSC is this program's (rewritten),
+     so restoring needs no TSC offset, as long as no unmarked `rdtsc` ran
+     (item 14 and the README).
 
 ## Answers
 
