@@ -216,14 +216,14 @@ test "two users of the same idea do not move each other's dice" {
     wire.lost.rate = 3;
     drive.refused.rate = 3;
     var alone: [60]bool = undefined;
-    for (&alone) |*x| x.* = drive.serves(0, false);
+    for (&alone) |*x| x.* = drive.serves(0, 1, false);
 
     var together = Drive{};
     together.refused.rate = 3;
     var mixed: [60]bool = undefined;
     for (&mixed) |*x| {
         _ = wire.carries(); // the wire is busy at the same time
-        x.* = together.serves(0, false);
+        x.* = together.serves(0, 1, false);
     }
     try testing.expectEqualSlices(bool, &alone, &mixed);
 }
@@ -231,9 +231,9 @@ test "two users of the same idea do not move each other's dice" {
 test "the disk refuses the request it was told to refuse" {
     var d = Drive{};
     d.refused.named[0] = 2;
-    try testing.expect(d.serves(10, false));
-    try testing.expect(!d.serves(11, true));
-    try testing.expect(d.serves(12, false));
+    try testing.expect(d.serves(10, 1, false));
+    try testing.expect(!d.serves(11, 1, true));
+    try testing.expect(d.serves(12, 1, false));
     try testing.expectEqual(@as(u64, 1), d.refused.picked_count);
     // And it remembers what was being asked for, not just when.
     try testing.expectEqual(@as(u64, 11), d.sectors[0]);
@@ -272,6 +272,25 @@ pub const Drive = struct {
     /// moment something is being saved. With this set, reads are served and
     /// not counted, and n means the nth write.
     writes_only: bool = false,
+    /// **COUNT ONLY THE READS**, the other way round: writes land and are not
+    /// counted. Both set is a disk that refuses nothing.
+    reads_only: bool = false,
+
+    /// **BAD SECTORS** (`DISK_BAD_SECTOR=s[,t]`): every request touching one
+    /// of these is refused, read or write (or only one kind, by
+    /// `DISK_READS_ONLY` and `DISK_WRITES_ONLY`), for the whole run. A request
+    /// number reaches a sector on one path; a sector is reached on every path
+    /// that touches it, and stays bad on the next boot if it is named again,
+    /// as a real one does.
+    bad: [8]u64 = @splat(0),
+    bad_len: usize = 0,
+    /// Every request so far, of either kind, counting from one, and the ones
+    /// a bad sector refused: their numbers, sectors and kinds.
+    requests: u64 = 0,
+    bad_hits: u64 = 0,
+    bad_at: [8]u64 = @splat(0),
+    bad_sectors: [8]u64 = @splat(0),
+    bad_kinds: [8]u8 = @splat(0),
 
     /// **THE POWER IS CUT AFTER THE GUEST'S NTH WRITE** (`DISK_CUT_AFTER`):
     /// that write lands, nothing after it does, and the machine stops at the
@@ -298,7 +317,8 @@ pub const Drive = struct {
     };
 
     pub fn configured(self: *const Drive) bool {
-        return self.refused.configured() or self.writes_only or self.cut_after != null or self.tear != null;
+        return self.refused.configured() or self.writes_only or self.reads_only or self.bad_len != 0 or
+            self.cut_after != null or self.tear != null;
     }
 
     /// **HOW MUCH OF THIS WRITE LANDS**, in sectors, for a write of `sectors`
@@ -319,16 +339,38 @@ pub const Drive = struct {
         return sectors;
     }
 
-    /// **IS THIS ONE SERVED?** Called once per request, in order.
-    pub fn serves(self: *Drive, sector: u64, writing: bool) bool {
+    /// **IS THIS ONE SERVED?** Called once per request of `sectors` sectors
+    /// from `sector`, in order. A bad sector does not move the schedule's
+    /// count, so `DISK_REFUSE=n` means the same request with one or without.
+    pub fn serves(self: *Drive, sector: u64, sectors: u64, writing: bool) bool {
+        self.requests += 1;
         if (self.writes_only and !writing) return true;
+        if (self.reads_only and writing) return true;
         const at = self.refused.picked_count;
-        if (!self.refused.picks()) return true;
-        if (at < self.sectors.len) {
-            self.sectors[@intCast(at)] = sector;
-            self.kinds[@intCast(at)] = if (writing) 'w' else 'r';
+        if (self.refused.picks()) {
+            if (at < self.sectors.len) {
+                self.sectors[@intCast(at)] = sector;
+                self.kinds[@intCast(at)] = if (writing) 'w' else 'r';
+            }
+            return false;
         }
+        const hit = self.touchesBad(sector, sectors) orelse return true;
+        if (self.bad_hits < self.bad_at.len) {
+            const i: usize = @intCast(self.bad_hits);
+            self.bad_at[i] = self.requests;
+            self.bad_sectors[i] = hit;
+            self.bad_kinds[i] = if (writing) 'w' else 'r';
+        }
+        self.bad_hits += 1;
         return false;
+    }
+
+    /// The first bad sector in `sectors` sectors from `sector`, if any.
+    fn touchesBad(self: *const Drive, sector: u64, sectors: u64) ?u64 {
+        for (self.bad[0..self.bad_len]) |b| {
+            if (b >= sector and b - sector < @max(sectors, 1)) return b;
+        }
+        return null;
     }
 };
 
@@ -337,10 +379,53 @@ test "a wire with nothing configured is a wire that does nothing" {
     var d = Drive{};
     try testing.expect(!w.configured());
     try testing.expect(!d.configured());
-    for (0..100) |_| try testing.expect(d.serves(0, false));
+    for (0..100) |_| try testing.expect(d.serves(0, 1, false));
     for (0..100) |_| try testing.expect(w.carries());
     w.hold("now", 12345);
     try testing.expectEqualStrings("now", w.ready(12345).?);
+}
+
+test "a bad sector refuses every request that touches it, and nothing else" {
+    var d = Drive{ .bad_len = 2 };
+    d.bad[0] = 2180;
+    d.bad[1] = 7;
+    try testing.expect(d.serves(2179, 1, false)); // beside it
+    try testing.expect(!d.serves(2180, 1, false)); // on it
+    try testing.expect(!d.serves(2176, 8, true)); // across it
+    try testing.expect(d.serves(2181, 4, true)); // just past it
+    try testing.expect(!d.serves(0, 8, false)); // across the other
+    try testing.expect(!d.serves(2180, 1, true)); // and again: it stays bad
+    try testing.expectEqual(@as(u64, 4), d.bad_hits);
+    try testing.expectEqualSlices(u64, &.{ 2, 3, 5, 6 }, d.bad_at[0..4]);
+    try testing.expectEqualSlices(u64, &.{ 2180, 2180, 7, 2180 }, d.bad_sectors[0..4]);
+    try testing.expectEqualSlices(u8, "rwrw", d.bad_kinds[0..4]);
+    try testing.expect(d.refused.picked_count == 0 and d.configured());
+}
+
+test "reads only: the bad sector's reads are refused and its writes land" {
+    var d = Drive{ .bad_len = 1, .reads_only = true };
+    d.bad[0] = 40;
+    try testing.expect(!d.serves(40, 1, false));
+    try testing.expect(d.serves(40, 1, true));
+    try testing.expect(!d.serves(40, 1, false));
+    var w = Drive{ .bad_len = 1, .writes_only = true };
+    w.bad[0] = 40;
+    try testing.expect(w.serves(40, 1, false));
+    try testing.expect(!w.serves(40, 1, true));
+}
+
+test "a bad sector leaves the schedule's count where it was" {
+    var plain = Drive{};
+    plain.refused.named[0] = 4;
+    var with = Drive{ .bad_len = 1 };
+    with.bad[0] = 3;
+    with.refused.named[0] = 4;
+    for (1..7) |i| {
+        const a = plain.serves(i, 1, false);
+        const b = with.serves(i, 1, false);
+        if (i == 3) try testing.expect(a and !b) else try testing.expectEqual(a, b);
+    }
+    try testing.expectEqual(@as(u32, 4), with.refused.picked[0]);
 }
 
 test "the power is cut after the nth write, which lands whole" {

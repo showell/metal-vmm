@@ -253,10 +253,11 @@ test "the disk's faults: refusals, a cut, a tear" {
     const step = struct {
         fn f(d: *faults.Drive, r: std.Random, h: *std.hash.Wyhash) void {
             if (d.cut != null) return note(h, 1);
-            if (r.boolean()) note(h, @intFromBool(d.serves(r.int(u16), r.boolean()))) else note(h, d.lands(r.int(u16), r.intRangeAtMost(u64, 1, 8)));
+            if (r.boolean()) note(h, @intFromBool(d.serves(r.int(u16), r.intRangeAtMost(u64, 1, 8), r.boolean()))) else note(h, d.lands(r.int(u16), r.intRangeAtMost(u64, 1, 8)));
         }
     }.f;
-    var fresh = faults.Drive{ .tear = 40, .tear_keep = 2 };
+    var fresh = faults.Drive{ .tear = 40, .tear_keep = 2, .bad_len = 2 };
+    fresh.bad = .{ 300, 9000, 0, 0, 0, 0, 0, 0 };
     fresh.refused.rate = 7;
     try restoresExactly(faults.Drive, &fresh, step, null);
 }

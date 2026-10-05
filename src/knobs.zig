@@ -37,8 +37,10 @@
 //!
 //! `PEER_FLOOD_AT_US`, `PEER_DAMAGE_RATE` and `DISK_REFUSE_RATE` are
 //! never drawn: a seed's flood starts with the client, and a seed's peer
-//! damage and disk refusals are named, not rated. Set by hand, they print
-//! with the rest.
+//! damage and disk refusals are named, not rated. Nor are `DISK_BAD_SECTOR`
+//! and `DISK_READS_ONLY`: a sector is worth naming only on a volume whose
+//! layout a person has read, and drawing them would change what every
+//! existing seed does. Set by hand, they print with the rest.
 //!
 //! The peer's ranges are gopher-metal's `tcp_sim.zig` `Rough`'s and
 //! `Scenario`'s, where they have one.
@@ -49,10 +51,10 @@ const std = @import("std");
 pub const names = [_][]const u8{
     "WIRE_EAT",         "WIRE_LOSS",         "WIRE_LATENCY_US",  "PEER_EAT",
     "PEER_LOSS",        "PEER_DAMAGE",       "PEER_DAMAGE_RATE", "DISK_REFUSE",
-    "DISK_REFUSE_RATE", "DISK_WRITES_ONLY",  "DISK_CUT_AFTER",   "DISK_TEAR",
-    "DISK_TEAR_KEEP",   "PEER_RESET_AT",     "PEER_RESET_OFF",   "PEER_VANISH_AFTER",
-    "PEER_FLOOD",       "PEER_FLOOD_GAP_US", "PEER_FLOOD_AT_US", "PEER_SHUT_AFTER",
-    "PEER_SHUT_FOR_US", "PEER_MSS",
+    "DISK_REFUSE_RATE", "DISK_WRITES_ONLY",  "DISK_READS_ONLY",  "DISK_BAD_SECTOR",
+    "DISK_CUT_AFTER",   "DISK_TEAR",         "DISK_TEAR_KEEP",   "PEER_RESET_AT",
+    "PEER_RESET_OFF",   "PEER_VANISH_AFTER", "PEER_FLOOD",       "PEER_FLOOD_GAP_US",
+    "PEER_FLOOD_AT_US", "PEER_SHUT_AFTER",   "PEER_SHUT_FOR_US", "PEER_MSS",
 };
 
 fn index(comptime name: []const u8) usize {
@@ -214,10 +216,11 @@ test "different seeds turn different knobs, and every knob is turned by some see
         last_len = f.len;
     }
     for (turned, names) |t, n| {
-        // Three knobs only a person sets: a seed's runs keep to the flood
-        // and rates of the table above.
+        // Five knobs only a person sets: a seed's runs keep to the flood
+        // and rates of the table above, and name no sector.
         if (!t and !std.mem.eql(u8, n, "PEER_DAMAGE_RATE") and !std.mem.eql(u8, n, "DISK_REFUSE_RATE") and
-            !std.mem.eql(u8, n, "PEER_FLOOD_AT_US"))
+            !std.mem.eql(u8, n, "PEER_FLOOD_AT_US") and !std.mem.eql(u8, n, "DISK_BAD_SECTOR") and
+            !std.mem.eql(u8, n, "DISK_READS_ONLY"))
         {
             std.debug.print("never turned: {s}\n", .{n});
             return error.TestUnexpectedResult;

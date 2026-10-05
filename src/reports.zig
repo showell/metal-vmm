@@ -98,6 +98,10 @@ pub fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void
         const shown: usize = @intCast(@min(block.refusals.refused.picked_count, block.refusals.sectors.len));
         reportFaultsWith("disk", "requests", &block.refusals.refused, ns, block.refusals.sectors[0..shown], block.refusals.kinds[0..shown]);
     }
+    if (block.refusals.bad_len != 0) {
+        var buf: [512]u8 = undefined;
+        std.debug.print("{s}", .{badSectors(&block.refusals, &buf)});
+    }
 }
 
 /// One line on the error stream, so a sweep can read what a run did. **THE
@@ -137,6 +141,44 @@ pub fn reportFaultsWith(what: []const u8, of: []const u8, s: *const faults.Sched
         at += 1;
     }
     _ = linux.write(2, &text, at);
+}
+
+/// **WHAT THE BAD SECTORS REFUSED**: which, how often, and the first few
+/// by request number, so a sweep can say which path reached them.
+pub fn badSectors(d: *const faults.Drive, buf: []u8) []const u8 {
+    var at: usize = 0;
+    const w = struct {
+        fn f(b: []u8, i: *usize, comptime fmt: []const u8, args: anytype) void {
+            const out = std.fmt.bufPrint(b[i.*..], fmt, args) catch return;
+            i.* += out.len;
+        }
+    }.f;
+    w(buf, &at, "metal-vmm: disk: bad sector", .{});
+    for (d.bad[0..d.bad_len], 0..) |s, i| w(buf, &at, "{s}{d}", .{ if (i == 0) " " else ", ", s });
+    w(buf, &at, " refused {d} of {d} requests", .{ d.bad_hits, d.requests });
+    const shown: usize = @intCast(@min(d.bad_hits, d.bad_at.len));
+    for (0..shown) |i| {
+        w(buf, &at, "{s}#{d}, a {s} of sector {d}", .{
+            if (i == 0) " (" else "; ", d.bad_at[i], if (d.bad_kinds[i] == 'w') "write" else "read", d.bad_sectors[i],
+        });
+    }
+    if (shown > 0) w(buf, &at, ")", .{});
+    w(buf, &at, "\n", .{});
+    return buf[0..at];
+}
+
+test "the bad sectors' line" {
+    var d = faults.Drive{ .bad_len = 2 };
+    d.bad[0] = 2180;
+    d.bad[1] = 7;
+    _ = d.serves(1, 1, false);
+    _ = d.serves(2180, 1, true);
+    _ = d.serves(0, 8, false);
+    var buf: [512]u8 = undefined;
+    try std.testing.expectEqualStrings("metal-vmm: disk: bad sector 2180, 7 refused 2 of 3 requests (#2, a write of sector 2180; #3, a read of sector 7)\n", badSectors(&d, &buf));
+    var none = faults.Drive{ .bad_len = 1 };
+    none.bad[0] = 5;
+    try std.testing.expectEqualStrings("metal-vmm: disk: bad sector 5 refused 0 of 0 requests\n", badSectors(&none, &buf));
 }
 
 pub fn pickedWord(what: []const u8) []const u8 {

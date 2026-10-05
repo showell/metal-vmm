@@ -65,7 +65,8 @@ const startedApic = halt.startedApic;
 /// which of the guest's frames to eat (`WIRE_EAT=3` or `WIRE_EAT=3,9`), a rate
 /// to eat them at (`WIRE_LOSS=4`, one frame in four), how long a frame takes to
 /// reach the guest (`WIRE_LATENCY_US=250`), and which of its disk requests come
-/// back refused (`DISK_REFUSE=3,9`, `DISK_REFUSE_RATE=100`). Nothing set is a
+/// back refused (`DISK_REFUSE=3,9`, `DISK_REFUSE_RATE=100`) or which sectors
+/// are bad (`DISK_BAD_SECTOR=2180`). Nothing set is a
 /// machine that works perfectly, which is what check.sh runs on.
 pub fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, rough: *wire.Rough, k: *const knobs.Knobs) void {
     numbers(&line.lost, k, "WIRE_EAT");
@@ -101,6 +102,15 @@ pub fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, rough: *wire.Roug
     if (k.get("WIRE_LOSS")) |n| line.lost.rate = std.fmt.parseInt(u32, n, 10) catch 0;
     if (k.get("DISK_REFUSE_RATE")) |n| drive.refused.rate = std.fmt.parseInt(u32, n, 10) catch 0;
     if (k.get("DISK_WRITES_ONLY")) |_| drive.writes_only = true;
+    if (k.get("DISK_READS_ONLY")) |_| drive.reads_only = true;
+    if (k.get("DISK_BAD_SECTOR")) |list| {
+        var each = std.mem.tokenizeScalar(u8, list, ',');
+        while (each.next()) |one| {
+            if (drive.bad_len == drive.bad.len) break;
+            drive.bad[drive.bad_len] = std.fmt.parseInt(u64, one, 10) catch continue;
+            drive.bad_len += 1;
+        }
+    }
     if (k.get("WIRE_LATENCY_US")) |n| {
         line.latency_ns = (std.fmt.parseInt(u64, n, 10) catch 0) * std.time.ns_per_us;
     }
@@ -142,10 +152,11 @@ pub const FakeEnv = struct {
 test "the knobs reach the wire, the disk and the peer, a seed's or the environment's alike" {
     var by_hand = knobs.Knobs{};
     by_hand.overlay(FakeEnv{ .pairs = &.{
-        .{ "WIRE_EAT", "3,9" },  .{ "PEER_EAT", "2" },         .{ "WIRE_LATENCY_US", "250" },
-        .{ "DISK_REFUSE", "4" }, .{ "DISK_WRITES_ONLY", "1" }, .{ "PEER_RESET_AT", "3000" },
-        .{ "PEER_FLOOD", "4" },  .{ "PEER_MSS", "100" },       .{ "DISK_CUT_AFTER", "7" },
-        .{ "DISK_TEAR", "2" },   .{ "DISK_TEAR_KEEP", "3" },
+        .{ "WIRE_EAT", "3,9" },      .{ "PEER_EAT", "2" },         .{ "WIRE_LATENCY_US", "250" },
+        .{ "DISK_REFUSE", "4" },     .{ "DISK_WRITES_ONLY", "1" }, .{ "PEER_RESET_AT", "3000" },
+        .{ "PEER_FLOOD", "4" },      .{ "PEER_MSS", "100" },       .{ "DISK_CUT_AFTER", "7" },
+        .{ "DISK_TEAR", "2" },       .{ "DISK_TEAR_KEEP", "3" },   .{ "DISK_BAD_SECTOR", "2180,x,7" },
+        .{ "DISK_READS_ONLY", "1" },
     } });
     var line = faults.Wire{};
     var drive = faults.Drive{};
@@ -156,6 +167,8 @@ test "the knobs reach the wire, the disk and the peer, a seed's or the environme
     try testing.expectEqual(@as(u64, 250 * std.time.ns_per_us), line.latency_ns);
     try testing.expectEqual(@as(u32, 4), drive.refused.named[0]);
     try testing.expect(drive.writes_only);
+    try testing.expect(drive.reads_only);
+    try testing.expectEqualSlices(u64, &.{ 2180, 7 }, drive.bad[0..drive.bad_len]);
     try testing.expectEqual(@as(?u64, 7), drive.cut_after);
     try testing.expectEqual(@as(?u64, 2), drive.tear);
     try testing.expectEqual(@as(u64, 3), drive.tear_keep);

@@ -486,6 +486,17 @@ probe reaches them. No hang, no wrong answer, and no run that carried on as
 though nothing had happened. That is a statement about a guest's error paths
 that you can only make by trying all of them.
 
+**And a sector can be bad.** `DISK_BAD_SECTOR=2180` (or `2180,7`) refuses
+every request that touches that sector, for the whole run, read or write;
+`DISK_READS_ONLY=1` or `DISK_WRITES_ONLY=1` narrows it to one kind. A request
+number reaches a sector on one path; a sector is reached on every path that
+touches it, the way the FAT's mirror below turned up under three of them,
+and named again on the next boot it is still bad, as a real one is. The run
+ends saying which requests it refused, in this form (it has not yet been run
+against gopher.elf here):
+
+    metal-vmm: disk: bad sector 2180 refused N of M requests (#n, a write of sector 2180; ...)
+
 The one PASS under a refusal is #1, the GPT header: `vfat` reads any failure to
 find a partition table as "no table" and mounts sector 0, which on this bare
 volume is right. On a partitioned disk the same fallback fails the mount, so the

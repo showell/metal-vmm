@@ -219,7 +219,7 @@ bottom.
     halt), guest nanoseconds, frames each way, disk requests, and the
     longest stretch of guest time with no exit at all. Keep it pure: a
     counter struct the run loop bumps and a formatter with tests.
-32. **Your proposals.** When 22-31 are done, read the README's "Being
+32. **Done (CC): F1-F5 under Proposed; F1 built (`DISK_BAD_SECTOR`, `DISK_READS_ONLY`), the box's to aim at sector 2180 and the pinned file.** **Your proposals.** When 22-31 are done, read the README's "Being
     unhelpful on purpose" and "The real server" sections and propose (under
     Proposed, one line each on why) the next five faults or checks you
     think would find the most in gopher.elf. Then take the first one.
@@ -360,6 +360,36 @@ From the review (`docs/reviews/REVIEW-interrupts.md`), most urgent first:
 16. **Done (CC).** **A halt is not a hang on the PC-shaped machine (P1).** An idle server
     is killed as `GuestStuck` after ~1M exits of resting (minutes of guest
     time); soaks and the explorer will hit it.
+
+From item 32: the next five faults or checks for gopher.elf, most finding
+first (CC):
+
+- **F1. A bad sector, aimed by address** (`DISK_BAD_SECTOR=s[,t]`, with
+  `DISK_READS_ONLY` beside `DISK_WRITES_ONLY`). Every disk finding above is
+  about one sector (2180, the FAT's mirror; the pinned file), and a request
+  count reaches it on one path only. A sector is reached on every path, stays
+  bad across a reboot as a real one does, and refusing the pinned file's
+  reads while its writes land is the aim "The bookmark that eats your
+  bookmarks" says this machine cannot take yet. **Built (CC); not yet run against gopher.elf.**
+- **F2. Silent rot on read** (`DISK_ROT=sector,byte`): the sector is served
+  with one byte changed and an "ok". fat16.zig checks nothing it reads, so a
+  FAT entry that points back into its own chain is a loop to hang on, and a
+  rotted directory entry a file written over another's clusters; the
+  explorer finds which bytes matter.
+- **F3. A write cache, and whether the guest ever flushes** (offer
+  `VIRTIO_BLK_F_FLUSH`; `DISK_CACHE=1` holds acknowledged writes until a
+  flush, and a power cut loses what was not flushed). gopher's driver may
+  never send a flush; on a disk with a cache, "303 means saved" (README,
+  "The write path") would then be true here and false on hardware.
+- **F4. A client that retries what got no answer** (`PEER_RETRY=1`: a client
+  whose connection closed with no response sends the same request again on
+  a new one), with a check that the volume holds the message once. The
+  three-run row of "The multi-file path" says a user who retries gets a
+  duplicate; this measures it.
+- **F5. The calendar as a knob** (`RTC_BOOTS_AT=unix`, clock.zig's
+  `boots_at` today a constant): boots on 2038-01-19, 2099-12-31, 2108 (past
+  FAT's last year), a leap day, and just before midnight, for FAT
+  timestamps, cookie expiry and anything that sorts by date.
 
 Folded into existing items rather than new ones: M4, L1, L2, L3 into item 4
 (MSI-X); L4 into item 5 (APIC); L5 (0xCF9) waits until a reset is something
