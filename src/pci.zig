@@ -453,3 +453,438 @@ test "MSI-X: masked, the message waits; unmasked, it reaches the APIC" {
     _ = bus.memory(&ram, f.bar + msix_table_at + 12, true, &unmask);
     try testing.expectEqual(@as(?u8, 0x31), lapic.next());
 }
+
+// ── the driver's whole sequence, without a processor ────────────────────────
+
+const entropy = @import("entropy.zig");
+const net = @import("net.zig");
+
+/// **GOPHER-METAL'S DRIVER, FROM THE OTHER SIDE.** Each step is what its
+/// `pci.zig` and `virtio.zig` do, at the widths they do it: configuration
+/// space by `outl`/`inl` and `outw`, the common configuration by each field's
+/// own width, 64-bit fields as two 32-bit stores. Its RAM holds the rings; its
+/// stores to a BAR go through `Bus.memory`, as an exit would bring them.
+const FakeGuest = struct {
+    bus: *Bus,
+    ram: [0x4000]u8 align(8) = @splat(0),
+
+    // Where this guest keeps one queue's rings and buffers, in its RAM.
+    const size: u16 = 8;
+    const desc_at: u64 = 0x100;
+    const avail_at: u64 = desc_at + size * @sizeOf(virtio.Desc);
+    const used_at: u64 = 0x400;
+    const buffer_at: u64 = 0x1000;
+    const buffer_len: u32 = 0x800;
+
+    const wake_vector: u8 = 0x40;
+
+    /// What `pciDevice` and `prepareMsix` found.
+    const Found = struct {
+        slot: u8,
+        common: u64,
+        notify: u64,
+        multiplier: u32,
+        isr: u64,
+        device: u64,
+        msix_entry: ?u64 = null,
+        msix_cap: u8 = 0,
+    };
+
+    // ── configuration space, by the two ports ──
+
+    fn cfgRead32(self: *FakeGuest, slot: u8, register: u8) u32 {
+        var addr: [4]u8 = undefined;
+        std.mem.writeInt(u32, &addr, 0x8000_0000 | (@as(u32, slot) << 11) | (register & 0xFC), .little);
+        self.bus.out(address_port, &addr);
+        var data: [4]u8 = undefined;
+        self.bus.in(data_port, &data);
+        return std.mem.readInt(u32, &data, .little);
+    }
+
+    fn cfgRead16(self: *FakeGuest, slot: u8, register: u8) u16 {
+        return @truncate(self.cfgRead32(slot, register) >> @intCast((register & 2) * 8));
+    }
+
+    fn cfgRead8(self: *FakeGuest, slot: u8, register: u8) u8 {
+        return @truncate(self.cfgRead32(slot, register) >> @intCast((register & 3) * 8));
+    }
+
+    fn cfgWrite16(self: *FakeGuest, slot: u8, register: u8, value: u16) void {
+        var addr: [4]u8 = undefined;
+        std.mem.writeInt(u32, &addr, 0x8000_0000 | (@as(u32, slot) << 11) | (register & 0xFC), .little);
+        self.bus.out(address_port, &addr);
+        var data: [2]u8 = undefined;
+        std.mem.writeInt(u16, &data, value, .little);
+        self.bus.out(data_port + (register & 2), &data);
+    }
+
+    // ── a BAR, by loads and stores ──
+
+    fn load(self: *FakeGuest, comptime T: type, addr: u64) !T {
+        var data: [@sizeOf(T)]u8 = undefined;
+        try testing.expect(self.bus.memory(&self.ram, addr, false, &data));
+        return std.mem.readInt(T, &data, .little);
+    }
+
+    fn store(self: *FakeGuest, comptime T: type, addr: u64, value: T) !void {
+        var data: [@sizeOf(T)]u8 = undefined;
+        std.mem.writeInt(T, &data, value, .little);
+        try testing.expect(self.bus.memory(&self.ram, addr, true, &data));
+    }
+
+    fn store64(self: *FakeGuest, addr: u64, value: u64) !void {
+        try self.store(u32, addr, @truncate(value));
+        try self.store(u32, addr + 4, @truncate(value >> 32));
+    }
+
+    // ── gopher-metal's pci.zig ──
+
+    /// `Scan`: every slot of bus 0, function 0 unless the header says more;
+    /// the first function whose device id names virtio `kind`.
+    fn find(self: *FakeGuest, kind: u32) ?u8 {
+        if (!someone(self.cfgRead16(0, 0x00))) return null; // `present`
+        var slot: u8 = 0;
+        while (slot < 32) : (slot += 1) {
+            if (!someone(self.cfgRead16(slot, 0x00))) continue;
+            if (self.cfgRead8(slot, 0x0E) & 0x80 != 0) return null; // nothing here is multi-function
+            if (self.cfgRead16(slot, 0x00) != 0x1AF4) continue;
+            const id = self.cfgRead16(slot, 0x02);
+            if (id >= 0x1040 and id <= 0x107F and id - 0x1040 == kind) return slot;
+        }
+        return null;
+    }
+
+    fn someone(vendor: u16) bool {
+        return vendor != 0xFFFF and vendor != 0x0000;
+    }
+
+    fn bar(self: *FakeGuest, slot: u8, index: u8) ?u64 {
+        const low = self.cfgRead32(slot, 0x10 + index * 4);
+        if (low & 1 != 0) return null;
+        var at: u64 = low & 0xFFFF_FFF0;
+        if ((low >> 1) & 3 == 2) at |= @as(u64, self.cfgRead32(slot, 0x10 + index * 4 + 4)) << 32;
+        return if (at == 0) null else at;
+    }
+
+    /// `pciDevice`: the four windows from the capability list, then memory
+    /// and bus mastering on (`Function.enable`).
+    fn open(self: *FakeGuest, slot: u8) ?Found {
+        var common: ?u64 = null;
+        var notify: ?u64 = null;
+        var isr: ?u64 = null;
+        var device: ?u64 = null;
+        var multiplier: u32 = 0;
+        var msix_cap: u8 = 0;
+        if (self.cfgRead16(slot, 0x06) & 0x10 == 0) return null;
+        var at = self.cfgRead8(slot, 0x34) & 0xFC;
+        var seen: u8 = 0;
+        while (at != 0 and seen < 48) : (seen += 1) {
+            const id = self.cfgRead8(slot, at);
+            const next = self.cfgRead8(slot, at + 1) & 0xFC;
+            if (id == 0x11) msix_cap = at;
+            if (id == 0x09) {
+                const window = (self.bar(slot, self.cfgRead8(slot, at + 4)) orelse return null) + self.cfgRead32(slot, at + 8);
+                switch (self.cfgRead8(slot, at + 3)) {
+                    1 => common = common orelse window,
+                    2 => if (notify == null) {
+                        notify = window;
+                        multiplier = self.cfgRead32(slot, at + 16);
+                    },
+                    3 => isr = isr orelse window,
+                    4 => device = device orelse window,
+                    else => {},
+                }
+            }
+            at = next;
+        }
+        self.cfgWrite16(slot, 0x04, self.cfgRead16(slot, 0x04) | 0x0006);
+        return .{
+            .slot = slot,
+            .common = common orelse return null,
+            .notify = notify orelse return null,
+            .multiplier = multiplier,
+            .isr = isr orelse return null,
+            .device = device orelse return null,
+            .msix_cap = msix_cap,
+        };
+    }
+
+    // ── gopher-metal's virtio.zig ──
+
+    /// `negotiate`: reset and wait for it, ACKNOWLEDGE, DRIVER, VERSION_1 and
+    /// `want_low`, FEATURES_OK read back. The status so far, or null where
+    /// the driver would have given up.
+    fn negotiate(self: *FakeGuest, f: Found, want_low: u32) !?u8 {
+        try self.store(u8, f.common + 0x14, 0);
+        var spins: usize = 0;
+        while (try self.load(u8, f.common + 0x14) != 0) : (spins += 1) if (spins == 1000) return null;
+        var st: u8 = 1;
+        try self.store(u8, f.common + 0x14, st);
+        st |= 2;
+        try self.store(u8, f.common + 0x14, st);
+        try self.store(u32, f.common + 0x00, 1);
+        if (try self.load(u32, f.common + 0x04) & 1 == 0) return null; // VERSION_1
+        try self.store(u32, f.common + 0x00, 0);
+        if (try self.load(u32, f.common + 0x04) & want_low != want_low) return null;
+        try self.store(u32, f.common + 0x08, 1);
+        try self.store(u32, f.common + 0x0C, 1);
+        try self.store(u32, f.common + 0x08, 0);
+        try self.store(u32, f.common + 0x0C, want_low);
+        st |= 8;
+        try self.store(u8, f.common + 0x14, st);
+        if (try self.load(u8, f.common + 0x14) & 8 == 0) return null;
+        return st;
+    }
+
+    /// `prepareMsix`: entry 0 masked and cleared, then MSI-X on for the
+    /// function, not masked as a whole.
+    fn prepareMsix(self: *FakeGuest, f: *Found) !void {
+        if (f.msix_cap == 0) return;
+        const table = self.cfgRead32(f.slot, f.msix_cap + 4);
+        const window = self.bar(f.slot, @truncate(table & 7)) orelse return;
+        const entry = window + (table & ~@as(u32, 7));
+        try self.store(u32, entry + 12, 1);
+        try self.store(u32, entry + 0, 0);
+        try self.store(u32, entry + 4, 0);
+        try self.store(u32, entry + 8, 0);
+        const control = self.cfgRead16(f.slot, f.msix_cap + 2);
+        self.cfgWrite16(f.slot, f.msix_cap + 2, (control | 0x8000) & ~@as(u16, 0x4000));
+        f.msix_entry = entry;
+    }
+
+    /// `Queue.setup` for queue `index`: its rings, its vector (entry 0, read
+    /// back), enabled. The doorbell's address, and whether the vector took.
+    fn setupQueue(self: *FakeGuest, f: Found, index: u16) !struct { doorbell: u64, vectored: bool } {
+        try self.store(u16, f.common + 0x16, index);
+        const max = try self.load(u16, f.common + 0x18);
+        try testing.expect(max >= size);
+        try self.store(u16, f.common + 0x18, size);
+        try self.store64(f.common + 0x20, desc_at);
+        try self.store64(f.common + 0x28, avail_at);
+        try self.store64(f.common + 0x30, used_at);
+        const off = try self.load(u16, f.common + 0x1E);
+        var vectored = false;
+        if (f.msix_entry != null) {
+            try self.store(u16, f.common + 0x1A, 0);
+            vectored = try self.load(u16, f.common + 0x1A) == 0;
+        }
+        try self.store(u16, f.common + 0x1C, 1);
+        return .{ .doorbell = f.notify + @as(u64, off) * f.multiplier, .vectored = vectored };
+    }
+
+    /// `routeToProcessor`: entry 0 aimed at APIC 0 with `vector`, unmasked.
+    fn route(self: *FakeGuest, f: Found, vector: u8) !void {
+        const entry = f.msix_entry.?;
+        try self.store(u32, entry + 0, @intCast(apic.base));
+        try self.store(u32, entry + 4, 0);
+        try self.store(u32, entry + 8, vector);
+        try self.store(u32, entry + 12, 0);
+    }
+
+    fn driverOk(self: *FakeGuest, f: Found, st: u8) !void {
+        try self.store(u8, f.common + 0x14, st | 4);
+    }
+
+    /// One device-writable buffer offered on the queue, and the doorbell rung
+    /// as `notify` does: the queue's index, 16 bits wide.
+    fn offer(self: *FakeGuest, doorbell: u64, index: u16, flags: u16) !void {
+        virtio.writeInt(u64, &self.ram, desc_at, buffer_at);
+        virtio.writeInt(u32, &self.ram, desc_at + 8, buffer_len);
+        virtio.writeInt(u16, &self.ram, desc_at + 12, virtio.Desc.write_flag);
+        const idx = virtio.readInt(u16, &self.ram, avail_at + 2);
+        virtio.writeInt(u16, &self.ram, avail_at, flags);
+        virtio.writeInt(u16, &self.ram, avail_at + 4 + @as(u64, idx % size) * 2, 0);
+        virtio.writeInt(u16, &self.ram, avail_at + 2, idx +% 1);
+        try self.store(u16, doorbell, index);
+    }
+
+    fn usedIdx(self: *FakeGuest) u16 {
+        return virtio.readInt(u16, &self.ram, used_at + 2);
+    }
+
+    /// The whole bring-up, as `net.zig`/`rng.zig` call it: found, negotiated,
+    /// MSI-X prepared, one queue set up, routed, DRIVER_OK.
+    fn bringUp(self: *FakeGuest, kind: u32, want_low: u32, queue: u16) !struct { f: Found, doorbell: u64 } {
+        var f = self.open(self.find(kind) orelse return error.NotFound) orelse return error.NoWindows;
+        const st = (try self.negotiate(f, want_low)) orelse return error.Refused;
+        try self.prepareMsix(&f);
+        const q = try self.setupQueue(f, queue);
+        try testing.expect(q.vectored);
+        try self.route(f, wake_vector);
+        try self.driverOk(f, st);
+        return .{ .f = f, .doorbell = q.doorbell };
+    }
+};
+
+/// The PC-shaped machine's three devices in main.zig's slots, and its APIC
+/// as gopher-metal's `startApic` leaves it.
+const Machine = struct {
+    bus: Bus = .{},
+    lapic: apic.Apic = .{},
+    block_context: u8 = 0,
+    block: virtio.Device = undefined,
+    card: net.Net = .{},
+    card_device: virtio.Device = undefined,
+    dice: entropy.Entropy = .{},
+    dice_device: virtio.Device = undefined,
+
+    fn init(self: *Machine) void {
+        self.block = .{ .id = virtio.device_id_block, .context = &self.block_context, .notified = nothing };
+        self.card_device = self.card.device();
+        self.dice_device = self.dice.device();
+        _ = self.bus.plug(1, &self.block, &self.lapic);
+        _ = self.bus.plug(2, &self.card_device, &self.lapic);
+        _ = self.bus.plug(3, &self.dice_device, &self.lapic);
+        _ = self.lapic.writeMsr(apic.msr_apic_base, self.lapic.readMsr(apic.msr_apic_base).? | (1 << 11));
+        self.lapic.write(0x0F0, 0x1FF);
+        self.lapic.write(0x320, 0x41 | (2 << 17));
+    }
+};
+
+test "the scan finds a bus, and each device by its modern id" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    // PCI 3.0 §6.1: an empty slot's vendor reads all ones; virtio 1.2
+    // §4.1.2.1: a modern-only device is 0x1040 plus its type.
+    try testing.expectEqual(@as(u16, 0xFFFF), g.cfgRead16(4, 0x00));
+    try testing.expectEqual(@as(?u8, 1), g.find(virtio.device_id_block));
+    try testing.expectEqual(@as(?u8, 2), g.find(virtio.device_id_net));
+    try testing.expectEqual(@as(?u8, 3), g.find(virtio.device_id_entropy));
+    try testing.expectEqual(@as(?u8, null), g.find(16)); // a GPU: not here
+    // §4.1.2.1: a non-transitional device has revision 1 or more.
+    try testing.expect(g.cfgRead8(2, 0x08) >= 1);
+}
+
+test "the capability list gives four windows inside the BAR, and MSI-X" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    const f = g.open(2).?;
+    const b = g.bar(2, 0).?;
+    for ([_]u64{ f.common, f.notify, f.isr, f.device }) |w| try testing.expect(w >= b and w < b + bar_size);
+    try testing.expect(f.msix_cap != 0);
+    // `enable` read the command register, set memory and bus master, and
+    // they read back (§6.2.2).
+    try testing.expectEqual(@as(u16, 0x0006), g.cfgRead16(2, 0x04) & 0x0006);
+}
+
+test "a reset reads back zero, and the device's fields at their own widths" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    const f = g.open(2).?;
+    try g.store(u8, f.common + 0x14, 1 | 2);
+    try testing.expectEqual(@as(u8, 3), try g.load(u8, f.common + 0x14));
+    // virtio 1.2 §4.1.4.3.1: writing 0 resets, and the device presents 0
+    // once the reset is done.
+    try g.store(u8, f.common + 0x14, 0);
+    try testing.expectEqual(@as(u8, 0), try g.load(u8, f.common + 0x14));
+    // A selector is read back as written, at its width (§4.1.4.3).
+    try g.store(u16, f.common + 0x16, 1);
+    try testing.expectEqual(@as(u16, 1), try g.load(u16, f.common + 0x16));
+}
+
+test "features: VERSION_1 in the high word, the card's MAC in the low, FEATURES_OK kept" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    const f = g.open(2).?;
+    const st = (try g.negotiate(f, 1 << 5)).?; // VIRTIO_NET_F_MAC
+    try testing.expectEqual(@as(u8, 1 | 2 | 8), st);
+}
+
+test "MSI-X prepared: enabled, entry 0 masked, nothing sent" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    var f = g.open(3).?;
+    _ = (try g.negotiate(f, 0)).?;
+    try g.prepareMsix(&f);
+    const control = g.cfgRead16(3, f.msix_cap + 2);
+    try testing.expect(control & 0x8000 != 0); // enabled
+    try testing.expect(control & 0x4000 == 0); // the function not masked
+    try testing.expectEqual(@as(u32, 1), try g.load(u32, f.msix_entry.? + 12) & 1);
+    try testing.expect(m.lapic.next() == null);
+}
+
+test "a queue set up takes entry 0 as its vector, and its doorbell is in the notify window" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    var f = g.open(3).?;
+    _ = (try g.negotiate(f, 0)).?;
+    try g.prepareMsix(&f);
+    const q = try g.setupQueue(f, 0);
+    try testing.expect(q.vectored);
+    try testing.expect(q.doorbell >= f.notify and q.doorbell < f.notify + notify_len);
+    try testing.expectEqual(@as(u16, 1), try g.load(u16, f.common + 0x1C)); // enabled
+    try testing.expectEqual(@as(u64, FakeGuest.desc_at), try g.load(u64, f.common + 0x20));
+}
+
+test "a doorbell is served: the buffer comes back filled on the used ring" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    const up = try g.bringUp(virtio.device_id_entropy, 0, 0);
+    try g.offer(up.doorbell, 0, 0);
+    try testing.expectEqual(@as(u16, 1), g.usedIdx());
+    try testing.expectEqual(FakeGuest.buffer_len, virtio.readInt(u32, &g.ram, FakeGuest.used_at + 8));
+}
+
+test "a completion is an MSI-X message, and the APIC delivers its vector until EOI" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    const up = try g.bringUp(virtio.device_id_entropy, 0, 0);
+    try g.offer(up.doorbell, 0, 0);
+    try testing.expectEqual(@as(?u8, FakeGuest.wake_vector), m.lapic.next());
+    // In service until the handler's EOI: a second completion waits.
+    try g.offer(up.doorbell, 0, 0);
+    try testing.expect(m.lapic.next() == null);
+    m.lapic.write(0x0B0, 0);
+    try testing.expectEqual(@as(?u8, FakeGuest.wake_vector), m.lapic.next());
+}
+
+test "a completion while entry 0 is masked waits, and routing it sends it" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    var f = g.open(3).?;
+    const st = (try g.negotiate(f, 0)).?;
+    try g.prepareMsix(&f);
+    const q = try g.setupQueue(f, 0);
+    try g.driverOk(f, st);
+    try g.offer(q.doorbell, 0, 0);
+    try testing.expectEqual(@as(u16, 1), g.usedIdx());
+    try testing.expect(m.lapic.next() == null);
+    // PCI 3.0 §6.8.2.9: a masked entry's message is held in its pending
+    // bit, and sent when it is unmasked.
+    try testing.expectEqual(@as(u64, 1), try g.load(u64, m.bus.functions[3].?.bar + msix_pba_at) & 1);
+    try g.route(f, FakeGuest.wake_vector);
+    try testing.expectEqual(@as(?u8, FakeGuest.wake_vector), m.lapic.next());
+    try testing.expectEqual(@as(u64, 0), try g.load(u64, m.bus.functions[3].?.bar + msix_pba_at) & 1);
+}
+
+test "a driver that asked for no interrupts on a queue gets none" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    const up = try g.bringUp(virtio.device_id_entropy, 0, 0);
+    try g.offer(up.doorbell, 0, 1); // VIRTQ_AVAIL_F_NO_INTERRUPT (§2.7.7)
+    try testing.expectEqual(@as(u16, 1), g.usedIdx());
+    try testing.expect(m.lapic.next() == null);
+}
+
+test "a frame the wire delivers into a receive buffer wakes the guest" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    const up = try g.bringUp(virtio.device_id_net, 1 << 5, 0); // receive queue
+    try g.offer(up.doorbell, 0, 0);
+    try testing.expect(m.lapic.next() == null); // a receive buffer is parked
+    m.card.line.hold(&.{ 1, 2, 3, 4 }, 0);
+    m.card.pump(&m.card_device, &g.ram, 0);
+    try testing.expectEqual(@as(u16, 1), g.usedIdx());
+    try testing.expectEqual(@as(?u8, FakeGuest.wake_vector), m.lapic.next());
+}

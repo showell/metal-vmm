@@ -23,7 +23,7 @@ bottom.
    could reach, and where could a run stop being a function of the guest
    alone? Write `docs/reviews/REVIEW-interrupts.md`. Fix nothing in it; each
    finding becomes an item.
-2. **A `FakeGuest` over PCI.** As `virtio.zig`'s does for mmio: drive
+2. **Done (CC).** **A `FakeGuest` over PCI.** As `virtio.zig`'s does for mmio: drive
    `pci.Bus` through ports 0xCF8/0xCFC the way gopher-metal's `pci.zig` and
    `virtio.zig` do (scan, capabilities, common config at each field's width,
    reset and its read-back, feature negotiation, a queue set up with its
