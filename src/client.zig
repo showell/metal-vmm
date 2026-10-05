@@ -61,6 +61,11 @@ pub fn earliest(a: ?u64, b: ?u64) ?u64 {
 /// gives up on the connection.
 const initial_rto_ns: u64 = std.time.ns_per_s;
 const max_rto_ns: u64 = 60 * std.time.ns_per_s;
+/// **THE FLOOR, LINUX'S** (RFC 6298 §2.4 allows it): a measured path as
+/// short as this one would otherwise time out within its own round trip.
+const min_rto_ns: u64 = 200 * std.time.ns_per_ms;
+/// RFC 6298's G, the clock's granularity.
+const granularity_ns: u64 = std.time.ns_per_ms;
 const max_tries: u8 = 8;
 /// **TIME-WAIT LASTS 2MSL** (RFC 9293 §3.10.7.4): Linux's 60 s, of the
 /// guest's time.
@@ -162,6 +167,18 @@ pub const Tcp = struct {
     timer_at: ?u64 = null,
     rto_ns: u64 = initial_rto_ns,
     tries: u8 = 0,
+    /// **THE ROUND TRIP, MEASURED** (RFC 6298 §2-3): one segment timed at a
+    /// time, never one sent twice (Karn), and the estimates from it.
+    timed: ?struct { end: u32, at: u64 } = null,
+    srtt_ns: ?u64 = null,
+    rttvar_ns: u64 = 0,
+    /// Duplicate acknowledgements in a row (RFC 5681 §3.2): three resend
+    /// the oldest unacknowledged at once.
+    dupacks: u8 = 0,
+    /// **AFTER A TIMEOUT, EVERYTHING FROM SND.UNA GOES AGAIN**, within the
+    /// window: what is still to be sent again, by sequence number.
+    resend_from: u32 = 0,
+    resend_to: u32 = 0,
     /// The reset is behind it, done or let go of because the connection was
     /// not open when its time came.
     reset_past: bool = false,
@@ -186,6 +203,7 @@ pub const Tcp = struct {
         };
         const frame = self.segment(out, flag_syn, "");
         self.seq +%= 1; // the SYN takes one
+        self.timed = .{ .end = self.seq, .at = now };
         self.arm(now);
         return frame;
     }
@@ -206,9 +224,27 @@ pub const Tcp = struct {
             },
             else => {},
         }
-        if (s.flags & flag_rst != 0) {
-            self.state = .refused;
-            self.timer_at = null;
+        if (self.state == .syn_sent) {
+            // **AN ACKNOWLEDGEMENT OF ANOTHER SYN** (RFC 9293 §3.10.7.3):
+            // answered with a reset at what it acknowledged; a reset that
+            // does not acknowledge ours is not believed.
+            const acceptable = s.flags & flag_ack != 0 and s.ack == self.iss +% 1;
+            if (s.flags & flag_ack != 0 and !acceptable) {
+                if (s.flags & flag_rst != 0) return null;
+                return build(out, server_ip, self.port, s.ack, 0, flag_rst, 0, "");
+            }
+            if (s.flags & flag_rst != 0) {
+                if (acceptable) self.refuse();
+                return null;
+            }
+        } else if (s.flags & flag_rst != 0) {
+            // **A RESET MUST NAME RCV.NXT** (RFC 5961 §3.2): one inside the
+            // window draws a challenge ACK, anything else is ignored.
+            if (s.seq == self.ack) {
+                self.refuse();
+                return null;
+            }
+            if (s.seq -% self.ack < self.window()) return self.segment(out, flag_ack, "");
             return null;
         }
         switch (self.state) {
@@ -225,6 +261,14 @@ pub const Tcp = struct {
                 return self.segment(out, flag_ack, "");
             },
             .established, .closing, .fin_wait => {
+                // **AN ACKNOWLEDGEMENT OF WHAT WAS NEVER SENT** (RFC 9293
+                // §3.10.7.4): an ACK, and the segment is dropped.
+                if (s.flags & flag_ack != 0 and before(self.seq, s.ack)) return self.segment(out, flag_ack, "");
+                // A duplicate acknowledgement (RFC 5681 §2): nothing new,
+                // nothing carried, the window as it was, and something
+                // still out.
+                const duplicate = s.flags & flag_ack != 0 and s.ack == self.una and self.una != self.seq and
+                    s.data.len == 0 and s.flags & (flag_syn | flag_fin) == 0 and s.window == self.snd_wnd;
                 if (s.flags & flag_ack != 0) {
                     self.acknowledged(s.ack, now);
                     // The window counts from what it acknowledges, so an
@@ -240,6 +284,14 @@ pub const Tcp = struct {
                             self.persist_at = null;
                             self.persist_ns = initial_rto_ns;
                         }
+                    }
+                }
+                if (duplicate and self.rough.retransmits) {
+                    self.dupacks +|= 1;
+                    if (self.dupacks == 3) {
+                        // Fast retransmit: the oldest, now, and not timed.
+                        self.timed = null;
+                        return self.again(out);
                     }
                 }
                 // **IN ORDER ONLY.** Anything else is re-acknowledged, which
@@ -383,6 +435,7 @@ pub const Tcp = struct {
             }
             const frame = self.segment(out, flag_ack | flag_psh, data);
             self.seq +%= @intCast(data.len);
+            self.time(now);
             self.arm(now);
             return frame;
         }
@@ -391,6 +444,7 @@ pub const Tcp = struct {
             const frame = self.segment(out, flag_fin | flag_ack, "");
             self.seq +%= 1;
             self.fin_sent = true;
+            self.time(now);
             self.arm(now);
             return frame;
         }
@@ -433,10 +487,36 @@ pub const Tcp = struct {
                 self.timer_at = null;
                 return null;
             }
+            // RFC 6298 §5.5-5.6: back off, and resend from SND.UNA; Karn's
+            // rule: nothing sent again is timed.
             self.rto_ns = @min(self.rto_ns * 2, max_rto_ns);
             self.timer_at = now + self.rto_ns;
-            return self.again(out);
+            self.timed = null;
+            const frame = self.again(out);
+            if (tcpIn(frame)) |sent_again| {
+                const end = sent_again.seq +% @as(u32, @intCast(sent_again.data.len));
+                if (sent_again.data.len > 0 and before(end, self.dataEnd())) {
+                    self.resend_from = end;
+                    self.resend_to = self.dataEnd();
+                }
+            }
+            return frame;
         };
+        // The rest of what a timeout sends again, as far as the window goes.
+        if (self.rough.retransmits and before(self.resend_from, self.resend_to)) {
+            if (!before(self.resend_from, self.una)) {
+                const off: usize = self.resend_from -% (self.iss +% 1);
+                const room: usize = if (self.rough.ignore_window) std.math.maxInt(usize) else self.snd_wnd -| (self.resend_from -% self.una);
+                const pending = self.chunk(off);
+                const n = @min(pending.len, room, self.resend_to -% self.resend_from);
+                if (n > 0) {
+                    const frame = build(out, server_ip, self.port, self.resend_from, self.ack, flag_ack | flag_psh, self.window(), pending[0..n]);
+                    self.resend_from +%= @intCast(n);
+                    return frame;
+                }
+            }
+            self.resend_to = self.resend_from;
+        }
         return null;
     }
 
@@ -462,6 +542,38 @@ pub const Tcp = struct {
         return build(out, server_ip, self.port, data_end, self.ack, flag_fin | flag_ack, self.window(), "");
     }
 
+    /// Where the request bytes sent so far end, by sequence number.
+    fn dataEnd(self: *const Tcp) u32 {
+        return self.iss +% 1 +% @as(u32, @intCast(self.sent()));
+    }
+
+    /// The guest reset it.
+    fn refuse(self: *Tcp) void {
+        self.state = .refused;
+        self.timer_at = null;
+        self.persist_at = null;
+    }
+
+    /// What was just sent is timed, if nothing is (RFC 6298 §3).
+    fn time(self: *Tcp, now: u64) void {
+        if (self.timed == null) self.timed = .{ .end = self.seq, .at = now };
+    }
+
+    /// **A ROUND TRIP, MEASURED** (RFC 6298 §2.2-2.4), and the timeout it
+    /// makes, between the floor and the cap.
+    fn sample(self: *Tcp, r: u64) void {
+        if (self.srtt_ns) |srtt| {
+            const diff = if (srtt > r) srtt - r else r - srtt;
+            self.rttvar_ns = (3 * self.rttvar_ns + diff) / 4;
+            self.srtt_ns = (7 * srtt + r) / 8;
+        } else {
+            self.srtt_ns = r;
+            self.rttvar_ns = r / 2;
+        }
+        const rto = self.srtt_ns.? + @max(granularity_ns, 4 * self.rttvar_ns);
+        self.rto_ns = std.math.clamp(rto, min_rto_ns, max_rto_ns);
+    }
+
     /// Something of ours that takes sequence space is on the wire: if the
     /// timer runs and is not already running, it starts.
     fn arm(self: *Tcp, now: u64) void {
@@ -473,9 +585,16 @@ pub const Tcp = struct {
     fn acknowledged(self: *Tcp, ack: u32, now: u64) void {
         const advance = ack -% self.una;
         if (advance == 0 or advance > self.seq -% self.una) return;
+        // A segment timed, and now acknowledged: a sample. Until one comes,
+        // a backed-off timeout stays backed off (RFC 6298 §5.7).
+        if (self.timed) |t| if (!before(ack, t.end)) {
+            self.sample(now - t.at);
+            self.timed = null;
+        };
         self.una = ack;
         self.tries = 0;
-        self.rto_ns = initial_rto_ns;
+        self.dupacks = 0;
+        if (before(self.resend_from, self.una)) self.resend_from = self.una;
         self.timer_at = null;
         if (self.una != self.seq) self.arm(now);
     }
@@ -580,8 +699,12 @@ test "a segment out of order is re-acknowledged rather than taken" {
 test "a reset ends it, rather than leaving a client that waits forever" {
     var peer = Peer{};
     var theirs: [2048]u8 = undefined;
-    _ = peer.open("GET / HTTP/1.1\r\n\r\n", 0);
+    const syn = tcpIn(peer.open("GET / HTTP/1.1\r\n\r\n", 0)).?;
+    // A reset that does not acknowledge the SYN is not believed (RFC 9293
+    // §3.10.7.3); the guest's refusal of it, acknowledging it, is.
     try testing.expect(peer.answer(fakeSegment(&theirs, flag_rst, 0, 0, ""), 0) == null);
+    try testing.expectEqual(Tcp.State.syn_sent, peer.tcp.state);
+    try testing.expect(peer.answer(fakeSegment(&theirs, flag_rst | flag_ack, 0, syn.seq +% 1, ""), 0) == null);
     try testing.expectEqual(Tcp.State.refused, peer.tcp.state);
 }
 
@@ -607,12 +730,20 @@ test "the request goes a segment at a time, and a timeout sends the oldest unack
     for (&seqs) |*q| q.* = tcpIn(peer.more(0).?).?.seq;
     try testing.expect(peer.more(0) == null);
     try testing.expectEqualSlices(u32, &.{ 1001, 1011, 1021 }, &seqs);
-    // The guest has the first ten bytes only: the timer restarts from there.
+    // The guest has the first ten bytes only: the timer restarts from there,
+    // at the timeout the round trips make (RFC 6298 §2): the SYN's took no
+    // time (SRTT 0, RTTVAR 0), the first segment's 500 ms (SRTT 62.5 ms,
+    // RTTVAR 125 ms), so 62.5 + 4 x 125 = 562.5 ms.
     _ = peer.answer(fakeSegment(&theirs, flag_ack, 5001, 1011, ""), 500 * ms);
-    try testing.expectEqual(@as(?u64, 1500 * ms), peer.wakeAt());
-    const again = tcpIn(peer.due(1500 * ms).?).?;
+    try testing.expectEqual(@as(?u64, 500 * ms + 562_500_000), peer.wakeAt());
+    const again = tcpIn(peer.due(500 * ms + 562_500_000).?).?;
     try testing.expectEqual(@as(u32, 1011), again.seq);
     try testing.expectEqualStrings("klmnopqrst", again.data);
+    // And everything after it, at once (RFC 6298 §5.4: go back to SND.UNA).
+    const rest = tcpIn(peer.due(500 * ms + 562_500_000).?).?;
+    try testing.expectEqual(@as(u32, 1021), rest.seq);
+    try testing.expectEqualStrings("uvwxy", rest.data);
+    try testing.expect(peer.due(500 * ms + 562_500_000) == null);
     // All of it acknowledged: the timer stops.
     _ = peer.answer(fakeSegment(&theirs, flag_ack, 5001, 1026, ""), 2 * sec);
     try testing.expect(peer.wakeAt() == null);
@@ -730,10 +861,14 @@ test "an acknowledgement of what was never sent moves nothing" {
     var peer = Peer{};
     var theirs: [2048]u8 = undefined;
     try opened(&peer, .{ .retransmits = true }, "GET", 0);
-    // RFC 9293 §3.10.7.4: SEG.ACK past SND.NXT acknowledges nothing.
-    _ = peer.answer(fakeSegment(&theirs, flag_ack, 5001, 1004 + 50, ""), 0);
+    // RFC 9293 §3.10.7.4: SEG.ACK past SND.NXT acknowledges nothing, and
+    // draws an ACK. (The timer is the floor: the SYN's round trip took no
+    // time.)
+    const said = tcpIn(peer.answer(fakeSegment(&theirs, flag_ack, 5001, 1004 + 50, "data"), 0).?).?;
+    try testing.expectEqual(flag_ack, said.flags);
+    try testing.expectEqual(@as(u32, 5001), said.ack); // and its data not taken
     try testing.expectEqual(@as(u32, 1001), peer.tcp.una);
-    try testing.expectEqual(@as(?u64, std.time.ns_per_s), peer.wakeAt());
+    try testing.expectEqual(@as(?u64, min_rto_ns), peer.wakeAt());
     _ = peer.answer(fakeSegment(&theirs, flag_ack, 5001, 1004, ""), 0);
     try testing.expect(peer.wakeAt() == null);
 }
@@ -1009,4 +1144,70 @@ test "P2: an older segment does not take the window back" {
     try testing.expectEqual(@as(u32, 0), peer.tcp.snd_wnd);
     _ = peer.answer(fakeSegment(&theirs, flag_ack, 5001, una, ""), 0);
     try testing.expectEqual(@as(u32, 0), peer.tcp.snd_wnd);
+}
+
+test "P3: three duplicate acknowledgements resend the oldest at once" {
+    var peer = Peer{ .rough = .{ .retransmits = true, .mss = 10 } };
+    var theirs: [2048]u8 = undefined;
+    const syn = tcpIn(peer.open("abcdefghijklmnopqrstuvwxyz0123456789", 0)).?;
+    _ = peer.answer(fakeSegment(&theirs, flag_syn | flag_ack, 5000, syn.seq +% 1, ""), 0).?;
+    while (peer.more(0)) |_| {}
+    // Four segments; the first is lost, so each of the other three draws
+    // the same acknowledgement, of 1001, which the SYN-ACK already gave.
+    try testing.expect(peer.answer(fakeSegment(&theirs, flag_ack, 5001, 1001, ""), ms) == null);
+    try testing.expect(peer.answer(fakeSegment(&theirs, flag_ack, 5001, 1001, ""), ms) == null);
+    const fast = tcpIn(peer.answer(fakeSegment(&theirs, flag_ack, 5001, 1001, ""), ms).?).?;
+    try testing.expectEqual(@as(u32, 1001), fast.seq);
+    try testing.expectEqualStrings("abcdefghij", fast.data);
+    // Without a lossy wire the peer has no timer, and does nothing of this.
+    var plain = Peer{ .rough = .{ .mss = 10 } };
+    const syn2 = tcpIn(plain.open("abcdefghijklmnopqrstuvwxyz0123456789", 0)).?;
+    _ = plain.answer(fakeSegment(&theirs, flag_syn | flag_ack, 5000, syn2.seq +% 1, ""), 0).?;
+    while (plain.more(0)) |_| {}
+    for (0..3) |_| try testing.expect(plain.answer(fakeSegment(&theirs, flag_ack, 5001, 1001, ""), ms) == null);
+}
+
+test "P3: a backed-off timeout stays backed off until a round trip is measured" {
+    var peer = Peer{ .rough = .{ .retransmits = true } };
+    var theirs: [2048]u8 = undefined;
+    const syn = tcpIn(peer.open("GET", 0)).?;
+    // The SYN-ACK takes 100 ms: RTO 300 ms (100 + 4 x 50, over the floor).
+    _ = peer.answer(fakeSegment(&theirs, flag_syn | flag_ack, 5000, syn.seq +% 1, ""), 100 * ms).?;
+    try testing.expectEqual(@as(u64, 300 * ms), peer.tcp.rto_ns);
+    _ = peer.more(100 * ms).?;
+    // Lost: a timeout at 400 ms, the next at 600 ms past it.
+    _ = peer.due(400 * ms).?;
+    try testing.expectEqual(@as(?u64, 1000 * ms), peer.wakeAt());
+    // Its acknowledgement measures nothing (it was sent twice): the timeout
+    // stays 600 ms.
+    _ = peer.answer(fakeSegment(&theirs, flag_ack, 5001, 1004, ""), 450 * ms);
+    try testing.expectEqual(@as(u64, 600 * ms), peer.tcp.rto_ns);
+}
+
+test "P5: a reset must name RCV.NXT; one in the window is challenged, one outside is ignored" {
+    var theirs: [2048]u8 = undefined;
+    var peer = Peer{};
+    try opened(&peer, .{}, "GET", 0);
+    const nxt = peer.tcp.ack;
+    // In the window but not exact: a challenge ACK, and it carries on.
+    const challenge = tcpIn(peer.answer(fakeSegment(&theirs, flag_rst, nxt +% 100, 0, ""), 0).?).?;
+    try testing.expectEqual(flag_ack, challenge.flags);
+    try testing.expectEqual(nxt, challenge.ack);
+    try testing.expectEqual(Tcp.State.established, peer.tcp.state);
+    // Outside it: nothing at all.
+    try testing.expect(peer.answer(fakeSegment(&theirs, flag_rst, nxt -% 1, 0, ""), 0) == null);
+    try testing.expectEqual(Tcp.State.established, peer.tcp.state);
+    // Exact: believed.
+    try testing.expect(peer.answer(fakeSegment(&theirs, flag_rst, nxt, 0, ""), 0) == null);
+    try testing.expectEqual(Tcp.State.refused, peer.tcp.state);
+}
+
+test "P7: a SYN-ACK acknowledging another SYN is answered with a reset" {
+    var peer = Peer{};
+    var theirs: [2048]u8 = undefined;
+    const syn = tcpIn(peer.open("GET", 0)).?;
+    const rst = tcpIn(peer.answer(fakeSegment(&theirs, flag_syn | flag_ack, 5000, syn.seq +% 7, ""), 0).?).?;
+    try testing.expectEqual(flag_rst, rst.flags);
+    try testing.expectEqual(syn.seq +% 7, rst.seq);
+    try testing.expectEqual(Tcp.State.syn_sent, peer.tcp.state);
 }
