@@ -45,6 +45,11 @@ const most_data = frames.most_data;
 const default_mss = frames.default_mss;
 const fakeSynAck = frames.fakeSynAck;
 
+/// `a` comes before `b`, modulo 2^32.
+fn before(a: u32, b: u32) bool {
+    return @as(i32, @bitCast(a -% b)) < 0;
+}
+
 pub fn earliest(a: ?u64, b: ?u64) ?u64 {
     const x = a orelse return b;
     const y = b orelse return x;
@@ -142,6 +147,15 @@ pub const Tcp = struct {
     /// client sends nothing past it (RFC 9293 §3.8.6); one that ignores it
     /// (`Rough.ignore_window`) sends everything at once.
     snd_wnd: u32 = 65535,
+    /// The segment SND.WND was last taken from (RFC 9293 §3.10.7.4), so an
+    /// older one, reordered, does not take it back.
+    snd_wl1: u32 = 0,
+    snd_wl2: u32 = 0,
+    /// **THE PERSIST TIMER** (§3.8.6.1): with the window shut and bytes
+    /// waiting, a byte past it is sent this often, doubling to a minute,
+    /// whatever the knobs, and never counted toward giving up.
+    persist_at: ?u64 = null,
+    persist_ns: u64 = initial_rto_ns,
     opened_at: u64 = 0,
     /// The retransmission timer: when it goes off, and how long the next
     /// wait is.
@@ -203,6 +217,8 @@ pub const Tcp = struct {
                 self.ack = s.seq +% 1; // their SYN takes one too
                 self.send_mss = std.math.clamp(@as(usize, s.mss orelse default_mss), 1, most_data);
                 self.snd_wnd = s.window;
+                self.snd_wl1 = s.seq;
+                self.snd_wl2 = s.ack;
                 self.state = .established;
                 self.owes_empty = self.request.len == 0;
                 self.acknowledged(self.seq, now);
@@ -212,8 +228,19 @@ pub const Tcp = struct {
                 if (s.flags & flag_ack != 0) {
                     self.acknowledged(s.ack, now);
                     // The window counts from what it acknowledges, so an
-                    // acknowledgement older than SND.UNA says nothing of it.
-                    if (s.ack == self.una) self.snd_wnd = s.window;
+                    // acknowledgement older than SND.UNA says nothing of it;
+                    // nor does a segment older than the one it came from.
+                    if (s.ack == self.una and (before(self.snd_wl1, s.seq) or
+                        (self.snd_wl1 == s.seq and !before(s.ack, self.snd_wl2))))
+                    {
+                        self.snd_wnd = s.window;
+                        self.snd_wl1 = s.seq;
+                        self.snd_wl2 = s.ack;
+                        if (s.window > 0) {
+                            self.persist_at = null;
+                            self.persist_ns = initial_rto_ns;
+                        }
+                    }
                 }
                 // **IN ORDER ONLY.** Anything else is re-acknowledged, which
                 // asks for what we are missing — the same rule the guest's own
@@ -347,7 +374,13 @@ pub const Tcp = struct {
         if (from < self.released()) {
             const next = self.chunk(from);
             const data = next[0..@min(next.len, self.windowRoom())];
-            if (data.len == 0) return null; // the window is full: wait for it
+            if (data.len == 0) {
+                // The window is full: wait for it, and if it is shut with
+                // nothing in flight, probe it.
+                if (self.snd_wnd == 0 and self.seq == self.una and self.persist_at == null)
+                    self.persist_at = now + self.persist_ns;
+                return null;
+            }
             const frame = self.segment(out, flag_ack | flag_psh, data);
             self.seq +%= @intCast(data.len);
             self.arm(now);
@@ -379,6 +412,20 @@ pub const Tcp = struct {
             self.shut_until = null;
             return self.segment(out, flag_ack, "");
         };
+        if (self.persist_at) |at| if (now >= at) {
+            self.persist_at = null;
+            if (self.snd_wnd == 0 and self.state == .established and self.sent() < self.released()) {
+                // One byte past the shut window: the next one, or the one
+                // already sent and not yet taken.
+                const from: usize = self.una -% (self.iss +% 1);
+                const byte = self.chunk(from)[0..1];
+                const frame = build(out, server_ip, self.port, self.una, self.ack, flag_ack | flag_psh, self.window(), byte);
+                if (self.seq == self.una) self.seq +%= 1;
+                self.persist_ns = @min(self.persist_ns * 2, max_rto_ns);
+                self.persist_at = now + self.persist_ns;
+                return frame;
+            }
+        };
         if (self.timer_at) |at| if (now >= at) {
             self.tries += 1;
             if (self.tries >= max_tries) {
@@ -395,7 +442,7 @@ pub const Tcp = struct {
 
     /// The next instant at which `due` will have something, if any.
     pub fn wakeAt(self: *const Tcp) ?u64 {
-        return earliest(earliest(self.resetAt(), self.shut_until), self.timer_at);
+        return earliest(earliest(earliest(self.resetAt(), self.shut_until), self.timer_at), self.persist_at);
     }
 
     fn resetAt(self: *const Tcp) ?u64 {
@@ -905,4 +952,61 @@ test "P1: a port the guest reset, one never opened, and one closed by the guest 
     try testing.expectEqual(Tcp.State.done, done.tcp.state);
     const r3 = tcpIn(done.answer(fakeSegment(&theirs, flag_fin | flag_ack, 5001, done.tcp.seq, ""), 0).?).?;
     try testing.expect(r3.flags & flag_rst != 0);
+}
+
+test "P2: a shut window is probed a byte at a time, backing off, until it opens" {
+    var request: [3000]u8 = undefined;
+    for (&request, 0..) |*b, i| b.* = @truncate('a' + i % 26);
+    var peer = Peer{};
+    var theirs: [2048]u8 = undefined;
+    const syn = tcpIn(peer.open(&request, 0)).?;
+    const iss = syn.seq;
+    // A SYN-ACK with a shut window: nothing goes, and the persist timer runs.
+    const syn_ack = fakeSynAck(&theirs, 5000, iss +% 1, 1460);
+    theirs[34 + 14] = 0;
+    theirs[34 + 15] = 0;
+    _ = peer.answer(syn_ack, 0).?;
+    try testing.expect(peer.more(0) == null);
+    try testing.expectEqual(@as(?u64, sec), peer.wakeAt());
+    // A second on: one byte past the window.
+    const probe = tcpIn(peer.due(sec).?).?;
+    try testing.expectEqual(@as(usize, 1), probe.data.len);
+    try testing.expectEqual(request[0], probe.data[0]);
+    try testing.expectEqual(iss +% 1, probe.seq);
+    // Still shut, the byte not taken: the same byte again, two seconds on.
+    var shut = fakeSegment(&theirs, flag_ack, 5001, iss +% 1, "");
+    theirs[34 + 14] = 0;
+    theirs[34 + 15] = 0;
+    _ = &shut;
+    _ = peer.answer(theirs[0..shut.len], sec);
+    try testing.expectEqual(@as(?u64, 3 * sec), peer.wakeAt());
+    const again = tcpIn(peer.due(3 * sec).?).?;
+    try testing.expectEqual(iss +% 1, again.seq);
+    try testing.expectEqual(@as(usize, 1), again.data.len);
+    // It opens, the byte taken: the rest goes, and no probe is due.
+    _ = peer.answer(fakeSegment(&theirs, flag_ack, 5001, iss +% 2, ""), 3 * sec);
+    var sent: usize = 1;
+    while (peer.more(3 * sec)) |frame| sent += tcpIn(frame).?.data.len;
+    try testing.expectEqual(request.len, sent);
+    try testing.expect(peer.tcp.persist_at == null);
+}
+
+test "P2: an older segment does not take the window back" {
+    var peer = Peer{};
+    var theirs: [2048]u8 = undefined;
+    var request: [9000]u8 = @splat('x');
+    const syn = tcpIn(peer.open(&request, 0)).?;
+    _ = peer.answer(fakeSynAck(&theirs, 5000, syn.seq +% 1, 1460), 0).?;
+    while (peer.more(0)) |_| {}
+    const una = peer.tcp.seq;
+    // Two acknowledgements of everything: the newer, from seq 5003, shuts
+    // the window; the older, from 5001, reordered behind it, says 8192.
+    var newer = fakeSegment(&theirs, flag_ack, 5003, una, "");
+    theirs[34 + 14] = 0;
+    theirs[34 + 15] = 0;
+    _ = &newer;
+    _ = peer.answer(theirs[0..newer.len], 0);
+    try testing.expectEqual(@as(u32, 0), peer.tcp.snd_wnd);
+    _ = peer.answer(fakeSegment(&theirs, flag_ack, 5001, una, ""), 0);
+    try testing.expectEqual(@as(u32, 0), peer.tcp.snd_wnd);
 }
