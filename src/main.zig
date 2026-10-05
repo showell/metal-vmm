@@ -1017,7 +1017,8 @@ fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, rough: *wire.Rough, k
     if (knob(k, "PEER_RESET_AT")) |us| rough.reset_after_ns = us * std.time.ns_per_us;
     if (knob(k, "PEER_RESET_OFF")) |n| rough.reset_off = @truncate(n);
     if (knob(k, "PEER_VANISH_AFTER")) |n| rough.vanish_after = @intCast(n);
-    if (knob(k, "PEER_FLOOD")) |n| rough.flood = @intCast(@min(n, 32));
+    if (knob(k, "PEER_FLOOD")) |n| rough.flood = @intCast(@min(n, wire.max_flood));
+    if (knob(k, "PEER_FLOOD_AT_US")) |us| rough.flood_after_ns = us * std.time.ns_per_us;
     if (knob(k, "PEER_FLOOD_GAP_US")) |us| rough.flood_gap_ns = us * std.time.ns_per_us;
     if (knob(k, "PEER_SHUT_AFTER")) |n| rough.shut_after = @intCast(n);
     if (knob(k, "PEER_SHUT_FOR_US")) |us| rough.shut_for_ns = us * std.time.ns_per_us;

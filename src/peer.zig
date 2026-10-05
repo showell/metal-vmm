@@ -53,10 +53,12 @@ pub const Rough = struct {
     /// guest's table alone is left to give up on it.
     vanish_after: ?usize = null,
     /// SYNs from addresses that never finish the handshake, `flood_gap_ns`
-    /// apart from the opening: more half-open connections than the guest has
-    /// room for, so a new SYN has to take one's place.
-    flood: u8 = 0,
+    /// apart from `flood_after_ns` past the opening: more half-open
+    /// connections than the guest has room for, so a new SYN has to take
+    /// one's place. Up to `max_flood`, each from its own (address, port).
+    flood: u32 = 0,
     flood_gap_ns: u64 = 10 * std.time.ns_per_ms,
+    flood_after_ns: u64 = 0,
     /// Once it has this much of the answer its receive window shuts, for
     /// `shut_for_ns`, and then it says the window is open again. While shut
     /// it takes nothing, and answers the guest's probes with the window
@@ -73,9 +75,18 @@ pub const Rough = struct {
 };
 
 /// Where a flood's SYNs come from: TEST-NET-2 (RFC 5737), off the guest's
-/// subnet, so they reach it through the gateway this peer already is.
+/// subnet, so they reach it through the gateway this peer already is. SYN
+/// `i` is from host `1 + i % 254` and port `40000 + i`, so no two share an
+/// (address, port), and a flood can be as large as there are ports above
+/// 40000: enough to fill gopher.zig's 256 slots many times over.
 const flood_ip = [3]u8{ 198, 51, 100 };
 const flood_port: u16 = 40000;
+pub const max_flood: u32 = 65536 - @as(u32, flood_port);
+
+fn floodSyn(out: []u8, i: u32) []const u8 {
+    const from = flood_ip ++ [1]u8{@intCast(1 + i % 254)};
+    return build(out, from, @intCast(flood_port + i), 7000 +% i *% 1000, 0, flag_syn, window_open, "");
+}
 
 /// The most clients the peer has at once: the first, and the rest of
 /// `PEER_CLIENTS`.
@@ -110,7 +121,7 @@ pub const Peer = struct {
     /// many of the flood's SYNs are sent.
     opened_at: ?u64 = null,
     opened: u8 = 0,
-    flooded: u8 = 0,
+    flooded: u32 = 0,
 
     pub fn client(self: *Peer, i: usize) *Tcp {
         return if (i == 0) &self.tcp else &self.others[i - 1];
@@ -167,10 +178,8 @@ pub const Peer = struct {
     /// frame a call; null when there is nothing more.
     pub fn due(self: *Peer, now: u64) ?[]const u8 {
         if (self.nextFlood()) |at| if (now >= at) {
-            const i = self.flooded;
             self.flooded += 1;
-            const from = flood_ip ++ [1]u8{1 + i};
-            return build(&self.scratch, from, flood_port + i, 7000 + @as(u32, i) * 1000, 0, flag_syn, window_open, "");
+            return floodSyn(&self.scratch, self.flooded - 1);
         };
         if (self.nextOpening()) |at| if (now >= at) {
             const i = self.opened;
@@ -193,8 +202,8 @@ pub const Peer = struct {
 
     fn nextFlood(self: *const Peer) ?u64 {
         const at = self.opened_at orelse return null;
-        if (self.flooded >= self.rough.flood) return null;
-        return at + @as(u64, self.flooded) * self.rough.flood_gap_ns;
+        if (self.flooded >= @min(self.rough.flood, max_flood)) return null;
+        return at + self.rough.flood_after_ns + @as(u64, self.flooded) * self.rough.flood_gap_ns;
     }
 
     fn nextOpening(self: *const Peer) ?u64 {
@@ -1494,4 +1503,133 @@ test "a timeout during the second request sends the second request's bytes again
     const again = tcpIn(peer.due(peer.wakeAt().?).?).?;
     try testing.expectEqual(@as(u32, 1011), again.seq);
     try testing.expectEqualStrings("GET ", again.data);
+}
+
+// ── a flood that can fill the guest's table ─────────────────────────────────
+
+test "a flood of a thousand SYNs, from as many (address, port) pairs, starting when it was told" {
+    var peer = Peer{ .rough = .{ .flood = 1024, .flood_gap_ns = 1000, .flood_after_ns = 5 * ms } };
+    _ = peer.open("GET", 100);
+    try testing.expectEqual(@as(?u64, 100 + 5 * ms), peer.wakeAt());
+    try testing.expect(peer.due(100 + 5 * ms - 1) == null);
+    var seen = std.AutoHashMap(u64, void).init(testing.allocator);
+    defer seen.deinit();
+    var at: u64 = 100 + 5 * ms;
+    for (0..1024) |i| {
+        try testing.expectEqual(@as(?u64, at), peer.wakeAt());
+        const frame = peer.due(at).?;
+        try testing.expect(verifies(frame));
+        const syn = tcpIn(frame).?;
+        try testing.expectEqual(flag_syn, syn.flags);
+        try testing.expectEqualSlices(u8, &flood_ip, frame[26..29]);
+        const host = frame[29];
+        try testing.expect(host >= 1 and host <= 254);
+        if (i < 254) try testing.expectEqual(@as(u8, @intCast(1 + i)), host); // as a small flood was
+        const key = (@as(u64, host) << 16) | syn.src_port;
+        try testing.expect(!seen.contains(key));
+        try seen.put(key, {});
+        at += 1000;
+    }
+    try testing.expect(peer.wakeAt() == null);
+    try testing.expectEqual(@as(u32, 1024), peer.flooded);
+}
+
+test "the largest flood there are ports for, and no larger" {
+    var peer = Peer{ .rough = .{ .flood = max_flood + 10, .flood_gap_ns = 0 } };
+    _ = peer.open("GET", 0);
+    var n: u32 = 0;
+    var last_port: u16 = 0;
+    while (peer.due(0)) |frame| : (n += 1) last_port = tcpIn(frame).?.src_port;
+    try testing.expectEqual(max_flood, n);
+    try testing.expectEqual(@as(u16, 65535), last_port);
+}
+
+/// **THE GUEST'S CONNECTION TABLE, IN MINIATURE**: gopher.zig's rule for a
+/// SYN, as its tcp.zig states it. A free slot takes it; with none free, the
+/// oldest half-open connection older than a round trip gives way to it;
+/// with none of those either, it is dropped. An established connection is
+/// never given up for a SYN.
+const ModelTable = struct {
+    const slots = 256;
+    const round_trip_ns = ms;
+    const Slot = struct { from: [4]u8, port: u16, established: bool, since: u64 };
+
+    held: [slots]?Slot = @splat(null),
+    gave_way: u32 = 0,
+    dropped: u32 = 0,
+    evicted_established: u32 = 0,
+
+    fn syn(self: *ModelTable, from: [4]u8, port: u16, now: u64) bool {
+        for (&self.held) |*s| if (s.* == null) {
+            s.* = .{ .from = from, .port = port, .established = false, .since = now };
+            return true;
+        };
+        var oldest: ?usize = null;
+        for (self.held, 0..) |s, i| {
+            const h = s.?;
+            if (h.established or now - h.since <= round_trip_ns) continue;
+            if (oldest == null or h.since < self.held[oldest.?].?.since) oldest = i;
+        }
+        const i = oldest orelse {
+            self.dropped += 1;
+            return false;
+        };
+        self.gave_way += 1;
+        self.held[i] = .{ .from = from, .port = port, .established = false, .since = now };
+        return true;
+    }
+
+    fn establish(self: *ModelTable, from: [4]u8, port: u16) void {
+        for (&self.held) |*s| if (s.*) |*h| if (std.mem.eql(u8, &h.from, &from) and h.port == port) {
+            h.established = true;
+        };
+    }
+
+    fn holds(self: *const ModelTable, from: [4]u8, port: u16) bool {
+        for (self.held) |s| if (s) |h| if (std.mem.eql(u8, &h.from, &from) and h.port == port) return true;
+        return false;
+    }
+};
+
+test "a client that opened before a flood of a thousand SYNs gets its whole answer, and only half-opens give way" {
+    var peer = Peer{ .rough = .{ .flood = 1024, .flood_gap_ns = 20_000, .flood_after_ns = 2 * ms } };
+    var table = ModelTable{};
+    var theirs: [2048]u8 = undefined;
+    const body_len = 20_000;
+    const head = std.fmt.comptimePrint("HTTP/1.1 200 OK\r\nContent-Length: {d}\r\n\r\n", .{body_len});
+
+    // The client connects and asks, before the flood begins.
+    const syn = tcpIn(peer.open("GET /long HTTP/1.1\r\n\r\n", 0)).?;
+    try testing.expect(table.syn(server_ip, syn.src_port, 0));
+    _ = peer.answer(fakeSegment(&theirs, flag_syn | flag_ack, 5000, syn.seq +% 1, ""), 0).?;
+    table.establish(server_ip, syn.src_port);
+    const request = tcpIn(peer.more(0).?).?;
+    const acked = request.seq +% @as(u32, @intCast(request.data.len));
+
+    // The guest answers a kilobyte a millisecond while the flood arrives.
+    var answer: [head.len + body_len]u8 = undefined;
+    @memcpy(answer[0..head.len], head);
+    for (answer[head.len..], 0..) |*b, i| b.* = @truncate(i);
+    var sent: usize = 0;
+    var now: u64 = 0;
+    while (now < 40 * ms) : (now += 10_000) {
+        while (peer.due(now)) |frame| {
+            const s = tcpIn(frame).?;
+            if (s.flags & flag_syn != 0) _ = table.syn(frame[26..30].*, s.src_port, now);
+        }
+        if (now >= ms and now % ms == 0 and sent < answer.len) {
+            const n = @min(1000, answer.len - sent);
+            _ = peer.answer(fakeSegment(&theirs, flag_ack | flag_psh, 5001 +% @as(u32, @intCast(sent)), acked, answer[sent..][0..n]), now).?;
+            sent += n;
+        }
+    }
+    try testing.expectEqual(@as(u32, 1024), peer.flooded);
+    try testing.expectEqual(@as(u32, 1), peer.tcp.answers); // whole, by its length
+    try testing.expectEqual(answer.len, peer.tcp.reply_len);
+    try testing.expectEqualSlices(u8, &answer, peer.tcp.whole());
+    // The table was full and stuck half-opens gave way to new SYNs, while the
+    // client's own connection held its slot throughout.
+    try testing.expect(table.gave_way > 0);
+    try testing.expect(table.holds(server_ip, syn.src_port));
+    try testing.expectEqual(@as(u32, 1024 - 255), table.gave_way + table.dropped);
 }

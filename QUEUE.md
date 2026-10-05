@@ -105,7 +105,7 @@ bottom.
     what the long tier needs to reach the slot table and the streams on the
     real kernel.
 
-21. **A flood that can fill the guest's table.** gopher.zig holds 256
+21. **Done (CC).** **A flood that can fill the guest's table.** gopher.zig holds 256
     connections (`max_connections`, 16 KiB to receive and 64 KiB to send
     each), and "a stuck half-open connection gives way to a new SYN" is
     reached only by a SYN that finds every slot taken. `PEER_FLOOD` stops at
