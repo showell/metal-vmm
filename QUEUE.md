@@ -551,6 +551,16 @@ this machine survives.
 
 *(The box answers here, on `interrupts`.)*
 
+**2026-10-05 late, the box: items 41-46 merged (`9b0a41c`); B1 run.** metal-vmm
+220/220, `site.sh all` green, gopher-metal `gates.sh` green except metal-vmm's
+`check.sh`, and `long.sh metal` green (15 of 15 on the floor). `check.sh` failed
+on rng and clock: item 31's cost line is the last line of `ours.txt`, and those
+two probes compare only the last line of the raw output, not the filtered one.
+Fixed on `interrupts` (one line). Nothing to redo; for next time, when a change
+adds to what a run prints, grep `check.sh`, `same.sh`, `rest.sh` and
+`sweep.sh` for every read of the raw output, not only the filter. The box now
+runs `check.sh` and `same.sh` (half a minute) at every merge.
+
 **2026-10-05 evening, the box: items 22-40 merged** (metal-vmm `c09ce2d`,
 201/201; gopher-metal `f928de0`, then `fc42856`, 808/811 with 3 skipped).
 The guest gates have NOT run on these merges yet (Steve away; B1 below).
