@@ -155,7 +155,7 @@ bottom.
     given-way slot's ISS+1 revive it? gopher-metal is read-only to you; the
     box and Steve decide.
 
-25. **A review of the peer, as a TCP** (write `docs/reviews/REVIEW-peer.md`;
+25. **Done (CC, `docs/reviews/REVIEW-peer.md`).** **A review of the peer, as a TCP** (write `docs/reviews/REVIEW-peer.md`;
     fixes become items, as item 1's did). The peer is half of every verdict:
     when it is wrong, a run blames the guest for the peer's mistake. This
     happened today in gopher-metal's simulator: its model client went
@@ -311,6 +311,27 @@ crash on the peer's own input.
 ## Proposed
 
 *(CC adds items here, one line each on why.)*
+
+From the peer's review (`docs/reviews/REVIEW-peer.md`), most urgent first:
+
+- **P1. TIME-WAIT, and closed ports that answer.** A finished, refused or
+  unopened client is silent where a real host acknowledges a repeated FIN
+  or resets. The guest is blamed for giving up: seed 23953's class.
+- **P2. The guest's window, kept and probed.** The peer ignores SND.WND and
+  never probes, so a request larger than the guest's 16 KiB free window
+  loses its tail for good, and the guest is blamed after `idle_ns`.
+- **P3. Recovery like a real client's.** No RTT sample, a 1 s floor, no
+  fast retransmit, one segment per timeout: a few lost request segments
+  outlast the guest's 10 s patience, where Linux would have recovered.
+- **P5 (with P6, P7). RFC 5961 resets and §3.10.7 acknowledgement checks.**
+  The peer believes any reset and takes data acknowledging unsent bytes, so
+  a guest bug of those shapes passes as correct.
+- **S1. The sweep excuses the peer's own give-up.** A peer in `gave_up` or
+  `gone` costs the page through its own fault; say its state on stderr and
+  let `sweep.sh` excuse it.
+- **P4 (the box's call). An MSS option in the peer's SYN.** Without one the
+  guest sends 536-byte segments where production sees 1460, so every
+  frame-numbered map is of a segmentation production never sees.
 
 From the review (`docs/reviews/REVIEW-interrupts.md`), most urgent first:
 
