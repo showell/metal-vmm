@@ -327,9 +327,32 @@ Running the same sweep against the `stdhttp` guest gives the same shape with a
 1,000 ms cost instead of 200 — the same stack with a different measured
 round-trip time, and so a different timer.
 
-**The wire does not lose what the peer sends**, only what the guest sends. The
-peer is a test fixture with no timers of its own, so a frame lost on the way in
-would only hang the run, which would say nothing about the guest.
+### And the peer can misbehave
+
+**The wire can lose and damage what the peer sends too**: `PEER_EAT=n` (or
+`n,m`) and `PEER_LOSS=k` as for the guest's frames, and `PEER_DAMAGE=n` and
+`PEER_DAMAGE_RATE=k`, which change a byte of the segment's checksum so the
+guest's own check throws it away. Frame 1 is the first the peer ever sends, a
+DHCP reply included. Either one winds the peer's own retransmission timer
+(RFC 6298: one second, doubling to a minute, eight sends and it gives up), on
+the machine's clock, so what is lost is sent again rather than hanging the
+run.
+
+**And the peer can be a worse client** (`peer.zig`, `Rough`), each by a knob;
+times are microseconds after it opens, sizes are bytes of the answer:
+
+| knob | the peer |
+|---|---|
+| `PEER_RESET_AT=us` | resets the connection then, if it is open, at its next sequence number; then answers anything with a reset |
+| `PEER_RESET_OFF=n` | puts that reset `n` past it instead, inside the guest's window, which must challenge it |
+| `PEER_VANISH_AFTER=n` | neither sends nor hears once it has `n` bytes of the answer |
+| `PEER_FLOOD=n`, `PEER_FLOOD_GAP_US=us` | sends `n` SYNs from 198.51.100.x that never finish, from the opening, `us` apart (10 ms by default) |
+| `PEER_SHUT_AFTER=n`, `PEER_SHUT_FOR_US=us` | shuts its receive window once it has `n` bytes, takes nothing while it is shut, then says it is open |
+| `PEER_MSS=n` | sends its request `n` bytes a segment |
+
+With none of these set the peer is the plain client it always was, frame for
+frame, and no run here changes. The guest's coverage properties these reach
+are gopher-metal's to measure (its `coverage/floor-metal.txt`).
 
 ### And the disk can refuse
 

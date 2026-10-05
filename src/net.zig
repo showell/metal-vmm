@@ -89,9 +89,9 @@ pub const Net = struct {
         self.sent += 1;
         if (!self.line.carries()) return;
         const frame = buf[@sizeOf(Header)..];
-        if (self.peer.answer(frame)) |reply| self.line.hold(reply, self.now);
+        if (self.peer.answer(frame, self.now)) |reply| self.line.hold(reply, self.now);
         // One frame arriving can mean two to send: see `Peer.more`.
-        while (self.peer.more()) |another| self.line.hold(another, self.now);
+        while (self.peer.more(self.now)) |another| self.line.hold(another, self.now);
         self.arrivals(d, ram);
     }
 
@@ -100,7 +100,23 @@ pub const Net = struct {
     /// Every exit is therefore an opportunity, and this takes it.
     pub fn pump(self: *Net, d: *virtio.Device, ram: []u8, now: u64) void {
         self.now = now;
+        // What the peer says unspoken to — a timer of its own, a flood, a
+        // reset — goes on the wire first, at this instant.
+        while (self.peer.due(now)) |frame| self.line.hold(frame, now);
         self.arrivals(d, ram);
+    }
+
+    /// **WHEN SOMETHING NEXT HAPPENS ON THIS SIDE OF THE WIRE**, strictly
+    /// after `now`, once `pump` has run at `now`: a frame arriving, or the
+    /// peer acting on its own (the pump let it act on everything due by
+    /// `now`). A frame due already and still waiting has no buffer to go
+    /// to, and waits for the guest, not the clock.
+    pub fn nextDue(self: *const Net, now: u64) ?u64 {
+        var at = self.peer.wakeAt();
+        if (self.line.nextDue()) |due| if (due > now) {
+            at = if (at) |a| @min(a, due) else due;
+        };
+        return at;
     }
 
     /// Everything the wire has finished carrying, into the guest's parked
@@ -141,7 +157,7 @@ pub const Net = struct {
     /// this program opens a connection, because a client that started on its
     /// own would race the guest's own setup.
     pub fn connect(self: *Net, d: *virtio.Device, ram: []u8, request: []const u8) bool {
-        self.line.hold(self.peer.open(request), self.now);
+        self.line.hold(self.peer.open(request, self.now), self.now);
         self.arrivals(d, ram);
         return true;
     }
@@ -174,4 +190,48 @@ test "the card reports the address the guest prints, and the feature it wants" {
     try testing.expectEqual(@as(u64, 0x54), d.read(0x101, 1));
     try testing.expectEqual(virtio.device_id_net, @as(u32, @intCast(d.read(0x008, 4))));
     try testing.expectEqual(@as(u64, feature_mac), d.read(0x010, 4));
+}
+
+test "the wire loses the peer's nth frame, and damages another so its checksum fails" {
+    var card = Net{};
+    card.line.peer_lost.named[0] = 1;
+    card.line.peer_damaged.named[0] = 2;
+    var p = wire.Peer{};
+    const syn = p.open("GET", 0);
+    card.line.hold(syn, 0); // the first: lost
+    try testing.expect(card.line.ready(0) == null);
+    card.line.hold(syn, 0); // the second: damaged
+    const got = card.line.ready(0).?;
+    try testing.expect(!std.mem.eql(u8, got, syn));
+    try testing.expectEqualSlices(u8, syn[0..50], got[0..50]); // only the checksum's byte
+    card.line.take();
+    card.line.hold(syn, 0); // the third: as sent
+    try testing.expectEqualSlices(u8, syn, card.line.ready(0).?);
+    try testing.expect(card.line.hurtsPeer());
+}
+
+test "the next thing on this side: the peer's own timer, past a frame stuck for want of a buffer" {
+    var card = Net{};
+    card.peer.rough = .{ .retransmits = true };
+    var ram = [_]u8{0} ** 256;
+    var d = card.device();
+    _ = card.connect(&d, &ram, "GET");
+    // The SYN has no buffer to go to: due now, it waits for the guest.
+    try testing.expectEqual(@as(?u64, 0), card.line.nextDue());
+    try testing.expectEqual(@as(?u64, std.time.ns_per_s), card.nextDue(0));
+    // At the timer, the pump puts the SYN on the wire again.
+    card.pump(&d, &ram, std.time.ns_per_s);
+    card.line.take();
+    try testing.expect(card.line.ready(std.time.ns_per_s) != null);
+    try testing.expectEqual(@as(?u64, 3 * std.time.ns_per_s), card.nextDue(std.time.ns_per_s));
+}
+
+test "with nothing configured, nothing on this side ever happens on its own" {
+    var card = Net{};
+    var ram = [_]u8{0} ** 256;
+    var d = card.device();
+    _ = card.connect(&d, &ram, "GET");
+    try testing.expect(card.nextDue(0) == null);
+    card.pump(&d, &ram, 1000 * std.time.ns_per_s);
+    try testing.expect(card.nextDue(1000 * std.time.ns_per_s) == null);
 }

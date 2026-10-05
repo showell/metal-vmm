@@ -673,7 +673,7 @@ fn rest(vcpu: linux.fd_t, run: *kvm.Run, machine: *Machine) !bool {
     machine.halts += 1;
     const began = machine.time.ns;
     while (true) {
-        const due = if (machine.card) |card| card.line.nextDue() else null;
+        const due = if (machine.card) |card| card.nextDue(machine.time.ns) else null;
         switch (wakes(&machine.lapic, machine.time.ns, due)) {
             .take => |v| {
                 machine.halted_ns += machine.time.ns - began;
@@ -841,8 +841,26 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
 /// reach the guest (`WIRE_LATENCY_US=250`), and which of its disk requests come
 /// back refused (`DISK_REFUSE=3,9`, `DISK_REFUSE_RATE=100`). Nothing set is a
 /// machine that works perfectly, which is what check.sh runs on.
-fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, environ: std.process.Environ) void {
+fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, rough: *wire.Rough, environ: std.process.Environ) void {
     numbers(&line.lost, environ, "WIRE_EAT");
+    numbers(&line.peer_lost, environ, "PEER_EAT");
+    numbers(&line.peer_damaged, environ, "PEER_DAMAGE");
+    if (environ.getPosix("PEER_LOSS")) |n| line.peer_lost.rate = std.fmt.parseInt(u32, n, 10) catch 0;
+    if (environ.getPosix("PEER_DAMAGE_RATE")) |n| line.peer_damaged.rate = std.fmt.parseInt(u32, n, 10) catch 0;
+    rough.retransmits = line.hurtsPeer();
+    // **THE PEER'S OWN MISBEHAVIOUR** (peer.zig, `Rough`): times in
+    // microseconds of the machine's clock from when it opened, sizes in
+    // bytes of the answer.
+    if (count(environ, "PEER_RESET_AT")) |us| rough.reset_after_ns = us * std.time.ns_per_us;
+    if (count(environ, "PEER_RESET_OFF")) |n| rough.reset_off = @truncate(n);
+    if (count(environ, "PEER_VANISH_AFTER")) |n| rough.vanish_after = @intCast(n);
+    if (count(environ, "PEER_FLOOD")) |n| rough.flood = @intCast(@min(n, 32));
+    if (count(environ, "PEER_FLOOD_GAP_US")) |us| rough.flood_gap_ns = us * std.time.ns_per_us;
+    if (count(environ, "PEER_SHUT_AFTER")) |n| rough.shut_after = @intCast(n);
+    if (count(environ, "PEER_SHUT_FOR_US")) |us| rough.shut_for_ns = us * std.time.ns_per_us;
+    if (count(environ, "PEER_MSS")) |n| if (n > 0) {
+        rough.mss = @intCast(n);
+    };
     numbers(&drive.refused, environ, "DISK_REFUSE");
     if (environ.getPosix("WIRE_LOSS")) |n| line.lost.rate = std.fmt.parseInt(u32, n, 10) catch 0;
     if (environ.getPosix("DISK_REFUSE_RATE")) |n| drive.refused.rate = std.fmt.parseInt(u32, n, 10) catch 0;
@@ -850,6 +868,12 @@ fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, environ: std.process.
     if (environ.getPosix("WIRE_LATENCY_US")) |n| {
         line.latency_ns = (std.fmt.parseInt(u64, n, 10) catch 0) * std.time.ns_per_us;
     }
+}
+
+/// One number from the environment, if it is there and is one.
+fn count(environ: std.process.Environ, name: []const u8) ?u64 {
+    const text = environ.getPosix(name) orelse return null;
+    return std.fmt.parseInt(u64, text, 10) catch null;
 }
 
 fn numbers(schedule: *faults.Schedule, environ: std.process.Environ, name: []const u8) void {
@@ -878,6 +902,8 @@ fn reportRest(machine: *const Machine) void {
 
 fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void {
     if (card.line.configured()) reportFaults("wire", "frames sent", &card.line.lost, ns);
+    if (card.line.peer_lost.configured()) reportFaults("peer", "frames sent", &card.line.peer_lost, ns);
+    if (card.line.peer_damaged.configured()) reportFaults("peer damage", "frames sent", &card.line.peer_damaged, ns);
     if (block.refusals.configured()) {
         const shown: usize = @intCast(@min(block.refusals.refused.picked_count, block.refusals.sectors.len));
         reportFaultsWith("disk", "requests", &block.refusals.refused, ns, block.refusals.sectors[0..shown], block.refusals.kinds[0..shown]);
@@ -924,7 +950,9 @@ fn reportFaultsWith(what: []const u8, of: []const u8, s: *const faults.Schedule,
 }
 
 fn pickedWord(what: []const u8) []const u8 {
-    return if (std.mem.eql(u8, what, "wire")) "lost" else "refused";
+    if (std.mem.eql(u8, what, "wire") or std.mem.eql(u8, what, "peer")) return "lost";
+    if (std.mem.eql(u8, what, "peer damage")) return "damaged";
+    return "refused";
 }
 
 fn readAll(path: [:0]const u8, into: []u8) ?[]const u8 {
@@ -1067,7 +1095,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         _ = bus.plug(3, &dice_device, &machine.lapic);
     }
 
-    tellTheFaults(&card.line, &block.refusals, init.environ);
+    tellTheFaults(&card.line, &block.refusals, &card.peer.rough, init.environ);
 
     // **WHAT THE PEER ASKS FOR.** A path is enough for a probe; a server with
     // a login and a chat wants a whole request, cookie and body and all, so

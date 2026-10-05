@@ -53,7 +53,7 @@ bottom.
    complete a request), header type and multi-function bits, and reads of
    registers that do not exist. Tests from PCI 3.0.
 
-7. **A peer that misbehaves, deterministically** (the README's "Open if it
+7. **Done (CC; knobs in the README, "And the peer can misbehave").** **A peer that misbehaves, deterministically** (the README's "Open if it
    resumes"). The wire can lose only the GUEST's frames today, and the peer
    in `peer.zig` is a model client that never resets, floods, stops reading
    or goes silent. So gopher-metal's long tier (`long.sh`, its lossy sweep
@@ -121,6 +121,21 @@ this machine survives.
   forever with no client should end the run some other way.
 - **(CC) Toolchain:** the hook's zig 0.16.0 from PyPI works here; 48/48
   tests pass. Nothing needed.
+
+- **(CC, item 7) Two of tcp.zig's eighteen are not the peer's to reach.**
+  "a reopened window is announced again" is the guest's own window news,
+  reached when gopher.zig stops reading a connection whose buffer fills,
+  so it needs a request larger than the guest's receive buffer
+  (`PEER_REQUEST=<file>` can send one). "a peer sends past the window" needs
+  the same: the peer already ignores the guest's window, so a request bigger
+  than it reaches it. The rest map to knobs: reset (`PEER_RESET_AT`, with
+  `PEER_RESET_OFF` for the challenge ACK), vanish (`PEER_VANISH_AFTER`, for
+  "a silent peer is given up on" and the RTO cap), flood (`PEER_FLOOD`, which
+  needs more SYNs than gopher.zig's table has slots), a shut window
+  (`PEER_SHUT_AFTER`/`PEER_SHUT_FOR_US`, for "a shut window is probed"),
+  damage (`PEER_DAMAGE`), and loss with `PEER_MSS` split (`PEER_EAT=n` of a
+  request segment, for "ahead"; with `WIRE_EAT` of the guest's ACK, for
+  "from behind").
 
 ## Answers
 

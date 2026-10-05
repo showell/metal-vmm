@@ -6,11 +6,12 @@
 //! failure with a name.
 //!
 //! **THE WIRE CAN LOSE WHAT THE GUEST SENDS**, by number or by chance, and it
-//! can make what comes back take time to arrive. It does not lose what the
-//! peer sends: the peer (peer.zig) is a test fixture with no timers, so a
-//! frame lost on the way in would only hang the run, which says nothing about
-//! the guest. The guest is the side with a retransmission timer, and the point
-//! is to make that timer do its job.
+//! can make what comes back take time to arrive. **IT CAN LOSE OR DAMAGE WHAT
+//! THE PEER SENDS, TOO**, and then the peer (peer.zig) runs a retransmission
+//! timer of its own on the machine's clock, so a frame lost on the way in is
+//! sent again rather than hanging the run. The point either way is to make
+//! the guest's own recovery do its job: its retransmissions for what it sent,
+//! and its handling of what arrives out of order, twice, or damaged.
 //!
 //! **THE DISK CAN REFUSE TO SERVE A REQUEST**, which is the same idea one
 //! layer over: the guest's own `fat16.zig` turns a bad status byte into
@@ -83,6 +84,12 @@ pub const Wire = struct {
     /// Which of the guest's frames never arrive. 1 is the first frame it ever
     /// sends.
     lost: Schedule = .init(0x77_69_72_65_64_69_63_65), // "wiredice"
+    /// Which of the PEER's frames never arrive, and which arrive damaged: a
+    /// byte of the TCP segment changed, which its checksum notices (or of
+    /// the IP header, for a frame that is not TCP). 1 is the first frame the
+    /// peer ever sends. Each has its own dice.
+    peer_lost: Schedule = .init(0x70_65_65_72_6c_6f_73_65), // "peerlose"
+    peer_damaged: Schedule = .init(0x70_65_65_72_68_75_72_74), // "peerhurt"
     /// How long a frame takes to reach the guest. Zero means it arrives in the
     /// same breath the guest's frame was sent, which is what the probes have
     /// always seen and what makes the peer look like a function call.
@@ -107,6 +114,12 @@ pub const Wire = struct {
         return self.lost.configured() or self.latency_ns != 0;
     }
 
+    /// The peer's frames may not arrive as sent, so it must be ready to send
+    /// them again.
+    pub fn hurtsPeer(self: *const Wire) bool {
+        return self.peer_lost.configured() or self.peer_damaged.configured();
+    }
+
     /// **DOES THE GUEST'S NEXT FRAME GET THERE?**
     pub fn carries(self: *Wire) bool {
         return !self.lost.picks();
@@ -116,6 +129,10 @@ pub const Wire = struct {
     /// which with no latency is at once.
     pub fn hold(self: *Wire, bytes: []const u8, now: u64) void {
         if (bytes.len > frame_bytes) return;
+        // Both are asked of every frame, so each counts every frame.
+        const lose = self.peer_lost.picks();
+        const damage = self.peer_damaged.picks();
+        if (lose) return;
         const slot = &self.held[self.next % in_flight];
         // A full wire drops the oldest rather than the newest, which is what a
         // queue that overflows does.
@@ -123,6 +140,10 @@ pub const Wire = struct {
         slot.due_ns = now + self.latency_ns;
         slot.len = bytes.len;
         @memcpy(slot.bytes[0..bytes.len], bytes);
+        if (damage) {
+            const tcp = bytes.len >= 34 + 20 and bytes[23] == 6;
+            slot.bytes[if (tcp) 34 + 16 else 24] ^= 0x5A; // a checksum's byte
+        }
         self.next += 1;
     }
 
