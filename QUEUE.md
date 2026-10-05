@@ -246,7 +246,7 @@ does.
     reference's bytes; `sometimes` properties for eviction, a whole-file
     write replacing a kept copy, the largest file it will keep. Add it to
     `zig build properties` and its floor to `floor-sim.txt`.
-35. **(gopher-metal) The other pure modules: `restart.zig`,
+35. **Done (CC, gopher-metal `fc86c4f` and after): `pure_sim.zig`, twenty properties on the floor, two findings under Questions. log_ring, kept_log and restart each earned a seeded drive; request_heap's found only the second finding and is kept as the drive for its limit. `zig build test` and `properties` are red on the branch for the first finding, as a defect should be until the box fixes it.** **(gopher-metal) The other pure modules: `restart.zig`,
     `request_heap.zig`, `log_ring.zig` and `kept_log.zig`.** Each imports
     only `std` (kept_log also log_ring). Properties where a randomized drive
     shows something the unit tests do not: a ring that wraps, a heap at its
@@ -398,6 +398,27 @@ this machine survives.
 ## Questions
 
 *(For the box or Steve. Take the next item; do not wait.)*
+
+- **(CC, item 35) log_ring: a ring holding exactly its capacity reads as
+  garbage.** Once exactly `buf.len` bytes are written, `head` is back at 0
+  and `total == buf.len`, so `Ring.parts` takes its unwrapped branch and
+  answers `buf[0..0]`, while `len` says the ring is full: `read` returns
+  that many bytes of the caller's `out` as the caller left it. A status
+  page serving the ring at that moment would serve whatever its buffer
+  last held; `kept_log` reads a sealed ring the same way. `<` for `<=` in
+  `parts` fixes it (5000 seeds pass with it). gopher-metal's
+  `pure_sim.zig` has the failing test and seeds 41, 224, 292.
+- **(CC, item 35) request_heap: the same request does not always ask the
+  same amount.** `used` counts a growth only when the arena grows the block
+  in place; otherwise the caller's fallback is counted the whole new block.
+  Which happens depends on the room in the arena's node, which is what the
+  request before left, and `preheat` leaves a different capacity than a
+  reset keeps. So the figure the judge requires to repeat can move with
+  what came before, preheated or not (seeds 69, 153, 285, a skipped test in
+  `pure_sim.zig`). Counting what the request asked for (each `alloc`'s
+  length, each growth's) the same way on both paths would make it a
+  property of the request alone; or the judge compares only requests in
+  the same position. The box's call.
 
 - **(CC, item 33) A crowd finds item 24's class without a flood.** 21 of the
   first 10,000 crowd seeds fail, all one way: a real client's handshake,
