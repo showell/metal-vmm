@@ -25,18 +25,44 @@
 //! frame for frame.
 
 const std = @import("std");
-
-/// The gateway's hardware address, as QEMU's user-mode network uses it.
-pub const peer_mac = [6]u8{ 0x52, 0x55, 0x0a, 0x00, 0x02, 0x02 };
-/// What the guest's card reports from config space: QEMU's default, so a probe
-/// that prints its MAC prints the same one either way.
-pub const card_mac = [6]u8{ 0x52, 0x54, 0x00, 0x12, 0x34, 0x56 };
-
-pub const guest_ip = [4]u8{ 10, 0, 2, 15 };
-pub const server_ip = [4]u8{ 10, 0, 2, 2 };
-pub const dns_ip = [4]u8{ 10, 0, 2, 3 };
-pub const netmask = [4]u8{ 255, 255, 255, 0 };
-pub const broadcast_ip = [4]u8{ 255, 255, 255, 255 };
+const frames = @import("frames.zig");
+const client = @import("client.zig");
+pub const Tcp = client.Tcp;
+pub const Ask = client.Ask;
+pub const Response = @import("response.zig").Response;
+const earliest = client.earliest;
+const opened = client.opened;
+pub const peer_mac = frames.peer_mac;
+pub const card_mac = frames.card_mac;
+pub const guest_ip = frames.guest_ip;
+pub const server_ip = frames.server_ip;
+pub const dns_ip = frames.dns_ip;
+pub const netmask = frames.netmask;
+pub const broadcast_ip = frames.broadcast_ip;
+const flag_fin = frames.flag_fin;
+const flag_syn = frames.flag_syn;
+const flag_rst = frames.flag_rst;
+const flag_psh = frames.flag_psh;
+const flag_ack = frames.flag_ack;
+const Segment = frames.Segment;
+const window_open = frames.window_open;
+const closedPort = frames.closedPort;
+const build = frames.build;
+const tcpIn = frames.tcpIn;
+const ethertype_ipv4 = frames.ethertype_ipv4;
+const proto_udp = frames.proto_udp;
+const wrap = frames.wrap;
+const checksum = frames.checksum;
+const pseudoChecksum = frames.pseudoChecksum;
+const sum = frames.sum;
+const finish = frames.finish;
+const readBe16 = frames.readBe16;
+const readBe32 = frames.readBe32;
+const writeBe16 = frames.writeBe16;
+const writeBe32 = frames.writeBe32;
+const fakeSegment = frames.fakeSegment;
+const verifies = frames.verifies;
+const fakeTo = frames.fakeTo;
 
 /// **WHAT THE PEER MAY DO THAT A GOOD CLIENT DOES NOT**, each set by an
 /// environment knob (main.zig, `tellTheFaults`) as the wire's faults are.
@@ -65,8 +91,14 @@ pub const Rough = struct {
     /// still shut (RFC 9293 §3.8.6.1).
     shut_after: ?usize = null,
     shut_for_ns: u64 = 0,
-    /// The most of its request it puts in one segment; all of it, if null.
+    /// The most of its request it puts in one segment, below the MSS the
+    /// guest announced (`Tcp.send_mss`); that MSS alone, if null.
     mss: ?usize = null,
+    /// **IT SENDS PAST THE GUEST'S WINDOW** (`PEER_IGNORE_WINDOW`), all it
+    /// has released at once, as a careless or hostile client does; what the
+    /// guest throws away its timer sends again. A plain client keeps to the
+    /// window the guest last offered.
+    ignore_window: bool = false,
     /// **ITS OWN RETRANSMISSION TIMER RUNS** (RFC 6298): set when the wire
     /// may lose or damage what it sends. A peer whose frames always arrive
     /// never needs to send one twice, so without this the run is the run it
@@ -127,7 +159,7 @@ pub const Peer = struct {
         return if (i == 0) &self.tcp else &self.others[i - 1];
     }
 
-    fn clientConst(self: *const Peer, i: usize) *const Tcp {
+    pub fn clientConst(self: *const Peer, i: usize) *const Tcp {
         return if (i == 0) &self.tcp else &self.others[i - 1];
     }
 
@@ -221,562 +253,6 @@ pub const Peer = struct {
         return writeDhcp(&self.scratch, request, kind);
     }
 };
-
-// ── TCP, from the client's side ──────────────────────────────────────────────
-
-const flag_fin: u8 = 1;
-const flag_syn: u8 = 2;
-const flag_rst: u8 = 4;
-const flag_psh: u8 = 8;
-const flag_ack: u8 = 16;
-
-/// One segment, as it arrived.
-const Segment = struct {
-    seq: u32,
-    ack: u32,
-    flags: u8,
-    data: []const u8,
-    src_port: u16,
-    dst_port: u16,
-};
-
-fn earliest(a: ?u64, b: ?u64) ?u64 {
-    const x = a orelse return b;
-    const y = b orelse return x;
-    return @min(x, y);
-}
-
-/// The window it offers: one it never actually fills, or none.
-const window_open: u16 = 64240;
-
-/// RFC 6298 §2: the first timeout is a second, and each one after a timeout
-/// doubles, to a minute. A peer that has sent the same thing this many times
-/// gives up on the connection.
-const initial_rto_ns: u64 = std.time.ns_per_s;
-const max_rto_ns: u64 = 60 * std.time.ns_per_s;
-const max_tries: u8 = 8;
-
-/// **HOW ONE CLIENT IS TO BEHAVE**: what it asks and how often, and where it
-/// stands on the wire.
-pub const Ask = struct {
-    request: []const u8,
-    /// How many times it asks, one after another on the same connection: the
-    /// next goes when the answer to the last is whole (keep-alive). A client
-    /// that asks more than once closes the connection itself after its last
-    /// answer; one that asks once leaves that to the server, as before.
-    asks: u32 = 1,
-    port: u16 = 49152,
-    /// A fixed first sequence number, because two runs of the same guest
-    /// should look the same on the wire.
-    iss: u32 = 1000,
-};
-
-/// A client that fetches what it was told to and then closes, which is all
-/// the probes ask of it. **Sequence numbers are counted, not guessed**: the
-/// guest's table checks them, refuses a segment that is not the next one, and
-/// answers a reset for a connection it does not know — so a client that
-/// drifts is told about it immediately rather than hanging.
-pub const Tcp = struct {
-    pub const State = enum {
-        idle,
-        syn_sent,
-        established,
-        /// The guest closed first, and our FIN answered it.
-        closing,
-        /// We closed first (after a keep-alive's last answer), and wait for
-        /// the guest's FIN.
-        fin_wait,
-        done,
-        /// The guest reset it.
-        refused,
-        /// It reset the connection itself (`Rough.reset_after_ns`), and is a
-        /// closed port now.
-        reset,
-        /// It vanished (`Rough.vanish_after`): it neither sends nor hears.
-        gone,
-        /// It sent the same thing `max_tries` times and stopped: a closed
-        /// port, as after a reset.
-        gave_up,
-    };
-
-    state: State = .idle,
-    port: u16 = 49152,
-    iss: u32 = 1000,
-    /// SND.NXT, SND.UNA and RCV.NXT (RFC 9293 §3.3.1).
-    seq: u32 = 1000,
-    una: u32 = 1000,
-    ack: u32 = 0,
-    /// What it asks, and how many times. **THE REQUEST GOES IN ITS OWN
-    /// SEGMENT**, after the handshake's last acknowledgement rather than
-    /// riding along with it. Both are legal, and an ordinary client does the
-    /// second — which matters, because a guest whose table reports "the
-    /// connection opened" and "data arrived" as different events may only
-    /// look at the buffer on the second.
-    request: []const u8 = "",
-    asks: u32 = 1,
-    /// An empty request is still one segment, once.
-    owes_empty: bool = false,
-    /// It has sent its FIN, at the sequence number just past everything it
-    /// asked.
-    fin_sent: bool = false,
-    /// The first 64 KiB of everything that came back; `received` counts all
-    /// of it.
-    reply: [64 * 1024]u8 = undefined,
-    reply_len: usize = 0,
-    received: u64 = 0,
-    /// The answer being read, and how many have come whole.
-    answer: Response = .{},
-    answers: u32 = 0,
-
-    rough: Rough = .{},
-    opened_at: u64 = 0,
-    /// The retransmission timer: when it goes off, and how long the next
-    /// wait is.
-    timer_at: ?u64 = null,
-    rto_ns: u64 = initial_rto_ns,
-    tries: u8 = 0,
-    /// The reset is behind it, done or let go of because the connection was
-    /// not open when its time came.
-    reset_past: bool = false,
-    /// While its window is shut, when it opens; and whether it has shut yet.
-    shut_until: ?u64 = null,
-    shut_ever: bool = false,
-
-    pub fn open(self: *Tcp, ask: Ask, now: u64, rough: Rough, out: []u8) []const u8 {
-        self.* = .{
-            .state = .syn_sent,
-            .request = ask.request,
-            .asks = @max(ask.asks, 1),
-            .port = ask.port,
-            .iss = ask.iss,
-            .seq = ask.iss,
-            .una = ask.iss,
-            .rough = rough,
-            .opened_at = now,
-        };
-        const frame = self.segment(out, flag_syn, "");
-        self.seq +%= 1; // the SYN takes one
-        self.arm(now);
-        return frame;
-    }
-
-    /// What this client says back to one segment, if anything.
-    pub fn receive(self: *Tcp, s: Segment, now: u64, out: []u8) ?[]const u8 {
-        if (s.dst_port != self.port) return null;
-        switch (self.state) {
-            .gone => return null,
-            .reset, .gave_up => return closedPort(s, out),
-            else => {},
-        }
-        if (s.flags & flag_rst != 0) {
-            self.state = .refused;
-            self.timer_at = null;
-            return null;
-        }
-        switch (self.state) {
-            .syn_sent => {
-                if (s.flags & flag_syn == 0 or s.flags & flag_ack == 0) return null;
-                self.ack = s.seq +% 1; // their SYN takes one too
-                self.state = .established;
-                self.owes_empty = self.request.len == 0;
-                self.acknowledged(self.seq, now);
-                return self.segment(out, flag_ack, "");
-            },
-            .established, .closing, .fin_wait => {
-                if (s.flags & flag_ack != 0) self.acknowledged(s.ack, now);
-                // **IN ORDER ONLY.** Anything else is re-acknowledged, which
-                // asks for what we are missing — the same rule the guest's own
-                // table follows.
-                if (s.seq != self.ack) return self.segment(out, flag_ack, "");
-                // **A SHUT WINDOW TAKES NOTHING**, neither a byte nor a FIN;
-                // what arrives is answered with the window still shut.
-                if (self.shut_until != null and (s.data.len > 0 or s.flags & flag_fin != 0)) return self.segment(out, flag_ack, "");
-                if (s.data.len > 0) {
-                    const room = self.reply.len - self.reply_len;
-                    const n = @min(room, s.data.len);
-                    @memcpy(self.reply[self.reply_len..][0..n], s.data[0..n]);
-                    self.reply_len += n;
-                    self.received += s.data.len;
-                    self.ack +%= @intCast(s.data.len);
-                    self.read(s.data);
-                    if (self.rough.vanish_after) |after| if (self.reply_len >= after) {
-                        self.state = .gone;
-                        self.timer_at = null;
-                        return null;
-                    };
-                    if (self.rough.shut_after) |after| if (!self.shut_ever and self.reply_len >= after) {
-                        self.shut_ever = true;
-                        self.shut_until = now + self.rough.shut_for_ns;
-                    };
-                }
-                if (s.flags & flag_fin != 0) {
-                    self.ack +%= 1; // their FIN takes one
-                    self.answer.closed(); // an answer read to the close is whole
-                    if (self.answer.phase == .done) self.answered();
-                    if (self.state == .established) {
-                        self.state = .closing;
-                        const frame = self.segment(out, flag_fin | flag_ack, "");
-                        self.seq +%= 1;
-                        self.fin_sent = true;
-                        self.arm(now);
-                        return frame;
-                    }
-                    self.state = .done;
-                    return self.segment(out, flag_ack, "");
-                }
-                if (s.data.len > 0) return self.segment(out, flag_ack, "");
-                // An acknowledgement of our FIN and nothing else: we are done.
-                // A peer that may have to send its FIN again waits for the
-                // acknowledgement that covers it.
-                if (self.state == .closing and s.flags & flag_ack != 0 and
-                    (!self.rough.retransmits or s.ack == self.seq)) self.state = .done;
-                return null;
-            },
-            else => return null,
-        }
-    }
-
-    /// The answer's bytes, as they come: each one that comes whole lets the
-    /// next request go.
-    fn read(self: *Tcp, data: []const u8) void {
-        var rest = data;
-        while (rest.len > 0) {
-            const used = self.answer.feed(rest);
-            rest = rest[used..];
-            if (self.answer.phase != .done) break;
-            self.answered();
-        }
-    }
-
-    fn answered(self: *Tcp) void {
-        self.answers += 1;
-        self.answer = .{};
-    }
-
-    /// How much of what it asks it may send by now: one request for each
-    /// answer that came whole, and one more.
-    fn released(self: *const Tcp) usize {
-        return self.request.len * @min(self.answers + 1, self.asks);
-    }
-
-    /// Bytes of its requests it has sent.
-    fn sent(self: *const Tcp) usize {
-        return self.seq -% (self.iss +% 1) -% @intFromBool(self.fin_sent);
-    }
-
-    /// The bytes from `from` on that one segment may carry: up to `Rough.mss`,
-    /// within one request, and no further than is released.
-    fn chunk(self: *const Tcp, from: usize) []const u8 {
-        const within = from % self.request.len;
-        const n = @min(self.rough.mss orelse self.request.len, self.request.len - within, self.released() - from);
-        return self.request[within..][0..n];
-    }
-
-    /// The next thing this client has to say without being spoken to, if
-    /// anything: its next request's bytes, or, after the last answer of a
-    /// client that asked more than once, its FIN. Called after every
-    /// answer, because one thing arriving can mean two things to send.
-    pub fn more(self: *Tcp, now: u64, out: []u8) ?[]const u8 {
-        if (self.state != .established) return null;
-        if (self.request.len == 0) {
-            if (!self.owes_empty) return null;
-            self.owes_empty = false;
-            return self.segment(out, flag_ack | flag_psh, "");
-        }
-        const from = self.sent();
-        if (from < self.released()) {
-            const data = self.chunk(from);
-            const frame = self.segment(out, flag_ack | flag_psh, data);
-            self.seq +%= @intCast(data.len);
-            self.arm(now);
-            return frame;
-        }
-        if (self.asks > 1 and self.answers >= self.asks) {
-            self.state = .fin_wait;
-            const frame = self.segment(out, flag_fin | flag_ack, "");
-            self.seq +%= 1;
-            self.fin_sent = true;
-            self.arm(now);
-            return frame;
-        }
-        return null;
-    }
-
-    /// **WHAT IT SAYS ON ITS OWN, BY `now`**: its reset, its window reopened,
-    /// or what its timer sends again. One frame a call.
-    pub fn due(self: *Tcp, now: u64, out: []u8) ?[]const u8 {
-        if (self.resetAt()) |at| if (now >= at) {
-            self.reset_past = true;
-            if (self.state != .established and self.state != .closing and self.state != .fin_wait) return null;
-            self.state = .reset;
-            self.timer_at = null;
-            self.shut_until = null;
-            return build(out, server_ip, self.port, self.seq +% self.rough.reset_off, 0, flag_rst, 0, "");
-        };
-        if (self.shut_until) |at| if (now >= at) {
-            self.shut_until = null;
-            return self.segment(out, flag_ack, "");
-        };
-        if (self.timer_at) |at| if (now >= at) {
-            self.tries += 1;
-            if (self.tries >= max_tries) {
-                self.state = .gave_up;
-                self.timer_at = null;
-                return null;
-            }
-            self.rto_ns = @min(self.rto_ns * 2, max_rto_ns);
-            self.timer_at = now + self.rto_ns;
-            return self.again(out);
-        };
-        return null;
-    }
-
-    /// The next instant at which `due` will have something, if any.
-    pub fn wakeAt(self: *const Tcp) ?u64 {
-        return earliest(earliest(self.resetAt(), self.shut_until), self.timer_at);
-    }
-
-    fn resetAt(self: *const Tcp) ?u64 {
-        if (self.reset_past or self.state == .idle) return null;
-        return self.opened_at + (self.rough.reset_after_ns orelse return null);
-    }
-
-    /// The oldest thing unacknowledged, sent again (RFC 6298 §5.4): the SYN,
-    /// a segment's worth of a request, or the FIN.
-    fn again(self: *Tcp, out: []u8) []const u8 {
-        if (self.state == .syn_sent) return build(out, server_ip, self.port, self.iss, 0, flag_syn, self.window(), "");
-        const data_end = self.iss +% 1 +% @as(u32, @intCast(self.sent()));
-        const from: usize = self.una -% (self.iss +% 1);
-        if (self.una != data_end and self.request.len > 0) {
-            return build(out, server_ip, self.port, self.una, self.ack, flag_ack | flag_psh, self.window(), self.chunk(from));
-        }
-        return build(out, server_ip, self.port, data_end, self.ack, flag_fin | flag_ack, self.window(), "");
-    }
-
-    /// Something of ours that takes sequence space is on the wire: if the
-    /// timer runs and is not already running, it starts.
-    fn arm(self: *Tcp, now: u64) void {
-        if (self.rough.retransmits and self.timer_at == null) self.timer_at = now + self.rto_ns;
-    }
-
-    /// The guest acknowledged up to `ack`. New ground restarts the timer for
-    /// whatever is left, or stops it (RFC 6298 §5.2-5.3).
-    fn acknowledged(self: *Tcp, ack: u32, now: u64) void {
-        const advance = ack -% self.una;
-        if (advance == 0 or advance > self.seq -% self.una) return;
-        self.una = ack;
-        self.tries = 0;
-        self.rto_ns = initial_rto_ns;
-        self.timer_at = null;
-        if (self.una != self.seq) self.arm(now);
-    }
-
-    fn window(self: *const Tcp) u16 {
-        return if (self.shut_until != null) 0 else window_open;
-    }
-
-    /// Everything that came back, status line and headers included — which is
-    /// what a caller checking a redirect's Location needs.
-    pub fn whole(self: *const Tcp) []const u8 {
-        return self.reply[0..self.reply_len];
-    }
-
-    /// What came back, headers and all.
-    pub fn body(self: *const Tcp) []const u8 {
-        const all = self.reply[0..self.reply_len];
-        const at = std.mem.indexOf(u8, all, "\r\n\r\n") orelse return "";
-        return all[at + 4 ..];
-    }
-
-    /// The status line's code, or zero if there is not one.
-    pub fn status(self: *const Tcp) u16 {
-        const all = self.reply[0..self.reply_len];
-        const space = std.mem.indexOfScalar(u8, all, ' ') orelse return 0;
-        if (space + 4 > all.len) return 0;
-        return std.fmt.parseInt(u16, all[space + 1 ..][0..3], 10) catch 0;
-    }
-
-    fn segment(self: *Tcp, out: []u8, flags: u8, data: []const u8) []const u8 {
-        return build(out, server_ip, self.port, self.seq, self.ack, flags, self.window(), data);
-    }
-};
-
-/// **WHERE ONE HTTP ANSWER ENDS** (RFC 9112 §6.3), read a byte at a time as
-/// it arrives, so an answer of any size is followed without being kept: by
-/// its Content-Length, by its chunks, or, with neither, not until the server
-/// closes the connection. A stream that never ends is an answer that is
-/// never whole, and its client reads it for as long as it lasts.
-pub const Response = struct {
-    phase: enum { head, length, chunk_size, chunk_data, chunk_end, trailer, to_close, done } = .head,
-    /// The head so far, until its blank line.
-    head: [4096]u8 = undefined,
-    head_len: usize = 0,
-    /// Body bytes left: of the whole length, or of the chunk.
-    left: u64 = 0,
-    /// Within a chunk-size line or a trailer line: the size so far, whether
-    /// past an extension, and the line's length.
-    size: u64 = 0,
-    in_extension: bool = false,
-    line_len: usize = 0,
-
-    /// Takes bytes until the answer is whole; answers how many it took.
-    pub fn feed(self: *Response, bytes: []const u8) usize {
-        for (bytes, 0..) |b, i| {
-            switch (self.phase) {
-                .head => {
-                    if (self.head_len < self.head.len) {
-                        self.head[self.head_len] = b;
-                        self.head_len += 1;
-                    } else {
-                        self.phase = .to_close; // a head past all reason
-                        continue;
-                    }
-                    if (std.mem.endsWith(u8, self.head[0..self.head_len], "\r\n\r\n")) self.headDone();
-                },
-                .length => {
-                    self.left -= 1;
-                    if (self.left == 0) self.phase = .done;
-                },
-                .chunk_size => {
-                    if (b == '\n') {
-                        if (self.size == 0) {
-                            self.phase = .trailer;
-                            self.line_len = 0;
-                        } else {
-                            self.left = self.size;
-                            self.phase = .chunk_data;
-                        }
-                        self.size = 0;
-                        self.in_extension = false;
-                    } else if (b == ';') {
-                        self.in_extension = true;
-                    } else if (!self.in_extension) {
-                        if (std.fmt.charToDigit(b, 16)) |d| {
-                            self.size = self.size *% 16 +% d;
-                        } else |_| {}
-                    }
-                },
-                .chunk_data => {
-                    self.left -= 1;
-                    if (self.left == 0) self.phase = .chunk_end;
-                },
-                .chunk_end => if (b == '\n') {
-                    self.phase = .chunk_size;
-                },
-                .trailer => {
-                    if (b == '\n') {
-                        if (self.line_len == 0) self.phase = .done;
-                        self.line_len = 0;
-                    } else if (b != '\r') self.line_len += 1;
-                },
-                .to_close => {},
-                .done => return i,
-            }
-            if (self.phase == .done) return i + 1;
-        }
-        return bytes.len;
-    }
-
-    /// The server closed the connection: an answer read to the close is
-    /// whole now.
-    pub fn closed(self: *Response) void {
-        if (self.phase == .to_close) self.phase = .done;
-    }
-
-    fn headDone(self: *Response) void {
-        const head = self.head[0..self.head_len];
-        const code = statusOf(head);
-        // No body at all: 1xx, 204 and 304.
-        if ((code >= 100 and code < 200) or code == 204 or code == 304) {
-            self.phase = .done;
-            return;
-        }
-        if (header(head, "transfer-encoding")) |te| if (std.ascii.indexOfIgnoreCase(te, "chunked") != null) {
-            self.phase = .chunk_size;
-            return;
-        };
-        if (header(head, "content-length")) |cl| {
-            self.left = std.fmt.parseInt(u64, std.mem.trim(u8, cl, " \t"), 10) catch {
-                self.phase = .to_close;
-                return;
-            };
-            self.phase = if (self.left == 0) .done else .length;
-            return;
-        }
-        self.phase = .to_close;
-    }
-
-    fn statusOf(head: []const u8) u16 {
-        const space = std.mem.indexOfScalar(u8, head, ' ') orelse return 0;
-        if (space + 4 > head.len) return 0;
-        return std.fmt.parseInt(u16, head[space + 1 ..][0..3], 10) catch 0;
-    }
-
-    /// A header's value, its name matched without regard to case.
-    fn header(head: []const u8, name: []const u8) ?[]const u8 {
-        var lines = std.mem.splitSequence(u8, head, "\r\n");
-        _ = lines.next(); // the status line
-        while (lines.next()) |line| {
-            const colon = std.mem.indexOfScalar(u8, line, ':') orelse continue;
-            if (std.ascii.eqlIgnoreCase(line[0..colon], name)) return line[colon + 1 ..];
-        }
-        return null;
-    }
-};
-
-/// **A CLOSED PORT'S ANSWER** (RFC 9293 §3.10.7.1): a reset for anything
-/// but a reset, at the sequence number the segment acknowledged, or else
-/// acknowledging all of it.
-fn closedPort(s: Segment, out: []u8) ?[]const u8 {
-    if (s.flags & flag_rst != 0) return null;
-    if (s.flags & flag_ack != 0) return build(out, server_ip, s.dst_port, s.ack, 0, flag_rst, 0, "");
-    const len: u32 = @intCast(s.data.len + @intFromBool(s.flags & flag_syn != 0) + @intFromBool(s.flags & flag_fin != 0));
-    return build(out, server_ip, s.dst_port, 0, s.seq +% len, flag_rst | flag_ack, 0, "");
-}
-
-/// One TCP segment to the guest's port 80, in a frame.
-fn build(out: []u8, from: [4]u8, port: u16, seq: u32, ack: u32, flags: u8, window: u16, data: []const u8) []const u8 {
-    const tcp_len = 20 + data.len;
-    const tcp = out[34..][0..tcp_len];
-    @memset(tcp[0..20], 0);
-    writeBe16(tcp[0..2], port);
-    writeBe16(tcp[2..4], 80);
-    writeBe32(tcp[4..8], seq);
-    writeBe32(tcp[8..12], ack);
-    tcp[12] = 5 << 4; // five words of header, no options
-    tcp[13] = flags;
-    writeBe16(tcp[14..16], window);
-    @memcpy(tcp[20..][0..data.len], data);
-
-    // **THE GUEST VERIFIES THIS ONE.** Its table counts a segment whose
-    // checksum is wrong as damaged and drops it without a word, so a
-    // client that got it wrong would simply hang.
-    writeBe16(tcp[16..18], pseudoChecksum(from, guest_ip, 6, tcp));
-    return wrap(out, 6, from, guest_ip, tcp_len);
-}
-
-/// The TCP segment inside a frame addressed to us, or null.
-fn tcpIn(frame: []const u8) ?Segment {
-    if (frame.len < 14 + 20 + 20) return null;
-    if (readBe16(frame[12..14]) != ethertype_ipv4) return null;
-    const ip = frame[14..];
-    const ihl: usize = @as(usize, ip[0] & 0x0F) * 4;
-    if (ip[0] >> 4 != 4 or ihl < 20 or ip.len < ihl) return null;
-    if (ip[9] != 6) return null; // TCP
-    const total: usize = readBe16(ip[2..4]);
-    if (total < ihl + 20 or total > ip.len) return null;
-    const tcp = ip[ihl..total];
-    const offset: usize = @as(usize, tcp[12] >> 4) * 4;
-    if (offset < 20 or offset > tcp.len) return null;
-    return .{
-        .seq = readBe32(tcp[4..8]),
-        .ack = readBe32(tcp[8..12]),
-        .flags = tcp[13],
-        .data = tcp[offset..],
-        .src_port = readBe16(tcp[0..2]),
-        .dst_port = readBe16(tcp[2..4]),
-    };
-}
 
 // ── DHCP ─────────────────────────────────────────────────────────────────────
 
@@ -885,85 +361,11 @@ fn writeOption(p: []u8, at: usize, code: u8, value: []const u8) usize {
     return at + 2 + value.len;
 }
 
-// ── the headers every frame here carries ─────────────────────────────────────
-
-const ethertype_ipv4: u16 = 0x0800;
-const proto_udp: u8 = 17;
-
-/// Puts the IP and ethernet headers in front of a payload already written at
-/// offset 34, and answers the whole frame.
-///
-/// **THE GUEST CHECKS THE IP HEADER'S CHECKSUM** and drops a frame whose sum
-/// is wrong without saying so, so this is not optional.
-fn wrap(out: []u8, protocol: u8, from: [4]u8, to: [4]u8, payload_len: usize) []const u8 {
-    const ip_len = 20 + payload_len;
-
-    @memcpy(out[0..6], &card_mac);
-    @memcpy(out[6..12], &peer_mac);
-    writeBe16(out[12..14], ethertype_ipv4);
-
-    const ip = out[14..][0..20];
-    @memset(ip, 0);
-    ip[0] = 0x45; // version 4, five words of header
-    writeBe16(ip[2..4], @intCast(ip_len));
-    ip[8] = 64; // time to live
-    ip[9] = protocol;
-    @memcpy(ip[12..16], &from);
-    @memcpy(ip[16..20], &to);
-    writeBe16(ip[10..12], checksum(ip));
-
-    return out[0 .. 14 + ip_len];
-}
-
-/// The one's-complement sum an IP header carries.
-fn checksum(header: []const u8) u16 {
-    return finish(sum(header, 0));
-}
-
-/// TCP's checksum covers a pseudo-header of the addresses as well, which is
-/// how a segment delivered to the wrong host is noticed.
-fn pseudoChecksum(from: [4]u8, to: [4]u8, protocol: u8, segment: []const u8) u16 {
-    var total: u32 = 0;
-    total = sum(&from, total);
-    total = sum(&to, total);
-    total += protocol;
-    total += @intCast(segment.len);
-    return finish(sum(segment, total));
-}
-
-fn sum(bytes: []const u8, start: u32) u32 {
-    var total = start;
-    var i: usize = 0;
-    while (i + 1 < bytes.len) : (i += 2) total += readBe16(bytes[i..][0..2]);
-    if (i < bytes.len) total += @as(u32, bytes[i]) << 8;
-    return total;
-}
-
-fn finish(total: u32) u16 {
-    var t = total;
-    while (t >> 16 != 0) t = (t & 0xFFFF) + (t >> 16);
-    return ~@as(u16, @truncate(t));
-}
-
-fn readBe16(bytes: *const [2]u8) u16 {
-    return std.mem.readInt(u16, bytes, .big);
-}
-
-fn readBe32(bytes: *const [4]u8) u32 {
-    return std.mem.readInt(u32, bytes, .big);
-}
-
-fn writeBe16(bytes: *[2]u8, value: u16) void {
-    std.mem.writeInt(u16, bytes, value, .big);
-}
-
-fn writeBe32(bytes: *[4]u8, value: u32) void {
-    std.mem.writeInt(u32, bytes, value, .big);
-}
-
 // ── what can be checked without a guest ──────────────────────────────────────
 
 const testing = std.testing;
+const ms = std.time.ns_per_ms;
+const sec = std.time.ns_per_s;
 
 /// A DHCP request as the guest builds one.
 fn fakeDiscover(out: []u8, kind: u8, mac: [6]u8, xid: [4]u8) []const u8 {
@@ -990,24 +392,6 @@ fn fakeDiscover(out: []u8, kind: u8, mac: [6]u8, xid: [4]u8) []const u8 {
     return out[0 .. 42 + 244];
 }
 
-/// A segment as the guest's table would send one, so the client can be driven
-/// through a whole exchange without a guest.
-fn fakeSegment(out: []u8, flags: u8, seq: u32, ack: u32, data: []const u8) []const u8 {
-    const tcp_len = 20 + data.len;
-    const tcp = out[34..][0..tcp_len];
-    @memset(tcp[0..20], 0);
-    writeBe16(tcp[0..2], 80);
-    writeBe16(tcp[2..4], 49152);
-    writeBe32(tcp[4..8], seq);
-    writeBe32(tcp[8..12], ack);
-    tcp[12] = 5 << 4;
-    tcp[13] = flags;
-    writeBe16(tcp[14..16], 8192);
-    @memcpy(tcp[20..][0..data.len], data);
-    writeBe16(tcp[16..18], pseudoChecksum(guest_ip, server_ip, 6, tcp));
-    return wrap(out, 6, guest_ip, server_ip, tcp_len);
-}
-
 test "a discover is answered with the lease QEMU would hand out" {
     var peer = Peer{};
     var request: [512]u8 = undefined;
@@ -1029,65 +413,6 @@ test "a request is acknowledged, and the headers the guest checks add up" {
     try testing.expectEqual(@as(u16, 0), checksum(reply[14..34])); // a good header sums to zero
 }
 
-test "the whole fetch: a handshake, a request, an answer, and a close" {
-    var peer = Peer{};
-    var theirs: [2048]u8 = undefined;
-
-    // The client opens with a SYN.
-    const syn = peer.open("GET /probe HTTP/1.1\r\n\r\n", 0);
-    const syn_tcp = tcpIn(syn).?;
-    try testing.expectEqual(flag_syn, syn_tcp.flags);
-    try testing.expectEqual(@as(u16, 80), syn_tcp.dst_port);
-
-    // The guest answers it, and the request rides our last acknowledgement.
-    const their_isn: u32 = 5000;
-    const ack = peer.answer(fakeSegment(&theirs, flag_syn | flag_ack, their_isn, syn_tcp.seq +% 1, ""), 0).?;
-    const ack_tcp = tcpIn(ack).?;
-    try testing.expect(ack_tcp.flags & flag_ack != 0);
-    try testing.expectEqual(their_isn +% 1, ack_tcp.ack);
-    try testing.expectEqualStrings("", ack_tcp.data); // the handshake's own ACK carries nothing
-
-    // And then the request, in a segment of its own.
-    const asked = tcpIn(peer.more(0).?).?;
-    try testing.expectEqualStrings("GET /probe HTTP/1.1\r\n\r\n", asked.data);
-    try testing.expect(peer.more(0) == null); // and only once
-
-    // The answer comes back in two segments, as any answer might.
-    const head = "HTTP/1.1 200 OK\r\ncontent-length: 5\r\n\r\n";
-    _ = peer.answer(fakeSegment(&theirs, flag_psh | flag_ack, their_isn +% 1, 0, head), 0);
-    _ = peer.answer(fakeSegment(&theirs, flag_psh | flag_ack, their_isn +% 1 +% @as(u32, head.len), 0, "hello"), 0);
-    try testing.expectEqual(@as(u16, 200), peer.tcp.status());
-    try testing.expectEqualStrings("hello", peer.tcp.body());
-
-    // The guest closes; the client says goodbye and is done.
-    const after = their_isn +% 1 +% @as(u32, head.len) +% 5;
-    const fin = peer.answer(fakeSegment(&theirs, flag_fin | flag_ack, after, 0, ""), 0).?;
-    try testing.expect(tcpIn(fin).?.flags & flag_fin != 0);
-    _ = peer.answer(fakeSegment(&theirs, flag_ack, after +% 1, 0, ""), 0);
-    try testing.expectEqual(Tcp.State.done, peer.tcp.state);
-}
-
-test "a segment out of order is re-acknowledged rather than taken" {
-    var peer = Peer{};
-    var theirs: [2048]u8 = undefined;
-    const syn = tcpIn(peer.open("GET / HTTP/1.1\r\n\r\n", 0)).?;
-    _ = peer.answer(fakeSegment(&theirs, flag_syn | flag_ack, 5000, syn.seq +% 1, ""), 0);
-
-    // A segment from further along than we have reached.
-    const reply = peer.answer(fakeSegment(&theirs, flag_psh | flag_ack, 9999, 0, "later"), 0).?;
-    const tcp = tcpIn(reply).?;
-    try testing.expectEqual(@as(u32, 5001), tcp.ack); // still asking for what is missing
-    try testing.expectEqual(@as(usize, 0), peer.tcp.reply_len);
-}
-
-test "a reset ends it, rather than leaving a client that waits forever" {
-    var peer = Peer{};
-    var theirs: [2048]u8 = undefined;
-    _ = peer.open("GET / HTTP/1.1\r\n\r\n", 0);
-    try testing.expect(peer.answer(fakeSegment(&theirs, flag_rst, 0, 0, ""), 0) == null);
-    try testing.expectEqual(Tcp.State.refused, peer.tcp.state);
-}
-
 test "a frame for another port, or no frame at all, is not answered" {
     var peer = Peer{};
     var buf: [512]u8 = undefined;
@@ -1095,27 +420,6 @@ test "a frame for another port, or no frame at all, is not answered" {
     writeBe16(buf[12..14], 0x0806); // ARP, which this peer does not speak
     try testing.expect(peer.answer(buf[0..60], 0) == null);
     try testing.expect(peer.answer(buf[0..20], 0) == null);
-}
-
-// ── a peer that misbehaves, driven by hand ──────────────────────────────────
-
-const ms = std.time.ns_per_ms;
-const sec = std.time.ns_per_s;
-
-/// A segment's TCP checksum adds up, as the guest checks it.
-fn verifies(frame: []const u8) bool {
-    const ip = frame[14..34];
-    return pseudoChecksum(ip[12..16].*, ip[16..20].*, 6, frame[34..]) == 0;
-}
-
-/// A peer through its handshake with the guest (ISN 5000), its request sent.
-fn opened(peer: *Peer, rough: Rough, request: []const u8, now: u64) !void {
-    var theirs: [2048]u8 = undefined;
-    peer.rough = rough;
-    const syn = tcpIn(peer.open(request, now)).?;
-    _ = peer.answer(fakeSegment(&theirs, flag_syn | flag_ack, 5000, syn.seq +% 1, ""), now).?;
-    while (peer.more(now)) |_| {}
-    try testing.expectEqual(Tcp.State.established, peer.tcp.state);
 }
 
 test "with no recipe, the peer never acts on its own" {
@@ -1126,124 +430,6 @@ test "with no recipe, the peer never acts on its own" {
     try testing.expect(peer.due(1000 * sec) == null);
     _ = peer.answer(fakeSegment(&theirs, flag_fin | flag_ack, 5001, 0, ""), 0);
     try testing.expect(peer.wakeAt() == null);
-}
-
-test "a lost SYN is sent again after a second, then two seconds after that" {
-    var peer = Peer{ .rough = .{ .retransmits = true } };
-    const first = tcpIn(peer.open("GET / HTTP/1.1\r\n\r\n", 0)).?;
-    try testing.expectEqual(@as(?u64, sec), peer.wakeAt());
-    try testing.expect(peer.due(sec - 1) == null);
-    const again = tcpIn(peer.due(sec).?).?;
-    try testing.expectEqual(flag_syn, again.flags);
-    try testing.expectEqual(first.seq, again.seq);
-    try testing.expectEqual(@as(?u64, 3 * sec), peer.wakeAt()); // RFC 6298 §5.5
-}
-
-test "the request goes a segment at a time, and a timeout sends the oldest unacknowledged again" {
-    var peer = Peer{};
-    var theirs: [2048]u8 = undefined;
-    peer.rough = .{ .retransmits = true, .mss = 10 };
-    const syn = tcpIn(peer.open("abcdefghijklmnopqrstuvwxy", 0)).?;
-    _ = peer.answer(fakeSegment(&theirs, flag_syn | flag_ack, 5000, syn.seq +% 1, ""), 0).?;
-    try testing.expect(peer.wakeAt() == null); // the SYN is acknowledged
-    var seqs: [3]u32 = undefined;
-    for (&seqs) |*q| q.* = tcpIn(peer.more(0).?).?.seq;
-    try testing.expect(peer.more(0) == null);
-    try testing.expectEqualSlices(u32, &.{ 1001, 1011, 1021 }, &seqs);
-    // The guest has the first ten bytes only: the timer restarts from there.
-    _ = peer.answer(fakeSegment(&theirs, flag_ack, 5001, 1011, ""), 500 * ms);
-    try testing.expectEqual(@as(?u64, 1500 * ms), peer.wakeAt());
-    const again = tcpIn(peer.due(1500 * ms).?).?;
-    try testing.expectEqual(@as(u32, 1011), again.seq);
-    try testing.expectEqualStrings("klmnopqrst", again.data);
-    // All of it acknowledged: the timer stops.
-    _ = peer.answer(fakeSegment(&theirs, flag_ack, 5001, 1026, ""), 2 * sec);
-    try testing.expect(peer.wakeAt() == null);
-}
-
-test "a FIN is sent again until the acknowledgement that covers it" {
-    var peer = Peer{};
-    var theirs: [2048]u8 = undefined;
-    try opened(&peer, .{ .retransmits = true }, "GET", 0);
-    _ = peer.answer(fakeSegment(&theirs, flag_ack, 5001, 1004, ""), 0);
-    const fin = tcpIn(peer.answer(fakeSegment(&theirs, flag_fin | flag_ack, 5001, 1004, ""), 0).?).?;
-    try testing.expect(fin.flags & flag_fin != 0);
-    // An acknowledgement short of the FIN does not end it.
-    _ = peer.answer(fakeSegment(&theirs, flag_ack, 5002, 1004, ""), 10 * ms);
-    try testing.expectEqual(Tcp.State.closing, peer.tcp.state);
-    const again = tcpIn(peer.due(sec).?).?;
-    try testing.expect(again.flags & flag_fin != 0);
-    try testing.expectEqual(fin.seq, again.seq);
-    _ = peer.answer(fakeSegment(&theirs, flag_ack, 5002, 1005, ""), sec + 1);
-    try testing.expectEqual(Tcp.State.done, peer.tcp.state);
-    try testing.expect(peer.wakeAt() == null);
-}
-
-test "a peer that has sent the same thing too often gives up, and is a closed port" {
-    var peer = Peer{ .rough = .{ .retransmits = true } };
-    var theirs: [2048]u8 = undefined;
-    _ = peer.open("GET", 0);
-    var sent: usize = 1; // the first SYN
-    while (peer.wakeAt()) |at| {
-        if (peer.due(at)) |_| sent += 1;
-    }
-    try testing.expectEqual(@as(usize, max_tries), sent);
-    try testing.expectEqual(Tcp.State.gave_up, peer.tcp.state);
-    const rst = tcpIn(peer.answer(fakeSegment(&theirs, flag_syn | flag_ack, 5000, 1001, ""), 0).?).?;
-    try testing.expectEqual(flag_rst, rst.flags);
-}
-
-test "an exact reset, at the next sequence number, and a closed port after it" {
-    var peer = Peer{};
-    var theirs: [2048]u8 = undefined;
-    try opened(&peer, .{ .reset_after_ns = 5 * ms }, "GET", 100);
-    try testing.expectEqual(@as(?u64, 100 + 5 * ms), peer.wakeAt());
-    const rst_frame = peer.due(100 + 5 * ms).?;
-    try testing.expect(verifies(rst_frame));
-    const rst = tcpIn(rst_frame).?;
-    try testing.expectEqual(flag_rst, rst.flags);
-    try testing.expectEqual(@as(u32, 1004), rst.seq); // SND.NXT: past the SYN and "GET"
-    try testing.expectEqual(Tcp.State.reset, peer.tcp.state);
-    try testing.expect(peer.wakeAt() == null);
-    // RFC 9293 §3.10.7.1: with ACK, a reset at what it acknowledged...
-    const a = tcpIn(peer.answer(fakeSegment(&theirs, flag_ack | flag_psh, 5001, 1004, "HTTP"), 0).?).?;
-    try testing.expectEqual(flag_rst, a.flags);
-    try testing.expectEqual(@as(u32, 1004), a.seq);
-    // ...without, a reset acknowledging all of it (a SYN counts one).
-    const b = tcpIn(peer.answer(fakeSegment(&theirs, flag_syn, 7000, 0, ""), 0).?).?;
-    try testing.expectEqual(flag_rst | flag_ack, b.flags);
-    try testing.expectEqual(@as(u32, 7001), b.ack);
-    // And a reset is not answered.
-    try testing.expect(peer.answer(fakeSegment(&theirs, flag_rst, 5001, 0, ""), 0) == null);
-}
-
-test "an inexact reset lands inside the window, off by what was asked" {
-    var peer = Peer{};
-    try opened(&peer, .{ .reset_after_ns = ms, .reset_off = 300 }, "GET", 0);
-    const rst = tcpIn(peer.due(ms).?).?;
-    try testing.expectEqual(@as(u32, 1004 + 300), rst.seq);
-}
-
-test "a reset whose time comes before the connection opens never happens" {
-    var peer = Peer{ .rough = .{ .reset_after_ns = ms } };
-    var theirs: [2048]u8 = undefined;
-    const syn = tcpIn(peer.open("GET", 0)).?;
-    try testing.expect(peer.due(ms) == null);
-    _ = peer.answer(fakeSegment(&theirs, flag_syn | flag_ack, 5000, syn.seq +% 1, ""), 2 * ms);
-    try testing.expect(peer.wakeAt() == null);
-    try testing.expect(peer.due(10 * ms) == null);
-    try testing.expectEqual(Tcp.State.established, peer.tcp.state);
-}
-
-test "a peer that vanishes part-way through the answer says nothing more" {
-    var peer = Peer{};
-    var theirs: [2048]u8 = undefined;
-    try opened(&peer, .{ .vanish_after = 6, .retransmits = true }, "GET", 0);
-    try testing.expect(peer.answer(fakeSegment(&theirs, flag_ack | flag_psh, 5001, 1004, "HTTP/1"), 0) == null);
-    try testing.expectEqual(Tcp.State.gone, peer.tcp.state);
-    try testing.expect(peer.answer(fakeSegment(&theirs, flag_ack | flag_psh, 5007, 1004, ".1 200"), 0) == null);
-    try testing.expect(peer.wakeAt() == null);
-    try testing.expectEqual(@as(usize, 6), peer.tcp.reply_len);
 }
 
 test "a flood: SYNs from addresses that never finish, a gap apart, unanswered" {
@@ -1274,126 +460,6 @@ test "a flood: SYNs from addresses that never finish, a gap apart, unanswered" {
     theirs[36] = 0x9C; // to port 40000
     theirs[37] = 0x40;
     try testing.expect(peer.answer(theirs[0..reply.len], 0) == null);
-}
-
-test "a shut window takes nothing and says so, then opens and says that" {
-    var peer = Peer{};
-    var theirs: [2048]u8 = undefined;
-    try opened(&peer, .{ .shut_after = 5, .shut_for_ns = 50 * ms }, "GET", 0);
-    const shut = tcpIn(peer.answer(fakeSegment(&theirs, flag_ack | flag_psh, 5001, 1004, "HTTP/"), 0).?).?;
-    try testing.expectEqual(@as(u32, 5006), shut.ack);
-    const shut_frame = peer.answer(fakeSegment(&theirs, flag_ack | flag_psh, 5006, 1004, "1"), ms).?;
-    try testing.expectEqual(@as(u16, 0), readBe16(shut_frame[34 + 14 ..][0..2]));
-    // The probe's byte is not taken: still asking for 5006.
-    try testing.expectEqual(@as(u32, 5006), tcpIn(shut_frame).?.ack);
-    try testing.expectEqual(@as(usize, 5), peer.tcp.reply_len);
-    // Nor a FIN, which takes sequence space the window does not have.
-    _ = peer.answer(fakeSegment(&theirs, flag_fin | flag_ack, 5006, 1004, ""), ms);
-    try testing.expectEqual(Tcp.State.established, peer.tcp.state);
-    // It opens when it said it would, and says so.
-    try testing.expectEqual(@as(?u64, 50 * ms), peer.wakeAt());
-    const open_frame = peer.due(50 * ms).?;
-    try testing.expectEqual(window_open, readBe16(open_frame[34 + 14 ..][0..2]));
-    try testing.expectEqual(@as(u32, 5006), tcpIn(open_frame).?.ack);
-    _ = peer.answer(fakeSegment(&theirs, flag_ack | flag_psh, 5006, 1004, "1"), 51 * ms);
-    try testing.expectEqual(@as(usize, 6), peer.tcp.reply_len);
-}
-
-test "an acknowledgement of what was never sent moves nothing" {
-    var peer = Peer{};
-    var theirs: [2048]u8 = undefined;
-    try opened(&peer, .{ .retransmits = true }, "GET", 0);
-    // RFC 9293 §3.10.7.4: SEG.ACK past SND.NXT acknowledges nothing.
-    _ = peer.answer(fakeSegment(&theirs, flag_ack, 5001, 1004 + 50, ""), 0);
-    try testing.expectEqual(@as(u32, 1001), peer.tcp.una);
-    try testing.expectEqual(@as(?u64, std.time.ns_per_s), peer.wakeAt());
-    _ = peer.answer(fakeSegment(&theirs, flag_ack, 5001, 1004, ""), 0);
-    try testing.expect(peer.wakeAt() == null);
-}
-
-// ── several clients, keep-alive and streams, driven by hand ─────────────────
-
-/// A segment from the guest to client `port`.
-fn fakeTo(out: []u8, port: u16, flags: u8, seq: u32, ack: u32, data: []const u8) []const u8 {
-    const frame = fakeSegment(out, flags, seq, ack, data);
-    writeBe16(out[34 + 2 ..][0..2], port);
-    writeBe16(out[34 + 16 ..][0..2], 0);
-    writeBe16(out[34 + 16 ..][0..2], pseudoChecksum(guest_ip, server_ip, 6, out[34..frame.len]));
-    return frame;
-}
-
-test "where an answer ends: its length, its chunks, its close, or nothing to read" {
-    var r = Response{};
-    const sized = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhelloHTTP/1.1";
-    try testing.expectEqual(@as(usize, sized.len - 8), r.feed(sized));
-    try testing.expect(r.phase == .done);
-
-    // The same, a byte at a time, and the header's name in another case.
-    var b = Response{};
-    const again = "HTTP/1.1 200 OK\r\ncontent-LENGTH:  3\r\n\r\nabc";
-    for (again, 0..) |_, i| {
-        try testing.expect(b.phase != .done);
-        _ = b.feed(again[i..][0..1]);
-    }
-    try testing.expect(b.phase == .done);
-
-    // Chunks, with an extension and a trailer (RFC 9112 §7.1).
-    var c = Response{};
-    const chunked = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4;x=y\r\nWiki\r\n5\r\npedia\r\n0\r\nT: 1\r\n\r\n";
-    try testing.expectEqual(chunked.len, c.feed(chunked ++ "next"));
-    try testing.expect(c.phase == .done);
-
-    // No length, no chunks: whole only when the server closes.
-    var d = Response{};
-    _ = d.feed("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\ndata: 1\n\ndata: 2\n\n");
-    try testing.expect(d.phase == .to_close);
-    d.closed();
-    try testing.expect(d.phase == .done);
-
-    // 204 and 304 have no body.
-    var e = Response{};
-    _ = e.feed("HTTP/1.1 304 Not Modified\r\nContent-Length: 99\r\n\r\n");
-    try testing.expect(e.phase == .done);
-}
-
-test "keep-alive: the second request goes when the first answer is whole, then the client closes" {
-    var peer = Peer{ .plan = .{ .asks = 2 } };
-    var theirs: [2048]u8 = undefined;
-    const req = "GET / HTTP/1.1\r\n\r\n";
-    const syn = tcpIn(peer.open(req, 0)).?;
-    _ = peer.answer(fakeSegment(&theirs, flag_syn | flag_ack, 5000, syn.seq +% 1, ""), 0).?;
-    const first = tcpIn(peer.more(0).?).?;
-    try testing.expectEqualStrings(req, first.data);
-    try testing.expect(peer.more(0) == null); // not until the answer is whole
-
-    const answer = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi";
-    const after_req: u32 = 1001 + @as(u32, req.len);
-    // Half the answer: still nothing to say but its acknowledgement.
-    _ = peer.answer(fakeSegment(&theirs, flag_ack, 5001, after_req, answer[0..20]), 0).?;
-    try testing.expect(peer.more(0) == null);
-    _ = peer.answer(fakeSegment(&theirs, flag_ack | flag_psh, 5001 + 20, after_req, answer[20..]), 0).?;
-    try testing.expectEqual(@as(u32, 1), peer.tcp.answers);
-    const second = tcpIn(peer.more(0).?).?;
-    try testing.expectEqualStrings(req, second.data);
-    try testing.expectEqual(after_req, second.seq);
-    try testing.expect(peer.more(0) == null);
-
-    // The second answer: then its FIN, ours first.
-    const at: u32 = 5001 + @as(u32, answer.len);
-    _ = peer.answer(fakeSegment(&theirs, flag_ack | flag_psh, at, after_req + @as(u32, req.len), answer), 0).?;
-    const fin = tcpIn(peer.more(0).?).?;
-    try testing.expectEqual(flag_fin | flag_ack, fin.flags);
-    try testing.expectEqual(after_req + @as(u32, req.len), fin.seq);
-    try testing.expectEqual(Tcp.State.fin_wait, peer.tcp.state);
-    // The guest acknowledges it, then closes too: the client is done.
-    const theirs_at = at + @as(u32, answer.len);
-    try testing.expect(peer.answer(fakeSegment(&theirs, flag_ack, theirs_at, fin.seq + 1, ""), 0) == null);
-    try testing.expectEqual(Tcp.State.fin_wait, peer.tcp.state);
-    const last = tcpIn(peer.answer(fakeSegment(&theirs, flag_fin | flag_ack, theirs_at, fin.seq + 1, ""), 0).?).?;
-    try testing.expectEqual(flag_ack, last.flags);
-    try testing.expectEqual(theirs_at + 1, last.ack);
-    try testing.expectEqual(Tcp.State.done, peer.tcp.state);
-    try testing.expectEqual(@as(u32, 2), peer.tcp.answers);
 }
 
 test "several clients: each opens a gap after the last, on its own port and its own numbers" {
@@ -1457,52 +523,6 @@ test "the rough knobs are the first client's; the others behave" {
     try testing.expectEqual(flag_rst, rst.flags);
     try testing.expectEqual(@as(u16, 49152), rst.src_port);
     try testing.expectEqual(Tcp.State.established, peer.client(1).state);
-}
-
-test "a client reading a stream holds its connection open, however much comes" {
-    var peer = Peer{};
-    var theirs: [2048]u8 = undefined;
-    try opened(&peer, .{}, "GET /chat/stream HTTP/1.1\r\n\r\n", 0);
-    const head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\n";
-    var at: u32 = 5001;
-    _ = peer.answer(fakeSegment(&theirs, flag_ack | flag_psh, at, 0, head), 0).?;
-    at += head.len;
-    const event = "data: a message for the room\n\n" ** 40;
-    for (0..100) |_| {
-        const ack = tcpIn(peer.answer(fakeSegment(&theirs, flag_ack | flag_psh, at, 0, event), 0).?).?;
-        at += event.len;
-        try testing.expectEqual(at, ack.ack);
-    }
-    try testing.expectEqual(Tcp.State.established, peer.tcp.state);
-    try testing.expectEqual(@as(u32, 0), peer.tcp.answers);
-    try testing.expectEqual(@as(u64, head.len + 100 * event.len), peer.tcp.received);
-    try testing.expect(peer.more(0) == null);
-}
-
-test "a timeout during the second request sends the second request's bytes again" {
-    var peer = Peer{ .rough = .{ .retransmits = true, .mss = 4 }, .plan = .{ .asks = 2 } };
-    var theirs: [2048]u8 = undefined;
-    const req = "GET /x\r\n\r\n"; // 10 bytes: 4, 4 and 2
-    const syn = tcpIn(peer.open(req, 0)).?;
-    _ = peer.answer(fakeSegment(&theirs, flag_syn | flag_ack, 5000, syn.seq +% 1, ""), 0).?;
-    while (peer.more(0)) |_| {}
-    try testing.expectEqual(@as(u32, 1011), peer.tcp.seq);
-    const answer = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
-    _ = peer.answer(fakeSegment(&theirs, flag_ack, 5001, 1011, answer), 10);
-    var sent: [3][]const u8 = undefined;
-    var copies: [3][8]u8 = undefined;
-    for (0..3) |i| {
-        const d = tcpIn(peer.more(10).?).?.data;
-        @memcpy(copies[i][0..d.len], d);
-        sent[i] = copies[i][0..d.len];
-    }
-    try testing.expectEqualStrings("GET ", sent[0]);
-    try testing.expectEqualStrings("/x\r\n", sent[1]);
-    try testing.expectEqualStrings("\r\n", sent[2]);
-    // The guest has none of the second: the timer sends its first chunk.
-    const again = tcpIn(peer.due(peer.wakeAt().?).?).?;
-    try testing.expectEqual(@as(u32, 1011), again.seq);
-    try testing.expectEqualStrings("GET ", again.data);
 }
 
 // ── a flood that can fill the guest's table ─────────────────────────────────

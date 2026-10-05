@@ -74,7 +74,9 @@ pub const Net = struct {
         const self: *Net = @ptrCast(@alignCast(context));
         if (queue != tx_queue) return; // receive buffers are parked, not served
         var links: [4]virtio.Desc = undefined;
-        while (d.take(ram, tx_queue, &links)) |chain| {
+        var left = d.budget(tx_queue);
+        while (left > 0) : (left -= 1) {
+            const chain = d.take(ram, tx_queue, &links) orelse break;
             if (chain.links.len > 0) self.speak(d, ram, virtio.buffer(ram, chain.links[0]));
             d.complete(ram, tx_queue, chain.head, 0);
         }
@@ -202,8 +204,8 @@ test "the card reports the address the guest prints, and the feature it wants" {
 
 test "the wire loses the peer's nth frame, and damages another so its checksum fails" {
     var card = Net{};
-    card.line.peer_lost.named[0] = 1;
-    card.line.peer_damaged.named[0] = 2;
+    card.line.peer_lost.named[0] = .one(1);
+    card.line.peer_damaged.named[0] = .one(2);
     var p = wire.Peer{};
     const syn = p.open("GET", 0);
     card.line.hold(syn, 0); // the first: lost

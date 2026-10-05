@@ -224,12 +224,26 @@ round trip is longer than the table's least timeout.
 - `src/faults.zig` — what this machine is allowed to do to its guest.
 - `src/virtio.zig` — the transport the devices sit on, and the block device.
 - `src/net.zig` — the network card: two queues, and the asymmetry between them.
-- `src/peer.zig` — the machine at the other end of the wire: DHCP, and a TCP
-  client that fetches one thing. **There is no tap device and no real
-  network**, deliberately — a host's network is an input this program does not
-  control, which is the one thing a deterministic machine cannot have.
-- `src/main.zig` — the loader, the processor's starting state, the serial port,
-  the exit door, and the loop that serves them.
+- `src/peer.zig` — the machine at the other end of the wire: DHCP, its
+  clients, how many and how they misbehave. **There is no tap device and no
+  real network**, deliberately — a host's network is an input this program
+  does not control, which is the one thing a deterministic machine cannot
+  have. `src/client.zig` is one client as a TCP, `src/response.zig` where an
+  HTTP answer ends, `src/frames.zig` the frames on the wire.
+- `src/pci.zig` — the PC-shaped machine's bus; `src/virtio_pci.zig` a virtio
+  device as a function on it; `src/msix.zig` its MSI-X; `src/apic.zig` the
+  local APIC its messages and timer reach.
+- `src/main.zig` — the processor's starting state, the serial port, the exit
+  door, and the loop that serves them. Beside it: `src/loader.zig` (the ELF,
+  and the marked instructions rewritten), `src/processor.zig` (CPUID and the
+  MSRs this program answers), `src/halt.zig` (what wakes a halted guest),
+  `src/settings.zig` (the knobs, into the faults; `src/knobs.zig` for a
+  seed's), `src/reports.zig` (what a run says at its end) and `src/cost.zig`
+  (what it cost, in exits and guest time).
+- `src/coverage.zig` — the guest's coverage lines, one run's and many runs'.
+- `src/fuzz.zig` — every model above under seeded guest input;
+  `src/determinism.zig` — the first rule, checked; `src/snapshot.zig` —
+  every model's state, saved and restored in place.
 
 `zig build test` checks the parts that need no processor: the ELF loader, the
 note parsing, the devices' answers, and a fake guest that drives the block
@@ -301,7 +315,8 @@ same 4 s as the debug one, so `zig build`'s default stays debug.
 
 A hypervisor that owns every input can choose to withhold one, and a
 deterministic one can do it to a recipe. The wire will eat what the guest
-sends — a numbered frame (`WIRE_EAT=3`, or `3,9`), or one frame in n
+sends — a numbered frame (`WIRE_EAT=3`, or `3,9`, or a range, `8-40`; up to
+32 of these), or one frame in n
 (`WIRE_LOSS=4`) — and it will hold what comes back (`WIRE_LATENCY_US=250`).
 
 **Losing frame number n is a better knob than a loss rate.** A rate explores
@@ -334,6 +349,14 @@ Running the same sweep against the `stdhttp` guest gives the same shape with a
 1,000 ms cost instead of 200 — the same stack with a different measured
 round-trip time, and so a different timer.
 
+**And the power can be cut.** `DISK_CUT_AFTER=n` lets the guest's nth write
+land, and then nothing: the request is never answered, the machine stops at
+the end of that exit, and the image keeps exactly what was written before
+the cut. `DISK_TEAR=n` (with `DISK_TEAR_KEEP=k`, 1 by default) tears the nth
+write of several sectors: only its first `k` land. Boot the image again and
+run `sound.sh` on it: that is how a FAT volume's crash consistency is
+measured, and `sweep.sh` does it for every seed that cuts the power.
+
 ### And the peer can misbehave
 
 **The wire can lose and damage what the peer sends too**: `PEER_EAT=n` (or
@@ -355,7 +378,8 @@ times are microseconds after it opens, sizes are bytes of the answer:
 | `PEER_VANISH_AFTER=n` | neither sends nor hears once it has `n` bytes of the answer |
 | `PEER_FLOOD=n`, `PEER_FLOOD_GAP_US=us`, `PEER_FLOOD_AT_US=us` | sends `n` SYNs that never finish (up to 25,536), each from its own address in 198.51.100.x and port, `us` apart (10 ms by default), starting `PEER_FLOOD_AT_US` after the opening (at once by default); a thousand fills gopher.zig's 256 slots four times over |
 | `PEER_SHUT_AFTER=n`, `PEER_SHUT_FOR_US=us` | shuts its receive window once it has `n` bytes, takes nothing while it is shut, then says it is open |
-| `PEER_MSS=n` | sends its request `n` bytes a segment |
+| `PEER_IGNORE_WINDOW=1` | sends all its request at once, past the window the guest offered, and sends again what the guest threw away; a plain client keeps to the window |
+| `PEER_MSS=n` | sends its request `n` bytes a segment (never more than the guest's announced MSS, which it keeps to anyway: 536 if it announced none, 1460 at most) |
 
 **And more than one client** (`peer.zig`, `Plan`), for a guest that holds
 many connections:
@@ -392,6 +416,16 @@ without the seed:
 
     metal-vmm: FAULT_SEED=4711 is WIRE_EAT=12 WIRE_LATENCY_US=8143 PEER_FLOOD=3 PEER_FLOOD_GAP_US=212998
 
+**A sweep of seeds** is `./sweep.sh [first] [last]`: one kernel, one volume
+(`SITE`), a fresh copy per run, `FAULT_SEED` from first to last on the
+PC-shaped machine. A seed fails if its exit is not the unhurt run's, it
+broke a coverage property, the volume it wrote is not sound (`sound.sh`), or
+its page is not the unhurt run's when nothing it did excuses that (a reset,
+a vanished peer and a refused disk request do). It stops at nothing, merges
+every run's coverage (`FLOOR=<file>` to gate on one), and ends with the
+failing seeds as the knobs that repeat them. `./sweep_test.sh` checks its
+verdicts against a fake machine told in advance what each seed does.
+
 ### What the guest says it reached
 
 A gopher-metal kernel built `-Dcoverage` prints zig-coverage-sdk's JSONL on
@@ -404,6 +438,28 @@ of stdout and appends them to that file as plain JSONL, for the SDK's
 that printed any ends with one line on the error stream:
 
     metal-vmm: coverage: 7 of 23 properties reached (6 hold, 0 broken), from 412 lines over 1 boots
+
+**And across many runs.** Each run's lines in a `COVERAGE_OUT` file follow a
+line naming it (`{"metal_vmm_run":{"seed":4711,"knobs":"..."}}`, which
+`report.py` passes over). `zig build coverage-merge -- [--floor f] a.jsonl
+...` merges any number of such files, or the judge's `sdk.jsonl` (a run per
+boot), into one table: every property's verdict, how many runs reached it
+and which first, and the ones only one run ever reached. With a floor it
+fails as `report.py --floor` does: a FAIL, a floor property missed, or a
+floor line gone stale.
+
+### And nothing the guest does kills this program
+
+`zig build fuzz -Dseeds=n` drives every model a guest can reach (the PCI
+ports at any offset and width, every BAR, the mmio window, the APIC and its
+MSRs, virtqueues laid out any way at all, block requests with hostile
+fields, frames on the wire, COM1, the PIT and the RTC, and the peer's
+clients answered by any segment at all) from a seeded stream,
+without a processor. Nothing may panic, and each seed must be the same run
+twice. `zig build test` runs the first 64 seeds and every seed that ever
+found something (`fuzz.zig`, `regressions`). On its first day it found six
+ways a guest could kill or hang this program, two of them on the
+microvm-shaped machine check.sh runs.
 
 ### And the disk can refuse
 
@@ -432,6 +488,17 @@ most of the rest, then the path, the read, the directory and the listing as the
 probe reaches them. No hang, no wrong answer, and no run that carried on as
 though nothing had happened. That is a statement about a guest's error paths
 that you can only make by trying all of them.
+
+**And a sector can be bad.** `DISK_BAD_SECTOR=2180` (or `2180,7`) refuses
+every request that touches that sector, for the whole run, read or write;
+`DISK_READS_ONLY=1` or `DISK_WRITES_ONLY=1` narrows it to one kind. A request
+number reaches a sector on one path; a sector is reached on every path that
+touches it, the way the FAT's mirror below turned up under three of them,
+and named again on the next boot it is still bad, as a real one is. The run
+ends saying which requests it refused, in this form (it has not yet been run
+against gopher.elf here):
+
+    metal-vmm: disk: bad sector 2180 refused N of M requests (#n, a write of sector 2180; ...)
 
 The one PASS under a refusal is #1, the GPT header: `vfat` reads any failure to
 find a partition table as "no table" and mounts sector 0, which on this bare

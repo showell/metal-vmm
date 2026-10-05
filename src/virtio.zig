@@ -103,6 +103,15 @@ pub const Queue = struct {
     avail: u64 = 0,
     used: u64 = 0,
     last_avail: u16 = 0,
+
+    /// Its size, if a ring can be that size here: one or more, and no more
+    /// than this device offers (`queue_max`). A driver may write anything
+    /// to the register; a size past the maximum is a queue nothing is
+    /// taken from, not a number to trust.
+    pub fn usableSize(self: *const Queue) ?u16 {
+        if (self.size == 0 or self.size > queue_max) return null;
+        return @intCast(self.size);
+    }
 };
 
 /// A chain of descriptors the driver offered, and the head to answer with.
@@ -162,8 +171,11 @@ pub const Device = struct {
     pub fn read(self: *Device, offset: u64, len: u32) u64 {
         if (offset >= @intFromEnum(Reg.config)) {
             const at: usize = @intCast(offset - @intFromEnum(Reg.config));
+            // Past the end of what this device keeps there is nothing, which
+            // reads as zero, as the rest of the window does.
+            if (at >= self.config.len) return 0;
             var value: u64 = 0;
-            for (0..@min(len, self.config.len - at)) |i| {
+            for (0..@min(len, 8, self.config.len - at)) |i| {
                 value |= @as(u64, self.config[at + i]) << @intCast(i * 8);
             }
             return value;
@@ -239,24 +251,37 @@ pub const Device = struct {
     /// for as long as it likes, which is exactly what a receive queue is for.
     pub fn take(self: *Device, ram: []u8, index: u32, into: []Desc) ?Chain {
         const q = &self.queues[index];
-        if (!self.may_dma or q.ready == 0 or q.size == 0) return null;
-        const size: u16 = @intCast(q.size);
-        if (q.last_avail == readInt(u16, ram, q.avail + 2)) return null;
-        const head = readInt(u16, ram, q.avail + 4 + @as(u64, q.last_avail % size) * 2);
+        if (!self.may_dma or q.ready == 0) return null;
+        const size = q.usableSize() orelse return null;
+        const avail_idx = readInt(u16, ram, q.avail +| 2);
+        if (q.last_avail == avail_idx) return null;
+        // **NEVER MORE OFFERED THAN THE RING HOLDS** (virtio 1.2 §2.7.13): an
+        // index further ahead than that is a ring this device cannot trust,
+        // and walking it would be up to 65,535 chains for one doorbell.
+        if (avail_idx -% q.last_avail > size) return null;
+        const head = readInt(u16, ram, q.avail +| (4 + @as(u64, q.last_avail % size) * 2));
         q.last_avail +%= 1;
         return .{ .head = head, .links = follow(ram, q.desc, head, into) };
+    }
+
+    /// **HOW MANY CHAINS ONE DOORBELL MAY SERVE**: the ring's size, which is
+    /// all a driver can have offered at once. A device that served "until
+    /// nothing is left" would never stop for a driver whose used ring lies
+    /// over its available ring, where every completion offers one more.
+    pub fn budget(self: *const Device, index: u32) u32 {
+        return self.queues[index].usableSize() orelse 0;
     }
 
     /// Puts the head back on the used ring with what the device wrote, which
     /// is how the driver learns the buffer is its own again.
     pub fn complete(self: *Device, ram: []u8, index: u32, head: u16, written: u32) void {
         const q = &self.queues[index];
-        const size: u16 = @intCast(q.size);
-        const used_idx = readInt(u16, ram, q.used + 2);
-        const at = q.used + 4 + @as(u64, used_idx % size) * @sizeOf(UsedElem);
+        const size = q.usableSize() orelse return;
+        const used_idx = readInt(u16, ram, q.used +| 2);
+        const at = q.used +| (4 + @as(u64, used_idx % size) * @sizeOf(UsedElem));
         writeInt(u32, ram, at, head);
-        writeInt(u32, ram, at + 4, written);
-        writeInt(u16, ram, q.used + 2, used_idx +% 1);
+        writeInt(u32, ram, at +| 4, written);
+        writeInt(u16, ram, q.used +| 2, used_idx +% 1);
         self.served += 1;
         if (self.completion) |c| {
             if (readInt(u16, ram, q.avail) & avail_no_interrupt == 0) c.done(c.context, index);
@@ -271,8 +296,8 @@ fn follow(ram: []u8, table: u64, head: u16, into: []Desc) []const Desc {
     var at = head;
     var n: usize = 0;
     while (n < into.len) {
-        const desc_at = table + @as(u64, at) * @sizeOf(Desc);
-        if (desc_at + @sizeOf(Desc) > ram.len) break;
+        const desc_at = table +| @as(u64, at) * @sizeOf(Desc);
+        if (!inside(ram, desc_at, @sizeOf(Desc))) break;
         into[n] = .{
             .addr = readInt(u64, ram, desc_at),
             .len = readInt(u32, ram, desc_at + 8),
@@ -288,22 +313,32 @@ fn follow(ram: []u8, table: u64, head: u16, into: []Desc) []const Desc {
 
 // ── guest memory, which is just our own with an offset ───────────────────────
 
+/// **WHETHER `len` BYTES AT `at` ARE ALL GUEST MEMORY.** Every address here
+/// is the guest's to choose, up to 2^64 - 1, so the test subtracts rather
+/// than adds: `at + len` could wrap past the top and land back inside.
+/// Addresses built from a guest's base and an offset add with saturation
+/// (`+|`) for the same reason, so they land at the top, outside, instead.
+pub fn inside(ram: []const u8, at: u64, len: u64) bool {
+    return at <= ram.len and len <= ram.len - at;
+}
+
 pub fn readInt(comptime T: type, ram: []const u8, at: u64) T {
+    if (!inside(ram, at, @sizeOf(T))) return 0;
     const i: usize = @intCast(at);
-    if (i + @sizeOf(T) > ram.len) return 0;
     return std.mem.readInt(T, ram[i..][0..@sizeOf(T)], .little);
 }
 
 pub fn writeInt(comptime T: type, ram: []u8, at: u64, value: T) void {
+    if (!inside(ram, at, @sizeOf(T))) return;
     const i: usize = @intCast(at);
-    if (i + @sizeOf(T) > ram.len) return;
     std.mem.writeInt(T, ram[i..][0..@sizeOf(T)], value, .little);
 }
 
-/// The bytes a descriptor names, as a slice of the guest's own memory.
+/// The bytes a descriptor names, as a slice of the guest's own memory; none
+/// when any of them is not.
 pub fn buffer(ram: []u8, desc: Desc) []u8 {
+    if (!inside(ram, desc.addr, desc.len)) return ram[0..0];
     const at: usize = @intCast(desc.addr);
-    if (at + desc.len > ram.len) return ram[0..0];
     return ram[at..][0..desc.len];
 }
 
@@ -353,8 +388,15 @@ pub const Block = struct {
     fn notified(context: *anyopaque, d: *Device, ram: []u8, queue: u32) void {
         const self: *Block = @ptrCast(@alignCast(context));
         var links: [4]Desc = undefined;
-        while (d.take(ram, queue, &links)) |chain| {
-            d.complete(ram, queue, chain.head, self.serve(ram, chain.links));
+        var left = d.budget(queue);
+        while (left > 0) : (left -= 1) {
+            // **NO POWER, NO DISK**: nothing more is taken, and the request
+            // the power was cut in is never answered.
+            if (self.refusals.cut != null) return;
+            const chain = d.take(ram, queue, &links) orelse break;
+            const answer = self.serve(ram, chain.links);
+            if (self.refusals.cut != null) return;
+            d.complete(ram, queue, chain.head, answer);
         }
     }
 
@@ -367,17 +409,24 @@ pub const Block = struct {
         const data = chain[1];
         const status = chain[2];
         if (head.len < @sizeOf(Header) or status.len < 1) return 0;
+        // A header the device cannot read is no request at all: zeros read
+        // from nowhere would spell "read sector 0".
+        if (!inside(ram, head.addr, @sizeOf(Header))) {
+            writeInt(u8, ram, status.addr, status_ioerr);
+            return 1;
+        }
 
         // **A REFUSED REQUEST TOUCHES NOTHING**: no bytes move, no sector is
         // marked, and the guest gets the one thing a real disk gives it when
         // it cannot do the work.
-        if (!self.refusals.serves(readInt(u64, ram, head.addr + 8), readInt(u32, ram, head.addr) == type_out)) {
+        const asked = (buffer(ram, data).len + sector_bytes - 1) / sector_bytes;
+        if (!self.refusals.serves(readInt(u64, ram, head.addr +| 8), asked, readInt(u32, ram, head.addr) == type_out)) {
             writeInt(u8, ram, status.addr, status_ioerr);
             return 1;
         }
 
         const kind = readInt(u32, ram, head.addr);
-        const sector = readInt(u64, ram, head.addr + 8);
+        const sector = readInt(u64, ram, head.addr +| 8);
         if (self.trace) {
             var line: [64]u8 = undefined;
             const text = std.fmt.bufPrint(&line, "{s} {d} {d}\n", .{
@@ -385,12 +434,14 @@ pub const Block = struct {
             }) catch "";
             _ = std.os.linux.write(2, text.ptr, text.len);
         }
-        const at = sector * sector_bytes;
+        // A sector the guest names may be anything: one past the image, by
+        // however much, is an error, never an address computed by wrapping.
+        const at = std.math.mul(u64, sector, sector_bytes) catch std.math.maxInt(u64);
         const bytes = buffer(ram, data);
 
         var answer: u8 = status_ok;
         var written: u32 = 0;
-        if (at + bytes.len > self.image.len or bytes.len == 0) {
+        if (!inside(self.image, at, bytes.len) or bytes.len == 0) {
             answer = status_ioerr;
         } else switch (kind) {
             type_in => {
@@ -399,8 +450,12 @@ pub const Block = struct {
                 self.reads += 1;
             },
             type_out => {
-                @memcpy(self.image[@intCast(at)..][0..bytes.len], bytes);
-                if (self.dirty) |bits| disk.mark(bits, sector, (bytes.len + sector_bytes - 1) / sector_bytes);
+                // As much as lands before the power goes, which is all of it
+                // unless this is the write it goes in.
+                const sectors = (bytes.len + sector_bytes - 1) / sector_bytes;
+                const landed = @min(bytes.len, self.refusals.lands(sector, sectors) * sector_bytes);
+                @memcpy(self.image[@intCast(at)..][0..landed], bytes[0..landed]);
+                if (self.dirty) |bits| disk.mark(bits, sector, (landed + sector_bytes - 1) / sector_bytes);
                 self.writes += 1;
             },
             else => answer = status_unsupported,
@@ -567,4 +622,112 @@ test "nothing happens until the queue is ready" {
     var guest = FakeGuest{};
     d.write(&guest.ram, 0x050, 0);
     try testing.expectEqual(@as(u64, 0), d.served);
+}
+
+test "a used ring laid over the available ring does not keep a doorbell busy forever" {
+    // Found by fuzz.zig, seed 4939: each completion wrote the used index
+    // where the available index is, offering one more chain, and the device
+    // served "until nothing was left" without end.
+    var context: u8 = 0;
+    var d = Device{ .id = device_id_entropy, .context = &context, .notified = struct {
+        fn serve(_: *anyopaque, dev: *Device, ram: []u8, queue: u32) void {
+            var links: [4]Desc = undefined;
+            var left = dev.budget(queue);
+            while (left > 0) : (left -= 1) {
+                const chain = dev.take(ram, queue, &links) orelse break;
+                dev.complete(ram, queue, chain.head, 0);
+            }
+        }
+    }.serve };
+    var ram: [4096]u8 = @splat(0);
+    d.queues[0] = .{ .size = 8, .ready = 1, .desc = 0x100, .avail = 0x200, .used = 0x200 };
+    writeInt(u16, &ram, 0x202, 1);
+    d.notified(d.context, &d, &ram, 0);
+    try testing.expect(d.served <= 8);
+}
+
+test "a block request with a sector or an address at the top of the range is an error, not a wrap" {
+    var image: [8 * 512]u8 = @splat(0);
+    var block = Block{ .image = &image };
+    var ram: [4096]u8 = @splat(0);
+    const links = [_]Desc{
+        .{ .addr = 0x400, .len = 16, .flags = Desc.next_flag, .next = 1 },
+        .{ .addr = 0x800, .len = 512, .flags = Desc.next_flag | Desc.write_flag, .next = 2 },
+        .{ .addr = 0x600, .len = 1, .flags = Desc.write_flag, .next = 0 },
+    };
+    writeInt(u32, &ram, 0x400, Block.type_in);
+    // A sector whose byte offset is past 2^64: refused, not wrapped to 0.
+    writeInt(u64, &ram, 0x408, std.math.maxInt(u64) / 256);
+    _ = block.serve(&ram, &links);
+    try testing.expectEqual(Block.status_ioerr, readInt(u8, &ram, 0x600));
+    // A header at the very top of the address space reads as nothing.
+    var high = links;
+    high[0].addr = std.math.maxInt(u64) - 4;
+    writeInt(u8, &ram, 0x600, 0xFF);
+    _ = block.serve(&ram, &high);
+    try testing.expectEqual(@as(u64, 0), block.reads);
+    try testing.expectEqual(Block.status_ioerr, readInt(u8, &ram, 0x600));
+}
+
+test "a power cut: the write it comes after lands, nothing after it does, and nothing is answered" {
+    var image: [16 * 512]u8 = @splat(0);
+    var dirty: [2]u8 = @splat(0);
+    var block = Block{ .image = &image, .dirty = &dirty };
+    block.refusals.cut_after = 1;
+    var d = block.device();
+    var ram: [8192]u8 = @splat(0);
+    d.queues[0] = .{ .size = 8, .ready = 1, .desc = 0x100, .avail = 0x200, .used = 0x300 };
+    // Two writes offered at once: sector 2 from 0x1000, then sector 5 from 0x1200.
+    for (0..2) |r| {
+        const base = 0x100 + r * 3 * @sizeOf(Desc);
+        const header: u64 = 0x400 + r * 0x20;
+        const links = [_]Desc{
+            .{ .addr = header, .len = 16, .flags = Desc.next_flag, .next = @intCast(r * 3 + 1) },
+            .{ .addr = 0x1000 + r * 0x200, .len = 512, .flags = Desc.next_flag, .next = @intCast(r * 3 + 2) },
+            .{ .addr = 0x600 + r, .len = 1, .flags = Desc.write_flag, .next = 0 },
+        };
+        for (links, 0..) |l, i| {
+            const at = base + i * @sizeOf(Desc);
+            writeInt(u64, &ram, at, l.addr);
+            writeInt(u32, &ram, at + 8, l.len);
+            writeInt(u16, &ram, at + 12, l.flags);
+            writeInt(u16, &ram, at + 14, l.next);
+        }
+        writeInt(u32, &ram, header, Block.type_out);
+        writeInt(u64, &ram, header + 8, if (r == 0) 2 else 5);
+        writeInt(u16, &ram, 0x204 + r * 2, @intCast(r * 3));
+        @memset(ram[0x1000 + r * 0x200 ..][0..512], @intCast(0xA0 + r));
+    }
+    writeInt(u16, &ram, 0x202, 2);
+    d.notified(d.context, &d, &ram, 0);
+    try testing.expectEqual(@as(u8, 0xA0), image[2 * 512]); // the first landed
+    try testing.expectEqual(@as(u8, 0), image[5 * 512]); // the second did not
+    try testing.expect(disk.isDirty(&dirty, 2) and !disk.isDirty(&dirty, 5));
+    try testing.expectEqual(@as(u16, 0), readInt(u16, &ram, 0x302)); // nothing answered
+    // And a doorbell after the cut takes nothing.
+    d.notified(d.context, &d, &ram, 0);
+    try testing.expectEqual(@as(u8, 0), image[5 * 512]);
+}
+
+test "a torn write lands only its first sectors, and marks only those" {
+    var image: [16 * 512]u8 = @splat(0);
+    var dirty: [2]u8 = @splat(0);
+    var block = Block{ .image = &image, .dirty = &dirty };
+    block.refusals.tear = 1;
+    block.refusals.tear_keep = 2;
+    var ram: [8192]u8 = @splat(0);
+    @memset(ram[0x1000..][0 .. 4 * 512], 0xEE);
+    writeInt(u32, &ram, 0x400, Block.type_out);
+    writeInt(u64, &ram, 0x408, 3);
+    const links = [_]Desc{
+        .{ .addr = 0x400, .len = 16, .flags = Desc.next_flag, .next = 1 },
+        .{ .addr = 0x1000, .len = 4 * 512, .flags = Desc.next_flag, .next = 2 },
+        .{ .addr = 0x600, .len = 1, .flags = Desc.write_flag, .next = 0 },
+    };
+    _ = block.serve(&ram, &links);
+    try testing.expectEqual(@as(u8, 0xEE), image[3 * 512]);
+    try testing.expectEqual(@as(u8, 0xEE), image[5 * 512 - 1]);
+    try testing.expectEqual(@as(u8, 0), image[5 * 512]); // the third of four: not landed
+    try testing.expect(disk.isDirty(&dirty, 4) and !disk.isDirty(&dirty, 5));
+    try testing.expectEqual(@as(u64, 2), block.refusals.cut.?.landed);
 }

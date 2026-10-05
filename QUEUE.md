@@ -122,7 +122,7 @@ bottom.
     in a model of the guest's table (`tcp_sim: a client that stayed through
     a flood got its whole answer` is the simulator's version).
 
-22. **Coverage across runs** (the explorer's memory; groundwork). Item 18's
+22. **Done (CC).** **Coverage across runs** (the explorer's memory; groundwork). Item 18's
     table covers one run. Give `coverage.zig` a merge: many runs' JSONL
     (each line tagged with the run's `FAULT_SEED` or its knobs) into one
     table that says, per property, which run reached it first and how many
@@ -131,7 +131,7 @@ bottom.
     (`zig build coverage-merge -- a.jsonl b.jsonl ...` or similar) printing
     that table and the floor check gopher-metal's `long.sh` does today with
     the SDK's `report.py`. Pure logic, unit tests from hand-written JSONL.
-23. **A seed sweep the box can run** (groundwork, as 22). `sweep.sh` (or a
+23. **Done (CC; the box runs it, see Questions).** **A seed sweep the box can run** (groundwork, as 22). `sweep.sh` (or a
     zig step): `FAULT_SEED` over a range against one kernel and volume, a
     fresh copy of the volume per run, each run's verdict (exit code, the
     peer's status, the page against an unhurt run's, `sound.sh`'s fsck when
@@ -140,7 +140,7 @@ bottom.
     repeat it. You cannot boot a guest, so test the parts that are logic
     (verdicts, the summary) by hand-fed run outputs; the box runs it on
     gopher.elf and answers here.
-24. **A review: can tcp.zig tell a real client from a flood?** (design;
+24. **Done (CC, `docs/reviews/REVIEW-flood.md`).** **A review: can tcp.zig tell a real client from a flood?** (design;
     write `docs/reviews/REVIEW-flood.md`, fix nothing). gopher-metal's
     simulator found 14 rough seeds in 50,000 where a real client is reset:
     its handshake ACK is lost, its slot is still `syn_received` on the
@@ -155,7 +155,7 @@ bottom.
     given-way slot's ISS+1 revive it? gopher-metal is read-only to you; the
     box and Steve decide.
 
-25. **A review of the peer, as a TCP** (write `docs/reviews/REVIEW-peer.md`;
+25. **Done (CC, `docs/reviews/REVIEW-peer.md`).** **A review of the peer, as a TCP** (write `docs/reviews/REVIEW-peer.md`;
     fixes become items, as item 1's did). The peer is half of every verdict:
     when it is wrong, a run blames the guest for the peer's mistake. This
     happened today in gopher-metal's simulator: its model client went
@@ -167,7 +167,7 @@ bottom.
     Karn's rule, window probes, FIN in every state, item 20's several
     clients. For each difference, say whether the guest can reach it and
     which verdict it would make wrong.
-26. **The guest's input never kills the VMM: a fuzzer over the models.**
+26. **Done (CC).** **The guest's input never kills the VMM: a fuzzer over the models.**
     H1 (item 8) was a panic on `inl $0xCFD`. Drive every guest-facing model
     from a seeded stream of what a guest could do, without a vCPU: port and
     width at random over 0xCF8/0xCFC, COM1, the PIT, the RTC, 0xE0/0xE1;
@@ -178,7 +178,7 @@ bottom.
     spec says; nothing panics, nothing reads past guest memory, and the
     same seed makes the same trace. `zig build fuzz -Dseeds=n`; a seed that
     finds something stays as a named test, as gopher-metal's regressions do.
-27. **A power cut, and a torn write** (the disk's half of "does the volume
+27. **Done (CC).** **A power cut, and a torn write** (the disk's half of "does the volume
     boot again"). Today a disk request is answered or refused whole. Add,
     each by a knob and in `FAULT_SEED`'s ranges: `DISK_CUT_AFTER=n`, the
     machine stops dead after the guest's nth write, and the image keeps
@@ -189,21 +189,21 @@ bottom.
     `sound.sh` on it: that is how a FAT volume's crash consistency gets
     measured, which no run here has done. Unit tests on `disk.zig` with a
     hand-fed request stream.
-28. **Determinism, enforced by a test.** CLOUD_WORK.md's first rule says
+28. **Done (CC).** **Determinism, enforced by a test.** CLOUD_WORK.md's first rule says
     nothing reads the host's clock or randomness; nothing checks it. A test
     in `zig build test` that reads `src/*.zig` and fails on any use of the
     host's time or entropy (`std.time.timestamp`, `nanoTimestamp`,
     `Instant`, `std.crypto.random`, `getrandom`, `clock_gettime`, and the
     like) outside an allowlist with a one-line reason each, so a change
     that slips one in is refused, not reviewed.
-29. **Split the three long files** (the ~1000-line rule: `main.zig` 1820,
+29. **Done (CC).** **Split the three long files** (the ~1000-line rule: `main.zig` 1820,
     `peer.zig` 1635, `pci.zig` 1551). Along the seams they already have:
     main.zig's knob parsing and end-of-run reports apart from its run loop;
     peer.zig's `Rough` and `Plan` apart from the plain client; pci.zig's
     MSI-X and the virtio-pci capabilities apart from configuration space.
     No behavior changes: the tests move with their code, and the box's
     gates are the check. Do this after 25 and 26, which read these files.
-30. **The machine's state, saved and restored** (groundwork for the
+30. **Done for the device side (CC, `snapshot.zig`); the box's half is under Questions.** **The machine's state, saved and restored** (groundwork for the
     explorer: Antithesis branches many runs from one prefix instead of
     booting each from scratch). The device side first, which is all
     logic: every model (clock, APIC, PCI and MSI-X, the virtqueues'
@@ -213,13 +213,13 @@ bottom.
     uninterrupted run did. The vCPU's registers and guest memory are the
     box's half (KVM_GET_REGS and friends); write down under Questions what
     the box would need to call, and do not guess at the ioctls.
-31. **What a run cost, in the guest's time.** The box measures wall time;
+31. **Done (CC, `cost.zig`; `check.sh` now drops the cost line, which QEMU has no counterpart to).** **What a run cost, in the guest's time.** The box measures wall time;
     an explorer will care about guest time and exits. End every run that
     did anything with one line on stderr: exits by kind (port, mmio, MSR,
     halt), guest nanoseconds, frames each way, disk requests, and the
     longest stretch of guest time with no exit at all. Keep it pure: a
     counter struct the run loop bumps and a formatter with tests.
-32. **Your proposals.** When 22-31 are done, read the README's "Being
+32. **Done (CC): F1-F5 under Proposed; F1 built (`DISK_BAD_SECTOR`, `DISK_READS_ONLY`), the box's to aim at sector 2180 and the pinned file.** **Your proposals.** When 22-31 are done, read the README's "Being
     unhelpful on purpose" and "The real server" sections and propose (under
     Proposed, one line each on why) the next five faults or checks you
     think would find the most in gopher.elf. Then take the first one.
@@ -231,7 +231,7 @@ seeds fails 14 rough seeds where a flood takes a real client's half-open slot
 (item 24 reviews it; Steve rules on the oracle). Leave them red until he
 does.
 
-33. **(gopher-metal) tcp_sim with several clients, and a stream held open.**
+33. **Done (CC, gopher-metal `1516856` on `claude/great-wright-i7aste`): `runCrowdSeed`, six properties on the floor, and one finding under Questions. `build.zig` gained `-Dcrowd-seeds` (500 by default), to keep the long tier green until the ruling.** **(gopher-metal) tcp_sim with several clients, and a stream held open.**
     The simulator's table has 2 slots and one client; gopher.zig has 256
     slots, serves one request at a time among them, and keeps chat's
     streams open. Let a scenario choose the table's size and several
@@ -239,20 +239,20 @@ does.
     client holding a stream; the oracles follow (every client that stayed
     got its whole answer; a held stream is not given up on while its client
     reads). This is item 20's peer, on the simulator's side.
-34. **(gopher-metal) A simulator for the page cache.** `page_cache.zig` is
+34. **Done (CC, gopher-metal `86c7cae`): `page_sim.zig`, twelve properties on the floor, nothing found in page_cache.zig (five planted bugs each caught). `build.zig` gained `-Dpage-seeds` (100 by default) and page_sim in the catalog and the tests.** **(gopher-metal) A simulator for the page cache.** `page_cache.zig` is
     pure (it imports only `std`, 417 lines) and has no properties. Drive it
     with seeded reads, writes and whole-file writes against a reference map
     of what each file holds; the oracle is that every read returns the
     reference's bytes; `sometimes` properties for eviction, a whole-file
     write replacing a kept copy, the largest file it will keep. Add it to
     `zig build properties` and its floor to `floor-sim.txt`.
-35. **(gopher-metal) The other pure modules: `restart.zig`,
+35. **Done (CC, gopher-metal `fc86c4f` and after): `pure_sim.zig`, twenty properties on the floor, two findings under Questions. log_ring, kept_log and restart each earned a seeded drive; request_heap's found only the second finding and is kept as the drive for its limit. `zig build test` and `properties` are red on the branch for the first finding, as a defect should be until the box fixes it.** **(gopher-metal) The other pure modules: `restart.zig`,
     `request_heap.zig`, `log_ring.zig` and `kept_log.zig`.** Each imports
     only `std` (kept_log also log_ring). Properties where a randomized drive
     shows something the unit tests do not: a ring that wraps, a heap at its
     limit, a restart decision at each of its branches. A small simulator
     each only where a seed earns it; say which did not.
-36. **(gopher-metal) What fat_sim never reaches in fat16.zig.** On day one
+36. **Done (CC, gopher-metal `2beac8a`): 35 reachable properties in fat16.zig (properties only), 33 of them never reached by the sweep before, 28 now reached by fat_sim's probes and on the floor; the seam under Proposed, two findings under Questions.** **(gopher-metal) What fat_sim never reaches in fat16.zig.** On day one
     the TCP properties found four tcp.zig paths tcp_sim never reached. Do
     the same for FAT: `sometimes`/`reachable` properties on fat16.zig's
     branches (errors, a full root, a full volume, chains that wrap, the
@@ -267,7 +267,7 @@ turn; gopher-metal's long.sh now runs seven rough-peer scenarios, and its
 metal floor is 15 of tcp.zig's 18). These are urgent before 25-36: 37 is a
 crash on the peer's own input.
 
-37. **(metal-vmm) The peer's segment outgrows its buffer: a panic.**
+37. **Done (CC). Every segment of the peer's is at most the MSS the guest's SYN-ACK announced (536 if none, 1460 at most), and `PEER_MSS` only lowers it. A request of up to 1460 bytes to a guest announcing 1460, which gopher-metal's tcp.zig does, is one segment as before; a larger one is now several. fuzz.zig has a peer half on its own dice, which finds this at seed 1 with the fix undone.** **(metal-vmm) The peer's segment outgrows its buffer: a panic.**
     `PEER_REQUEST=<20 KB request>` with no `PEER_MSS` panics the VMM:
     `index out of bounds: index 8246, len 2048` at `peer.zig:740` (`build`,
     from `Tcp.more` via `segment`). The peer sends as much as the guest's
@@ -276,7 +276,7 @@ crash on the peer's own input.
     9293 §3.7.1; 536 if none). Cap every segment at that, and at the
     buffer, and a test with a request larger than the window. Item 26's
     fuzzer should have a peer-side half that would have found this.
-38. **(metal-vmm) A reset the peer could not send says so.** `PEER_RESET_AT`
+38. **Done (CC, `reports.unspent`): one line each on the error stream for `WIRE_EAT`, `PEER_EAT`, `PEER_DAMAGE` and `DISK_REFUSE` numbers past the last, `PEER_RESET_AT` with no connection open (or none ever, or the run ending first), `PEER_VANISH_AFTER` and `PEER_SHUT_AFTER` past the answer, a flood not all sent, and `DISK_CUT_AFTER`/`DISK_TEAR` past the last write. A run with no knobs prints nothing new.** **(metal-vmm) A reset the peer could not send says so.** `PEER_RESET_AT`
     before the connection is established is dropped without a word
     (`Tcp.due` sets `reset_past` and returns null outside established,
     closing and fin_wait). On gopher.elf with a 5 ms wire, any time under
@@ -286,7 +286,7 @@ crash on the peer's own input.
     reset sent"), as the wire reports what it lost. The same for any knob
     whose moment passes unused (`PEER_VANISH_AFTER` past the answer's
     length, `PEER_SHUT_AFTER` likewise, `PEER_EAT` past the last frame).
-39. **(metal-vmm) The last three of tcp.zig's eighteen, on the real kernel.**
+39. **(b) done (CC): `WIRE_EAT`, `PEER_EAT`, `PEER_DAMAGE` and `DISK_REFUSE` take ranges (`8-40`) among up to 32 numbers. (c) is the box's.** **(a) done (CC): `PEER_IGNORE_WINDOW=1`, and a plain client now keeps to the guest's window (P2's first half), which only a request larger than the window notices.** **(metal-vmm) The last three of tcp.zig's eighteen, on the real kernel.**
     (a) **a peer sends past the window**: the peer keeps to the guest's
     window (its sends stop at the guest's shut 16 KB buffer, and a 20 KB
     request then deadlocks until the guest's idle timeout). A knob for a
@@ -299,7 +299,7 @@ crash on the peer's own input.
     large upload (gopher.zig streams big uploads), so this one is the
     box's, listed so you do not take it.
 
-40. **(metal-vmm) A run that ends idle still says what the client got.**
+40. **Done (CC): an idle end prints the `peer:` lines and writes `PEER_BODY`/`PEER_RESPONSE`, then ends with `GuestIdle` as before. The lines are `reports.client`, tested; the idle path through `serve` needs KVM, so it is the box's to see. An idle end still does not write the disk image back (see Questions).** **(metal-vmm) A run that ends idle still says what the client got.**
     `GuestIdle` (item 16) returns before main's "WHAT THE CLIENT GOT" block,
     so a run that ends idle prints no `peer:` line and writes no
     `PEER_BODY`. A guest serving more than one request always ends idle, so
@@ -311,6 +311,27 @@ crash on the peer's own input.
 ## Proposed
 
 *(CC adds items here, one line each on why.)*
+
+From the peer's review (`docs/reviews/REVIEW-peer.md`), most urgent first:
+
+- **P1. TIME-WAIT, and closed ports that answer.** A finished, refused or
+  unopened client is silent where a real host acknowledges a repeated FIN
+  or resets. The guest is blamed for giving up: seed 23953's class.
+- **P2. The guest's window, kept (CC, with item 39a) and probed (not yet: a zero window waits on the guest's own update).** The peer ignores SND.WND and
+  never probes, so a request larger than the guest's 16 KiB free window
+  loses its tail for good, and the guest is blamed after `idle_ns`.
+- **P3. Recovery like a real client's.** No RTT sample, a 1 s floor, no
+  fast retransmit, one segment per timeout: a few lost request segments
+  outlast the guest's 10 s patience, where Linux would have recovered.
+- **P5 (with P6, P7). RFC 5961 resets and §3.10.7 acknowledgement checks.**
+  The peer believes any reset and takes data acknowledging unsent bytes, so
+  a guest bug of those shapes passes as correct.
+- **S1. The sweep excuses the peer's own give-up.** A peer in `gave_up` or
+  `gone` costs the page through its own fault; say its state on stderr and
+  let `sweep.sh` excuse it.
+- **P4 (the box's call). An MSS option in the peer's SYN.** Without one the
+  guest sends 536-byte segments where production sees 1460, so every
+  frame-numbered map is of a segmentation production never sees.
 
 From the review (`docs/reviews/REVIEW-interrupts.md`), most urgent first:
 
@@ -340,6 +361,57 @@ From the review (`docs/reviews/REVIEW-interrupts.md`), most urgent first:
     is killed as `GuestStuck` after ~1M exits of resting (minutes of guest
     time); soaks and the explorer will hit it.
 
+From item 32: the next five faults or checks for gopher.elf, most finding
+first (CC):
+
+- **F1. A bad sector, aimed by address** (`DISK_BAD_SECTOR=s[,t]`, with
+  `DISK_READS_ONLY` beside `DISK_WRITES_ONLY`). Every disk finding above is
+  about one sector (2180, the FAT's mirror; the pinned file), and a request
+  count reaches it on one path only. A sector is reached on every path, stays
+  bad across a reboot as a real one does, and refusing the pinned file's
+  reads while its writes land is the aim "The bookmark that eats your
+  bookmarks" says this machine cannot take yet. **Built (CC); not yet run against gopher.elf.**
+- **F2. Silent rot on read** (`DISK_ROT=sector,byte`): the sector is served
+  with one byte changed and an "ok". fat16.zig checks nothing it reads, so a
+  FAT entry that points back into its own chain is a loop to hang on, and a
+  rotted directory entry a file written over another's clusters; the
+  explorer finds which bytes matter.
+- **F3. A write cache, and whether the guest ever flushes** (offer
+  `VIRTIO_BLK_F_FLUSH`; `DISK_CACHE=1` holds acknowledged writes until a
+  flush, and a power cut loses what was not flushed). gopher's driver may
+  never send a flush; on a disk with a cache, "303 means saved" (README,
+  "The write path") would then be true here and false on hardware.
+- **F4. A client that retries what got no answer** (`PEER_RETRY=1`: a client
+  whose connection closed with no response sends the same request again on
+  a new one), with a check that the volume holds the message once. The
+  three-run row of "The multi-file path" says a user who retries gets a
+  duplicate; this measures it.
+- **F5. The calendar as a knob** (`RTC_BOOTS_AT=unix`, clock.zig's
+  `boots_at` today a constant): boots on 2038-01-19, 2099-12-31, 2108 (past
+  FAT's last year), a leap day, and just before midnight, for FAT
+  timestamps, cookie expiry and anything that sorts by date.
+
+From item 36 (CC):
+
+- **G1. The seam that makes fat16.zig a layer with nothing below it.** It
+  imports `virtio.zig` for one thing: a disk of 512-byte sectors, through
+  `Block.read`, `readMany`, `write`, `writeMany`, `Block.max_sectors` and
+  `blk_s_ok`. Let `Volume` take that as a small interface of its own (a
+  `Sectors` struct of four function pointers and a context, or `Volume`
+  generic over a device type), with virtio.Block one implementation and an
+  in-memory one another. What stays behind is the driver; what comes out
+  is everything fat16 decides. And the test hooks that live in virtio.zig
+  today (`Block.inMemory`, `fail_after`, `fail_after_writes`, `fault`, the
+  `requests` and `writes` counts) move to test_disk.zig, out of the
+  driver the kernel runs. Nothing about what fat16 does changes; it is a
+  move the box makes, because fat16 serves lynrummy.com.
+- **G2. A fault on a multi-sector write**, for test_disk: `fail_after`
+  stops every request after it, so a failure meant for an append's run of
+  data sectors meets the read before it first, and "fat: a run of sectors
+  fails to write" is reached about once in 160 failure points. A fault
+  that refuses only the next write of more than one sector reaches it
+  every time. test_disk.zig is not the simulators' to change.
+
 Folded into existing items rather than new ones: M4, L1, L2, L3 into item 4
 (MSI-X); L4 into item 5 (APIC); L5 (0xCF9) waits until a reset is something
 this machine survives.
@@ -347,6 +419,66 @@ this machine survives.
 ## Questions
 
 *(For the box or Steve. Take the next item; do not wait.)*
+
+- **(CC, item 36) fat16: a tree makePath makes is one check and
+  removeTree refuse.** makePath, and so writeFile, makes directories at
+  any depth; `check` calls a tree past `max_tree_depth` (16) `too_deep`,
+  and `removeTree` refuses it with `BadChain`, so io.zig's deleteTree of
+  it answers WriteFailed for good. A volume this code made is one its own
+  check calls broken. One side moves: a depth limit in makePath, or none
+  in check and removeTree (whose limit is there for a looped tree, which
+  `Loop` could catch instead). gopher-metal's fat_sim.zig has the failing
+  test.
+- **(CC, item 36) fat16: a file whose chain loops reads back as other
+  bytes, with no error.** `readAt` follows the chain only as far as the
+  file's size, so a damaged FAT whose chain loops answers the earlier
+  clusters' bytes again as the file's. A chain that leads outside the
+  data is caught (`BadChain`), and an append to a looped chain is
+  (`chainEnd`'s `Loop`); a read is not. Damage, not this code's doing, but
+  the read is where it would be served to a client as the file. `Loop` in
+  `readAt` would refuse it. Not a failing test: whether a read should
+  notice is the box's call. fat_sim's probes count it ("a file whose
+  chain loops reads as other bytes, without an error").
+
+- **(CC, item 35) log_ring: a ring holding exactly its capacity reads as
+  garbage.** Once exactly `buf.len` bytes are written, `head` is back at 0
+  and `total == buf.len`, so `Ring.parts` takes its unwrapped branch and
+  answers `buf[0..0]`, while `len` says the ring is full: `read` returns
+  that many bytes of the caller's `out` as the caller left it. A status
+  page serving the ring at that moment would serve whatever its buffer
+  last held; `kept_log` reads a sealed ring the same way. `<` for `<=` in
+  `parts` fixes it (5000 seeds pass with it). gopher-metal's
+  `pure_sim.zig` has the failing test and seeds 41, 224, 292.
+- **(CC, item 35) request_heap: the same request does not always ask the
+  same amount.** `used` counts a growth only when the arena grows the block
+  in place; otherwise the caller's fallback is counted the whole new block.
+  Which happens depends on the room in the arena's node, which is what the
+  request before left, and `preheat` leaves a different capacity than a
+  reset keeps. So the figure the judge requires to repeat can move with
+  what came before, preheated or not (seeds 69, 153, 285, a skipped test in
+  `pure_sim.zig`). Counting what the request asked for (each `alloc`'s
+  length, each growth's) the same way on both paths would make it a
+  property of the request alone; or the judge compares only requests in
+  the same position. The box's call.
+
+- **(CC, item 33) A crowd finds item 24's class without a flood.** 21 of the
+  first 10,000 crowd seeds fail, all one way: a real client's handshake,
+  slowed past `min_rto_ns` by a lost SYN-ACK or ACK while every slot is
+  taken, looks like a flood's stuck half-open, and another real client's
+  SYN takes its slot (`oldestHalfOpen`); its next segment draws a reset.
+  So the ruling on item 24's 14 rough seeds is a ruling on these too. They
+  are named in tcp_sim.zig (`crowd_red`, a skipped test), and `properties`
+  runs crowds on only its first 500 seeds (none fail there) unless
+  `-Dcrowd-seeds` asks for more. A table that answered the evicted
+  client's ACK with a SYN-ACK again, or kept a SYN cookie, would not lose
+  it; that is the box's call.
+
+- **(CC, item 40) Should an idle end write the disk back?** `GuestIdle`
+  returns before `writeBack`, so a run serving more than one request (which
+  always ends idle) leaves the image as it found it: `sound.sh` and a second
+  boot never see what it wrote. Item 40 asked only for the client's lines,
+  so that is all that changed. If an idle end is a normal end, the image
+  should probably be written back too; a crash should still not be.
 
 - **(CC, D3) Was KVM's fast path for IA32_TSC_DEADLINE seen taking the write
   with no in-kernel irqchip?** Upstream's fast path sets the deadline on the
@@ -382,6 +514,41 @@ this machine survives.
   `complete_fast_pio_out` skips the instruction on the next entry). If it
   is wrong, no clock read is answered and every probe fails at once,
   so check.sh shows it immediately.
+
+- **(CC, item 23) `sweep.sh` is new** (no existing script changed), with
+  `sweep_test.sh` for its logic. Please run it on gopher.elf, e.g. `SITE=...
+  ./sweep.sh 1 200`, and answer here: how long a seed takes, which seeds fail
+  and why, and whether the "allowed" rule (a page may differ under
+  PEER_RESET_AT, PEER_VANISH_AFTER or DISK_REFUSE) is the rule you want.
+  KEEP=<dir> keeps every run's log, page and the coverage JSONL.
+
+- **(CC, item 30) What the box's half of a snapshot must hold**, named by
+  what it is, not by ioctl: the devices' half is `snapshot.zig`, a value
+  copy of every model restored in place, plus the disk's bytes.
+  1. **The general registers**, RIP and RFLAGS among them.
+  2. **The special registers**: segments, descriptor tables, CR0, CR2-CR4,
+     CR8, EFER, and the APIC base as KVM keeps it.
+  3. **The FPU, SSE and extended state** (XSAVE, and XCR0). gopher-metal is
+     soft-float, but nothing stops a guest from using them.
+  4. **The MSRs KVM answers itself** (not the filtered ones, which are
+     apic.zig's): at least the SYSCALL MSRs, FS and GS bases, TSC_AUX, and
+     whatever the guest wrote. Listing which ones KVM holds for this VM is
+     part of the box's half.
+  5. **The vCPU's events**: an interrupt or exception mid-injection, the
+     interrupt shadow (an `sti` or `mov ss` just executed), NMI state. A
+     snapshot taken between `KVM_INTERRUPT` and the entry that takes it must
+     not lose the vector.
+  6. **The run structure's own flags this program sets**:
+     `request_interrupt_window`, and whether an exit was completed (a port
+     read answered, or a rewritten `out` whose RIP KVM skips on the next
+     entry). The simplest rule is to snapshot only between exits, after the
+     answer is written, which is where this program's loop already is.
+  7. **Guest memory**, 512 MiB. A full copy should take on the order of a tenth of a second (an estimate from memory bandwidth, not measured here). A
+     copy-on-write mapping, or KVM's dirty-page log, would make a branch
+     cheap. Which one is the box's call.
+  8. **And no host time anywhere.** The TSC is this program's (rewritten),
+     so restoring needs no TSC offset, as long as no unmarked `rdtsc` ran
+     (item 14 and the README).
 
 ## Answers
 

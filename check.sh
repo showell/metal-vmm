@@ -108,6 +108,9 @@ for one in $CASES; do
     awk '!started && /Booting from ROM/ { sub(/^.*Booting from ROM\.*/, ""); started = 1; if (length($0)) print; next }
          started { print }' "$WORK/qemu.raw" | sed 's/\r$//' > "$WORK/qemu.txt"
 
+    # **WHAT A RUN COST** is this machine's account of itself (cost.zig), which
+    # QEMU has no line for: left out of the comparison like the shape below.
+    #
     # **THE BLOCK PROBE PRINTS THE MACHINE'S SHAPE**, not just its answer: which
     # slots hold devices, and where. QEMU fills its window from the top and has
     # a random-number device too; this one puts a disk in the first slot. That
@@ -123,7 +126,7 @@ for one in $CASES; do
     stamped=no
     [ "$probe" = append ] && stamped=yes
     for side in ours qemu; do
-        grep -av "^  slot \|^  device at \|^  wall clock " "$WORK/$side.txt" > "$WORK/$side.cmp"
+        grep -av "^  slot \|^  device at \|^  wall clock \|^metal-vmm: cost: " "$WORK/$side.txt" > "$WORK/$side.cmp"
     done
 
     if [ "$probe" = rng ] || [ "$probe" = clock ]; then
