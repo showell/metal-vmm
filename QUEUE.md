@@ -189,7 +189,7 @@ bottom.
     `sound.sh` on it: that is how a FAT volume's crash consistency gets
     measured, which no run here has done. Unit tests on `disk.zig` with a
     hand-fed request stream.
-28. **Determinism, enforced by a test.** CLOUD_WORK.md's first rule says
+28. **Done (CC).** **Determinism, enforced by a test.** CLOUD_WORK.md's first rule says
     nothing reads the host's clock or randomness; nothing checks it. A test
     in `zig build test` that reads `src/*.zig` and fails on any use of the
     host's time or entropy (`std.time.timestamp`, `nanoTimestamp`,
