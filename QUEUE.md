@@ -331,16 +331,16 @@ order without waiting; the box answers when he is back).
     (`PEER_RETRY=1`), with the run's end saying how many times the request
     was sent; whether the volume holds the message once is the box's check.
 46. **(metal-vmm) F5, the calendar as a knob** (`RTC_BOOTS_AT=unix`).
-47. **(gopher-metal) A prototype of REVIEW-flood's option 4, revival, in
-    tcp.zig, on your branch, not for merging.** Steve has not ruled yet;
-    the prototype is what he will rule on. The 14 rough seeds and the 21
+47. **(gopher-metal) REVIEW-flood's option 4, revival, in tcp.zig.**
+    Steve ruled yes (2026-10-05): build it for merging. The box reviews the
+    diff and merges it into `antithesis-sdk`; it reaches the site only in
+    the next image, which Steve is holding for now. The 14 rough seeds and the 21
     crowd seeds (`crowd_red`) as its regression tests, all green with it;
     every other seed at the sweep size you can afford unchanged, frame for
     frame where there is no flood; the ring's size and what happens when a
     flood outlasts it, measured. Say in the commit what the change costs
-    the kernel (bytes, a branch on which path). The box reads the diff and
-    puts it to Steve. This is the one place you change kernel code, and
-    only on your branch.
+    the kernel (bytes, a branch on which path). This is the one place you
+    change kernel code; on your branch, as always.
 48. **Your proposals again** when 41-47 are done, as in item 32: the next
     five, one line each on why, then take the first.
 
@@ -574,8 +574,9 @@ question: yes, item 42. Items 41-48 are yours.
   MSRs, and guest memory (KVM's dirty log or copy-on-write).
 - **B10.** Item 14's microvm half, with its own `check.sh` run.
 
-**For Steve:** the flood ruling (REVIEW-flood: revive, option 4), on item
-47's prototype; whether B5's fat16 fixes go out in an image.
+**Steve, 2026-10-05:** the flood: **yes**, revival (option 4), item 47.
+The next image: **not yet**; B5's fat16 fixes and item 47 wait on
+`antithesis-sdk` for it.
 
 **2026-10-05, the box: item 21 merged (`44f6522`)**: 160/160, check.sh,
 same.sh, site.sh all and rest.sh all green. Items 22-32 are yours, in order;
