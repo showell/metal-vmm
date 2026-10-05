@@ -30,7 +30,7 @@ bottom.
    vector, a doorbell, a completion), then through MSI-X to an `apic.Apic`
    and out of `next()`. One test per step of the driver's sequence. This is
    the transport's integration test, without a vCPU.
-3. **`rest`'s decision, pulled out and tested.** Given the APIC, the wire's
+3. **Done (CC).** **`rest`'s decision, pulled out and tested.** Given the APIC, the wire's
    next due frame and the clock: the time to move to, and the vector to take,
    or "nothing can wake it". Cases: a vector already pending (no time
    passes); a deadline before the next frame and after it; a frame due but

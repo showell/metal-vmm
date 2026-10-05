@@ -673,31 +673,53 @@ fn rest(vcpu: linux.fd_t, run: *kvm.Run, machine: *Machine) !bool {
     machine.halts += 1;
     const began = machine.time.ns;
     while (true) {
-        machine.lapic.tick(machine.time.ticks());
-        if (machine.lapic.next()) |v| {
-            machine.halted_ns += machine.time.ns - began;
-            // At a halt after `sti` the guest can take it now; if KVM says
-            // otherwise, at the first moment it can.
-            if (run.ready_for_interrupt_injection != 0) {
-                try inject(vcpu, v);
-            } else {
-                machine.waiting = v;
-                run.request_interrupt_window = 1;
-            }
-            return true;
+        const due = if (machine.card) |card| card.line.nextDue() else null;
+        switch (wakes(&machine.lapic, machine.time.ns, due)) {
+            .take => |v| {
+                machine.halted_ns += machine.time.ns - began;
+                // At a halt after `sti` the guest can take it now; if KVM says
+                // otherwise, at the first moment it can.
+                if (run.ready_for_interrupt_injection != 0) {
+                    try inject(vcpu, v);
+                } else {
+                    machine.waiting = v;
+                    run.request_interrupt_window = 1;
+                }
+                return true;
+            },
+            .move_to => |at| {
+                machine.time.ns = at;
+                machine.pump();
+            },
+            .never => return false,
         }
-        const now = machine.time.ns;
-        var wake: ?u64 = null;
-        if (machine.lapic.timerDue()) |due| wake = clock.nsAt(due);
-        // A frame due already but undelivered has no buffer to go to, and
-        // waits for the guest, not the clock.
-        if (machine.card) |card| if (card.line.nextDue()) |due| if (due > now) {
-            wake = if (wake) |w| @min(w, due) else due;
-        };
-        const at = wake orelse return false;
-        machine.time.ns = @max(now, at);
-        machine.pump();
     }
+}
+
+/// What a halted guest is waiting for, decided from the APIC, the time, and
+/// when the wire's oldest frame is due.
+const Wake = union(enum) {
+    /// This vector, now: no time passes. It is in service from here.
+    take: u8,
+    /// Nothing yet: move the clock here, pump the wire, and ask again.
+    move_to: u64,
+    /// Nothing can ever wake it.
+    never,
+};
+
+/// **ONE STEP OF A HALT**, without the processor: the timer is looked at, then
+/// the waiting vectors; failing those, the earlier of the deadline and the
+/// next frame. A frame due already but undelivered has no buffer to go to,
+/// and waits for the guest, not the clock.
+fn wakes(lapic: *apic.Apic, now: u64, frame_due: ?u64) Wake {
+    lapic.tick((clock.Clock{ .ns = now }).ticks());
+    if (lapic.next()) |v| return .{ .take = v };
+    var wake: ?u64 = null;
+    if (lapic.timerDue()) |due| wake = clock.nsAt(due);
+    if (frame_due) |due| if (due > now) {
+        wake = if (wake) |w| @min(w, due) else due;
+    };
+    return .{ .move_to = @max(now, wake orelse return .never) };
 }
 
 fn inject(vcpu: linux.fd_t, vector: u8) !void {
@@ -1268,4 +1290,91 @@ test "the exit door stops the machine with the guest's own code" {
     try testing.expect(machine.stopped == null);
     machine.out(exit_door, &.{7});
     try testing.expectEqual(@as(u8, 7), machine.stopped.?);
+}
+
+// ── a halt's decision, without a processor ──────────────────────────────────
+
+/// The APIC as gopher-metal's `startApic` leaves it: enabled, the timer on
+/// 0x41 in TSC-deadline mode, nothing armed.
+fn startedApic() apic.Apic {
+    var a = apic.Apic{};
+    _ = a.writeMsr(apic.msr_apic_base, a.readMsr(apic.msr_apic_base).? | (1 << 11));
+    a.write(0x0F0, 0x100 | 0xFF);
+    a.write(0x320, 0x41 | (2 << 17));
+    return a;
+}
+
+test "a vector already waiting is taken at once, and no time passes" {
+    var a = startedApic();
+    _ = a.writeMsr(apic.msr_tsc_deadline, 1_000_000);
+    a.raise(0x40);
+    try testing.expectEqual(Wake{ .take = 0x40 }, wakes(&a, 5_000, 6_000));
+}
+
+test "a deadline before the next frame: the clock goes to the deadline, and the timer fires there" {
+    var a = startedApic();
+    _ = a.writeMsr(apic.msr_tsc_deadline, 25_000); // 10 µs at 2.5 GHz
+    try testing.expectEqual(Wake{ .move_to = 10_000 }, wakes(&a, 1_000, 50_000));
+    try testing.expectEqual(Wake{ .take = 0x41 }, wakes(&a, 10_000, 50_000));
+}
+
+test "a frame before the deadline: the clock goes to the frame" {
+    var a = startedApic();
+    _ = a.writeMsr(apic.msr_tsc_deadline, 250_000); // 100 µs
+    try testing.expectEqual(Wake{ .move_to = 40_000 }, wakes(&a, 1_000, 40_000));
+}
+
+test "a frame due already but undelivered does not wake the guest" {
+    var a = startedApic();
+    // It had its chance in this exit's pump and found no buffer: only the
+    // guest posting one can change that, and the guest is halted.
+    try testing.expectEqual(Wake.never, wakes(&a, 5_000, 5_000));
+    try testing.expectEqual(Wake.never, wakes(&a, 5_000, 1_000));
+    // With a deadline, the deadline is what wakes it.
+    _ = a.writeMsr(apic.msr_tsc_deadline, 25_000);
+    try testing.expectEqual(Wake{ .move_to = 10_000 }, wakes(&a, 5_000, 1_000));
+}
+
+test "a deadline between two nanoseconds: the first nanosecond at or past it" {
+    var a = startedApic();
+    // At 2.5 ticks a nanosecond, tick 26 falls between 10 ns (tick 25) and
+    // 11 ns (tick 27.5, read as 27). The timer fires when rdtsc would first
+    // answer 26 or more: at 11 ns, not at 10.
+    _ = a.writeMsr(apic.msr_tsc_deadline, 26);
+    try testing.expectEqual(Wake{ .move_to = 11 }, wakes(&a, 0, null));
+    try testing.expectEqual(@as(u64, 25), (clock.Clock{ .ns = 10 }).ticks());
+    try testing.expectEqual(Wake{ .move_to = 11 }, wakes(&a, 10, null)); // not yet
+    try testing.expectEqual(Wake{ .take = 0x41 }, wakes(&a, 11, null));
+}
+
+test "a deadline already past fires without moving the clock" {
+    var a = startedApic();
+    _ = a.writeMsr(apic.msr_tsc_deadline, 100);
+    try testing.expectEqual(Wake{ .take = 0x41 }, wakes(&a, 1_000_000, null));
+}
+
+test "nothing armed and nothing on the wire: nothing can wake it" {
+    var a = startedApic();
+    try testing.expectEqual(Wake.never, wakes(&a, 1_000, null));
+}
+
+test "an APIC never enabled delivers nothing, even when its timer would fire" {
+    var a = apic.Apic{};
+    a.write(0x320, 0x41 | (2 << 17));
+    _ = a.writeMsr(apic.msr_tsc_deadline, 25_000);
+    a.raise(0x40);
+    // The deadline still moves the clock; when it passes there is nothing
+    // the guest could be woken by.
+    try testing.expectEqual(Wake{ .move_to = 10_000 }, wakes(&a, 0, null));
+    try testing.expectEqual(Wake.never, wakes(&a, 10_000, null));
+}
+
+test "a vector in service holds the others until EOI" {
+    var a = startedApic();
+    a.raise(0x40);
+    try testing.expectEqual(Wake{ .take = 0x40 }, wakes(&a, 0, null));
+    a.raise(0x40);
+    try testing.expectEqual(Wake.never, wakes(&a, 0, null));
+    a.write(0x0B0, 0);
+    try testing.expectEqual(Wake{ .take = 0x40 }, wakes(&a, 0, null));
 }
