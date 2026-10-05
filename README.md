@@ -392,6 +392,16 @@ without the seed:
 
     metal-vmm: FAULT_SEED=4711 is WIRE_EAT=12 WIRE_LATENCY_US=8143 PEER_FLOOD=3 PEER_FLOOD_GAP_US=212998
 
+**A sweep of seeds** is `./sweep.sh [first] [last]`: one kernel, one volume
+(`SITE`), a fresh copy per run, `FAULT_SEED` from first to last on the
+PC-shaped machine. A seed fails if its exit is not the unhurt run's, it
+broke a coverage property, the volume it wrote is not sound (`sound.sh`), or
+its page is not the unhurt run's when nothing it did excuses that (a reset,
+a vanished peer and a refused disk request do). It stops at nothing, merges
+every run's coverage (`FLOOR=<file>` to gate on one), and ends with the
+failing seeds as the knobs that repeat them. `./sweep_test.sh` checks its
+verdicts against a fake machine told in advance what each seed does.
+
 ### What the guest says it reached
 
 A gopher-metal kernel built `-Dcoverage` prints zig-coverage-sdk's JSONL on

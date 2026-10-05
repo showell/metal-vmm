@@ -423,7 +423,9 @@ pub const Merged = struct {
     fn runName(self: *Merged, run: std.json.Value, file: []const u8) ![]const u8 {
         if (run == .object) {
             if (run.object.get("seed")) |seed| if (seed == .integer) return std.fmt.allocPrint(self.allocator, "FAULT_SEED={d}", .{seed.integer});
-            if (Table.text(run.object.get("knobs"))) |k| return self.allocator.dupe(u8, k);
+            if (Table.text(run.object.get("knobs"))) |k| {
+                return self.allocator.dupe(u8, if (std.mem.eql(u8, k, "none")) "a run with no faults" else k);
+            }
         }
         return std.fmt.allocPrint(self.allocator, "{s}, run {d}", .{ file, self.runs.items.len + 1 });
     }
@@ -736,4 +738,19 @@ test "a line that is not JSON is counted, and the rest are read" {
     try m.addFile("a", boot ++ "\n{oops\n" ++ comptime sdkEvent("Reachable", "r", true, true) ++ "\r\n");
     try testing.expectEqual(@as(u64, 1), m.malformed);
     try testing.expectEqual(@as(u32, 1), m.rows.getPtr("r").?.runs);
+}
+
+test "a run with no seed is named by its knobs, or as having no faults" {
+    var buf: [128]u8 = undefined;
+    var m = Merged.init(testing.allocator);
+    defer m.deinit();
+    const r = comptime sdkEvent("Reachable", "r", true, true);
+    const a = try std.mem.concat(testing.allocator, u8, &.{ try runLine(&buf, null, "none"), "\n", r, "\n" });
+    defer testing.allocator.free(a);
+    const b = try std.mem.concat(testing.allocator, u8, &.{ try runLine(&buf, null, "WIRE_EAT=4"), "\n", r, "\n" });
+    defer testing.allocator.free(b);
+    try m.addFile("x", a);
+    try m.addFile("y", b);
+    try testing.expectEqualStrings("a run with no faults", m.runs.items[0]);
+    try testing.expectEqualStrings("WIRE_EAT=4", m.runs.items[1]);
 }

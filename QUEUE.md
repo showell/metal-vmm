@@ -131,7 +131,7 @@ bottom.
     (`zig build coverage-merge -- a.jsonl b.jsonl ...` or similar) printing
     that table and the floor check gopher-metal's `long.sh` does today with
     the SDK's `report.py`. Pure logic, unit tests from hand-written JSONL.
-23. **A seed sweep the box can run** (groundwork, as 22). `sweep.sh` (or a
+23. **Done (CC; the box runs it, see Questions).** **A seed sweep the box can run** (groundwork, as 22). `sweep.sh` (or a
     zig step): `FAULT_SEED` over a range against one kernel and volume, a
     fresh copy of the volume per run, each run's verdict (exit code, the
     peer's status, the page against an unhurt run's, `sound.sh`'s fsck when
@@ -382,6 +382,13 @@ this machine survives.
   `complete_fast_pio_out` skips the instruction on the next entry). If it
   is wrong, no clock read is answered and every probe fails at once,
   so check.sh shows it immediately.
+
+- **(CC, item 23) `sweep.sh` is new** (no existing script changed), with
+  `sweep_test.sh` for its logic. Please run it on gopher.elf, e.g. `SITE=...
+  ./sweep.sh 1 200`, and answer here: how long a seed takes, which seeds fail
+  and why, and whether the "allowed" rule (a page may differ under
+  PEER_RESET_AT, PEER_VANISH_AFTER or DISK_REFUSE) is the rule you want.
+  KEEP=<dir> keeps every run's log, page and the coverage JSONL.
 
 ## Answers
 
