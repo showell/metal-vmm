@@ -94,7 +94,7 @@ bottom.
     wins over the seed. This is what lets an explorer, and a person, say
     "seed 4711" and mean one exact run.
 
-20. **A peer with more than one connection.** gopher.elf holds up to 256
+20. **Done (CC).** **A peer with more than one connection.** gopher.elf holds up to 256
     connections, serves one request at a time among them, and keeps chat's
     live streams open; the peer opens one connection, sends one request and
     closes. Give it several clients, each its own port and its own

@@ -1297,14 +1297,39 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // **WHAT THE PEER ASKS FOR.** A path is enough for a probe; a server with
     // a login and a chat wants a whole request, cookie and body and all, so
     // `PEER_REQUEST=<file>` sends those bytes exactly as they are.
-    var request_buf: [8192]u8 = undefined;
-    if (init.environ.getPosix("PEER_REQUEST")) |from| {
-        machine.request = readAll(from, &request_buf) orelse {
-            std.debug.print("metal-vmm: cannot read the request in {s}\n", .{from});
-            return 2;
-        };
+    //
+    // **AND HOW MANY ASK** (peer.zig, `Plan`): `PEER_CLIENTS=n` clients, a
+    // gap apart (`PEER_CLIENT_GAP_US`), each asking `PEER_ASKS=k` times on
+    // its own connection. `PEER_REQUEST=a,b,...` names a file for each
+    // client; a client past the list asks the last one's.
+    const plan = &card.peer.plan;
+    if (count(init.environ, "PEER_CLIENTS")) |n| plan.clients = @intCast(std.math.clamp(n, 1, wire.max_clients));
+    if (count(init.environ, "PEER_ASKS")) |n| plan.asks = @intCast(std.math.clamp(n, 1, 1000));
+    if (count(init.environ, "PEER_CLIENT_GAP_US")) |us| plan.gap_ns = us * std.time.ns_per_us;
+    var request_bufs: [wire.max_clients][8192]u8 = undefined;
+    if (init.environ.getPosix("PEER_REQUEST")) |files| {
+        var each = std.mem.tokenizeScalar(u8, files, ',');
+        while (each.next()) |from| {
+            if (plan.named == wire.max_clients) break;
+            var name: [4096]u8 = undefined;
+            if (from.len >= name.len) {
+                std.debug.print("metal-vmm: a request file's name is too long: {s}\n", .{from});
+                return 2;
+            }
+            @memcpy(name[0..from.len], from);
+            name[from.len] = 0;
+            plan.requests[plan.named] = readAll(name[0..from.len :0], &request_bufs[plan.named]) orelse {
+                std.debug.print("metal-vmm: cannot read the request in {s}\n", .{from});
+                return 2;
+            };
+            plan.named += 1;
+        }
+        if (plan.named > 0) machine.request = plan.requests[0];
     } else if (fetch) |target| {
-        machine.request = std.fmt.bufPrint(&request_buf, "GET {s} HTTP/1.1\r\nHost: 10.0.2.15\r\nConnection: close\r\n\r\n", .{target}) catch null;
+        // A client that asks again keeps the connection; one that asks once
+        // says it will close, as curl's judge does.
+        const close = if (plan.asks > 1) "" else "Connection: close\r\n";
+        machine.request = std.fmt.bufPrint(&request_bufs[0], "GET {s} HTTP/1.1\r\nHost: 10.0.2.15\r\n{s}\r\n", .{ target, close }) catch null;
     }
 
     // **A RUN THAT ENDS BADLY STILL SAYS WHAT WAS DONE TO IT.** The faults
@@ -1348,6 +1373,17 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         const text = std.fmt.bufPrint(&line, "peer: {d} \"{s}\"\n", .{ got.status(), body }) catch
             std.fmt.bufPrint(&line, "peer: {d}, {d} bytes\n", .{ got.status(), body.len }) catch "peer: ?\n";
         _ = linux.write(1, text.ptr, text.len);
+        // **EVERY CLIENT, WHEN THERE IS MORE THAN ONE CONVERSATION**: what it
+        // got, how many answers came whole, and how it ended.
+        if (plan.clients > 1 or plan.asks > 1) {
+            for (0..card.peer.opened) |i| {
+                const c = card.peer.client(i);
+                const each = std.fmt.bufPrint(&line, "peer {d}: {d}, {d} of {d} answers, {d} bytes, {s}\n", .{
+                    i + 1, c.status(), c.answers, c.asks, c.received, @tagName(c.state),
+                }) catch continue;
+                _ = linux.write(1, each.ptr, each.len);
+            }
+        }
     }
     return code;
 }
