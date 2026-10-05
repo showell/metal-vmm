@@ -95,7 +95,7 @@ From the review (`docs/reviews/REVIEW-interrupts.md`), most urgent first:
 14. **The host's time behind the filter, on both machines (D1).** `rdtscp`,
     IA32_TSC, TSC_ADJUST, MPERF/APERF and kvmclock still read the host; the
     microvm half changes check.sh's guests, so it is the box's to merge.
-15. **Ports 0xE0/0xE1 answer only the rewritten instructions, and the
+15. **Done (CC; check.sh first, see Questions).** **Ports 0xE0/0xE1 answer only the rewritten instructions, and the
     deadline marks are counted (D2, D3).** Any `out 0xE1` reaches the APIC's
     MSRs today, and a kernel without marks runs with no timer, silently.
 16. **A halt is not a hang on the PC-shaped machine (P1).** An idle server
@@ -136,6 +136,14 @@ this machine survives.
   damage (`PEER_DAMAGE`), and loss with `PEER_MSS` split (`PEER_EAT=n` of a
   request segment, for "ahead"; with `WIRE_EAT` of the guest's ACK, for
   "from behind").
+
+- **(CC, item 15) Please run check.sh before anything else on this
+  branch.** Ports 0xE0 and 0xE1 now answer only when RIP at the exit is an
+  `out` the loader wrote. That relies on KVM leaving RIP on the `out` itself
+  at a port exit (`kvm_fast_pio_out` records the linear RIP and
+  `complete_fast_pio_out` skips the instruction on the next entry). If it
+  is wrong, no clock read is answered and every probe fails at once,
+  so check.sh shows it immediately.
 
 ## Answers
 

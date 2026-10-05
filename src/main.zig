@@ -117,9 +117,33 @@ const ProgramHeader = extern struct {
 
 /// What a loaded kernel amounts to: where to start it, and how many of its
 /// clock reads this program now answers.
+/// **WHERE THE LOADER PUT ITS PORT WRITES**: the address, as the guest runs
+/// it, of each `out` it wrote in place of a marked instruction. An exit on
+/// its port from anywhere else is the guest's own `out`, to a port nothing
+/// here decodes. (At a port exit, KVM leaves RIP on the `out` itself until
+/// the exit is complete.)
+const Rewritten = struct {
+    at: [1024]u64 = undefined,
+    len: usize = 0,
+
+    fn add(self: *Rewritten, address: u64) LoadError!void {
+        if (self.len == self.at.len) return error.TooManyMarks;
+        self.at[self.len] = address;
+        self.len += 1;
+    }
+
+    fn has(self: *const Rewritten, address: u64) bool {
+        return std.mem.indexOfScalar(u64, self.at[0..self.len], address) != null;
+    }
+};
+
 const Loaded = struct {
     entry: u64,
     clock_reads: usize,
+    /// The `out`s that answer for a marked `rdtsc` and a marked deadline
+    /// `wrmsr`.
+    clocks: Rewritten = .{},
+    deadlines: Rewritten = .{},
     /// **WHERE THE KERNEL'S CODE IS**, which is how a word on the stack can be
     /// told from a return address. Not the loaded image's range: a guest's
     /// stack lives in its own `.bss`, so most of the image is data and every
@@ -185,30 +209,26 @@ fn textRange(image: []const u8, head: *const ElfHeader) struct { lo: u64, hi: u6
 /// one. So gopher-metal marks that one write with `mov $"mvmd", %esi`
 /// (`BE 6D 76 6D 64`), and its `wrmsr` (`0F 30`) becomes `out 0xE1, al`
 /// (`E6 E1`): a port write whose registers say which MSR and what value.
-fn rewriteDeadlineWrites(segment: []u8) usize {
-    const mark = [_]u8{ 0xBE, 'm', 'v', 'm', 'd' };
-    const marked_wrmsr = mark ++ [2]u8{ 0x0F, 0x30 };
-    const out_to_us = [2]u8{ 0xE6, @as(u8, @intCast(msr_port)) };
-    var found: usize = 0;
-    var at: usize = 0;
-    while (std.mem.indexOfPos(u8, segment, at, &marked_wrmsr)) |k| {
-        @memcpy(segment[k + mark.len ..][0..2], &out_to_us);
-        found += 1;
-        at = k + marked_wrmsr.len;
-    }
-    return found;
+fn rewriteDeadlineWrites(segment: []u8, vaddr: u64, into: *Rewritten) LoadError!usize {
+    return rewriteMarked(segment, vaddr, into, .{ 0xBE, 'm', 'v', 'm', 'd' }, .{ 0x0F, 0x30 }, msr_port);
 }
 
-fn rewriteClockReads(segment: []u8) usize {
-    const mark = [_]u8{ 0xB9, 'm', 'v', 'm', 'c' };
-    const marked_rdtsc = mark ++ [2]u8{ 0x0F, 0x31 };
-    const out_to_us = [2]u8{ 0xE6, @as(u8, @intCast(tsc_port)) };
+fn rewriteClockReads(segment: []u8, vaddr: u64, into: *Rewritten) LoadError!usize {
+    return rewriteMarked(segment, vaddr, into, .{ 0xB9, 'm', 'v', 'm', 'c' }, .{ 0x0F, 0x31 }, tsc_port);
+}
+
+/// Every `instruction` right after `mark` in a segment that runs at `vaddr`
+/// becomes `out port, al`, and where it is goes `into` the record.
+fn rewriteMarked(segment: []u8, vaddr: u64, into: *Rewritten, mark: [5]u8, instruction: [2]u8, port: u16) LoadError!usize {
+    const marked = mark ++ instruction;
+    const out_to_us = [2]u8{ 0xE6, @as(u8, @intCast(port)) };
     var found: usize = 0;
     var at: usize = 0;
-    while (std.mem.indexOfPos(u8, segment, at, &marked_rdtsc)) |k| {
+    while (std.mem.indexOfPos(u8, segment, at, &marked)) |k| {
         @memcpy(segment[k + mark.len ..][0..2], &out_to_us);
+        try into.add(vaddr + k + mark.len);
         found += 1;
-        at = k + marked_rdtsc.len;
+        at = k + marked.len;
     }
     return found;
 }
@@ -223,7 +243,7 @@ const NoteHeader = extern struct {
     const phys32_entry: u32 = 18;
 };
 
-const LoadError = error{ NotAnElf, NotX86_64, NoPvhNote, DoesNotFit };
+const LoadError = error{ NotAnElf, NotX86_64, NoPvhNote, DoesNotFit, TooManyMarks };
 
 /// Copies every loadable segment to the physical address it asks for, and
 /// answers the PVH entry point. **A segment is placed by `paddr`, not
@@ -237,6 +257,8 @@ fn load(ram: []u8, image: []const u8) LoadError!Loaded {
 
     var entry: ?u64 = null;
     var clock_reads: usize = 0;
+    var clocks: Rewritten = .{};
+    var deadlines: Rewritten = .{};
     const text = textRange(image, head);
     for (0..head.phnum) |i| {
         const at = head.phoff + i * head.phentsize;
@@ -256,8 +278,8 @@ fn load(ram: []u8, image: []const u8) LoadError!Loaded {
                 // program is going to run guests over and over.
                 @memset(ram[to + in_file ..][0 .. in_memory - in_file], 0);
                 if (ph.flags & ProgramHeader.executable != 0) {
-                    clock_reads += rewriteClockReads(ram[to..][0..in_file]);
-                    _ = rewriteDeadlineWrites(ram[to..][0..in_file]);
+                    clock_reads += try rewriteClockReads(ram[to..][0..in_file], ph.vaddr, &clocks);
+                    _ = try rewriteDeadlineWrites(ram[to..][0..in_file], ph.vaddr, &deadlines);
                 }
             },
             ProgramHeader.note => {
@@ -266,7 +288,14 @@ fn load(ram: []u8, image: []const u8) LoadError!Loaded {
             else => {},
         }
     }
-    return .{ .entry = entry orelse return error.NoPvhNote, .clock_reads = clock_reads, .text_lo = text.lo, .text_hi = text.hi };
+    return .{
+        .entry = entry orelse return error.NoPvhNote,
+        .clock_reads = clock_reads,
+        .clocks = clocks,
+        .deadlines = deadlines,
+        .text_lo = text.lo,
+        .text_hi = text.hi,
+    };
 }
 
 /// The 32-bit entry address out of a PT_NOTE segment, if it names one.
@@ -527,6 +556,9 @@ const Machine = struct {
     halted_ns: u64 = 0,
     /// MSR accesses the filter sent here.
     msrs: u64 = 0,
+    /// The `out`s the loader wrote: the only ones `tsc_port` and `msr_port`
+    /// answer.
+    rewritten: struct { clocks: Rewritten = .{}, deadlines: Rewritten = .{} } = .{},
     /// **EXITS SINCE THE GUEST LAST DID ANYTHING.** A character printed or a
     /// device doorbell rung is progress; reading the clock and polling memory
     /// is not. A machine whose time is its guest's curiosity can count a hang
@@ -651,12 +683,10 @@ fn writeLittle(data: []u8, value: u64) void {
 /// `tsc_port` when it was loaded, and that instruction's whole effect is to
 /// put a 64-bit count in EDX:EAX — so that is what this does, leaving every
 /// other register exactly as the guest left it.
-fn answerClock(vcpu: linux.fd_t, ticks: u64) !void {
-    var regs: kvm.Regs = undefined;
-    _ = try kvm.call(vcpu, kvm.get_regs, @intFromPtr(&regs));
+fn answerClock(vcpu: linux.fd_t, regs: *kvm.Regs, ticks: u64) !void {
     regs.rax = ticks & 0xFFFFFFFF;
     regs.rdx = ticks >> 32;
-    _ = try kvm.call(vcpu, kvm.set_regs, @intFromPtr(&regs));
+    _ = try kvm.call(vcpu, kvm.set_regs, @intFromPtr(regs));
 }
 
 /// **THE GUEST HALTED (`sti; hlt`), SO TIME GOES STRAIGHT TO WHAT WAKES IT.**
@@ -784,16 +814,20 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
                 const io = kvm.ioExit(page);
                 const data = kvm.ioData(page, io);
                 if (io.direction == kvm.io_out) {
-                    if (io.port == tsc_port) {
-                        try answerClock(vcpu, machine.time.ticks());
-                        continue;
-                    }
-                    if (io.port == msr_port) {
+                    // **ONLY THE LOADER'S OWN `out`s ARE QUESTIONS.** Any
+                    // other write to these ports is the guest's, to nothing.
+                    if (io.port == tsc_port or io.port == msr_port) {
                         var regs: kvm.Regs = undefined;
                         _ = try kvm.call(vcpu, kvm.get_regs, @intFromPtr(&regs));
-                        machine.msrs += 1;
-                        _ = machine.lapic.writeMsr(@truncate(regs.rcx), (regs.rdx << 32) | (regs.rax & 0xFFFF_FFFF), machine.time.ns);
-                        continue;
+                        if (io.port == tsc_port and machine.rewritten.clocks.has(regs.rip)) {
+                            try answerClock(vcpu, &regs, machine.time.ticks());
+                            continue;
+                        }
+                        if (io.port == msr_port and machine.rewritten.deadlines.has(regs.rip)) {
+                            machine.msrs += 1;
+                            _ = machine.lapic.writeMsr(@truncate(regs.rcx), (regs.rdx << 32) | (regs.rax & 0xFFFF_FFFF), machine.time.ns);
+                            continue;
+                        }
                     }
                     machine.out(io.port, data);
                     if (machine.stopped) |code| return code;
@@ -1081,7 +1115,14 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // **THE DEVICES GO IN THE FIRST SLOTS**, which is not what QEMU does (it
     // fills from the top) and does not matter: the guest scans every slot and
     // takes the first of the kind it wants.
-    var machine = Machine{ .ram = ram };
+    var machine = Machine{ .ram = ram, .rewritten = .{ .clocks = loaded.clocks, .deadlines = loaded.deadlines } };
+    // **A KERNEL THAT MARKS NO DEADLINE** writes IA32_TSC_DEADLINE where
+    // this machine's APIC never hears it, and its every rest waits for a
+    // frame instead of its timer. Said once, at the start, rather than found
+    // as a run that ends early.
+    if (pc and loaded.deadlines.len == 0) {
+        std.debug.print("metal-vmm: this kernel marks no deadline write (mov $\"mvmd\", %esi before wrmsr), so on TRANSPORT=pci no APIC timer it arms is heard\n", .{});
+    }
     var block: virtio.Block = undefined;
     var block_device: virtio.Device = undefined;
     var drive: ?disk.Disk = null;
@@ -1282,6 +1323,10 @@ test "every marked rdtsc in the guest's text becomes a question for us" {
 
     const loaded = try load(ram, image);
     try testing.expectEqual(@as(usize, 2), loaded.clock_reads);
+    // Where each `out` the loader wrote is, as the guest runs it: only these
+    // are questions for us.
+    try testing.expectEqualSlices(u64, &.{ 0x100000 + 5, 0x100000 + 21 }, loaded.clocks.at[0..loaded.clocks.len]);
+    try testing.expect(!loaded.clocks.has(0x100000 + 7)); // the unmarked 0F 31 stays itself
     const want = m ++ "\xe6\xe0" ++ "\x0f\x31" ++ m ++ "\x0f\x30" ++ m ++ "\xe6\xe0";
     try testing.expectEqualSlices(u8, want, ram[0x100000..][0..body.len]);
 }
@@ -1449,4 +1494,18 @@ test "a halt with interrupts off stops the machine, whatever is waiting" {
     // Nothing was taken, and the clock was not asked to move.
     try testing.expect(a.irr.isSet(0x40));
     try testing.expect(a.isr.findFirstSet() == null);
+}
+
+test "a marked deadline write becomes a port write, and its place is recorded" {
+    var file: [512]u8 align(8) = undefined;
+    const d = "\xbemvmd";
+    const body = "\x90" ++ d ++ "\x0f\x30" ++ "\x0f\x30";
+    const image = fakeKernel(&file, 0x100000, 0x100000, body);
+    const ram = try testing.allocator.alloc(u8, 0x101000);
+    defer testing.allocator.free(ram);
+    @memset(ram, 0);
+    const loaded = try load(ram, image);
+    try testing.expectEqualSlices(u8, "\x90" ++ d ++ "\xe6\xe1" ++ "\x0f\x30", ram[0x100000..][0..body.len]);
+    try testing.expectEqualSlices(u64, &.{0x100000 + 6}, loaded.deadlines.at[0..loaded.deadlines.len]);
+    try testing.expectEqual(@as(usize, 0), loaded.clocks.len);
 }
