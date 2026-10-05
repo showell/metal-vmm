@@ -41,6 +41,7 @@ const disk = @import("disk.zig");
 const faults = @import("faults.zig");
 const wire = @import("peer.zig");
 const apic = @import("apic.zig");
+const cost = @import("cost.zig");
 const coverage = @import("coverage.zig");
 const knobs = @import("knobs.zig");
 const pci = @import("pci.zig");
@@ -308,6 +309,8 @@ pub const Machine = struct {
     msrs: u64 = 0,
     /// Exits so far: with the time, when something happened.
     exits: u64 = 0,
+    /// What the run has cost, in exits and the guest's time (cost.zig).
+    cost: cost.Cost = .{},
     /// The disk's faults, watched for a power cut.
     drive: ?*const faults.Drive = null,
     /// **THE SERIAL PORT READS THE GUEST'S COVERAGE LINES** (coverage.zig),
@@ -574,7 +577,20 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
             report(vcpu, machine.ram, text);
             return error.GuestStuck;
         }
-        switch (@as(kvm.Exit, @enumFromInt(run.exit_reason))) {
+        const exit_reason: kvm.Exit = @enumFromInt(run.exit_reason);
+        machine.cost.exit(switch (exit_reason) {
+            .io => io: {
+                const io = kvm.ioExit(page);
+                if (io.direction == kvm.io_out and io.port == tsc_port) break :io .clock;
+                if (io.direction == kvm.io_out and io.port == msr_port) break :io .msr;
+                break :io .port;
+            },
+            .mmio => .mmio,
+            .rdmsr, .wrmsr => .msr,
+            .hlt => .halt,
+            else => .other,
+        });
+        switch (exit_reason) {
             .io => {
                 const io = kvm.ioExit(page);
                 const data = kvm.ioData(page, io);
@@ -606,7 +622,10 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
             },
             .hlt => {
                 if (machine.bus == null) return machine.stopped orelse 0;
-                switch (try rest(vcpu, run, machine)) {
+                const halted_at = machine.time.ns;
+                const rested = try rest(vcpu, run, machine);
+                machine.cost.halted(machine.time.ns - halted_at);
+                switch (rested) {
                     .woken => if (machine.rested()) {
                         std.debug.print("metal-vmm: the guest has rested {d} s of its own time with nothing printed and no doorbell rung: idle, so the run ends\n", .{(machine.time.ns - machine.progress_ns) / std.time.ns_per_s});
                         return error.GuestIdle;
@@ -771,7 +790,9 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     if (pc and loaded.deadlines.len == 0) {
         std.debug.print("metal-vmm: this kernel marks no deadline write (mov $\"mvmd\", %esi before wrmsr), so on TRANSPORT=pci no APIC timer it arms is heard\n", .{});
     }
-    var block: virtio.Block = undefined;
+    // A run with no disk still has a disk's faults to set and report: none,
+    // on a block device with nothing behind it, never memory left undefined.
+    var block: virtio.Block = .{ .image = &.{} };
     var block_device: virtio.Device = undefined;
     var drive: ?disk.Disk = null;
     if (disk_path) |on_disk| {
@@ -883,6 +904,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // they are reported before the error goes anywhere.
     const code = serve(vcpu, page, &machine, .{ .lo = loaded.text_lo, .hi = loaded.text_hi }) catch |e| {
         reportRun(&card, &block, machine.time.ns);
+        reports.cost(&machine, &card, &block);
         reportCoverage(&machine);
         return e;
     };
@@ -891,6 +913,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // stays comparable with QEMU's.
     reportRun(&card, &block, machine.time.ns);
     if (pc) reportRest(&machine);
+    reports.cost(&machine, &card, &block);
     reportCoverage(&machine);
     // **THE FILE LEARNS WHAT HAPPENED ONLY NOW**, and only the sectors the
     // guest actually wrote. A run that never gets here leaves the image as it
@@ -957,6 +980,7 @@ test {
     _ = @import("fuzz.zig");
     _ = @import("determinism.zig");
     _ = @import("snapshot.zig");
+    _ = @import("cost.zig");
     _ = @import("settings.zig");
     _ = @import("reports.zig");
     _ = @import("loader.zig");

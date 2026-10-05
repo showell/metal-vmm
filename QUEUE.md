@@ -213,7 +213,7 @@ bottom.
     uninterrupted run did. The vCPU's registers and guest memory are the
     box's half (KVM_GET_REGS and friends); write down under Questions what
     the box would need to call, and do not guess at the ioctls.
-31. **What a run cost, in the guest's time.** The box measures wall time;
+31. **Done (CC, `cost.zig`; `check.sh` now drops the cost line, which QEMU has no counterpart to).** **What a run cost, in the guest's time.** The box measures wall time;
     an explorer will care about guest time and exits. End every run that
     did anything with one line on stderr: exits by kind (port, mmio, MSR,
     halt), guest nanoseconds, frames each way, disk requests, and the

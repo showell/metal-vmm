@@ -238,10 +238,12 @@ round trip is longer than the table's least timeout.
   and the marked instructions rewritten), `src/processor.zig` (CPUID and the
   MSRs this program answers), `src/halt.zig` (what wakes a halted guest),
   `src/settings.zig` (the knobs, into the faults; `src/knobs.zig` for a
-  seed's), and `src/reports.zig` (what a run says at its end).
+  seed's), `src/reports.zig` (what a run says at its end) and `src/cost.zig`
+  (what it cost, in exits and guest time).
 - `src/coverage.zig` — the guest's coverage lines, one run's and many runs'.
 - `src/fuzz.zig` — every model above under seeded guest input;
-  `src/determinism.zig` — the first rule, checked.
+  `src/determinism.zig` — the first rule, checked; `src/snapshot.zig` —
+  every model's state, saved and restored in place.
 
 `zig build test` checks the parts that need no processor: the ELF loader, the
 note parsing, the devices' answers, and a fake guest that drives the block

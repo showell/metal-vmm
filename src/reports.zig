@@ -144,3 +144,16 @@ pub fn pickedWord(what: []const u8) []const u8 {
     if (std.mem.eql(u8, what, "peer damage")) return "damaged";
     return "refused";
 }
+
+/// **WHAT THE RUN COST** (cost.zig), the line before the coverage's: exits by
+/// kind, the guest's time, the longest halt, frames each way, disk requests.
+pub fn cost(machine: *const Machine, card: *const net.Net, block: *const virtio.Block) void {
+    var buf: [256]u8 = undefined;
+    const line = machine.cost.line(&buf, .{
+        .guest_ns = machine.time.ns,
+        .frames_out = card.sent,
+        .frames_in = card.received,
+        .disk_requests = block.reads + block.writes,
+    }) orelse return;
+    std.debug.print("{s}", .{line});
+}
