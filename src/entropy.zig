@@ -32,7 +32,7 @@ pub const Entropy = struct {
     /// to it comes back filled with however many bytes the host had ready.
     /// Ours is always ready.
     pub fn device(self: *Entropy) virtio.Device {
-        return .{ .id = virtio.device_id_entropy, .context = self, .notified = notified };
+        return .{ .id = virtio.device_id_entropy, .context = self, .notified = notified, .queue_count = 1 };
     }
 
     fn notified(context: *anyopaque, d: *virtio.Device, ram: []u8, queue: u32) void {

@@ -141,6 +141,9 @@ pub const Device = struct {
     /// Two is enough for both devices here: a block device's one, and a
     /// network device's receive and transmit.
     queues: [2]Queue = .{ .{}, .{} },
+    /// How many of them this kind of device serves: what virtio-pci's
+    /// `num_queues` says, and past which a queue reads as absent.
+    queue_count: u32 = 2,
 
     /// How many requests it has served, for a host that wants to say what a
     /// guest actually asked of it.
@@ -339,7 +342,7 @@ pub const Block = struct {
     };
 
     pub fn device(self: *Block) Device {
-        var d = Device{ .id = device_id_block, .context = self, .notified = notified };
+        var d = Device{ .id = device_id_block, .context = self, .notified = notified, .queue_count = 1 };
         // Config space: the capacity in sectors, at offset 0.
         std.mem.writeInt(u64, d.config[0..8], self.image.len / sector_bytes, .little);
         return d;

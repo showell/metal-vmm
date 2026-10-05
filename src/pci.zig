@@ -216,7 +216,7 @@ pub const Function = struct {
         if (offset < common_at + common_len) return self.commonWrite(ram, offset, len, value);
         if (offset >= notify_at and offset < notify_at + notify_len) {
             const queue: u32 = @intCast((offset - notify_at) / notify_multiplier);
-            if (queue < self.device.queues.len) self.device.notified(self.device.context, self.device, ram, queue);
+            if (queue < self.device.queue_count) self.device.notified(self.device.context, self.device, ram, queue);
             return;
         }
         // **A QWORD IS TWO DWORDS, LOW FIRST** (§6.8.2: software uses aligned
@@ -273,8 +273,6 @@ pub const Function = struct {
     /// The common configuration (virtio §4.1.4.3), each field at its width.
     fn commonRead(self: *Function, offset: u64, len: u32) u64 {
         const d = self.device;
-        const q = &d.queues[@min(d.queue_sel, d.queues.len - 1)];
-        const sel = @min(d.queue_sel, d.queues.len - 1);
         var image: [common_len]u8 = @splat(0);
         std.mem.writeInt(u32, image[0x00..0x04], d.device_features_sel, .little);
         std.mem.writeInt(u32, image[0x04..0x08], switch (d.device_features_sel) {
@@ -284,17 +282,23 @@ pub const Function = struct {
         }, .little);
         std.mem.writeInt(u32, image[0x08..0x0C], d.driver_features_sel, .little);
         std.mem.writeInt(u16, image[0x10..0x12], self.msix_config, .little);
-        std.mem.writeInt(u16, image[0x12..0x14], @intCast(d.queues.len), .little);
+        std.mem.writeInt(u16, image[0x12..0x14], @intCast(d.queue_count), .little);
         image[0x14] = @truncate(d.status);
         std.mem.writeInt(u16, image[0x16..0x18], @truncate(d.queue_sel), .little);
-        // Zero would be "no such queue"; the maximum until the driver picks.
-        std.mem.writeInt(u16, image[0x18..0x1A], @intCast(if (q.size != 0) q.size else virtio.queue_max), .little);
-        std.mem.writeInt(u16, image[0x1A..0x1C], self.queue_vector[sel], .little);
-        std.mem.writeInt(u16, image[0x1C..0x1E], @truncate(q.ready), .little);
-        std.mem.writeInt(u16, image[0x1E..0x20], @intCast(sel), .little);
-        std.mem.writeInt(u64, image[0x20..0x28], q.desc, .little);
-        std.mem.writeInt(u64, image[0x28..0x30], q.avail, .little);
-        std.mem.writeInt(u64, image[0x30..0x38], q.used, .little);
+        // **A QUEUE THAT IS NOT THERE READS AS ZERO** (§4.1.4.3.2), with no
+        // vector; a queue that is reads its size, the maximum until the
+        // driver picks.
+        std.mem.writeInt(u16, image[0x1A..0x1C], no_vector, .little);
+        if (self.selectedQueue()) |sel| {
+            const q = &d.queues[sel];
+            std.mem.writeInt(u16, image[0x18..0x1A], @intCast(if (q.size != 0) q.size else virtio.queue_max), .little);
+            std.mem.writeInt(u16, image[0x1A..0x1C], self.queue_vector[sel], .little);
+            std.mem.writeInt(u16, image[0x1C..0x1E], @truncate(q.ready), .little);
+            std.mem.writeInt(u16, image[0x1E..0x20], @intCast(sel), .little);
+            std.mem.writeInt(u64, image[0x20..0x28], q.desc, .little);
+            std.mem.writeInt(u64, image[0x28..0x30], q.avail, .little);
+            std.mem.writeInt(u64, image[0x30..0x38], q.used, .little);
+        }
         const at: usize = @intCast(offset);
         var value: u64 = 0;
         for (0..@min(len, common_len - at)) |i| value |= @as(u64, image[at + i]) << @intCast(i * 8);
@@ -333,11 +337,34 @@ pub const Function = struct {
     }
 
     /// One whole field of the common configuration, written.
+    /// The queue `queue_select` names, if the device serves one by that
+    /// number.
+    fn selectedQueue(self: *const Function) ?usize {
+        const d = self.device;
+        return if (d.queue_sel < d.queue_count) d.queue_sel else null;
+    }
+
     fn commonField(self: *Function, ram: []u8, offset: u64, value: u64) void {
         const d = self.device;
-        const sel = @min(d.queue_sel, d.queues.len - 1);
-        const q = &d.queues[sel];
         const v32: u32 = @truncate(value);
+        // What is written to a queue that is not there goes nowhere.
+        if (offset >= 0x18 and offset != 0x1E) {
+            const sel = self.selectedQueue() orelse return;
+            const q = &d.queues[sel];
+            switch (offset) {
+                0x18 => q.size = v32 & 0xFFFF,
+                0x1A => self.queue_vector[sel] = entryOrNone(v32),
+                0x1C => q.ready = v32 & 0xFFFF,
+                0x20 => q.desc = (q.desc & 0xFFFF_FFFF_0000_0000) | (value & 0xFFFF_FFFF),
+                0x24 => q.desc = (q.desc & 0xFFFF_FFFF) | (value << 32),
+                0x28 => q.avail = (q.avail & 0xFFFF_FFFF_0000_0000) | (value & 0xFFFF_FFFF),
+                0x2C => q.avail = (q.avail & 0xFFFF_FFFF) | (value << 32),
+                0x30 => q.used = (q.used & 0xFFFF_FFFF_0000_0000) | (value & 0xFFFF_FFFF),
+                0x34 => q.used = (q.used & 0xFFFF_FFFF) | (value << 32),
+                else => {},
+            }
+            return;
+        }
         switch (offset) {
             0x00 => d.device_features_sel = v32,
             0x08 => d.driver_features_sel = v32,
@@ -356,15 +383,6 @@ pub const Function = struct {
                 } else d.write(ram, 0x070, v32 & 0xFF);
             },
             0x16 => d.queue_sel = v32 & 0xFFFF,
-            0x18 => q.size = v32 & 0xFFFF,
-            0x1A => self.queue_vector[sel] = entryOrNone(v32),
-            0x1C => q.ready = v32 & 0xFFFF,
-            0x20 => q.desc = (q.desc & 0xFFFF_FFFF_0000_0000) | (value & 0xFFFF_FFFF),
-            0x24 => q.desc = (q.desc & 0xFFFF_FFFF) | (value << 32),
-            0x28 => q.avail = (q.avail & 0xFFFF_FFFF_0000_0000) | (value & 0xFFFF_FFFF),
-            0x2C => q.avail = (q.avail & 0xFFFF_FFFF) | (value << 32),
-            0x30 => q.used = (q.used & 0xFFFF_FFFF_0000_0000) | (value & 0xFFFF_FFFF),
-            0x34 => q.used = (q.used & 0xFFFF_FFFF) | (value << 32),
             else => {},
         }
     }
@@ -1505,4 +1523,29 @@ test "the common configuration at other widths: a 64-bit address in one store, a
     // The read-only ones stay as they were.
     try g.store(u16, f.common + 0x12, 99);
     try testing.expectEqual(@as(u16, 2), try g.load(u16, f.common + 0x12));
+}
+
+test "a queue the device does not serve reads as absent, and takes no writes" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    // virtio-rng serves one queue, virtio-net two (virtio 1.2 §5.4.2, §5.1.2).
+    const rng = g.open(3).?;
+    const card = g.open(2).?;
+    try testing.expectEqual(@as(u16, 1), try g.load(u16, rng.common + 0x12));
+    try testing.expectEqual(@as(u16, 2), try g.load(u16, card.common + 0x12));
+    try g.store(u16, rng.common + 0x16, 1);
+    try testing.expectEqual(@as(u16, 1), try g.load(u16, rng.common + 0x16)); // as written
+    try testing.expectEqual(@as(u16, 0), try g.load(u16, rng.common + 0x18)); // §4.1.4.3.2
+    try g.store(u16, rng.common + 0x18, 16);
+    try g.store(u64, rng.common + 0x20, 0x1234_5000);
+    try g.store(u16, rng.common + 0x1C, 1);
+    try testing.expectEqual(@as(u32, 0), m.dice_device.queues[1].size);
+    try testing.expectEqual(@as(u64, 0), m.dice_device.queues[1].desc);
+    try testing.expectEqual(@as(u32, 0), m.dice_device.queues[1].ready);
+    try testing.expectEqual(@as(u64, 0), try g.load(u64, rng.common + 0x20));
+    try testing.expectEqual(no_vector, try g.load(u16, rng.common + 0x1A));
+    // Selecting queue 0 again, it is as it was.
+    try g.store(u16, rng.common + 0x16, 0);
+    try testing.expectEqual(@as(u16, virtio.queue_max), try g.load(u16, rng.common + 0x18));
 }

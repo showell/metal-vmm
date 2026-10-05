@@ -89,7 +89,7 @@ From the review (`docs/reviews/REVIEW-interrupts.md`), most urgent first:
 12. **Done (CC; the MSI-X half in item 4).** **BAR accesses split into aligned dwords (M3).** A QWORD unmask of an
     MSI-X entry leaves it masked; a QWORD `queue_desc` write keeps the stale
     high half. The MSI-X half folds into item 4.
-13. **Queues that do not exist read as absent (M5).** A `queue_select` past
+13. **Done (CC).** **Queues that do not exist read as absent (M5).** A `queue_select` past
     the last aliases the last queue, and `num_queues` is 2 for one-queue
     devices; virtio 1.2 §4.1.4.3.2 requires `queue_size` 0.
 14. **The host's time behind the filter, on both machines (D1).** `rdtscp`,
