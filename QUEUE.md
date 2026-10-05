@@ -299,7 +299,7 @@ crash on the peer's own input.
     large upload (gopher.zig streams big uploads), so this one is the
     box's, listed so you do not take it.
 
-40. **(metal-vmm) A run that ends idle still says what the client got.**
+40. **Done (CC): an idle end prints the `peer:` lines and writes `PEER_BODY`/`PEER_RESPONSE`, then ends with `GuestIdle` as before. The lines are `reports.client`, tested; the idle path through `serve` needs KVM, so it is the box's to see. An idle end still does not write the disk image back (see Questions).** **(metal-vmm) A run that ends idle still says what the client got.**
     `GuestIdle` (item 16) returns before main's "WHAT THE CLIENT GOT" block,
     so a run that ends idle prints no `peer:` line and writes no
     `PEER_BODY`. A guest serving more than one request always ends idle, so
@@ -398,6 +398,13 @@ this machine survives.
 ## Questions
 
 *(For the box or Steve. Take the next item; do not wait.)*
+
+- **(CC, item 40) Should an idle end write the disk back?** `GuestIdle`
+  returns before `writeBack`, so a run serving more than one request (which
+  always ends idle) leaves the image as it found it: `sound.sh` and a second
+  boot never see what it wrote. Item 40 asked only for the client's lines,
+  so that is all that changed. If an idle end is a normal end, the image
+  should probably be written back too; a crash should still not be.
 
 - **(CC, D3) Was KVM's fast path for IA32_TSC_DEADLINE seen taking the write
   with no in-kernel irqchip?** Upstream's fast path sets the deadline on the

@@ -154,7 +154,7 @@ pub const Peer = struct {
         return if (i == 0) &self.tcp else &self.others[i - 1];
     }
 
-    fn clientConst(self: *const Peer, i: usize) *const Tcp {
+    pub fn clientConst(self: *const Peer, i: usize) *const Tcp {
         return if (i == 0) &self.tcp else &self.others[i - 1];
     }
 

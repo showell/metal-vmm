@@ -693,6 +693,22 @@ fn readAll(path: [:0]const u8, into: []u8) ?[]const u8 {
 
 /// What the client got, for a caller that wants to diff it against another
 /// client's.
+/// **WHAT THE CLIENT GOT, IN ONE LINE** on stdout, so a run here can be
+/// compared with a run under QEMU where curl says the same thing; and its
+/// body and whole answer to files, when asked (`PEER_BODY`, `PEER_RESPONSE`).
+/// See `reports.client`.
+fn theClient(environ: std.process.Environ, peer: *const wire.Peer) void {
+    // **A REAL PAGE DOES NOT FIT ON A LINE.** The probes answer with a
+    // sentence and the line is compared against curl's; a guest serving an
+    // actual site answers with kilobytes, so the body goes to a file when one
+    // is asked for and the line says how much there was.
+    if (environ.getPosix("PEER_BODY")) |into| writeOut(into, peer.tcp.body());
+    if (environ.getPosix("PEER_RESPONSE")) |into| writeOut(into, peer.tcp.whole());
+    var buf: [4096]u8 = undefined;
+    const text = reports.client(peer, &buf);
+    _ = linux.write(1, text.ptr, text.len);
+}
+
 fn writeOut(path: [:0]const u8, bytes: []const u8) void {
     const opened = linux.open(path.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
     if (linux.errno(opened) != .SUCCESS) return;
@@ -906,6 +922,10 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         reportRun(&card, &block, machine.time.ns);
         reports.cost(&machine, &card, &block);
         reportCoverage(&machine);
+        // **AN IDLE END IS A SERVER'S NORMAL END**: a guest serving more than
+        // one request always ends this way, so it says what the client got
+        // as any end does. The error, and so the exit code, still says idle.
+        if (e == error.GuestIdle and fetch != null) theClient(init.environ, &card.peer);
         return e;
     };
     // **WHAT THE WIRE DID, IF IT WAS ASKED TO DO ANYTHING**, on the error
@@ -924,36 +944,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
             return 1;
         };
     }
-    // **WHAT THE CLIENT GOT, IN ONE LINE**, so a run here can be compared with
-    // a run under QEMU where curl says the same thing.
-    if (fetch != null) {
-        const got = card.fetched();
-        // **A REAL PAGE DOES NOT FIT ON A LINE.** The probes answer with a
-        // sentence and the line below is compared against curl's; a guest
-        // serving an actual site answers with kilobytes, so the body goes to a
-        // file when one is asked for (`PEER_BODY=/path`) and the line says how
-        // much there was.
-        if (init.environ.getPosix("PEER_BODY")) |into| writeOut(into, got.body());
-        if (init.environ.getPosix("PEER_RESPONSE")) |into| writeOut(into, got.whole());
-        var line: [512]u8 = undefined;
-        // Trailing newlines are trimmed because the shell trims them too, and
-        // this line is compared against one built from curl's output.
-        const body = std.mem.trimEnd(u8, got.body(), "\r\n");
-        const text = std.fmt.bufPrint(&line, "peer: {d} \"{s}\"\n", .{ got.status(), body }) catch
-            std.fmt.bufPrint(&line, "peer: {d}, {d} bytes\n", .{ got.status(), body.len }) catch "peer: ?\n";
-        _ = linux.write(1, text.ptr, text.len);
-        // **EVERY CLIENT, WHEN THERE IS MORE THAN ONE CONVERSATION**: what it
-        // got, how many answers came whole, and how it ended.
-        if (plan.clients > 1 or plan.asks > 1) {
-            for (0..card.peer.opened) |i| {
-                const c = card.peer.client(i);
-                const each = std.fmt.bufPrint(&line, "peer {d}: {d}, {d} of {d} answers, {d} bytes, {s}\n", .{
-                    i + 1, c.status(), c.answers, c.asks, c.received, @tagName(c.state),
-                }) catch continue;
-                _ = linux.write(1, each.ptr, each.len);
-            }
-        }
-    }
+    if (fetch != null) theClient(init.environ, &card.peer);
     return code;
 }
 

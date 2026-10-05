@@ -106,6 +106,61 @@ pub fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void
     std.debug.print("{s}", .{unspent(&card.line, &card.peer, &block.refusals, &buf)});
 }
 
+/// **WHAT THE CLIENT GOT**, as main prints it on stdout at any end that is
+/// not a crash: the first client's status and body on one line, or its size
+/// when the line would pass 512 bytes; and, when there is more than one
+/// conversation, a line for every client: what it got, how many answers came
+/// whole, and how it ended.
+pub fn client(peer: *const wire.Peer, buf: []u8) []const u8 {
+    const got = &peer.tcp;
+    // Trailing newlines are trimmed because the shell trims them too, and
+    // this line is compared against one built from curl's output.
+    const body = std.mem.trimEnd(u8, got.body(), "\r\n");
+    var at: usize = 0;
+    const first = buf[0..@min(buf.len, 512)];
+    const text = std.fmt.bufPrint(first, "peer: {d} \"{s}\"\n", .{ got.status(), body }) catch
+        std.fmt.bufPrint(first, "peer: {d}, {d} bytes\n", .{ got.status(), body.len }) catch return "peer: ?\n";
+    at = text.len;
+    if (peer.plan.clients > 1 or peer.plan.asks > 1) {
+        for (0..peer.opened) |i| {
+            const c = peer.clientConst(i);
+            const each = std.fmt.bufPrint(buf[at..], "peer {d}: {d}, {d} of {d} answers, {d} bytes, {s}\n", .{
+                i + 1, c.status(), c.answers, c.asks, c.received, @tagName(c.state),
+            }) catch break;
+            at += each.len;
+        }
+    }
+    return buf[0..at];
+}
+
+test "what the client got: one line, or its size, and a line a client when there are several" {
+    var buf: [4096]u8 = undefined;
+    var peer = wire.Peer{};
+    const answer = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello\r\n";
+    @memcpy(peer.tcp.reply[0..answer.len], answer);
+    peer.tcp.reply_len = answer.len;
+    try testing.expectEqualStrings("peer: 200 \"hello\"\n", client(&peer, &buf));
+    // A page that does not fit on the line says how big it was.
+    const head = "HTTP/1.1 200 OK\r\n\r\n";
+    @memcpy(peer.tcp.reply[0..head.len], head);
+    @memset(peer.tcp.reply[head.len..][0..600], 'x');
+    peer.tcp.reply_len = head.len + 600;
+    try testing.expectEqualStrings("peer: 200, 600 bytes\n", client(&peer, &buf));
+    // Two clients, the second still reading.
+    peer.plan.clients = 2;
+    peer.opened = 2;
+    peer.tcp.state = .done;
+    peer.tcp.answers = 1;
+    peer.tcp.received = 618;
+    peer.others[0].state = .established;
+    try testing.expectEqualStrings(
+        \\peer: 200, 600 bytes
+        \\peer 1: 200, 1 of 1 answers, 618 bytes, done
+        \\peer 2: 0, 0 of 1 answers, 0 bytes, established
+        \\
+    , client(&peer, &buf));
+}
+
 /// **A KNOB WHOSE MOMENT NEVER CAME SAYS SO**, one line each: a frame or a
 /// request named past the last there was, a reset due when there was no
 /// connection to reset, a vanish or a shut past the whole answer, a flood or
