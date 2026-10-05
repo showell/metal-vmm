@@ -105,6 +105,23 @@ bottom.
     what the long tier needs to reach the slot table and the streams on the
     real kernel.
 
+21. **A flood that can fill the guest's table.** gopher.zig holds 256
+    connections (`max_connections`, 16 KiB to receive and 64 KiB to send
+    each), and "a stuck half-open connection gives way to a new SYN" is
+    reached only by a SYN that finds every slot taken. `PEER_FLOOD` stops at
+    32 (`main.zig`'s `@min(n, 32)`, `Peer.flooded: u8`, one address per SYN
+    from 198.51.100.1 up), so the real kernel cannot get there. Let a flood
+    run to at least 1024 SYNs, from as many distinct (address, port) pairs
+    as it takes (TEST-NET-2 has 254 hosts; vary the port too), and let it
+    begin late (`PEER_FLOOD_AT_US`) so a real client can hold a slot first:
+    the property's other half is that the stuck half-open gives way, not the
+    client's live connection. Keep `FAULT_SEED`'s range for the flood as it
+    is unless you see a reason; a seeded run of 1024 SYNs is a different
+    kind of run. Unit tests with the peer driven by hand, as item 7's, and
+    one that a client opened before the flood still gets its whole answer
+    in a model of the guest's table (`tcp_sim: a client that stayed through
+    a flood got its whole answer` is the simulator's version).
+
 ## Proposed
 
 *(CC adds items here, one line each on why.)*
