@@ -102,6 +102,111 @@ pub fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void
         var buf: [512]u8 = undefined;
         std.debug.print("{s}", .{badSectors(&block.refusals, &buf)});
     }
+    var buf: [2048]u8 = undefined;
+    std.debug.print("{s}", .{unspent(&card.line, &card.peer, &block.refusals, &buf)});
+}
+
+/// **A KNOB WHOSE MOMENT NEVER CAME SAYS SO**, one line each: a frame or a
+/// request named past the last there was, a reset due when there was no
+/// connection to reset, a vanish or a shut past the whole answer, a flood or
+/// a power cut the run ended before. Without this such a run looks like the
+/// fault happened and changed nothing. Empty when every knob was spent.
+pub fn unspent(line: *const faults.Wire, peer: *const wire.Peer, drive: *const faults.Drive, buf: []u8) []const u8 {
+    var at: usize = 0;
+    const w = struct {
+        fn f(b: []u8, i: *usize, comptime fmt: []const u8, args: anytype) void {
+            const out = std.fmt.bufPrint(b[i.*..], "metal-vmm: " ++ fmt ++ "\n", args) catch return;
+            i.* += out.len;
+        }
+    }.f;
+    const named = [_]struct { name: []const u8, s: *const faults.Schedule, of: []const u8 }{
+        .{ .name = "WIRE_EAT", .s = &line.lost, .of = "the guest sent" },
+        .{ .name = "PEER_EAT", .s = &line.peer_lost, .of = "the peer sent" },
+        .{ .name = "PEER_DAMAGE", .s = &line.peer_damaged, .of = "the peer sent" },
+        .{ .name = "DISK_REFUSE", .s = &drive.refused, .of = if (drive.writes_only) "the guest wrote" else if (drive.reads_only) "the guest read" else "the guest made" },
+    };
+    for (named) |n| for (n.s.named) |k| {
+        if (k != 0 and k > n.s.seen) w(buf, &at, "{s} #{d} never came: {s} {d}", .{
+            n.name, k, n.of, n.s.seen,
+        });
+    };
+
+    const c = &peer.tcp;
+    const r = &peer.rough;
+    if (r.reset_after_ns) |ns| if (c.state != .reset) {
+        if (c.state == .idle) {
+            w(buf, &at, "PEER_RESET_AT={d} came to nothing: the client never opened", .{ns / std.time.ns_per_us});
+        } else if (c.reset_past) {
+            w(buf, &at, "PEER_RESET_AT={d} fell when the connection was not open ({s}); no reset sent", .{ ns / std.time.ns_per_us, @tagName(c.state) });
+        } else {
+            w(buf, &at, "PEER_RESET_AT={d} never came: the run ended first", .{ns / std.time.ns_per_us});
+        }
+    };
+    if (r.vanish_after) |n| if (c.state != .gone) {
+        w(buf, &at, "PEER_VANISH_AFTER={d} never came: the client had {d} bytes of the answer", .{ n, c.reply_len });
+    };
+    if (r.shut_after) |n| if (!c.shut_ever) {
+        w(buf, &at, "PEER_SHUT_AFTER={d} never came: the client had {d} bytes of the answer", .{ n, c.reply_len });
+    };
+    if (peer.flooded < @min(r.flood, wire.max_flood)) {
+        w(buf, &at, "PEER_FLOOD={d}: only {d} of its SYNs were sent before the run ended", .{ r.flood, peer.flooded });
+    }
+    if (drive.cut_after) |n| if (drive.cut == null) {
+        w(buf, &at, "DISK_CUT_AFTER={d} never came: the guest wrote {d} times", .{ n, drive.writes });
+    };
+    if (drive.tear) |n| if (drive.cut == null) {
+        w(buf, &at, "DISK_TEAR={d} never came: the guest made {d} writes of more than one sector", .{ n, drive.multi_writes });
+    };
+    return buf[0..at];
+}
+
+test "a knob whose moment never came says so, and a spent one says nothing" {
+    var buf: [2048]u8 = undefined;
+    var line = faults.Wire{};
+    var peer = wire.Peer{};
+    var drive = faults.Drive{};
+    try testing.expectEqualStrings("", unspent(&line, &peer, &drive, &buf));
+
+    // Frames and requests named past the last.
+    line.lost.named[0] = 2;
+    line.lost.named[1] = 9;
+    line.peer_lost.named[0] = 4;
+    drive.refused.named[0] = 50;
+    drive.writes_only = true;
+    for (0..3) |_| _ = line.carries();
+    for (0..4) |_| line.hold("x", 0);
+    for (0..7) |_| _ = drive.serves(0, 1, true);
+    // A reset due before the handshake finished, a vanish and a shut past
+    // the answer, half a flood, and a cut after more writes than there were.
+    peer.rough = .{ .reset_after_ns = 3 * std.time.ns_per_ms, .vanish_after = 900, .shut_after = 800, .flood = 5 };
+    peer.tcp.state = .syn_sent;
+    peer.tcp.reset_past = true;
+    peer.tcp.reply_len = 120;
+    peer.flooded = 2;
+    drive.cut_after = 40;
+    try testing.expectEqualStrings(
+        \\metal-vmm: WIRE_EAT #9 never came: the guest sent 3
+        \\metal-vmm: DISK_REFUSE #50 never came: the guest wrote 7
+        \\metal-vmm: PEER_RESET_AT=3000 fell when the connection was not open (syn_sent); no reset sent
+        \\metal-vmm: PEER_VANISH_AFTER=900 never came: the client had 120 bytes of the answer
+        \\metal-vmm: PEER_SHUT_AFTER=800 never came: the client had 120 bytes of the answer
+        \\metal-vmm: PEER_FLOOD=5: only 2 of its SYNs were sent before the run ended
+        \\metal-vmm: DISK_CUT_AFTER=40 never came: the guest wrote 0 times
+        \\
+    , unspent(&line, &peer, &drive, &buf));
+
+    // Spent, each of them: nothing to say.
+    peer.tcp.state = .gone;
+    peer.tcp.shut_ever = true;
+    peer.flooded = 5;
+    drive.cut = .{ .write = 40, .sector = 0, .landed = 1, .of = 1 };
+    line.lost.named[1] = 0;
+    drive.refused.named[0] = 7;
+    try testing.expectEqualStrings("metal-vmm: PEER_RESET_AT=3000 fell when the connection was not open (gone); no reset sent\n", unspent(&line, &peer, &drive, &buf));
+    // A reset that came: spent, though the vanish after it never could.
+    peer.tcp.state = .reset;
+    peer.rough.vanish_after = null;
+    try testing.expectEqualStrings("", unspent(&line, &peer, &drive, &buf));
 }
 
 /// One line on the error stream, so a sweep can read what a run did. **THE

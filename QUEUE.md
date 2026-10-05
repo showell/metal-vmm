@@ -276,7 +276,7 @@ crash on the peer's own input.
     9293 §3.7.1; 536 if none). Cap every segment at that, and at the
     buffer, and a test with a request larger than the window. Item 26's
     fuzzer should have a peer-side half that would have found this.
-38. **(metal-vmm) A reset the peer could not send says so.** `PEER_RESET_AT`
+38. **Done (CC, `reports.unspent`): one line each on the error stream for `WIRE_EAT`, `PEER_EAT`, `PEER_DAMAGE` and `DISK_REFUSE` numbers past the last, `PEER_RESET_AT` with no connection open (or none ever, or the run ending first), `PEER_VANISH_AFTER` and `PEER_SHUT_AFTER` past the answer, a flood not all sent, and `DISK_CUT_AFTER`/`DISK_TEAR` past the last write. A run with no knobs prints nothing new.** **(metal-vmm) A reset the peer could not send says so.** `PEER_RESET_AT`
     before the connection is established is dropped without a word
     (`Tcp.due` sets `reset_past` and returns null outside established,
     closing and fin_wait). On gopher.elf with a 5 ms wire, any time under
