@@ -327,7 +327,7 @@ order without waiting; the box answers when he is back).
     writes until a flush; item 27's power cut loses what was not flushed).
     Offering the feature changes what the guest negotiates, so it is off
     unless the knob is set: `check.sh` holds the default machine to QEMU.
-45. **(metal-vmm) F4, a client that retries what got no answer**
+45. **Done (CC, `Rough.retry`; whether the volume holds the message once is the box's).** **(metal-vmm) F4, a client that retries what got no answer**
     (`PEER_RETRY=1`), with the run's end saying how many times the request
     was sent; whether the volume holds the message once is the box's check.
 46. **(metal-vmm) F5, the calendar as a knob** (`RTC_BOOTS_AT=unix`).

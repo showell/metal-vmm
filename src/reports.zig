@@ -105,6 +105,8 @@ pub fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void
     var buf: [2048]u8 = undefined;
     std.debug.print("{s}", .{unspent(&card.line, &card.peer, &block.refusals, &buf)});
     if (peerEnd(&card.peer.tcp)) |line| std.debug.print("{s}", .{line});
+    if (card.peer.rough.retry > 0)
+        std.debug.print("metal-vmm: the first client sent its request {d} times (PEER_RETRY={d})\n", .{ card.peer.sends(), card.peer.rough.retry });
     if (block.cache) |c| {
         var line: [256]u8 = undefined;
         std.debug.print("{s}", .{c.line(&line, block.refusals.cut != null)});

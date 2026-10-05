@@ -1211,3 +1211,39 @@ test "P7: a SYN-ACK acknowledging another SYN is answered with a reset" {
     try testing.expectEqual(syn.seq +% 7, rst.seq);
     try testing.expectEqual(Tcp.State.syn_sent, peer.tcp.state);
 }
+
+test "PEER_RETRY: a connection closed before any answer is followed by one asking the same" {
+    var peer = Peer{};
+    var theirs: [2048]u8 = undefined;
+    const req = "POST /chat HTTP/1.1\r\n\r\nhello";
+    try opened(&peer, .{ .retry = 2 }, req, 0);
+    // The guest closes with no response at all.
+    _ = peer.answer(fakeSegment(&theirs, flag_fin | flag_ack, 5001, peer.tcp.seq, ""), 10 * ms).?;
+    try testing.expectEqual(@as(?u64, 11 * ms), peer.wakeAt());
+    // A millisecond on, the same request on a new connection.
+    const syn = tcpIn(peer.due(11 * ms).?).?;
+    try testing.expectEqual(flag_syn, syn.flags);
+    try testing.expectEqual(@as(u16, 49152 + peer_zig.max_clients), syn.src_port);
+    _ = peer.answer(fakeTo(&theirs, syn.src_port, flag_syn | flag_ack, 9000, syn.seq +% 1, ""), 12 * ms).?;
+    const asked = tcpIn(peer.more(12 * ms).?).?;
+    try testing.expectEqualStrings(req, asked.data);
+    try testing.expectEqual(@as(u32, 2), peer.sends());
+    // Reset before an answer: once more, and then no more.
+    _ = peer.answer(fakeTo(&theirs, syn.src_port, flag_rst, 9001, 0, ""), 20 * ms);
+    try testing.expect(peer.due(21 * ms) != null);
+    try testing.expectEqual(@as(u32, 3), peer.sends());
+    _ = peer.answer(fakeTo(&theirs, 49152 + peer_zig.max_clients + 1, flag_rst | flag_ack, 0, peer.tcp.iss +% 1, ""), 22 * ms);
+    try testing.expectEqual(Tcp.State.refused, peer.tcp.state);
+    try testing.expect(peer.wakeAt() == null);
+    // The first connection's port is closed now.
+    try testing.expect(tcpIn(peer.answer(fakeSegment(&theirs, flag_ack, 5002, 1, ""), 30 * ms).?).?.flags & flag_rst != 0);
+}
+
+test "PEER_RETRY: an answer, even a short one, is not asked again" {
+    var peer = Peer{};
+    var theirs: [2048]u8 = undefined;
+    try opened(&peer, .{ .retry = 1 }, "GET / HTTP/1.1\r\n\r\n", 0);
+    _ = peer.answer(fakeSegment(&theirs, flag_fin | flag_ack | flag_psh, 5001, peer.tcp.seq, "HTTP/1.1 500"), 0).?;
+    try testing.expect(peer.wakeAt() == null);
+    try testing.expectEqual(@as(u32, 1), peer.sends());
+}

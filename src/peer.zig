@@ -99,6 +99,11 @@ pub const Rough = struct {
     /// guest throws away its timer sends again. A plain client keeps to the
     /// window the guest last offered.
     ignore_window: bool = false,
+    /// **IT ASKS AGAIN WHAT GOT NO ANSWER** (`PEER_RETRY=n`): a connection
+    /// that closed, or was reset, before a byte of the answer came is
+    /// followed by a new one asking the same, as a browser does, up to `n`
+    /// times. The new one behaves.
+    retry: u8 = 0,
     /// **ITS OWN RETRANSMISSION TIMER RUNS** (RFC 6298): set when the wire
     /// may lose or damage what it sends. A peer whose frames always arrive
     /// never needs to send one twice, so without this the run is the run it
@@ -154,6 +159,10 @@ pub const Peer = struct {
     opened_at: ?u64 = null,
     opened: u8 = 0,
     flooded: u32 = 0,
+    /// The first client's retries (`Rough.retry`): how many, and when the
+    /// next opens.
+    retried: u8 = 0,
+    retry_at: ?u64 = null,
 
     pub fn client(self: *Peer, i: usize) *Tcp {
         return if (i == 0) &self.tcp else &self.others[i - 1];
@@ -171,7 +180,11 @@ pub const Peer = struct {
         if (!std.mem.eql(u8, &segment.to, &server_ip)) return null;
         for (0..self.opened) |i| {
             const c = self.client(i);
-            if (c.port == segment.dst_port) return c.receive(segment, now, &self.scratch);
+            if (c.port == segment.dst_port) {
+                const said = c.receive(segment, now, &self.scratch);
+                if (i == 0) self.noticeNoAnswer(now);
+                return said;
+            }
         }
         // **A PORT OF OURS WITH NOTHING ON IT** answers as a closed port
         // (RFC 9293 §3.10.7.1): a client not opened yet, or none at all.
@@ -186,6 +199,21 @@ pub const Peer = struct {
         self.request = request;
         self.opened = 1;
         return self.tcp.open(self.ask(0), now, self.rough, &self.scratch);
+    }
+
+    /// The first client's connection ended with nothing of the answer: a
+    /// retry is due a millisecond on, if one is left.
+    fn noticeNoAnswer(self: *Peer, now: u64) void {
+        if (self.retried >= self.rough.retry or self.retry_at != null) return;
+        const c = &self.tcp;
+        const closed = c.state == .closing or c.state == .done or c.state == .refused;
+        if (closed and c.received == 0) self.retry_at = now + std.time.ns_per_ms;
+    }
+
+    /// How many times the first client sent its request: once, and once
+    /// for each retry.
+    pub fn sends(self: *const Peer) u32 {
+        return @as(u32, self.retried) + 1;
     }
 
     /// What client `i` asks, on which port, from which first number.
@@ -213,6 +241,17 @@ pub const Peer = struct {
     /// client opening, a reset, a window reopened, a segment sent again. One
     /// frame a call; null when there is nothing more.
     pub fn due(self: *Peer, now: u64) ?[]const u8 {
+        if (self.retry_at) |at| if (now >= at) {
+            // **THE SAME REQUEST, ON A NEW CONNECTION**: a port past the
+            // clients' own, and new numbers.
+            self.retry_at = null;
+            self.retried += 1;
+            var asking = self.ask(0);
+            asking.port = 49152 + max_clients + @as(u16, self.retried) - 1;
+            asking.iss = 1000 +% @as(u32, self.retried) *% 0x0F00_0000;
+            const good = Rough{ .retransmits = self.rough.retransmits, .mss = self.rough.mss };
+            return self.tcp.open(asking, now, good, &self.scratch);
+        };
         if (self.nextFlood()) |at| if (now >= at) {
             self.flooded += 1;
             return floodSyn(&self.scratch, self.flooded - 1);
@@ -231,7 +270,7 @@ pub const Peer = struct {
 
     /// The next instant at which `due` will have something, if any.
     pub fn wakeAt(self: *const Peer) ?u64 {
-        var at = earliest(self.nextFlood(), self.nextOpening());
+        var at = earliest(earliest(self.nextFlood(), self.nextOpening()), self.retry_at);
         for (0..self.opened) |i| at = earliest(at, self.clientConst(i).wakeAt());
         return at;
     }

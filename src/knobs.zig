@@ -43,7 +43,7 @@
 //! layout a person has read, and drawing them would change what every
 //! existing seed does. `PEER_IGNORE_WINDOW` neither, for the same second
 //! reason, nor `DISK_CACHE`, which changes the device the guest negotiates
-//! with. Set by hand, they print with the rest.
+//! with, nor `PEER_RETRY`, a client's habit rather than a fault. Set by hand, they print with the rest.
 //!
 //! The peer's ranges are gopher-metal's `tcp_sim.zig` `Rough`'s and
 //! `Scenario`'s, where they have one.
@@ -58,7 +58,7 @@ pub const names = [_][]const u8{
     "DISK_CUT_AFTER",     "DISK_TEAR",         "DISK_TEAR_KEEP",   "PEER_RESET_AT",
     "PEER_RESET_OFF",     "PEER_VANISH_AFTER", "PEER_FLOOD",       "PEER_FLOOD_GAP_US",
     "PEER_FLOOD_AT_US",   "PEER_SHUT_AFTER",   "PEER_SHUT_FOR_US", "PEER_MSS",
-    "PEER_IGNORE_WINDOW", "DISK_ROT",          "DISK_CACHE",
+    "PEER_IGNORE_WINDOW", "DISK_ROT",          "DISK_CACHE",       "PEER_RETRY",
 };
 
 fn index(comptime name: []const u8) usize {
@@ -229,12 +229,12 @@ test "different seeds turn different knobs, and every knob is turned by some see
         last_len = f.len;
     }
     for (turned, names) |t, n| {
-        // Seven knobs only a person sets: a seed's runs keep to the flood
+        // Eight knobs only a person sets: a seed's runs keep to the flood
         // and rates of the table above, and name no sector.
         if (!t and !std.mem.eql(u8, n, "PEER_DAMAGE_RATE") and !std.mem.eql(u8, n, "DISK_REFUSE_RATE") and
             !std.mem.eql(u8, n, "PEER_FLOOD_AT_US") and !std.mem.eql(u8, n, "DISK_BAD_SECTOR") and
             !std.mem.eql(u8, n, "DISK_READS_ONLY") and !std.mem.eql(u8, n, "PEER_IGNORE_WINDOW") and
-            !std.mem.eql(u8, n, "DISK_CACHE"))
+            !std.mem.eql(u8, n, "DISK_CACHE") and !std.mem.eql(u8, n, "PEER_RETRY"))
         {
             std.debug.print("never turned: {s}\n", .{n});
             return error.TestUnexpectedResult;
