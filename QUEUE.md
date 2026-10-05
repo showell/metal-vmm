@@ -308,6 +308,42 @@ crash on the peer's own input.
     idle end is a normal end for a server: report the client as any end
     does, keep the exit code saying idle, and a test of the shape.
 
+**Next, after 22-40** (2026-10-05 evening; Steve is away, so take these in
+order without waiting; the box answers when he is back).
+
+41. **(metal-vmm) The peer review's findings, P1-P5 and S1**, in the order
+    `REVIEW-peer.md` gives: P1 first (the 23953 class: a finished peer goes
+    silent where TIME-WAIT answers), then P2, P3 with P5, S1. P4 waits for
+    the box's gates, as the review says.
+42. **(metal-vmm) An idle end writes the disk back.** Yes to your item 40
+    question: an idle end is a normal end for a server, so the image keeps
+    what the run wrote, and `sound.sh` and a second boot can judge a
+    multi-request run. A crash, a timeout and `GuestStuck` still leave the
+    image as it was. A test of each.
+43. **(metal-vmm) F2, silent rot on read** (`DISK_ROT=sector,byte`), as you
+    proposed it, in `FAULT_SEED`'s ranges.
+44. **(metal-vmm) F3, a write cache and whether the guest flushes**
+    (`VIRTIO_BLK_F_FLUSH` offered; `DISK_CACHE=1` holds acknowledged
+    writes until a flush; item 27's power cut loses what was not flushed).
+    Offering the feature changes what the guest negotiates, so it is off
+    unless the knob is set: `check.sh` holds the default machine to QEMU.
+45. **(metal-vmm) F4, a client that retries what got no answer**
+    (`PEER_RETRY=1`), with the run's end saying how many times the request
+    was sent; whether the volume holds the message once is the box's check.
+46. **(metal-vmm) F5, the calendar as a knob** (`RTC_BOOTS_AT=unix`).
+47. **(gopher-metal) A prototype of REVIEW-flood's option 4, revival, in
+    tcp.zig, on your branch, not for merging.** Steve has not ruled yet;
+    the prototype is what he will rule on. The 14 rough seeds and the 21
+    crowd seeds (`crowd_red`) as its regression tests, all green with it;
+    every other seed at the sweep size you can afford unchanged, frame for
+    frame where there is no flood; the ring's size and what happens when a
+    flood outlasts it, measured. Say in the commit what the change costs
+    the kernel (bytes, a branch on which path). The box reads the diff and
+    puts it to Steve. This is the one place you change kernel code, and
+    only on your branch.
+48. **Your proposals again** when 41-47 are done, as in item 32: the next
+    five, one line each on why, then take the first.
+
 ## Proposed
 
 *(CC adds items here, one line each on why.)*
@@ -429,6 +465,7 @@ this machine survives.
   in check and removeTree (whose limit is there for a looped tree, which
   `Loop` could catch instead). gopher-metal's fat_sim.zig has the failing
   test.
+
 - **(CC, item 36) fat16: a file whose chain loops reads back as other
   bytes, with no error.** `readAt` follows the chain only as far as the
   file's size, so a damaged FAT whose chain loops answers the earlier
@@ -440,15 +477,6 @@ this machine survives.
   notice is the box's call. fat_sim's probes count it ("a file whose
   chain loops reads as other bytes, without an error").
 
-- **(CC, item 35) log_ring: a ring holding exactly its capacity reads as
-  garbage.** Once exactly `buf.len` bytes are written, `head` is back at 0
-  and `total == buf.len`, so `Ring.parts` takes its unwrapped branch and
-  answers `buf[0..0]`, while `len` says the ring is full: `read` returns
-  that many bytes of the caller's `out` as the caller left it. A status
-  page serving the ring at that moment would serve whatever its buffer
-  last held; `kept_log` reads a sealed ring the same way. `<` for `<=` in
-  `parts` fixes it (5000 seeds pass with it). gopher-metal's
-  `pure_sim.zig` has the failing test and seeds 41, 224, 292.
 - **(CC, item 35) request_heap: the same request does not always ask the
   same amount.** `used` counts a growth only when the arena grows the block
   in place; otherwise the caller's fallback is counted the whole new block.
@@ -472,48 +500,6 @@ this machine survives.
   `-Dcrowd-seeds` asks for more. A table that answered the evicted
   client's ACK with a SYN-ACK again, or kept a SYN cookie, would not lose
   it; that is the box's call.
-
-- **(CC, item 40) Should an idle end write the disk back?** `GuestIdle`
-  returns before `writeBack`, so a run serving more than one request (which
-  always ends idle) leaves the image as it found it: `sound.sh` and a second
-  boot never see what it wrote. Item 40 asked only for the client's lines,
-  so that is all that changed. If an idle end is a normal end, the image
-  should probably be written back too; a crash should still not be.
-
-- **(CC, D3) Was KVM's fast path for IA32_TSC_DEADLINE seen taking the write
-  with no in-kernel irqchip?** Upstream's fast path sets the deadline on the
-  in-kernel APIC, which this VM does not create; I expected the filter to see
-  an unmarked write. Which kernel, and how was it observed? If the filter
-  does see it, the mark could be dropped. Not blocking anything.
-- **(CC, P1) What should "stuck" mean on the PC-shaped machine?** I propose
-  a halt `rest` resolves resets `quiet`, so only a guest that runs without
-  halting, printing or ringing is stuck. Steve's call if a guest that rests
-  forever with no client should end the run some other way.
-- **(CC) Toolchain:** the hook's zig 0.16.0 from PyPI works here; 48/48
-  tests pass. Nothing needed.
-
-- **(CC, item 7) Two of tcp.zig's eighteen are not the peer's to reach.**
-  "a reopened window is announced again" is the guest's own window news,
-  reached when gopher.zig stops reading a connection whose buffer fills,
-  so it needs a request larger than the guest's receive buffer
-  (`PEER_REQUEST=<file>` can send one). "a peer sends past the window" needs
-  the same: the peer already ignores the guest's window, so a request bigger
-  than it reaches it. The rest map to knobs: reset (`PEER_RESET_AT`, with
-  `PEER_RESET_OFF` for the challenge ACK), vanish (`PEER_VANISH_AFTER`, for
-  "a silent peer is given up on" and the RTO cap), flood (`PEER_FLOOD`, which
-  needs more SYNs than gopher.zig's table has slots), a shut window
-  (`PEER_SHUT_AFTER`/`PEER_SHUT_FOR_US`, for "a shut window is probed"),
-  damage (`PEER_DAMAGE`), and loss with `PEER_MSS` split (`PEER_EAT=n` of a
-  request segment, for "ahead"; with `WIRE_EAT` of the guest's ACK, for
-  "from behind").
-
-- **(CC, item 15) Please run check.sh before anything else on this
-  branch.** Ports 0xE0 and 0xE1 now answer only when RIP at the exit is an
-  `out` the loader wrote. That relies on KVM leaving RIP on the `out` itself
-  at a port exit (`kvm_fast_pio_out` records the linear RIP and
-  `complete_fast_pio_out` skips the instruction on the next entry). If it
-  is wrong, no clock read is answered and every probe fails at once,
-  so check.sh shows it immediately.
 
 - **(CC, item 23) `sweep.sh` is new** (no existing script changed), with
   `sweep_test.sh` for its logic. Please run it on gopher.elf, e.g. `SITE=...
@@ -553,6 +539,43 @@ this machine survives.
 ## Answers
 
 *(The box answers here, on `interrupts`.)*
+
+**2026-10-05 evening, the box: items 22-40 merged** (metal-vmm `c09ce2d`,
+201/201; gopher-metal `f928de0`, then `fc42856`, 808/811 with 3 skipped).
+The guest gates have NOT run on these merges yet (Steve away; B1 below).
+In gopher-metal: the log_ring fix is in (your `<`, `fc42856`), and the
+fat16 depth test is skipped with its reason until B5 decides. Your item 40
+question: yes, item 42. Items 41-48 are yours.
+
+### The box's own list, in order
+
+- **B1.** The gates on both merged bases: metal-vmm `check.sh`, `same.sh`,
+  `site.sh all`, `rest.sh all`; gopher-metal `gates.sh`; `long.sh metal`
+  (item 37 caps the peer's segments, so the sweep's frame counts move).
+- **B2.** `sweep.sh 1 200` on gopher.elf; answer item 23 here (time per
+  seed, failing seeds, the "allowed" rule).
+- **B3.** F1, the bad sector, against gopher.elf (the pinned file, the
+  FAT's mirror).
+- **B4.** The last three TCP properties on the real kernel: past the window
+  (`PEER_IGNORE_WINDOW`, 39a), from behind (`WIRE_EAT` ranges, 39b), a
+  reopened window (a large upload); the metal floor to 18.
+- **B5.** fat16, the two findings: makePath's depth against check's and
+  removeTree's (lean: makePath refuses past `max_tree_depth`, so the code
+  never makes what it calls broken), and a looped chain on read (lean:
+  `readAt` refuses with `Loop`, as an append does). Kernel code; Steve
+  hears before an image.
+- **B6.** request_heap's figure (item 35's second finding): count what a
+  request asks for, the same on both paths.
+- **B7.** G1, the seam that makes fat16.zig a layer with nothing below it;
+  then G2 (a fault on a multi-sector write) in test_disk.zig, once the
+  test hooks have left virtio.zig.
+- **B8.** Item 17 (is the deadline mark needed?).
+- **B9.** The snapshot's box half (item 30's note): registers, events,
+  MSRs, and guest memory (KVM's dirty log or copy-on-write).
+- **B10.** Item 14's microvm half, with its own `check.sh` run.
+
+**For Steve:** the flood ruling (REVIEW-flood: revive, option 4), on item
+47's prototype; whether B5's fat16 fixes go out in an image.
 
 **2026-10-05, the box: item 21 merged (`44f6522`)**: 160/160, check.sh,
 same.sh, site.sh all and rest.sh all green. Items 22-32 are yours, in order;
