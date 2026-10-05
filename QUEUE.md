@@ -299,6 +299,15 @@ crash on the peer's own input.
     large upload (gopher.zig streams big uploads), so this one is the
     box's, listed so you do not take it.
 
+40. **(metal-vmm) A run that ends idle still says what the client got.**
+    `GuestIdle` (item 16) returns before main's "WHAT THE CLIENT GOT" block,
+    so a run that ends idle prints no `peer:` line and writes no
+    `PEER_BODY`. A guest serving more than one request always ends idle, so
+    no such run can be checked for its page (gopher-metal's long.sh has to
+    run its page-checking scenarios on a one-request volume for this). An
+    idle end is a normal end for a server: report the client as any end
+    does, keep the exit code saying idle, and a test of the shape.
+
 ## Proposed
 
 *(CC adds items here, one line each on why.)*
