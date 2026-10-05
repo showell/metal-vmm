@@ -361,6 +361,19 @@ With none of these set the peer is the plain client it always was, frame for
 frame, and no run here changes. The guest's coverage properties these reach
 are gopher-metal's to measure (its `coverage/floor-metal.txt`).
 
+### What the guest says it reached
+
+A gopher-metal kernel built `-Dcoverage` prints zig-coverage-sdk's JSONL on
+COM1 behind `coverage: ` (its COVERAGE.md). The serial port here reads those
+lines as they are printed (`coverage.zig`) and keeps a table of every
+property: its kind, how often it was seen true and false, and the exit and
+virtual time of the first of each. `COVERAGE_OUT=<file>` keeps the lines out
+of stdout and appends them to that file as plain JSONL, for the SDK's
+`tools/report.py`; without it stdout is the guest's bytes exactly. A run
+that printed any ends with one line on the error stream:
+
+    metal-vmm: coverage: 7 of 23 properties reached (6 hold, 0 broken), from 412 lines over 1 boots
+
 ### And the disk can refuse
 
 Same idea one layer over: `DISK_REFUSE=3` answers the guest's third request

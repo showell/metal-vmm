@@ -74,7 +74,7 @@ bottom.
     removed, on the merged branch, the filter alone: does `rest.sh all` still
     see timer interrupts? If yes, the mark goes from both repos.
 
-18. **The guest's coverage lines, read by the machine** (groundwork for the
+18. **Done (CC).** **The guest's coverage lines, read by the machine** (groundwork for the
     explorer, which is not urgent: Steve, 2026-10-05). gopher-metal's kernel
     built `-Dcoverage` writes zig-coverage-sdk's JSONL to COM1 behind
     `coverage: ` (its COVERAGE.md); today a script greps stdout. Have the

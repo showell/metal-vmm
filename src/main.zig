@@ -41,6 +41,7 @@ const disk = @import("disk.zig");
 const faults = @import("faults.zig");
 const wire = @import("peer.zig");
 const apic = @import("apic.zig");
+const coverage = @import("coverage.zig");
 const pci = @import("pci.zig");
 
 /// How much RAM the guest gets. The probes were written against `-m 512`.
@@ -595,6 +596,12 @@ const Machine = struct {
     halted_ns: u64 = 0,
     /// MSR accesses the filter sent here.
     msrs: u64 = 0,
+    /// Exits so far: with the time, when something happened.
+    exits: u64 = 0,
+    /// **THE SERIAL PORT READS THE GUEST'S COVERAGE LINES** (coverage.zig),
+    /// and with `COVERAGE_OUT` sends them to this file instead of stdout.
+    serial: coverage.Serial = .{},
+    coverage_fd: ?linux.fd_t = null,
     /// The `out`s the loader wrote: the only ones `tsc_port` and `msr_port`
     /// answer.
     rewritten: struct { clocks: Rewritten = .{}, deadlines: Rewritten = .{} } = .{},
@@ -641,7 +648,7 @@ const Machine = struct {
         if (self.bus) |bus| if (pci.isPort(port)) return bus.out(port, bytes);
         switch (port) {
             com1 => if (self.line_control & divisor_latch == 0) {
-                _ = linux.write(1, bytes.ptr, bytes.len);
+                self.serial.feed(bytes, .{ .exit = self.exits, .ns = self.time.ns }, SerialOut{ .jsonl_fd = self.coverage_fd });
                 self.listen(bytes);
                 self.progressed();
             },
@@ -736,6 +743,28 @@ const Machine = struct {
         }
     }
 };
+
+/// Where the serial port's bytes go: stdout, and the coverage JSONL.
+const SerialOut = struct {
+    jsonl_fd: ?linux.fd_t,
+
+    pub fn stdout(_: SerialOut, bytes: []const u8) void {
+        _ = linux.write(1, bytes.ptr, bytes.len);
+    }
+
+    pub fn jsonl(self: SerialOut, line: []const u8) void {
+        const fd = self.jsonl_fd orelse return;
+        _ = linux.write(fd, line.ptr, line.len);
+        _ = linux.write(fd, "\n", 1);
+    }
+};
+
+/// The run's coverage, if its guest printed any: the last line on the error
+/// stream.
+fn reportCoverage(machine: *const Machine) void {
+    var buf: [256]u8 = undefined;
+    if (machine.serial.summary(&buf)) |line| std.debug.print("{s}", .{line});
+}
 
 fn readLittle(data: []const u8) u64 {
     var value: u64 = 0;
@@ -868,6 +897,7 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
         // the outside world for something, and in here that is the only thing
         // that makes time pass — see clock.zig.
         machine.time.asked();
+        machine.exits += 1;
         machine.pump();
         // **A HANG IS A RUN THAT STOPS MAKING PROGRESS**, and on this machine
         // that is a number rather than a feeling: so many exits with nothing
@@ -1236,6 +1266,17 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
 
     tellTheFaults(&card.line, &block.refusals, &card.peer.rough, init.environ);
     if (count(init.environ, "PATIENCE_S")) |seconds| machine.patience_ns = seconds * std.time.ns_per_s;
+    // **COVERAGE LINES TO A FILE OF THEIR OWN**, appended: each boot of a
+    // sweep adds its lines to the same JSONL, as the judge's do.
+    if (init.environ.getPosix("COVERAGE_OUT")) |out_path| {
+        const jsonl = linux.open(out_path, .{ .ACCMODE = .WRONLY, .CREAT = true, .APPEND = true }, 0o644);
+        if (linux.errno(jsonl) != .SUCCESS) {
+            std.debug.print("metal-vmm: cannot open COVERAGE_OUT {s}\n", .{out_path});
+            return 2;
+        }
+        machine.coverage_fd = @intCast(jsonl);
+        machine.serial.withhold = true;
+    }
 
     // **WHAT THE PEER ASKS FOR.** A path is enough for a probe; a server with
     // a login and a chat wants a whole request, cookie and body and all, so
@@ -1255,6 +1296,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // they are reported before the error goes anywhere.
     const code = serve(vcpu, page, &machine, .{ .lo = loaded.text_lo, .hi = loaded.text_hi }) catch |e| {
         reportRun(&card, &block, machine.time.ns);
+        reportCoverage(&machine);
         return e;
     };
     // **WHAT THE WIRE DID, IF IT WAS ASKED TO DO ANYTHING**, on the error
@@ -1262,6 +1304,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // stays comparable with QEMU's.
     reportRun(&card, &block, machine.time.ns);
     if (pc) reportRest(&machine);
+    reportCoverage(&machine);
     // **THE FILE LEARNS WHAT HAPPENED ONLY NOW**, and only the sectors the
     // guest actually wrote. A run that never gets here leaves the image as it
     // found it — see disk.zig.
@@ -1309,6 +1352,7 @@ test {
     _ = @import("peer.zig");
     _ = @import("apic.zig");
     _ = @import("pci.zig");
+    _ = @import("coverage.zig");
 }
 
 /// A tiny ELF with one loadable segment and one PVH note, built by hand so the
