@@ -140,7 +140,7 @@ bottom.
     repeat it. You cannot boot a guest, so test the parts that are logic
     (verdicts, the summary) by hand-fed run outputs; the box runs it on
     gopher.elf and answers here.
-24. **A review: can tcp.zig tell a real client from a flood?** (design;
+24. **Done (CC, `docs/reviews/REVIEW-flood.md`).** **A review: can tcp.zig tell a real client from a flood?** (design;
     write `docs/reviews/REVIEW-flood.md`, fix nothing). gopher-metal's
     simulator found 14 rough seeds in 50,000 where a real client is reset:
     its handshake ACK is lost, its slot is still `syn_received` on the
