@@ -201,7 +201,9 @@ million exits without printing or ringing a doorbell is stuck. On the
 PC-shaped one each halt starts that count again, and a guest that rests with
 nothing to do ends on a bound in its own time instead: `PATIENCE_S` seconds
 (600 by default) with nothing printed and no doorbell rung, reported as
-idle.
+idle. An idle end is a server's normal end: the disk keeps what the run
+wrote and the client's lines are printed, as at any other end. A guest that
+is stuck or faults leaves the image as it was.
 
 With a 5 ms wire each route halts a few times and takes timer and MSI-X
 interrupts both. At 200 ms, `/` halts 361 times, 356 woken by the timer at

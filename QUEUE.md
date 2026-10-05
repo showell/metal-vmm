@@ -315,7 +315,7 @@ order without waiting; the box answers when he is back).
     `REVIEW-peer.md` gives: P1 first (the 23953 class: a finished peer goes
     silent where TIME-WAIT answers), then P2, P3 with P5, S1. P4 waits for
     the box's gates, as the review says.
-42. **(metal-vmm) An idle end writes the disk back.** Yes to your item 40
+42. **Done (CC, `keepsWrites` in main.zig, with its test).** **(metal-vmm) An idle end writes the disk back.** Yes to your item 40
     question: an idle end is a normal end for a server, so the image keeps
     what the run wrote, and `sound.sh` and a second boot can judge a
     multi-request run. A crash, a timeout and `GuestStuck` still leave the

@@ -693,6 +693,22 @@ fn readAll(path: [:0]const u8, into: []u8) ?[]const u8 {
 
 /// What the client got, for a caller that wants to diff it against another
 /// client's.
+/// **WHICH ENDS KEEP WHAT THE GUEST WROTE** (QUEUE.md item 42): one that
+/// ended as the guest meant, by its exit door or a power cut it was dealt,
+/// and an idle one, which is a server's normal end. Not a crash, a guest
+/// that faulted or got stuck, or anything KVM refused: the image is left as
+/// it was found, and a timeout from outside never gets here at all.
+fn keepsWrites(e: anyerror) bool {
+    return e == error.GuestIdle;
+}
+
+test "an idle end keeps the guest's writes; a stuck, faulted or failed one does not" {
+    try testing.expect(keepsWrites(error.GuestIdle));
+    for ([_]anyerror{ error.GuestStuck, error.GuestFaulted, error.KvmFailed, error.Unhandled }) |e| {
+        try testing.expect(!keepsWrites(e));
+    }
+}
+
 /// **WHAT THE CLIENT GOT, IN ONE LINE** on stdout, so a run here can be
 /// compared with a run under QEMU where curl says the same thing; and its
 /// body and whole answer to files, when asked (`PEER_BODY`, `PEER_RESPONSE`).
@@ -923,8 +939,15 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         reports.cost(&machine, &card, &block);
         reportCoverage(&machine);
         // **AN IDLE END IS A SERVER'S NORMAL END**: a guest serving more than
-        // one request always ends this way, so it says what the client got
-        // as any end does. The error, and so the exit code, still says idle.
+        // one request always ends this way, so its disk keeps what it wrote
+        // and it says what the client got, as any end does. The error, and so
+        // the exit code, still says idle.
+        if (keepsWrites(e)) if (drive) |*on_disk| {
+            _ = on_disk.writeBack() catch |w| {
+                std.debug.print("metal-vmm: the disk would not take the run's writes: {s}\n", .{@errorName(w)});
+                return 1;
+            };
+        };
         if (e == error.GuestIdle and fetch != null) theClient(init.environ, &card.peer);
         return e;
     };
