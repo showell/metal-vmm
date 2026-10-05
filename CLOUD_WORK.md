@@ -33,6 +33,10 @@ stands; read it, and `src/pci.zig` and `src/apic.zig`, before anything else.
 **Run unattended for as long as the queue gives you work.** When something
 is the box Claude's or Steve's to do, write it under "Questions" in
 `QUEUE.md` and take the next item. Do not wait.
+**An item in the CC section of `QUEUE.md` is permission to start it**:
+never ask Steve or the box whether to. When you finish one, `git fetch` and
+reread `QUEUE.md` on `interrupts`, since the box adds items as it goes. Only
+an empty queue ends a session.
 
 ## Most of it is logic
 
