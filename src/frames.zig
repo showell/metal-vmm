@@ -36,6 +36,8 @@ pub const Segment = struct {
     mss: ?u16 = null,
     /// The window it offers: how much more it will take past `ack`.
     window: u16 = 0,
+    /// Where it is addressed: the peer's own address, or a flood's.
+    to: [4]u8 = server_ip,
 };
 
 /// **THE MOST ONE SEGMENT CARRIES HERE**: an ethernet frame's 1500 bytes
@@ -101,6 +103,7 @@ pub fn tcpIn(frame: []const u8) ?Segment {
         .dst_port = readBe16(tcp[2..4]),
         .mss = if (tcp[13] & flag_syn != 0) mssOption(tcp[20..offset]) else null,
         .window = readBe16(tcp[14..16]),
+        .to = ip[16..20].*,
     };
 }
 

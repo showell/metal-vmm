@@ -167,11 +167,15 @@ pub const Peer = struct {
     pub fn answer(self: *Peer, frame: []const u8, now: u64) ?[]const u8 {
         if (dhcpIn(frame)) |request| return self.dhcpOut(request);
         const segment = tcpIn(frame) orelse return null;
+        // To a flood's address: nobody is there to answer.
+        if (!std.mem.eql(u8, &segment.to, &server_ip)) return null;
         for (0..self.opened) |i| {
             const c = self.client(i);
             if (c.port == segment.dst_port) return c.receive(segment, now, &self.scratch);
         }
-        return null;
+        // **A PORT OF OURS WITH NOTHING ON IT** answers as a closed port
+        // (RFC 9293 §3.10.7.1): a client not opened yet, or none at all.
+        return closedPort(segment, &self.scratch);
     }
 
     /// Opens the first connection to the guest and asks it for something.
@@ -454,12 +458,18 @@ test "a flood: SYNs from addresses that never finish, a gap apart, unanswered" {
     try testing.expect(peer.wakeAt() == null);
     try testing.expectEqualSlices(u8, &.{ 1, 2, 3 }, &froms);
     try testing.expectEqualSlices(u16, &.{ 40000, 40001, 40002 }, &ports);
-    // The guest's SYN-ACK to one of them goes unanswered: it never finishes.
+    // The guest's SYN-ACK to one of them, at the address it came from,
+    // goes unanswered: it never finishes.
     var reply = fakeSegment(&theirs, flag_syn | flag_ack, 9000, 7001, "");
     _ = &reply;
     theirs[36] = 0x9C; // to port 40000
     theirs[37] = 0x40;
+    @memcpy(theirs[14 + 16 ..][0..3], &flood_ip);
+    theirs[14 + 19] = froms[0];
     try testing.expect(peer.answer(theirs[0..reply.len], 0) == null);
+    // The same to the peer's own address is a closed port's, and answered.
+    theirs[14 + 16 ..][0..4].* = server_ip;
+    try testing.expect(tcpIn(peer.answer(theirs[0..reply.len], 0).?).?.flags & flag_rst != 0);
 }
 
 test "several clients: each opens a gap after the last, on its own port and its own numbers" {

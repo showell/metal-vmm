@@ -57,6 +57,9 @@ pub fn earliest(a: ?u64, b: ?u64) ?u64 {
 const initial_rto_ns: u64 = std.time.ns_per_s;
 const max_rto_ns: u64 = 60 * std.time.ns_per_s;
 const max_tries: u8 = 8;
+/// **TIME-WAIT LASTS 2MSL** (RFC 9293 §3.10.7.4): Linux's 60 s, of the
+/// guest's time.
+const time_wait_ns: u64 = 60 * std.time.ns_per_s;
 
 /// **HOW ONE CLIENT IS TO BEHAVE**: what it asks and how often, and where it
 /// stands on the wire.
@@ -151,6 +154,9 @@ pub const Tcp = struct {
     /// While its window is shut, when it opens; and whether it has shut yet.
     shut_until: ?u64 = null,
     shut_ever: bool = false,
+    /// **IN TIME-WAIT UNTIL THEN**: it closed first, and the guest's FIN
+    /// came. Its state is still `done`, as every run's report has it.
+    time_wait_until: ?u64 = null,
 
     pub fn open(self: *Tcp, ask: Ask, now: u64, rough: Rough, out: []u8) []const u8 {
         self.* = .{
@@ -175,7 +181,15 @@ pub const Tcp = struct {
         if (s.dst_port != self.port) return null;
         switch (self.state) {
             .gone => return null,
-            .reset, .gave_up => return closedPort(s, out),
+            // **A CLOSED CONNECTION IS A CLOSED PORT** (RFC 9293
+            // §3.10.7.1): one it reset or gave up on, one the guest reset,
+            // one never opened, and one finished but for TIME-WAIT.
+            .reset, .gave_up, .refused, .idle => return closedPort(s, out),
+            .done => {
+                const until = self.time_wait_until orelse return closedPort(s, out);
+                if (now >= until) return closedPort(s, out);
+                return self.timeWait(s, now, out);
+            },
             else => {},
         }
         if (s.flags & flag_rst != 0) {
@@ -238,6 +252,9 @@ pub const Tcp = struct {
                         self.arm(now);
                         return frame;
                     }
+                    // Its FIN was first: TIME-WAIT, where the guest's FIN
+                    // is acknowledged again if this ACK is lost.
+                    if (self.state == .fin_wait) self.time_wait_until = now + time_wait_ns;
                     self.state = .done;
                     return self.segment(out, flag_ack, "");
                 }
@@ -251,6 +268,22 @@ pub const Tcp = struct {
             },
             else => return null,
         }
+    }
+
+    /// **TIME-WAIT** (RFC 9293 §3.10.7.4): the guest's FIN again is
+    /// acknowledged again, and the wait restarts; anything else unacceptable
+    /// is acknowledged; a reset is let be (RFC 1337). An acknowledgement of
+    /// our own FIN, which a simultaneous close can still be waiting for,
+    /// stops its timer.
+    fn timeWait(self: *Tcp, s: Segment, now: u64, out: []u8) ?[]const u8 {
+        if (s.flags & flag_rst != 0) return null;
+        if (s.flags & flag_ack != 0) self.acknowledged(s.ack, now);
+        if (s.flags & flag_fin != 0) {
+            self.time_wait_until = now + time_wait_ns;
+            return self.segment(out, flag_ack, "");
+        }
+        if (s.data.len > 0 or s.seq != self.ack) return self.segment(out, flag_ack, "");
+        return null;
     }
 
     /// The answer's bytes, as they come: each one that comes whole lets the
@@ -813,4 +846,63 @@ test "a plain client keeps to the guest's window; one that ignores it sends ever
     var all: usize = 0;
     while (careless.more(0)) |frame| all += tcpIn(frame).?.data.len;
     try testing.expectEqual(request.len, all);
+}
+
+test "P1: after closing first, TIME-WAIT acknowledges the guest's FIN again, then the port is closed" {
+    var peer = Peer{ .plan = .{ .asks = 2 } };
+    var theirs: [2048]u8 = undefined;
+    const answer = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
+    try opened(&peer, .{}, "GET / HTTP/1.1\r\n\r\n", 0);
+    const c = &peer.tcp;
+    // Two answers, each acknowledging what was asked; then the client's FIN.
+    var their_seq: u32 = 5001;
+    for (0..2) |_| {
+        _ = peer.answer(fakeSegment(&theirs, flag_ack | flag_psh, their_seq, c.seq, answer), 0);
+        their_seq +%= answer.len;
+        while (peer.more(0)) |_| {}
+    }
+    try testing.expectEqual(Tcp.State.fin_wait, c.state);
+    _ = peer.answer(fakeSegment(&theirs, flag_ack, their_seq, c.seq, ""), 0); // its FIN acknowledged
+    // The guest's FIN: acknowledged, and TIME-WAIT begins.
+    const ack = tcpIn(peer.answer(fakeSegment(&theirs, flag_fin | flag_ack, their_seq, c.seq, ""), 1 * sec).?).?;
+    try testing.expectEqual(Tcp.State.done, c.state);
+    try testing.expectEqual(their_seq +% 1, ack.ack);
+    // The ACK was lost: the guest's FIN again is acknowledged again, 30 s on.
+    const again = tcpIn(peer.answer(fakeSegment(&theirs, flag_fin | flag_ack, their_seq, c.seq, ""), 31 * sec).?).?;
+    try testing.expectEqual(flag_ack, again.flags);
+    try testing.expectEqual(their_seq +% 1, again.ack);
+    // A plain acceptable ACK draws nothing; a reset is let be.
+    try testing.expect(peer.answer(fakeSegment(&theirs, flag_ack, their_seq +% 1, c.seq, ""), 32 * sec) == null);
+    try testing.expect(peer.answer(fakeSegment(&theirs, flag_rst, their_seq +% 1, 0, ""), 33 * sec) == null);
+    // The wait restarted at 31 s: by 92 s it is over, and the port is closed.
+    const rst = tcpIn(peer.answer(fakeSegment(&theirs, flag_fin | flag_ack, their_seq, c.seq, ""), 92 * sec).?).?;
+    try testing.expect(rst.flags & flag_rst != 0);
+}
+
+test "P1: a port the guest reset, one never opened, and one closed by the guest first answer as closed ports" {
+    var theirs: [2048]u8 = undefined;
+    // The guest resets the connection; what it sends after draws a reset.
+    var peer = Peer{};
+    try opened(&peer, .{}, "GET / HTTP/1.1\r\n\r\n", 0);
+    _ = peer.answer(fakeSegment(&theirs, flag_rst, 5001, 0, ""), 0);
+    try testing.expectEqual(Tcp.State.refused, peer.tcp.state);
+    const r1 = tcpIn(peer.answer(fakeSegment(&theirs, flag_ack, 5001, 77, "late"), 0).?).?;
+    try testing.expectEqual(flag_rst, r1.flags);
+    try testing.expectEqual(@as(u32, 77), r1.seq);
+    // A client port not opened yet: a reset, acknowledging the segment.
+    const r2 = tcpIn(peer.answer(fakeTo(&theirs, 49153, flag_syn | flag_ack, 900, 1, ""), 0).?).?;
+    try testing.expect(r2.flags & flag_rst != 0);
+    // A segment to a flood's address: nobody there.
+    const flooded = fakeTo(&theirs, 40001, flag_syn | flag_ack, 900, 1, "");
+    @memcpy(theirs[14 + 16 ..][0..4], &[_]u8{ 198, 51, 100, 1 });
+    try testing.expect(peer.answer(flooded, 0) == null);
+    // The guest closed first, and its FIN and ours are done: closed.
+    var done = Peer{};
+    try opened(&done, .{}, "GET / HTTP/1.1\r\n\r\n", 0);
+    const fin = tcpIn(done.answer(fakeSegment(&theirs, flag_fin | flag_ack, 5001, done.tcp.seq, ""), 0).?).?;
+    try testing.expect(fin.flags & flag_fin != 0);
+    _ = done.answer(fakeSegment(&theirs, flag_ack, 5002, done.tcp.seq, ""), 0);
+    try testing.expectEqual(Tcp.State.done, done.tcp.state);
+    const r3 = tcpIn(done.answer(fakeSegment(&theirs, flag_fin | flag_ack, 5001, done.tcp.seq, ""), 0).?).?;
+    try testing.expect(r3.flags & flag_rst != 0);
 }
