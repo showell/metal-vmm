@@ -84,7 +84,7 @@ From the review (`docs/reviews/REVIEW-interrupts.md`), most urgent first:
    rewritten; gopher-metal wakes less often here than on a droplet.
 10. **A halt with interrupts off stops the machine (M1).** `rest` ignores
    `if_flag`, so `cli; hlt` resumes past the `hlt` later, which no PC does.
-11. **A vector is in service only once injected (M2).** The not-ready branch
+11. **Done (CC).** **A vector is in service only once injected (M2).** The not-ready branch
     of `rest` strands a vector in service and ends the run; untested.
 12. **BAR accesses split into aligned dwords (M3).** A QWORD unmask of an
     MSI-X entry leaves it masked; a QWORD `queue_desc` write keeps the stale

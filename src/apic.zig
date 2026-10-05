@@ -202,13 +202,19 @@ pub const Apic = struct {
     /// task priority holds its class off. It is in service from here until
     /// the guest's EOI.
     pub fn next(self: *Apic) ?u8 {
+        const v = self.deliverable() orelse return null;
+        self.irr.unset(v);
+        self.isr.set(v);
+        self.taken += 1;
+        return v;
+    }
+
+    /// The vector `next` would deliver, left waiting.
+    pub fn deliverable(self: *const Apic) ?u8 {
         if (!self.enabled()) return null;
         var it = self.irr.iterator(.{ .direction = .reverse });
         const v: u8 = @intCast(it.next() orelse return null);
         if (v >> 4 <= self.ppr() >> 4) return null;
-        self.irr.unset(v);
-        self.isr.set(v);
-        self.taken += 1;
         return v;
     }
 
