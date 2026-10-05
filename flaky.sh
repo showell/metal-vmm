@@ -1,8 +1,8 @@
 #!/bin/bash
 # **A MAP OF WHICH DISK REQUESTS THIS GUEST CAN SURVIVE BEING REFUSED.**
 #
-#   ./flaky.sh [probe] [how many]     # fat16 and its first 20 by default
-#   ./flaky.sh fat16 all              # every request it makes, in turn
+#   ./flaky.sh [probe] [how many]     # vfat and its first 20 by default
+#   ./flaky.sh vfat all               # every request it makes, in turn
 #   ./flaky.sh gopher all             # the REAL server, on the site's volume
 #
 # One run per request: the disk answers that one with an I/O error, exactly as
@@ -14,21 +14,21 @@
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
-IMAGES="${IMAGES:-$HOME/showell_repos/cobblestone-u61/codex/test}"
-PROBE="${1:-fat16}"
+PROBE="${1:-vfat}"
 HOW_MANY="${2:-20}"
 # The real server reads its site off its own volume, and answers a request the
 # peer makes; a probe brings its own small disk and answers nobody.
 SITE="${SITE:-$HOME/build/gopher-metal/probe/gopher/pristine.img}"
 FETCH=""
-case "$PROBE" in
-    gopher) DISK="$SITE"; FETCH="/" ;;
-    fat16) DISK="$IMAGES/fat16-list.disk" ;;
-    *) DISK="$IMAGES/fat16-write.disk" ;;
-esac
 VMM="$HERE/zig-out/bin/metal-vmm"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+case "$PROBE" in
+    gopher) DISK="$SITE"; FETCH="/" ;;
+    *) DISK="$WORK/fat16.blank"
+       mkfs.vfat -F 16 -S 512 -n GOPHER -C "$DISK" 32768 > /dev/null 2>&1 \
+           || { echo "mkfs.vfat could not make the FAT16 volume"; exit 1; } ;;
+esac
 [ -x "$VMM" ] || { echo "no $VMM; run: zig build"; exit 1; }
 [ -f "$GUESTS/$PROBE.elf" ] || { echo "no $GUESTS/$PROBE.elf"; exit 1; }
 [ -f "$DISK" ] || { echo "no disk at $DISK"; exit 1; }

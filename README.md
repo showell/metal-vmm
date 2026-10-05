@@ -186,17 +186,15 @@ and **the same disk image afterwards, byte for byte**. A device model that
 answers correctly and writes the wrong sector would pass everything else.
 
 ```
-PASS block       same words, same verdict (104 ms here, 128 ms under QEMU)
-PASS fat16       same words, same verdict (163 ms here, 150 ms under QEMU)
-PASS fat16write  same words, same verdict (878 ms here, 495 ms under QEMU)
-PASS vfat        same words, same verdict (4247 ms here, 1998 ms under QEMU)
-PASS net         same words, same verdict (118 ms here, 135 ms under QEMU)
-PASS http        same words, same verdict (123 ms here, 1023 ms under QEMU)
-PASS stdhttp     same words, same verdict (128 ms here, 1025 ms under QEMU)
-PASS rng         same words, same verdict (98 ms here, 126 ms under QEMU)
-PASS clock       same words, same verdict (1341 ms here, 8333 ms under QEMU)
-PASS vfat/fat32  same words, same verdict (140 ms here, 193 ms under QEMU, software CPU)
-PASS append/fat32 same words, same verdict (8000 ms here, 11351 ms under QEMU, software CPU)
+PASS block       same words, same verdict (109 ms here, 121 ms under QEMU, software CPU)
+PASS vfat        same words, same verdict (118 ms here, 145 ms under QEMU, software CPU)
+PASS net         same words, same verdict (132 ms here, 322 ms under QEMU, software CPU)
+PASS http        same words, same verdict (133 ms here, 1020 ms under QEMU, software CPU)
+PASS stdhttp     same words, same verdict (142 ms here, 1025 ms under QEMU, software CPU)
+PASS rng         same words, same verdict (109 ms here, 130 ms under QEMU, software CPU)
+PASS clock       same words, same verdict (849 ms here, 4156 ms under QEMU, software CPU)
+PASS vfat/fat32  same words, same verdict (126 ms here, 154 ms under QEMU, software CPU)
+PASS append/fat32 same words, same verdict (6531 ms here, 4587 ms under QEMU, software CPU)
 ```
 
 **The last two are FAT32** (added 2026-10-03; prod's data is FAT32): a fresh
@@ -292,23 +290,29 @@ and because every run is reproducible the sweep can be **exhaustive** rather
 than a sample:
 
 ```
-$ ./flaky.sh fat16 all
-fat16 makes 709 disk requests; an untouched run: exit 0 — PASS
-refusing each of the first 709, one run each:
-   701 runs  (#8..#708)  exit 1 — FAIL: the file would not read
-     3 runs  (#5..#7)    exit 1 — FAIL: EFI/BOOT/BOOTX64.EFI would not open
-     2 runs  (#1..#2)    exit 1 — FAIL: the partition table would not read
-     1 runs  (#709)      exit 1 — FAIL: the lookup failed
-     1 runs  (#4)        exit 1 — FAIL: the root directory would not list
-     1 runs  (#3)        exit 1 — FAIL: the volume would not mount
+$ ./flaky.sh vfat all
+vfat makes 173 disk requests; an untouched run: exit 0 — PASS
+refusing each of the first 173, one run each:
+   144 runs  (#4..#147)  exit 1 — FAIL: a write failed
+    13 runs  (#148..#168)  exit 1 — FAIL: a path would not resolve
+    10 runs  (#151..#170)  exit 1 — FAIL: a file would not read
+     2 runs  (#2..#3)  exit 1 — FAIL: the volume would not mount
+     2 runs  (#171..#172)  exit 1 — FAIL: auth/damian would not resolve
+     1 runs  (#173..#173)  exit 1 — FAIL: the listing failed
+     1 runs  (#1..#1)  exit 0 — PASS
 ```
 
-709 runs, 1 minute 46. **Every one of them failed cleanly, and every one named
-the right layer** — the partition table for the first two, the volume for the
-third, the directory for the fourth, the open for the next three, the read for
-the rest. No hang, no wrong answer, and no run that carried on as though
-nothing had happened. That is a statement about a guest's error paths that you
-can only make by trying all of them.
+173 runs, 21 seconds, on a fresh FAT16 volume. **Every refusal past the first
+failed cleanly and named its layer** -- the volume for #2 and #3, a write for
+most of the rest, then the path, the read, the directory and the listing as the
+probe reaches them. No hang, no wrong answer, and no run that carried on as
+though nothing had happened. That is a statement about a guest's error paths
+that you can only make by trying all of them.
+
+The one PASS under a refusal is #1, the GPT header: `vfat` reads any failure to
+find a partition table as "no table" and mounts sector 0, which on this bare
+volume is right. On a partitioned disk the same fallback fails the mount, so the
+refusal still surfaces, a layer later and under the volume's name.
 
 ## The real server
 
@@ -675,15 +679,13 @@ the sectors the guest changed go back into it at the end of the run and not
 before.
 
 ```
-SAME    clock       10 lines, verdict 0 (1375 ms, then 1390 ms)
-SAME    rng          6 lines, verdict 0 (105 ms, then 113 ms)
-SAME    block       10 lines, verdict 0 (106 ms, then 119 ms)
-SAME    fat16        7 lines, verdict 0 (170 ms, then 167 ms)
-SAME    fat16write   7 lines, verdict 0 (1010 ms, then 968 ms)
-SAME    vfat         6 lines, verdict 0 (3706 ms, then 3652 ms)
-SAME    net          9 lines, verdict 0 (112 ms, then 105 ms)
-SAME    http         7 lines, verdict 0 (127 ms, then 129 ms)
-SAME    stdhttp      8 lines, verdict 0 (161 ms, then 159 ms)
+SAME    clock       10 lines, verdict 0 (726 ms, then 701 ms)
+SAME    rng         6 lines, verdict 0 (104 ms, then 106 ms)
+SAME    block       10 lines, verdict 0 (108 ms, then 106 ms)
+SAME    vfat        6 lines, verdict 0 (118 ms, then 118 ms)
+SAME    net         9 lines, verdict 0 (128 ms, then 133 ms)
+SAME    http        7 lines, verdict 0 (129 ms, then 131 ms)
+SAME    stdhttp     8 lines, verdict 0 (135 ms, then 154 ms)
         tsc_hz 2500014511
         unix 1789732802
         civil 2026-9-18 12:0:2

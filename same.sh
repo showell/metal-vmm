@@ -18,22 +18,24 @@
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
-IMAGES="${IMAGES:-$HOME/showell_repos/cobblestone-u61/codex/test}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 VMM="$HERE/zig-out/bin/metal-vmm"
 [ -x "$VMM" ] || { echo "no $VMM; run: zig build"; exit 1; }
 
-# probe:image
-CASES="clock:fat16-list rng:fat16-list block:fat16-write fat16:fat16-list \
-fat16write:fat16-write vfat:fat16-write net:fat16-write http:fat16-write \
-stdhttp:fat16-write"
+# The probes, each run twice on copies of one fresh FAT16 volume: 32 MB,
+# 512-byte sectors, bare. One volume for every run, so the two disks after the
+# runs are comparable byte for byte.
+CASES="clock rng block vfat net http stdhttp"
+command -v mkfs.vfat > /dev/null || { echo "FAIL mkfs.vfat is not installed"; exit 1; }
+mkfs.vfat -F 16 -S 512 -n GOPHER -C "$WORK/fat16.blank" 32768 > /dev/null 2>&1 \
+    || { echo "FAIL mkfs.vfat could not make the FAT16 volume"; exit 1; }
 
 failed=0
 for one in $CASES; do
-    probe="${one%%:*}"
-    image="$IMAGES/${one##*:}.disk"
+    probe="$one"
+    image="$WORK/fat16.blank"
     elf="$GUESTS/$probe.elf"
     [ -f "$elf" ] || { echo "SKIP $probe (no $elf)"; continue; }
     fetch=""

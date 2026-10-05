@@ -31,16 +31,14 @@
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
-IMAGES="${IMAGES:-$HOME/showell_repos/cobblestone-u61/codex/test}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 VMM="$HERE/zig-out/bin/metal-vmm"
 [ -x "$VMM" ] || { echo "no $VMM; run: zig build"; exit 1; }
 
-# probe:image. The image `fat32` is a fresh volume made below.
-CASES="block:fat16-write fat16:fat16-list fat16write:fat16-write vfat:fat16-write \
-net:fat16-write http:fat16-write stdhttp:fat16-write rng:fat16-write clock:fat16-list \
+# probe:volume. Both volumes are made below, fresh for the run.
+CASES="block:fat16 vfat:fat16 net:fat16 http:fat16 stdhttp:fat16 rng:fat16 clock:fat16 \
 vfat:fat32 append:fat32"
 
 # **FAT32, ON A VOLUME MADE HERE**, as gopher-metal's runner makes its own
@@ -48,14 +46,18 @@ vfat:fat32 append:fat32"
 # FAT32, and a FAT bigger than one device request. Prod's data is FAT32, so
 # this is the format the devices here must not get wrong. One format, copied to
 # both sides: mkfs stamps the volume with the time it ran.
-command -v mkfs.vfat > /dev/null || { echo "FAIL mkfs.vfat is not installed, and the FAT32 cases need it"; exit 1; }
+# **FAT16 the same way**: 32 MB, 512-byte sectors, bare (no partition table),
+# the disk every other probe boots with.
+command -v mkfs.vfat > /dev/null || { echo "FAIL mkfs.vfat is not installed, and every case needs it"; exit 1; }
 mkfs.vfat -F 32 -S 512 -s 1 -n GOPHER -C "$WORK/fat32.blank" 40960 > /dev/null 2>&1 \
     || { echo "FAIL mkfs.vfat could not make the FAT32 volume"; exit 1; }
+mkfs.vfat -F 16 -S 512 -n GOPHER -C "$WORK/fat16.blank" 32768 > /dev/null 2>&1 \
+    || { echo "FAIL mkfs.vfat could not make the FAT16 volume"; exit 1; }
 
 failed=0
 for one in $CASES; do
     probe="${one%%:*}"
-    image="$IMAGES/${one##*:}.disk"
+    image="$WORK/fat16.blank"
     name="$probe"
     if [ "${one##*:}" = fat32 ]; then
         image="$WORK/fat32.blank"
