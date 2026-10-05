@@ -53,6 +53,23 @@ bottom.
    complete a request), header type and multi-function bits, and reads of
    registers that do not exist. Tests from PCI 3.0.
 
+7. **A peer that misbehaves, deterministically** (the README's "Open if it
+   resumes"). The wire can lose only the GUEST's frames today, and the peer
+   in `peer.zig` is a model client that never resets, floods, stops reading
+   or goes silent. So gopher-metal's long tier (`long.sh`, its lossy sweep
+   of gopher.elf) reaches 6 of tcp.zig's 18 coverage properties, and
+   `coverage/floor-metal.txt` says which; the simulator reaches all 18.
+   Give the peer what gopher-metal's `tcp_sim.zig` `Rough` gives its client,
+   each by environment knob as the faults are: a reset, exact or off by some
+   (`PEER_RESET_AT`); vanishing part-way through the answer
+   (`PEER_VANISH_AFTER`); a SYN flood from other addresses (`PEER_FLOOD`); a
+   receive window that shuts and stays shut a while; and losing the PEER's
+   frames on the wire, with the peer's own retransmission timer ticking on
+   the machine's clock (checked in the pump, as the README says: that is the
+   whole answer to "how, deterministically"). Unit tests for each, with the
+   peer driven by hand as `peer.zig`'s tests do; the box runs them against
+   gopher.elf and raises the metal floor to what they reach.
+
 ## Proposed
 
 *(CC adds items here, one line each on why.)*
