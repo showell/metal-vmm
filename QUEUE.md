@@ -224,6 +224,44 @@ bottom.
     Proposed, one line each on why) the next five faults or checks you
     think would find the most in gopher.elf. Then take the first one.
 
+**gopher-metal: the simulators** (CLOUD_WORK.md, "gopher-metal: the
+simulators"; branch from `antithesis-sdk`). Interleave these with 25-32 as
+you like; each is independent. Known red: `zig build properties` at 50,000
+seeds fails 14 rough seeds where a flood takes a real client's half-open slot
+(item 24 reviews it; Steve rules on the oracle). Leave them red until he
+does.
+
+33. **(gopher-metal) tcp_sim with several clients, and a stream held open.**
+    The simulator's table has 2 slots and one client; gopher.zig has 256
+    slots, serves one request at a time among them, and keeps chat's
+    streams open. Let a scenario choose the table's size and several
+    clients, each its own schedule, keep-alive with a second request, and a
+    client holding a stream; the oracles follow (every client that stayed
+    got its whole answer; a held stream is not given up on while its client
+    reads). This is item 20's peer, on the simulator's side.
+34. **(gopher-metal) A simulator for the page cache.** `page_cache.zig` is
+    pure (it imports only `std`, 417 lines) and has no properties. Drive it
+    with seeded reads, writes and whole-file writes against a reference map
+    of what each file holds; the oracle is that every read returns the
+    reference's bytes; `sometimes` properties for eviction, a whole-file
+    write replacing a kept copy, the largest file it will keep. Add it to
+    `zig build properties` and its floor to `floor-sim.txt`.
+35. **(gopher-metal) The other pure modules: `restart.zig`,
+    `request_heap.zig`, `log_ring.zig` and `kept_log.zig`.** Each imports
+    only `std` (kept_log also log_ring). Properties where a randomized drive
+    shows something the unit tests do not: a ring that wraps, a heap at its
+    limit, a restart decision at each of its branches. A small simulator
+    each only where a seed earns it; say which did not.
+36. **(gopher-metal) What fat_sim never reaches in fat16.zig.** On day one
+    the TCP properties found four tcp.zig paths tcp_sim never reached. Do
+    the same for FAT: `sometimes`/`reachable` properties on fat16.zig's
+    branches (errors, a full root, a full volume, chains that wrap, the
+    FAT32 paths), the sweep's report of which are never reached, then
+    fat_sim reaching them. fat16.zig is kernel code, so adding a property
+    to it is fine; changing what it does is the box's. It imports
+    `virtio.zig`: propose the seam that would make it a layer with nothing
+    below it (under Proposed), and do not cut it.
+
 ## Proposed
 
 *(CC adds items here, one line each on why.)*
