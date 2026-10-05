@@ -30,9 +30,17 @@ pub fn isPort(port: u16) bool {
     return port >= address_port and port < data_port + 4;
 }
 
-/// Where the BARs go: well above RAM and below the APIC, 64 KiB a slot.
+/// Where the BARs go: well above RAM and below the APIC, 64 KiB a slot. This
+/// is the firmware's placement; a guest may move a BAR (§6.2.5.1).
 const bar_base: u64 = 0xC000_0000;
 const bar_size: u64 = 0x1_0000;
+
+// The command register's bits a function here has (§6.2.2): memory space,
+// bus master, and interrupt disable. With no I/O BAR, I/O space is
+// hardwired to 0, and so is every bit for an error it never reports.
+const command_memory: u16 = 1 << 1;
+const command_bus_master: u16 = 1 << 2;
+const command_writable: u16 = command_memory | command_bus_master | (1 << 10);
 
 // Inside each BAR.
 const common_at = 0x0000;
@@ -116,6 +124,8 @@ pub const Function = struct {
             0x08 => 0x01 | (self.classCode() << 8), // revision 1, modern
             0x0C => 0, // header type 0, one function
             0x10 => @intCast(self.bar), // memory, 32-bit, not prefetchable
+            // The other BARs are not implemented, and read zero even after
+            // all ones are written: how sizing learns so (§6.2.5.1).
             0x2C => 0x1AF4 | (@as(u32, @intCast(self.device.id)) << 16),
             0x34 => cap_common,
             // struct virtio_pci_cap: vndr, next, len, cfg_type | bar, id, pad | offset | length
@@ -152,7 +162,20 @@ pub const Function = struct {
 
     fn configWrite(self: *Function, register: u8, value: u32, mask: u32) void {
         switch (register) {
-            0x04 => self.command = @truncate((self.command & ~mask) | (value & mask)),
+            0x04 => {
+                self.command = @as(u16, @truncate((self.command & ~mask) | (value & mask))) & command_writable;
+                // **NOT ALLOWED TO MASTER THE BUS, A DEVICE TOUCHES NO
+                // MEMORY**: not the rings, and not the APIC, which is what an
+                // MSI-X message is a write to (§6.2.2, §6.8.2).
+                self.device.may_dma = self.command & command_bus_master != 0;
+                self.flush();
+            },
+            // The address bits of the one BAR; its size's bits stay zero, so
+            // all ones written reads back the size (§6.2.5.1).
+            0x10 => {
+                const merged = (@as(u32, @truncate(self.bar)) & ~mask) | (value & mask);
+                self.bar = merged & ~@as(u32, bar_size - 1);
+            },
             // Only the bytes written change, and only the bits that are not
             // read-only.
             cap_msix => if (mask & 0xFFFF_0000 != 0) {
@@ -161,7 +184,7 @@ pub const Function = struct {
                 self.msix_control = @as(u16, @truncate(merged >> 16)) & (msix_enable | msix_function_mask);
                 if (was != self.msix_control) self.flush();
             },
-            else => {}, // BARs are placed here, not by the guest
+            else => {}, // read-only, or not implemented
         }
     }
 
@@ -354,6 +377,7 @@ pub const Function = struct {
     /// Sends every held message that nothing now masks, lowest entry first.
     fn flush(self: *Function) void {
         if (self.msix_control & msix_enable == 0 or self.msix_control & msix_function_mask != 0) return;
+        if (self.command & command_bus_master == 0) return;
         for (&self.table, 0..) |*e, i| {
             const bit = @as(u64, 1) << @intCast(i);
             if (self.pending & bit == 0 or e.control & 1 != 0) continue;
@@ -384,6 +408,7 @@ pub const Bus = struct {
         self.functions[slot] = .{ .device = device, .bar = bar_base + slot * bar_size, .apic = lapic };
         const f = &self.functions[slot].?;
         device.completion = .{ .context = f, .done = completedThunk };
+        device.may_dma = false; // until the driver sets bus master
         return f;
     }
 
@@ -406,7 +431,8 @@ pub const Bus = struct {
         return switch (self.selected()) {
             // **AN EMPTY SLOT READS ALL ONES**, vendor included.
             .none => 0xFFFF_FFFF,
-            // An Intel host bridge (Q35's), so the guest knows there is a bus.
+            // An Intel host bridge (Q35's), so the guest knows there is a bus:
+            // header type 0, one function, and the rest zero.
             .bridge => switch (register) {
                 0x00 => 0x8086 | (0x29C0 << 16),
                 0x08 => 0x06_00_00 << 8,
@@ -448,25 +474,28 @@ pub const Bus = struct {
         for (bytes, 0..) |*b, i| b.* = @truncate(dword >> (shift + @as(u5, @intCast(i * 8))));
     }
 
-    /// An access to some function's BAR; false when none holds `addr`.
+    /// **AN ACCESS TO SOME FUNCTION'S BAR**, wherever the guest put it, if
+    /// its memory decoding is on (§6.2.2); false when nothing here holds
+    /// `addr`. The firmware's range reads all ones where nothing decodes, as
+    /// an access nobody claims does on a PC.
     pub fn memory(self: *Bus, ram: []u8, addr: u64, is_write: bool, data: []u8) bool {
-        if (addr < bar_base or addr >= bar_base + slots * bar_size) return false;
-        const slot: usize = @intCast((addr - bar_base) / bar_size);
-        const f = if (self.functions[slot]) |*f| f else return false;
-        // A function whose memory decoding is off answers nothing (§6.2.2).
-        if (f.command & 0x2 == 0) {
-            if (!is_write) @memset(data, 0xFF);
+        for (&self.functions) |*slot| {
+            const f = if (slot.*) |*f| f else continue;
+            if (f.command & command_memory == 0) continue;
+            if (addr < f.bar or addr >= f.bar + bar_size) continue;
+            const offset = addr - f.bar;
+            if (is_write) {
+                var value: u64 = 0;
+                for (data, 0..) |b, i| value |= @as(u64, b) << @intCast(i * 8);
+                f.write(ram, offset, @intCast(data.len), value);
+            } else {
+                const value = f.read(offset, @intCast(data.len));
+                for (data, 0..) |*b, i| b.* = @truncate(value >> @intCast(i * 8));
+            }
             return true;
         }
-        const offset = addr - f.bar;
-        if (is_write) {
-            var value: u64 = 0;
-            for (data, 0..) |b, i| value |= @as(u64, b) << @intCast(i * 8);
-            f.write(ram, offset, @intCast(data.len), value);
-        } else {
-            const value = f.read(offset, @intCast(data.len));
-            for (data, 0..) |*b, i| b.* = @truncate(value >> @intCast(i * 8));
-        }
+        if (addr < bar_base or addr >= bar_base + slots * bar_size) return false;
+        if (!is_write) @memset(data, 0xFF);
         return true;
     }
 };
@@ -1209,4 +1238,152 @@ test "a message nothing here takes is counted, not delivered" {
     m.bus.functions[2].?.completed(0);
     try testing.expect(m.lapic.next() == null);
     try testing.expectEqual(@as(u64, 1), m.bus.functions[2].?.unheard);
+}
+
+// ── configuration space, as PCI 3.0 has it ──────────────────────────────────
+
+fn cfgWrite32(g: *FakeGuest, slot: u8, register: u8, value: u32) void {
+    var addr: [4]u8 = undefined;
+    std.mem.writeInt(u32, &addr, 0x8000_0000 | (@as(u32, slot) << 11) | register, .little);
+    g.bus.out(address_port, &addr);
+    var data: [4]u8 = undefined;
+    std.mem.writeInt(u32, &data, value, .little);
+    g.bus.out(data_port, &data);
+}
+
+test "sizing a BAR: all ones written, the size read back, the address restored" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    // §6.2.5.1, as firmware does it, with decoding off.
+    const was = g.cfgRead32(2, 0x10);
+    cfgWrite32(&g, 2, 0x10, 0xFFFF_FFFF);
+    const sized = g.cfgRead32(2, 0x10);
+    try testing.expectEqual(@as(u32, 0), sized & 0xF); // memory, 32-bit, not prefetchable
+    try testing.expectEqual(@as(u32, bar_size), ~(sized & 0xFFFF_FFF0) +% 1);
+    cfgWrite32(&g, 2, 0x10, was);
+    try testing.expectEqual(was, g.cfgRead32(2, 0x10));
+}
+
+test "the BARs that are not implemented read zero, even after all ones" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    for ([_]u8{ 0x14, 0x18, 0x1C, 0x20, 0x24, 0x30 }) |r| {
+        cfgWrite32(&g, 2, r, 0xFFFF_FFFF);
+        try testing.expectEqual(@as(u32, 0), g.cfgRead32(2, r));
+    }
+}
+
+test "a BAR moved by the guest moves the windows with it" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    const f = g.open(2).?; // memory and bus master on
+    const was = g.bar(2, 0).?;
+    try testing.expectEqual(@as(u8, 0), try g.load(u8, f.common + 0x14));
+    cfgWrite32(&g, 2, 0x10, 0xD000_0000);
+    try testing.expectEqual(@as(?u64, 0xD000_0000), g.bar(2, 0));
+    // The device answers at its new place, and not at its old one.
+    try g.store(u8, 0xD000_0000 + common_at + 0x14, 1);
+    try testing.expectEqual(@as(u8, 1), try g.load(u8, 0xD000_0000 + common_at + 0x14));
+    try testing.expectEqual(@as(u8, 0xFF), try g.load(u8, was + common_at + 0x14));
+}
+
+test "with memory space off, the BAR decodes nothing" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    const f = g.open(2).?;
+    try g.store(u8, f.common + 0x14, 1);
+    g.cfgWrite16(2, 0x04, 0x0004); // bus master only
+    try testing.expectEqual(@as(u8, 0xFF), try g.load(u8, f.common + 0x14));
+    try g.store(u8, f.common + 0x14, 3); // swallowed
+    g.cfgWrite16(2, 0x04, 0x0006);
+    try testing.expectEqual(@as(u8, 1), try g.load(u8, f.common + 0x14));
+}
+
+test "not allowed to master the bus, a device completes nothing; allowed, the next doorbell does" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    const up = try g.bringUp(virtio.device_id_entropy, 0, 0);
+    g.cfgWrite16(3, 0x04, 0x0002); // memory only
+    try g.offer(up.doorbell, 0, 0);
+    try testing.expectEqual(@as(u16, 0), g.usedIdx());
+    try testing.expect(m.lapic.next() == null);
+    g.cfgWrite16(3, 0x04, 0x0006);
+    try g.store(u16, up.doorbell, 0);
+    try testing.expectEqual(@as(u16, 1), g.usedIdx());
+    try testing.expectEqual(@as(?u8, FakeGuest.wake_vector), m.lapic.next());
+}
+
+test "a frame waits on the wire while the card may not master the bus" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    const up = try g.bringUp(virtio.device_id_net, 1 << 5, 0);
+    try g.offer(up.doorbell, 0, 0);
+    g.cfgWrite16(2, 0x04, 0x0002);
+    m.card.line.hold(&.{ 1, 2, 3, 4 }, 0);
+    m.card.pump(&m.card_device, &g.ram, 0);
+    try testing.expectEqual(@as(u16, 0), g.usedIdx());
+    g.cfgWrite16(2, 0x04, 0x0006);
+    m.card.pump(&m.card_device, &g.ram, 0);
+    try testing.expectEqual(@as(u16, 1), g.usedIdx());
+}
+
+test "an MSI-X message is a memory write: held while bus mastering is off" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    _ = try g.bringUp(virtio.device_id_entropy, 0, 0);
+    g.cfgWrite16(3, 0x04, 0x0002);
+    m.bus.functions[3].?.completed(0);
+    try testing.expect(m.lapic.next() == null);
+    try testing.expectEqual(@as(u64, 1), m.bus.functions[3].?.pending);
+    g.cfgWrite16(3, 0x04, 0x0006);
+    try testing.expectEqual(@as(?u8, FakeGuest.wake_vector), m.lapic.next());
+}
+
+test "the command register keeps only the bits a function here has" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    g.cfgWrite16(2, 0x04, 0xFFFF);
+    // §6.2.2: I/O space is hardwired to 0 with no I/O BAR; memory, bus
+    // master and interrupt disable are kept.
+    try testing.expectEqual(@as(u16, 0x0406), g.cfgRead16(2, 0x04));
+}
+
+test "header type 0, one function: the others in the slot are not there" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    for ([_]u8{ 0, 2 }) |slot| {
+        try testing.expectEqual(@as(u8, 0), g.cfgRead8(slot, 0x0E)); // §6.2.1
+    }
+    var addr: [4]u8 = undefined;
+    std.mem.writeInt(u32, &addr, 0x8000_0000 | (2 << 11) | (1 << 8), .little);
+    m.bus.out(address_port, &addr);
+    var data: [4]u8 = undefined;
+    m.bus.in(data_port, &data);
+    try testing.expectEqual(@as(u32, 0xFFFF_FFFF), std.mem.readInt(u32, &data, .little));
+}
+
+test "read-only registers keep their values, and unimplemented ones read zero" {
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    const id = g.cfgRead32(2, 0x00);
+    const class = g.cfgRead32(2, 0x08);
+    cfgWrite32(&g, 2, 0x00, 0);
+    cfgWrite32(&g, 2, 0x08, 0);
+    cfgWrite32(&g, 2, 0x34, 0);
+    try testing.expectEqual(id, g.cfgRead32(2, 0x00));
+    try testing.expectEqual(class, g.cfgRead32(2, 0x08));
+    try testing.expectEqual(@as(u8, cap_common), g.cfgRead8(2, 0x34));
+    // §6.1: reserved and unimplemented registers read zero.
+    for ([_]u8{ 0x28, 0x38, 0x3C, 0xA0, 0xFC }) |r| try testing.expectEqual(@as(u32, 0), g.cfgRead32(2, r));
+    for ([_]u8{ 0x04, 0x10, 0x2C, 0x34, 0x3C, 0xFC }) |r| try testing.expectEqual(@as(u32, 0), g.cfgRead32(0, r));
 }

@@ -150,6 +150,11 @@ pub const Device = struct {
     /// no interrupts on that queue (VIRTQ_AVAIL_F_NO_INTERRUPT). Null on mmio,
     /// where the guest only polls.
     completion: ?Completion = null,
+    /// **WHETHER THE DEVICE MAY TOUCH THE GUEST'S MEMORY AT ALL.** On PCI,
+    /// the function's bus-master bit (pci.zig); until it is set, nothing is
+    /// taken from a queue, so a frame waits on the wire and a request waits
+    /// for the next doorbell. Always so on mmio.
+    may_dma: bool = true,
 
     pub fn read(self: *Device, offset: u64, len: u32) u64 {
         if (offset >= @intFromEnum(Reg.config)) {
@@ -231,7 +236,7 @@ pub const Device = struct {
     /// for as long as it likes, which is exactly what a receive queue is for.
     pub fn take(self: *Device, ram: []u8, index: u32, into: []Desc) ?Chain {
         const q = &self.queues[index];
-        if (q.ready == 0 or q.size == 0) return null;
+        if (!self.may_dma or q.ready == 0 or q.size == 0) return null;
         const size: u16 = @intCast(q.size);
         if (q.last_avail == readInt(u16, ram, q.avail + 2)) return null;
         const head = readInt(u16, ram, q.avail + 4 + @as(u64, q.last_avail % size) * 2);

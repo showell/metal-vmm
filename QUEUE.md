@@ -47,7 +47,7 @@ bottom.
    of zero disarming, and the timer's one-shot and periodic modes (initial
    and current count) for a guest that is not gopher-metal. Unit tests for
    each, from the SDM.
-6. **PCI configuration space, closer to the spec.** BAR sizing (write all
+6. **Done (CC).** **PCI configuration space, closer to the spec.** BAR sizing (write all
    ones, read the size mask back), the command register gating memory
    decoding and bus mastering (a device not allowed to master the bus may not
    complete a request), header type and multi-function bits, and reads of
