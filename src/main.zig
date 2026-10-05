@@ -878,6 +878,16 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         std.debug.print("metal-vmm: FAULT_SEED={d} is {s}\n", .{ seed, turned.format(&line) });
     }
     tellTheFaults(&card.line, &block.refusals, &card.peer.rough, &turned);
+    // **THE CALENDAR AS A KNOB** (`RTC_BOOTS_AT=unix`): the day the chip
+    // boots on, from 1970 to 9999. Every run with it boots on that instant.
+    if (turned.get("RTC_BOOTS_AT")) |text| {
+        const at = std.fmt.parseInt(i64, text, 10) catch -1;
+        if (at < 0 or at > clock.last_boot) {
+            std.debug.print("metal-vmm: RTC_BOOTS_AT={s} is not a time from 1970 to 9999\n", .{text});
+            return 2;
+        }
+        machine.rtc.from = at;
+    }
     // **A WRITE CACHE, AND FLUSH OFFERED**, only when asked: offering the
     // feature changes what the guest negotiates, and check.sh holds the
     // default machine to QEMU's.

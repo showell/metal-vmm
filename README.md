@@ -135,7 +135,9 @@ seconds-edges — takes 1.3 s here against 9.7 s under QEMU.
 
 **And the wall clock is a decision.** The machine boots at noon on 2026-09-18,
 every time, so the dates a guest writes into a filesystem are the same dates on
-every run.
+every run. `RTC_BOOTS_AT=unix` makes it another instant, as decided: the last
+second of 32-bit time (`2147483647`), the end of a century (`4102444799`), a
+leap day's eve (`1835395199`), anything from 1970 to 9999.
 
 ### `rdtsc` does not exit, so the loader makes it one
 

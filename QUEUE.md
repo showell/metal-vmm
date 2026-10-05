@@ -330,7 +330,7 @@ order without waiting; the box answers when he is back).
 45. **Done (CC, `Rough.retry`; whether the volume holds the message once is the box's).** **(metal-vmm) F4, a client that retries what got no answer**
     (`PEER_RETRY=1`), with the run's end saying how many times the request
     was sent; whether the volume holds the message once is the box's check.
-46. **(metal-vmm) F5, the calendar as a knob** (`RTC_BOOTS_AT=unix`).
+46. **Done (CC, `Rtc.from`).** **(metal-vmm) F5, the calendar as a knob** (`RTC_BOOTS_AT=unix`).
 47. **(gopher-metal) REVIEW-flood's option 4, revival, in tcp.zig.**
     Steve ruled yes (2026-10-05): build it for merging. The box reviews the
     diff and merges it into `antithesis-sdk`; it reaches the site only in
