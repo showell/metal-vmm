@@ -252,7 +252,7 @@ does.
     shows something the unit tests do not: a ring that wraps, a heap at its
     limit, a restart decision at each of its branches. A small simulator
     each only where a seed earns it; say which did not.
-36. **(gopher-metal) What fat_sim never reaches in fat16.zig.** On day one
+36. **Done (CC, gopher-metal `2beac8a`): 35 reachable properties in fat16.zig (properties only), 33 of them never reached by the sweep before, 28 now reached by fat_sim's probes and on the floor; the seam under Proposed, two findings under Questions.** **(gopher-metal) What fat_sim never reaches in fat16.zig.** On day one
     the TCP properties found four tcp.zig paths tcp_sim never reached. Do
     the same for FAT: `sometimes`/`reachable` properties on fat16.zig's
     branches (errors, a full root, a full volume, chains that wrap, the
@@ -391,6 +391,27 @@ first (CC):
   FAT's last year), a leap day, and just before midnight, for FAT
   timestamps, cookie expiry and anything that sorts by date.
 
+From item 36 (CC):
+
+- **G1. The seam that makes fat16.zig a layer with nothing below it.** It
+  imports `virtio.zig` for one thing: a disk of 512-byte sectors, through
+  `Block.read`, `readMany`, `write`, `writeMany`, `Block.max_sectors` and
+  `blk_s_ok`. Let `Volume` take that as a small interface of its own (a
+  `Sectors` struct of four function pointers and a context, or `Volume`
+  generic over a device type), with virtio.Block one implementation and an
+  in-memory one another. What stays behind is the driver; what comes out
+  is everything fat16 decides. And the test hooks that live in virtio.zig
+  today (`Block.inMemory`, `fail_after`, `fail_after_writes`, `fault`, the
+  `requests` and `writes` counts) move to test_disk.zig, out of the
+  driver the kernel runs. Nothing about what fat16 does changes; it is a
+  move the box makes, because fat16 serves lynrummy.com.
+- **G2. A fault on a multi-sector write**, for test_disk: `fail_after`
+  stops every request after it, so a failure meant for an append's run of
+  data sectors meets the read before it first, and "fat: a run of sectors
+  fails to write" is reached about once in 160 failure points. A fault
+  that refuses only the next write of more than one sector reaches it
+  every time. test_disk.zig is not the simulators' to change.
+
 Folded into existing items rather than new ones: M4, L1, L2, L3 into item 4
 (MSI-X); L4 into item 5 (APIC); L5 (0xCF9) waits until a reset is something
 this machine survives.
@@ -398,6 +419,26 @@ this machine survives.
 ## Questions
 
 *(For the box or Steve. Take the next item; do not wait.)*
+
+- **(CC, item 36) fat16: a tree makePath makes is one check and
+  removeTree refuse.** makePath, and so writeFile, makes directories at
+  any depth; `check` calls a tree past `max_tree_depth` (16) `too_deep`,
+  and `removeTree` refuses it with `BadChain`, so io.zig's deleteTree of
+  it answers WriteFailed for good. A volume this code made is one its own
+  check calls broken. One side moves: a depth limit in makePath, or none
+  in check and removeTree (whose limit is there for a looped tree, which
+  `Loop` could catch instead). gopher-metal's fat_sim.zig has the failing
+  test.
+- **(CC, item 36) fat16: a file whose chain loops reads back as other
+  bytes, with no error.** `readAt` follows the chain only as far as the
+  file's size, so a damaged FAT whose chain loops answers the earlier
+  clusters' bytes again as the file's. A chain that leads outside the
+  data is caught (`BadChain`), and an append to a looped chain is
+  (`chainEnd`'s `Loop`); a read is not. Damage, not this code's doing, but
+  the read is where it would be served to a client as the file. `Loop` in
+  `readAt` would refuse it. Not a failing test: whether a read should
+  notice is the box's call. fat_sim's probes count it ("a file whose
+  chain loops reads as other bytes, without an error").
 
 - **(CC, item 35) log_ring: a ring holding exactly its capacity reads as
   garbage.** Once exactly `buf.len` bytes are written, `head` is back at 0
