@@ -170,26 +170,23 @@ fn textRange(image: []const u8, head: *const ElfHeader) struct { lo: u64, hi: u6
 /// in guest memory, so QEMU still runs the same bytes and check.sh stays an
 /// honest oracle.
 ///
-/// Two bytes is a short pattern to search for, and a `0F 31` that fell inside
-/// some other instruction's operand would corrupt the guest silently. Counted
-/// across nine of gopher-metal's kernels, the number of these pairs in the
-/// loadable segment equals the number of `rdtsc` instructions a disassembler
-/// finds, every time — 34 in the clock probe, 12 in stdhttp, none in rng.
-/// x86 leaves this pair unlikely to land on by accident, and these kernels
-/// keep no data in their text.
+/// **ONLY A MARKED READ.** Two bytes is too short a pattern: gopher.elf
+/// (2026-10-05) has 87 `0F 31` pairs in its text and 77 `rdtsc`s, and
+/// rewriting the other ten, inside other instructions' operands, stopped the
+/// guest on an invalid opcode. gopher-metal's `tsc.read` puts a 7-byte NOP
+/// whose displacement spells "mvmc" right before its `rdtsc`; this rewrites
+/// the `rdtsc` after that mark and nothing else. A guest that reads the
+/// counter without the mark reads the host's, which this does not see.
 fn rewriteClockReads(segment: []u8) usize {
-    const rdtsc = [2]u8{ 0x0F, 0x31 };
+    const mark = [_]u8{ 0x0F, 0x1F, 0x80, 'm', 'v', 'm', 'c' };
+    const marked_rdtsc = mark ++ [2]u8{ 0x0F, 0x31 };
     const out_to_us = [2]u8{ 0xE6, @as(u8, @intCast(tsc_port)) };
     var found: usize = 0;
     var at: usize = 0;
-    while (at + 2 <= segment.len) {
-        if (std.mem.eql(u8, segment[at..][0..2], &rdtsc)) {
-            @memcpy(segment[at..][0..2], &out_to_us);
-            found += 1;
-            at += 2;
-        } else {
-            at += 1;
-        }
+    while (std.mem.indexOfPos(u8, segment, at, &marked_rdtsc)) |k| {
+        @memcpy(segment[k + mark.len ..][0..2], &out_to_us);
+        found += 1;
+        at = k + marked_rdtsc.len;
     }
     return found;
 }
@@ -1010,11 +1007,13 @@ test "a segment is placed where it asks to be, and the note names the entry" {
     try testing.expectEqual(@as(u8, 0xAA), ram[0x100000 - 1]);
 }
 
-test "every rdtsc in the guest's text becomes a question for us" {
+test "every marked rdtsc in the guest's text becomes a question for us" {
     var file: [512]u8 align(8) = undefined;
-    // Two real ones, and two near misses: 0F 30 is wrmsr, and the 31 0F pair
-    // in the middle is the same two bytes the other way round.
-    const body = "\x0f\x31\x0f\x30\x31\x0f\x0f\x31";
+    // Two marked reads, and two near misses: an unmarked 0F 31, which may sit
+    // inside another instruction and must be left alone, and the mark before
+    // 0F 30 (wrmsr).
+    const m = "\x0f\x1f\x80mvmc";
+    const body = m ++ "\x0f\x31" ++ "\x0f\x31" ++ m ++ "\x0f\x30" ++ m ++ "\x0f\x31";
     const image = fakeKernel(&file, 0x100000, 0x100000, body);
     const ram = try testing.allocator.alloc(u8, 0x101000);
     defer testing.allocator.free(ram);
@@ -1022,7 +1021,8 @@ test "every rdtsc in the guest's text becomes a question for us" {
 
     const loaded = try load(ram, image);
     try testing.expectEqual(@as(usize, 2), loaded.clock_reads);
-    try testing.expectEqualSlices(u8, "\xe6\xe0\x0f\x30\x31\x0f\xe6\xe0", ram[0x100000..][0..body.len]);
+    const want = m ++ "\xe6\xe0" ++ "\x0f\x31" ++ m ++ "\x0f\x30" ++ m ++ "\xe6\xe0";
+    try testing.expectEqualSlices(u8, want, ram[0x100000..][0..body.len]);
 }
 
 test "a kernel with no PVH note is refused, rather than started at a guess" {
