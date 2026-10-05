@@ -76,29 +76,29 @@ bottom.
 
 From the review (`docs/reviews/REVIEW-interrupts.md`), most urgent first:
 
-7. **Config-data port accesses at any offset and width (H1).** `inl $0xCFD`
+8. **Config-data port accesses at any offset and width (H1).** `inl $0xCFD`
    panics this program (integer overflow, `pci.zig:350`): a guest's input
    kills the VMM, which an explorer will find first.
-8. **The deadline timer between halts (H2).** `tick` runs only in `rest`, so
+9. **The deadline timer between halts (H2).** `tick` runs only in `rest`, so
    a deadline passed while running reads back unchanged and is lost when
    rewritten; gopher-metal wakes less often here than on a droplet.
-9. **A halt with interrupts off stops the machine (M1).** `rest` ignores
+10. **A halt with interrupts off stops the machine (M1).** `rest` ignores
    `if_flag`, so `cli; hlt` resumes past the `hlt` later, which no PC does.
-10. **A vector is in service only once injected (M2).** The not-ready branch
+11. **A vector is in service only once injected (M2).** The not-ready branch
     of `rest` strands a vector in service and ends the run; untested.
-11. **BAR accesses split into aligned dwords (M3).** A QWORD unmask of an
+12. **BAR accesses split into aligned dwords (M3).** A QWORD unmask of an
     MSI-X entry leaves it masked; a QWORD `queue_desc` write keeps the stale
     high half. The MSI-X half folds into item 4.
-12. **Queues that do not exist read as absent (M5).** A `queue_select` past
+13. **Queues that do not exist read as absent (M5).** A `queue_select` past
     the last aliases the last queue, and `num_queues` is 2 for one-queue
     devices; virtio 1.2 §4.1.4.3.2 requires `queue_size` 0.
-13. **The host's time behind the filter, on both machines (D1).** `rdtscp`,
+14. **The host's time behind the filter, on both machines (D1).** `rdtscp`,
     IA32_TSC, TSC_ADJUST, MPERF/APERF and kvmclock still read the host; the
     microvm half changes check.sh's guests, so it is the box's to merge.
-14. **Ports 0xE0/0xE1 answer only the rewritten instructions, and the
+15. **Ports 0xE0/0xE1 answer only the rewritten instructions, and the
     deadline marks are counted (D2, D3).** Any `out 0xE1` reaches the APIC's
     MSRs today, and a kernel without marks runs with no timer, silently.
-15. **A halt is not a hang on the PC-shaped machine (P1).** An idle server
+16. **A halt is not a hang on the PC-shaped machine (P1).** An idle server
     is killed as `GuestStuck` after ~1M exits of resting (minutes of guest
     time); soaks and the explorer will hit it.
 
