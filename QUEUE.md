@@ -286,7 +286,7 @@ crash on the peer's own input.
     reset sent"), as the wire reports what it lost. The same for any knob
     whose moment passes unused (`PEER_VANISH_AFTER` past the answer's
     length, `PEER_SHUT_AFTER` likewise, `PEER_EAT` past the last frame).
-39. **(a) done (CC): `PEER_IGNORE_WINDOW=1`, and a plain client now keeps to the guest's window (P2's first half), which only a request larger than the window notices.** **(metal-vmm) The last three of tcp.zig's eighteen, on the real kernel.**
+39. **(b) done (CC): `WIRE_EAT`, `PEER_EAT`, `PEER_DAMAGE` and `DISK_REFUSE` take ranges (`8-40`) among up to 32 numbers. (c) is the box's.** **(a) done (CC): `PEER_IGNORE_WINDOW=1`, and a plain client now keeps to the guest's window (P2's first half), which only a request larger than the window notices.** **(metal-vmm) The last three of tcp.zig's eighteen, on the real kernel.**
     (a) **a peer sends past the window**: the peer keeps to the guest's
     window (its sends stop at the guest's shut 16 KB buffer, and a 20 KB
     request then deadlocks until the guest's idle timeout). A knob for a

@@ -204,8 +204,8 @@ test "the card reports the address the guest prints, and the feature it wants" {
 
 test "the wire loses the peer's nth frame, and damages another so its checksum fails" {
     var card = Net{};
-    card.line.peer_lost.named[0] = 1;
-    card.line.peer_damaged.named[0] = 2;
+    card.line.peer_lost.named[0] = .one(1);
+    card.line.peer_damaged.named[0] = .one(2);
     var p = wire.Peer{};
     const syn = p.open("GET", 0);
     card.line.hold(syn, 0); // the first: lost

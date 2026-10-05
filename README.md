@@ -315,7 +315,8 @@ same 4 s as the debug one, so `zig build`'s default stays debug.
 
 A hypervisor that owns every input can choose to withhold one, and a
 deterministic one can do it to a recipe. The wire will eat what the guest
-sends — a numbered frame (`WIRE_EAT=3`, or `3,9`), or one frame in n
+sends — a numbered frame (`WIRE_EAT=3`, or `3,9`, or a range, `8-40`; up to
+32 of these), or one frame in n
 (`WIRE_LOSS=4`) — and it will hold what comes back (`WIRE_LATENCY_US=250`).
 
 **Losing frame number n is a better knob than a loss rate.** A rate explores

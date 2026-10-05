@@ -181,9 +181,14 @@ pub fn unspent(line: *const faults.Wire, peer: *const wire.Peer, drive: *const f
         .{ .name = "DISK_REFUSE", .s = &drive.refused, .of = if (drive.writes_only) "the guest wrote" else if (drive.reads_only) "the guest read" else "the guest made" },
     };
     for (named) |n| for (n.s.named) |k| {
-        if (k != 0 and k > n.s.seen) w(buf, &at, "{s} #{d} never came: {s} {d}", .{
-            n.name, k, n.of, n.s.seen,
-        });
+        if (k.lo == 0 or k.hi <= n.s.seen) continue;
+        if (k.lo == k.hi) {
+            w(buf, &at, "{s} #{d} never came: {s} {d}", .{ n.name, k.lo, n.of, n.s.seen });
+        } else if (k.lo > n.s.seen) {
+            w(buf, &at, "{s} #{d}-{d} never came: {s} {d}", .{ n.name, k.lo, k.hi, n.of, n.s.seen });
+        } else {
+            w(buf, &at, "{s} #{d}-{d} ended early: {s} {d}", .{ n.name, k.lo, k.hi, n.of, n.s.seen });
+        }
     };
 
     const c = &peer.tcp;
@@ -223,10 +228,12 @@ test "a knob whose moment never came says so, and a spent one says nothing" {
     try testing.expectEqualStrings("", unspent(&line, &peer, &drive, &buf));
 
     // Frames and requests named past the last.
-    line.lost.named[0] = 2;
-    line.lost.named[1] = 9;
-    line.peer_lost.named[0] = 4;
-    drive.refused.named[0] = 50;
+    line.lost.named[0] = .one(2);
+    line.lost.named[1] = .one(9);
+    line.peer_lost.named[0] = .one(4);
+    line.peer_lost.named[1] = .{ .lo = 3, .hi = 6 };
+    line.peer_damaged.named[0] = .{ .lo = 5, .hi = 6 };
+    drive.refused.named[0] = .one(50);
     drive.writes_only = true;
     for (0..3) |_| _ = line.carries();
     for (0..4) |_| line.hold("x", 0);
@@ -241,6 +248,8 @@ test "a knob whose moment never came says so, and a spent one says nothing" {
     drive.cut_after = 40;
     try testing.expectEqualStrings(
         \\metal-vmm: WIRE_EAT #9 never came: the guest sent 3
+        \\metal-vmm: PEER_EAT #3-6 ended early: the peer sent 4
+        \\metal-vmm: PEER_DAMAGE #5-6 never came: the peer sent 4
         \\metal-vmm: DISK_REFUSE #50 never came: the guest wrote 7
         \\metal-vmm: PEER_RESET_AT=3000 fell when the connection was not open (syn_sent); no reset sent
         \\metal-vmm: PEER_VANISH_AFTER=900 never came: the client had 120 bytes of the answer
@@ -255,8 +264,10 @@ test "a knob whose moment never came says so, and a spent one says nothing" {
     peer.tcp.shut_ever = true;
     peer.flooded = 5;
     drive.cut = .{ .write = 40, .sector = 0, .landed = 1, .of = 1 };
-    line.lost.named[1] = 0;
-    drive.refused.named[0] = 7;
+    line.lost.named[1] = .{};
+    line.peer_lost.named[1] = .{};
+    line.peer_damaged.named[0] = .{};
+    drive.refused.named[0] = .one(7);
     try testing.expectEqualStrings("metal-vmm: PEER_RESET_AT=3000 fell when the connection was not open (gone); no reset sent\n", unspent(&line, &peer, &drive, &buf));
     // A reset that came: spent, though the vanish after it never could.
     peer.tcp.state = .reset;

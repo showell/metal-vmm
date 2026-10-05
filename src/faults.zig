@@ -31,8 +31,9 @@ const std = @import("std");
 /// Each user gets its own dice. A draw for the disk must not move the wire's
 /// generator along, or turning one on would change what the other did.
 pub const Schedule = struct {
-    /// The ones to pick, counting from one. Zeroes mean nothing.
-    named: [8]u32 = @splat(0),
+    /// The ones to pick, counting from one: each a number or a range of them
+    /// (`WIRE_EAT=3,9,20-60`), as many as `named.len`. Zeroes mean nothing.
+    named: [32]Span = @splat(.{}),
     /// Or one in this many, drawn. Zero picks none, which is the default and
     /// what every probe in check.sh runs on.
     rate: u32 = 0,
@@ -42,12 +43,26 @@ pub const Schedule = struct {
     picked: [8]u32 = @splat(0),
     picked_count: u64 = 0,
 
+    /// The ones from `lo` to `hi`, both included; zero is none.
+    pub const Span = struct {
+        lo: u32 = 0,
+        hi: u32 = 0,
+
+        pub fn one(n: u32) Span {
+            return .{ .lo = n, .hi = n };
+        }
+
+        fn has(self: Span, n: u64) bool {
+            return self.lo != 0 and n >= self.lo and n <= self.hi;
+        }
+    };
+
     pub fn init(seed: u64) Schedule {
         return .{ .dice = .init(seed) };
     }
 
     pub fn configured(self: *const Schedule) bool {
-        return self.rate != 0 or self.named[0] != 0;
+        return self.rate != 0 or self.named[0].lo != 0;
     }
 
     /// Counts one more, and answers whether it is chosen. Called once per
@@ -56,7 +71,7 @@ pub const Schedule = struct {
         self.seen += 1;
         var chosen = false;
         for (self.named) |n| {
-            if (n != 0 and n == self.seen) chosen = true;
+            if (n.has(self.seen)) chosen = true;
         }
         if (!chosen and self.rate != 0) chosen = self.dice.random().uintLessThan(u32, self.rate) == 0;
         if (!chosen) return false;
@@ -188,7 +203,7 @@ const testing = std.testing;
 
 test "the numbered frame is the one that goes missing" {
     var w = Wire{};
-    w.lost.named[0] = 3;
+    w.lost.named[0] = .one(3);
     try testing.expect(w.carries());
     try testing.expect(w.carries());
     try testing.expect(!w.carries()); // the third
@@ -230,7 +245,7 @@ test "two users of the same idea do not move each other's dice" {
 
 test "the disk refuses the request it was told to refuse" {
     var d = Drive{};
-    d.refused.named[0] = 2;
+    d.refused.named[0] = .one(2);
     try testing.expect(d.serves(10, 1, false));
     try testing.expect(!d.serves(11, 1, true));
     try testing.expect(d.serves(12, 1, false));
@@ -416,10 +431,10 @@ test "reads only: the bad sector's reads are refused and its writes land" {
 
 test "a bad sector leaves the schedule's count where it was" {
     var plain = Drive{};
-    plain.refused.named[0] = 4;
+    plain.refused.named[0] = .one(4);
     var with = Drive{ .bad_len = 1 };
     with.bad[0] = 3;
-    with.refused.named[0] = 4;
+    with.refused.named[0] = .one(4);
     for (1..7) |i| {
         const a = plain.serves(i, 1, false);
         const b = with.serves(i, 1, false);
@@ -447,4 +462,22 @@ test "a torn write lands its first sectors only, counting writes of more than on
     // A keep as large as the write still leaves its last sector unwritten.
     var e = Drive{ .tear = 1, .tear_keep = 99 };
     try testing.expectEqual(@as(u64, 1), e.lands(0, 2));
+}
+
+test "a range picks every one in it, and with numbers past eight of them" {
+    var s = Schedule.init(1);
+    s.named[0] = .one(2);
+    s.named[1] = .{ .lo = 5, .hi = 40 };
+    s.named[2] = .one(45);
+    var picked: usize = 0;
+    for (1..60) |n| {
+        const p = s.picks();
+        const want = n == 2 or (n >= 5 and n <= 40) or n == 45;
+        try testing.expectEqual(want, p);
+        if (p) picked += 1;
+    }
+    try testing.expectEqual(@as(u64, 38), s.picked_count);
+    try testing.expectEqual(@as(usize, 38), picked);
+    // The first eight are remembered by number; the rest only counted.
+    try testing.expectEqualSlices(u32, &.{ 2, 5, 6, 7, 8, 9, 10, 11 }, &s.picked);
 }

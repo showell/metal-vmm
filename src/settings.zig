@@ -137,9 +137,33 @@ pub fn numbers(schedule: *faults.Schedule, k: *const knobs.Knobs, name: []const 
     var each = std.mem.tokenizeScalar(u8, list, ',');
     while (each.next()) |one| {
         if (at >= schedule.named.len) break;
-        schedule.named[at] = std.fmt.parseInt(u32, one, 10) catch continue;
+        schedule.named[at] = span(one) orelse continue;
         at += 1;
     }
+}
+
+/// `n`, or `lo-hi` with lo no more than hi; anything else is nothing.
+fn span(text: []const u8) ?faults.Schedule.Span {
+    const dash = std.mem.indexOfScalar(u8, text, '-') orelse {
+        const n = std.fmt.parseInt(u32, text, 10) catch return null;
+        return if (n == 0) null else .one(n);
+    };
+    const lo = std.fmt.parseInt(u32, text[0..dash], 10) catch return null;
+    const hi = std.fmt.parseInt(u32, text[dash + 1 ..], 10) catch return null;
+    if (lo == 0 or hi < lo) return null;
+    return .{ .lo = lo, .hi = hi };
+}
+
+test "a list of numbers and ranges, past eight of them, and nonsense skipped" {
+    var k = knobs.Knobs{};
+    k.overlay(FakeEnv{ .pairs = &.{.{ "WIRE_EAT", "8-40,3,x,9-2,0,1,2,4,5,6,7,50,51,52" }} });
+    var s = faults.Schedule.init(0);
+    numbers(&s, &k, "WIRE_EAT");
+    const S = faults.Schedule.Span;
+    try testing.expectEqualSlices(S, &.{
+        .{ .lo = 8, .hi = 40 }, .one(3), .one(1), .one(2), .one(4), .one(5), .one(6), .one(7), .one(50), .one(51), .one(52),
+    }, s.named[0..11]);
+    try testing.expectEqual(S{}, s.named[11]);
 }
 
 /// An environment, by hand.
@@ -165,10 +189,10 @@ test "the knobs reach the wire, the disk and the peer, a seed's or the environme
     var drive = faults.Drive{};
     var rough = wire.Rough{};
     tellTheFaults(&line, &drive, &rough, &by_hand);
-    try testing.expectEqualSlices(u32, &.{ 3, 9 }, line.lost.named[0..2]);
-    try testing.expectEqual(@as(u32, 2), line.peer_lost.named[0]);
+    try testing.expectEqualSlices(faults.Schedule.Span, &.{ .one(3), .one(9) }, line.lost.named[0..2]);
+    try testing.expectEqual(faults.Schedule.Span.one(2), line.peer_lost.named[0]);
     try testing.expectEqual(@as(u64, 250 * std.time.ns_per_us), line.latency_ns);
-    try testing.expectEqual(@as(u32, 4), drive.refused.named[0]);
+    try testing.expectEqual(faults.Schedule.Span.one(4), drive.refused.named[0]);
     try testing.expect(drive.writes_only);
     try testing.expect(drive.reads_only);
     try testing.expect(rough.ignore_window and rough.retransmits);
@@ -207,11 +231,11 @@ test "the knobs reach the wire, the disk and the peer, a seed's or the environme
         tellTheFaults(&b_line, &b_drive, &b_rough, &again);
         try testing.expectEqual(a_rough, b_rough);
         try testing.expectEqual(a_line.latency_ns, b_line.latency_ns);
-        try testing.expectEqualSlices(u32, &a_line.lost.named, &b_line.lost.named);
+        try testing.expectEqualSlices(faults.Schedule.Span, &a_line.lost.named, &b_line.lost.named);
         try testing.expectEqual(a_line.lost.rate, b_line.lost.rate);
-        try testing.expectEqualSlices(u32, &a_line.peer_lost.named, &b_line.peer_lost.named);
-        try testing.expectEqualSlices(u32, &a_line.peer_damaged.named, &b_line.peer_damaged.named);
-        try testing.expectEqualSlices(u32, &a_drive.refused.named, &b_drive.refused.named);
+        try testing.expectEqualSlices(faults.Schedule.Span, &a_line.peer_lost.named, &b_line.peer_lost.named);
+        try testing.expectEqualSlices(faults.Schedule.Span, &a_line.peer_damaged.named, &b_line.peer_damaged.named);
+        try testing.expectEqualSlices(faults.Schedule.Span, &a_drive.refused.named, &b_drive.refused.named);
         try testing.expectEqual(a_drive.writes_only, b_drive.writes_only);
     }
 }
