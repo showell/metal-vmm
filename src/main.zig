@@ -603,10 +603,32 @@ const Machine = struct {
     /// is not. A machine whose time is its guest's curiosity can count a hang
     /// exactly — see `patience`.
     quiet: u64 = 0,
+    /// **WHEN THE GUEST LAST DID ANYTHING**, in its own time: the same
+    /// progress `quiet` counts from. On the PC-shaped machine a halt is not
+    /// a hang, so a halt resets `quiet`, and a guest that rests with
+    /// nothing to do is bounded by this instead (`idle`).
+    progress_ns: u64 = 0,
+    /// How long, in its own time, a guest may rest without doing anything
+    /// before the run ends as idle. `PATIENCE_S`; ten minutes by default.
+    patience_ns: u64 = 600 * std.time.ns_per_s,
     /// Reads of addresses no device answers. The guest looks for virtio in a
     /// window this program does not fill yet, and a window of zeros is what
     /// "nothing is plugged in there" looks like from inside.
     absent: u64 = 0,
+
+    /// A character printed or a doorbell rung.
+    fn progressed(self: *Machine) void {
+        self.quiet = 0;
+        self.progress_ns = self.time.ns;
+    }
+
+    /// **A HALT THE GUEST WOKE FROM IS NOT A HANG**: `quiet` starts again.
+    /// True when the guest has rested past its patience with nothing
+    /// printed and no doorbell rung: idle, which ends the run.
+    fn rested(self: *Machine) bool {
+        self.quiet = 0;
+        return self.time.ns - self.progress_ns > self.patience_ns;
+    }
 
     /// An MSR the filter sent here, read: IA32_TSC from this machine's own
     /// clock, the APIC's from the APIC, and null (a #GP) for the rest.
@@ -621,7 +643,7 @@ const Machine = struct {
             com1 => if (self.line_control & divisor_latch == 0) {
                 _ = linux.write(1, bytes.ptr, bytes.len);
                 self.listen(bytes);
-                self.quiet = 0;
+                self.progressed();
             },
             com1_line_control => if (bytes.len > 0) {
                 self.line_control = bytes[0];
@@ -677,7 +699,7 @@ const Machine = struct {
     /// the first thing it reads, and zero is not it.
     fn memory(self: *Machine, addr: u64, is_write: bool, data: []u8) void {
         if (self.bus) |bus| if (bus.memory(self.ram, addr, is_write, data)) {
-            if (is_write) self.quiet = 0;
+            if (is_write) self.progressed();
             return;
         };
         if (self.bus != null and apic.inWindow(addr)) {
@@ -691,7 +713,7 @@ const Machine = struct {
             if (self.devices[slot]) |device| {
                 if (is_write) {
                     device.write(self.ram, offset, @truncate(readLittle(data)));
-                    self.quiet = 0;
+                    self.progressed();
                 } else {
                     writeLittle(data, device.read(offset, @intCast(data.len)));
                 }
@@ -824,7 +846,9 @@ fn inject(vcpu: linux.fd_t, vector: u8) !void {
 
 /// How long a guest may go without printing anything or touching a device
 /// before this program calls it stuck. Generous: the heaviest probe here goes
-/// a few tens of thousands of exits between doorbells while it works.
+/// a few tens of thousands of exits between doorbells while it works. On the
+/// PC-shaped machine a halt starts the count again, and a resting guest is
+/// bounded in its own time instead (`Machine.patience_ns`).
 const patience: u64 = 1_000_000;
 
 /// Runs until the guest stops, and answers what it stopped with.
@@ -888,7 +912,10 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
             .hlt => {
                 if (machine.bus == null) return machine.stopped orelse 0;
                 switch (try rest(vcpu, run, machine)) {
-                    .woken => {},
+                    .woken => if (machine.rested()) {
+                        std.debug.print("metal-vmm: the guest has rested {d} s of its own time with nothing printed and no doorbell rung: idle, so the run ends\n", .{(machine.time.ns - machine.progress_ns) / std.time.ns_per_s});
+                        return error.GuestIdle;
+                    },
                     .never => {
                         std.debug.print("metal-vmm: the guest halted with nothing that could wake it\n", .{});
                         return machine.stopped orelse 0;
@@ -1208,6 +1235,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     }
 
     tellTheFaults(&card.line, &block.refusals, &card.peer.rough, init.environ);
+    if (count(init.environ, "PATIENCE_S")) |seconds| machine.patience_ns = seconds * std.time.ns_per_s;
 
     // **WHAT THE PEER ASKS FOR.** A path is enough for a probe; a server with
     // a login and a chat wants a whole request, cookie and body and all, so
@@ -1604,4 +1632,25 @@ test "IA32_TSC reads this machine's clock; the others are refused" {
         try testing.expect(!machine.lapic.writeMsr(m, 1, 0));
     }
     try testing.expect(!machine.lapic.writeMsr(msr_tsc, 0, 0));
+}
+
+test "a halt is not a hang: it starts the count of quiet exits again" {
+    var machine = Machine{};
+    machine.quiet = patience - 1;
+    machine.time.ns = std.time.ns_per_s;
+    try testing.expect(!machine.rested());
+    try testing.expectEqual(@as(u64, 0), machine.quiet);
+}
+
+test "a guest that rests past its patience with nothing done is idle; anything done starts it again" {
+    var machine = Machine{ .patience_ns = 10 * std.time.ns_per_s };
+    machine.time.ns = 10 * std.time.ns_per_s;
+    try testing.expect(!machine.rested()); // exactly its patience: not yet
+    machine.time.ns += 1;
+    try testing.expect(machine.rested());
+    // A character printed or a doorbell rung is progress, and the patience
+    // starts from there.
+    machine.progressed();
+    machine.time.ns += 5 * std.time.ns_per_s;
+    try testing.expect(!machine.rested());
 }

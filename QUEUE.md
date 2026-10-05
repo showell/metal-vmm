@@ -102,7 +102,7 @@ From the review (`docs/reviews/REVIEW-interrupts.md`), most urgent first:
 15. **Done (CC; check.sh first, see Questions).** **Ports 0xE0/0xE1 answer only the rewritten instructions, and the
     deadline marks are counted (D2, D3).** Any `out 0xE1` reaches the APIC's
     MSRs today, and a kernel without marks runs with no timer, silently.
-16. **A halt is not a hang on the PC-shaped machine (P1).** An idle server
+16. **Done (CC).** **A halt is not a hang on the PC-shaped machine (P1).** An idle server
     is killed as `GuestStuck` after ~1M exits of resting (minutes of guest
     time); soaks and the explorer will hit it.
 

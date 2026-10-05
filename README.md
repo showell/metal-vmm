@@ -196,6 +196,13 @@ the registers.
     ./rest.sh all     every route: the page the microvm-shaped machine
                       serves, the same run twice, and real rests
 
+**A halt is not a hang.** On the microvm-shaped machine a run that goes a
+million exits without printing or ringing a doorbell is stuck. On the
+PC-shaped one each halt starts that count again, and a guest that rests with
+nothing to do ends on a bound in its own time instead: `PATIENCE_S` seconds
+(600 by default) with nothing printed and no doorbell rung, reported as
+idle.
+
 With a 5 ms wire each route halts a few times and takes timer and MSI-X
 interrupts both. At 200 ms, `/` halts 361 times, 356 woken by the timer at
 its 1 ms slice, and pays one retransmission timeout, as it should when the
