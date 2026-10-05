@@ -424,6 +424,18 @@ and which first, and the ones only one run ever reached. With a floor it
 fails as `report.py --floor` does: a FAIL, a floor property missed, or a
 floor line gone stale.
 
+### And nothing the guest does kills this program
+
+`zig build fuzz -Dseeds=n` drives every model a guest can reach (the PCI
+ports at any offset and width, every BAR, the mmio window, the APIC and its
+MSRs, virtqueues laid out any way at all, block requests with hostile
+fields, frames on the wire, COM1, the PIT and the RTC) from a seeded stream,
+without a processor. Nothing may panic, and each seed must be the same run
+twice. `zig build test` runs the first 64 seeds and every seed that ever
+found something (`fuzz.zig`, `regressions`). On its first day it found six
+ways a guest could kill or hang this program, two of them on the
+microvm-shaped machine check.sh runs.
+
 ### And the disk can refuse
 
 Same idea one layer over: `DISK_REFUSE=3` answers the guest's third request

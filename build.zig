@@ -29,6 +29,24 @@ pub fn build(b: *std.Build) void {
     }) });
     b.step("test", "The parts that can be checked without a processor").dependOn(&b.addRunArtifact(tests).step);
 
+    // **THE GUEST'S INPUT NEVER KILLS THE VMM** (fuzz.zig):
+    // `zig build fuzz -Dseeds=n -Dfirst=k`. `zig build test` runs the first
+    // few seeds and the regressions every time.
+    const fuzz_options = b.addOptions();
+    fuzz_options.addOption(u64, "seeds", b.option(u64, "seeds", "How many fuzz seeds (zig build fuzz)") orelse 1000);
+    fuzz_options.addOption(u64, "first", b.option(u64, "first", "The first fuzz seed (zig build fuzz)") orelse 1);
+    const fuzz = b.addExecutable(.{
+        .name = "fuzz",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/fuzz_main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    fuzz.root_module.addOptions("fuzz_options", fuzz_options);
+    b.installArtifact(fuzz);
+    b.step("fuzz", "Every guest-facing model under a seeded stream of guest input: zig build fuzz -Dseeds=n").dependOn(&b.addRunArtifact(fuzz).step);
+
     // Many runs' coverage, one table: `zig build coverage-merge -- a.jsonl b.jsonl`.
     const merge = b.addExecutable(.{
         .name = "coverage-merge",

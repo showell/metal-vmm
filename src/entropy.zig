@@ -38,7 +38,9 @@ pub const Entropy = struct {
     fn notified(context: *anyopaque, d: *virtio.Device, ram: []u8, queue: u32) void {
         const self: *Entropy = @ptrCast(@alignCast(context));
         var links: [4]virtio.Desc = undefined;
-        while (d.take(ram, queue, &links)) |chain| {
+        var left = d.budget(queue);
+        while (left > 0) : (left -= 1) {
+            const chain = d.take(ram, queue, &links) orelse break;
             var written: u32 = 0;
             for (chain.links) |link| {
                 if (link.flags & virtio.Desc.write_flag == 0) continue;

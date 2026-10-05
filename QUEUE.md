@@ -167,7 +167,7 @@ bottom.
     Karn's rule, window probes, FIN in every state, item 20's several
     clients. For each difference, say whether the guest can reach it and
     which verdict it would make wrong.
-26. **The guest's input never kills the VMM: a fuzzer over the models.**
+26. **Done (CC).** **The guest's input never kills the VMM: a fuzzer over the models.**
     H1 (item 8) was a panic on `inl $0xCFD`. Drive every guest-facing model
     from a seeded stream of what a guest could do, without a vCPU: port and
     width at random over 0xCF8/0xCFC, COM1, the PIT, the RTC, 0xE0/0xE1;

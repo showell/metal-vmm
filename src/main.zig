@@ -1414,6 +1414,7 @@ test {
     _ = @import("pci.zig");
     _ = @import("coverage.zig");
     _ = @import("knobs.zig");
+    _ = @import("fuzz.zig");
 }
 
 /// A tiny ELF with one loadable segment and one PVH note, built by hand so the

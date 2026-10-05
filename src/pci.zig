@@ -246,6 +246,8 @@ pub const Function = struct {
 
     /// One aligned dword of the table or the pending bits.
     fn msixDword(self: *const Function, offset: u64) u32 {
+        // An access that began inside may run past the end: there, nothing.
+        if (!inMsix(offset)) return 0;
         if (offset >= msix_pba_at) return @truncate(self.pending >> @intCast((offset - msix_pba_at) * 8));
         const e = &self.table[@intCast((offset - msix_table_at) / 16)];
         return switch ((offset - msix_table_at) % 16) {
@@ -257,7 +259,7 @@ pub const Function = struct {
     }
 
     fn msixStore(self: *Function, offset: u64, value: u32) void {
-        if (offset >= msix_pba_at) return; // the pending bits are read-only
+        if (!inMsix(offset) or offset >= msix_pba_at) return; // the pending bits are read-only
         const e = &self.table[@intCast((offset - msix_table_at) / 16)];
         switch ((offset - msix_table_at) % 16) {
             0 => e.address = (e.address & 0xFFFF_FFFF_0000_0000) | value,
@@ -291,7 +293,7 @@ pub const Function = struct {
         std.mem.writeInt(u16, image[0x1A..0x1C], no_vector, .little);
         if (self.selectedQueue()) |sel| {
             const q = &d.queues[sel];
-            std.mem.writeInt(u16, image[0x18..0x1A], @intCast(if (q.size != 0) q.size else virtio.queue_max), .little);
+            std.mem.writeInt(u16, image[0x18..0x1A], @truncate(if (q.size != 0) q.size else virtio.queue_max), .little);
             std.mem.writeInt(u16, image[0x1A..0x1C], self.queue_vector[sel], .little);
             std.mem.writeInt(u16, image[0x1C..0x1E], @truncate(q.ready), .little);
             std.mem.writeInt(u16, image[0x1E..0x20], @intCast(sel), .little);
@@ -1548,4 +1550,20 @@ test "a queue the device does not serve reads as absent, and takes no writes" {
     // Selecting queue 0 again, it is as it was.
     try g.store(u16, rng.common + 0x16, 0);
     try testing.expectEqual(@as(u16, virtio.queue_max), try g.load(u16, rng.common + 0x18));
+}
+
+test "an access that begins in the MSI-X table or its pending bits and runs past their end" {
+    // Found by fuzz.zig, seed 135: a QWORD read at the last byte of the
+    // pending bits read a dword past them, with a shift past 63.
+    var m = Machine{};
+    m.init();
+    var g = FakeGuest{ .bus = &m.bus };
+    _ = g.open(2).?;
+    const b = m.bus.functions[2].?.bar;
+    try testing.expectEqual(@as(u64, 0), try g.load(u64, b + msix_pba_at + 7));
+    try testing.expectEqual(@as(u64, 0), try g.load(u64, b + msix_table_at + msix_table_bytes - 1) >> 8);
+    // The low dword lands on the last entry's vector control; the high one
+    // is past the table, and goes nowhere.
+    try g.store(u64, b + msix_table_at + msix_table_bytes - 4, 0xFFFF_FFFF_0000_0001);
+    try testing.expectEqual(@as(u32, 1), m.bus.functions[2].?.table[msix_entries - 1].control);
 }

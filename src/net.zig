@@ -74,7 +74,9 @@ pub const Net = struct {
         const self: *Net = @ptrCast(@alignCast(context));
         if (queue != tx_queue) return; // receive buffers are parked, not served
         var links: [4]virtio.Desc = undefined;
-        while (d.take(ram, tx_queue, &links)) |chain| {
+        var left = d.budget(tx_queue);
+        while (left > 0) : (left -= 1) {
+            const chain = d.take(ram, tx_queue, &links) orelse break;
             if (chain.links.len > 0) self.speak(d, ram, virtio.buffer(ram, chain.links[0]));
             d.complete(ram, tx_queue, chain.head, 0);
         }
