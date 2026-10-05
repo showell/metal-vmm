@@ -270,7 +270,10 @@ pub const Function = struct {
         switch (offset) {
             0x00 => d.device_features_sel = v32,
             0x08 => d.driver_features_sel = v32,
-            0x0C => {}, // whatever it takes, it may have
+            // Whatever it takes, it may have; word 0 is kept.
+            0x0C => if (d.driver_features_sel == 0) {
+                d.driver_features_low = v32;
+            },
             0x10 => self.msix_config = msix.Msix.entryOrNone(v32),
             0x14 => {
                 if (v32 & 0xFF == 0) {

@@ -42,6 +42,7 @@ const faults = @import("faults.zig");
 const wire = @import("peer.zig");
 const apic = @import("apic.zig");
 const cost = @import("cost.zig");
+const cache = @import("cache.zig");
 const coverage = @import("coverage.zig");
 const knobs = @import("knobs.zig");
 const pci = @import("pci.zig");
@@ -313,6 +314,8 @@ pub const Machine = struct {
     cost: cost.Cost = .{},
     /// The disk's faults, watched for a power cut.
     drive: ?*const faults.Drive = null,
+    /// The disk's write cache (`DISK_CACHE`), which a power cut empties.
+    write_cache: ?*cache.Cache = null,
     /// **THE SERIAL PORT READS THE GUEST'S COVERAGE LINES** (coverage.zig),
     /// and with `COVERAGE_OUT` sends them to this file instead of stdout.
     serial: coverage.Serial = .{},
@@ -549,6 +552,8 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
         // **THE POWER WENT OUT IN THE LAST EXIT** (faults.zig, `Drive.cut`):
         // the guest runs no further, and the image keeps what landed.
         if (machine.drive) |d| if (d.cut) |cut| {
+            // A write cache loses what was never flushed with it.
+            if (machine.write_cache) |c| c.lose();
             reportCut(cut);
             return machine.stopped orelse 0;
         };
@@ -873,6 +878,17 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         std.debug.print("metal-vmm: FAULT_SEED={d} is {s}\n", .{ seed, turned.format(&line) });
     }
     tellTheFaults(&card.line, &block.refusals, &card.peer.rough, &turned);
+    // **A WRITE CACHE, AND FLUSH OFFERED**, only when asked: offering the
+    // feature changes what the guest negotiates, and check.sh holds the
+    // default machine to QEMU's.
+    var write_cache: cache.Cache = undefined;
+    defer if (block.cache) |c| c.deinit();
+    if (turned.get("DISK_CACHE")) |how| if (block.image.len > 0) {
+        write_cache = .{ .gpa = std.heap.page_allocator, .image = block.image, .lies = std.mem.eql(u8, how, "lie") };
+        block.cache = &write_cache;
+        block_device.features_low |= virtio.feature_blk_flush;
+        machine.write_cache = &write_cache;
+    };
     if (count(init.environ, "PATIENCE_S")) |seconds| machine.patience_ns = seconds * std.time.ns_per_s;
     // **COVERAGE LINES TO A FILE OF THEIR OWN**, appended: each boot of a
     // sweep adds its lines to the same JSONL, as the judge's do.
@@ -995,6 +1011,7 @@ test {
     _ = @import("determinism.zig");
     _ = @import("snapshot.zig");
     _ = @import("cost.zig");
+    _ = @import("cache.zig");
     _ = @import("settings.zig");
     _ = @import("reports.zig");
     _ = @import("loader.zig");

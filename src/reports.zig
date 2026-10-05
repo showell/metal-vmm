@@ -105,6 +105,10 @@ pub fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void
     var buf: [2048]u8 = undefined;
     std.debug.print("{s}", .{unspent(&card.line, &card.peer, &block.refusals, &buf)});
     if (peerEnd(&card.peer.tcp)) |line| std.debug.print("{s}", .{line});
+    if (block.cache) |c| {
+        var line: [256]u8 = undefined;
+        std.debug.print("{s}", .{c.line(&line, block.refusals.cut != null)});
+    }
     const d = &block.refusals;
     if (d.rot_sector) |at| if (d.rotted > 0) {
         std.debug.print("metal-vmm: disk: sector {d} rotted (byte {d}, mask 0x{x:0>2}) in {d} reads{s}\n", .{

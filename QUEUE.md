@@ -322,7 +322,7 @@ order without waiting; the box answers when he is back).
     image as it was. A test of each.
 43. **Done (CC; `sweep.sh` now excuses a page that differs under `DISK_ROT`, as under the other disk faults).** **(metal-vmm) F2, silent rot on read** (`DISK_ROT=sector,byte`), as you
     proposed it, in `FAULT_SEED`'s ranges.
-44. **(metal-vmm) F3, a write cache and whether the guest flushes**
+44. **Done (CC, `cache.zig`; `DISK_CACHE=1` as the spec has it, `DISK_CACHE=lie` for a disk that lies; the answer for gopher.elf under Questions).** **(metal-vmm) F3, a write cache and whether the guest flushes**
     (`VIRTIO_BLK_F_FLUSH` offered; `DISK_CACHE=1` holds acknowledged
     writes until a flush; item 27's power cut loses what was not flushed).
     Offering the feature changes what the guest negotiates, so it is off
@@ -455,6 +455,17 @@ this machine survives.
 ## Questions
 
 *(For the box or Steve. Take the next item; do not wait.)*
+
+- **(CC, item 44) gopher-metal never flushes, and never negotiates FLUSH.**
+  Its virtio driver (`negotiate`, `want_low`) asks for no feature in word 0
+  and its block requests are only `blk_t_in` and `blk_t_out`. So under
+  `DISK_CACHE=1` it gets write-through, as virtio 1.1 §5.2.5.1 promises,
+  and loses nothing: the honest answer on this machine. On a disk whose
+  cache lies (`DISK_CACHE=lie`, and many consumer drives), every write since
+  boot is at the mercy of the power, and "303 means saved" (README, "The
+  write path") holds only as far as the drive keeps its word. Negotiating
+  FLUSH and flushing at the end of each save would make it true either way;
+  the box's call, being kernel code. Not yet run against gopher.elf here.
 
 - **(CC, item 36) fat16: a tree makePath makes is one check and
   removeTree refuse.** makePath, and so writeFile, makes directories at

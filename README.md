@@ -510,6 +510,16 @@ it holds what was written. fat16.zig checks nothing it reads, so this is how
 a FAT entry pointing somewhere else, or a directory entry gone wrong, is
 handed to it. A seed draws it one time in eight, last of all its knobs.
 
+**And the disk can hold its writes.** `DISK_CACHE=1` offers
+VIRTIO_BLK_F_FLUSH and keeps a write cache: if the guest negotiates FLUSH
+its writes are acknowledged before they are kept, a flush keeps them, and a
+power cut (`DISK_CUT_AFTER`, `DISK_TEAR`) loses every write since the last
+flush. A guest that does not negotiate FLUSH is promised write-through
+(virtio 1.1 §5.2.5.1) and loses nothing. `DISK_CACHE=lie` holds writes
+either way, as a disk that lies about its cache does. The run ends saying
+which, and how many writes a cut lost. Off unless asked: offering FLUSH
+changes what the guest negotiates.
+
 The one PASS under a refusal is #1, the GPT header: `vfat` reads any failure to
 find a partition table as "no table" and mounts sector 0, which on this bare
 volume is right. On a partitioned disk the same fallback fails the mount, so the

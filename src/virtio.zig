@@ -19,6 +19,7 @@
 
 const std = @import("std");
 const disk = @import("disk.zig");
+const cache_mod = @import("cache.zig");
 const faults = @import("faults.zig");
 
 /// Where the guest looks: 32 slots of 512 bytes from 0xFEB00000, which is what
@@ -70,6 +71,8 @@ const Reg = enum(u64) {
 /// the high word — which is why the driver selects word 1 before reading. A
 /// device that does not offer it is refused outright by this guest.
 pub const feature_version_1_high: u32 = 1 << (32 - 32);
+/// VIRTIO_BLK_F_FLUSH, offered only with a write cache (`DISK_CACHE`).
+pub const feature_blk_flush: u32 = 1 << 9;
 
 pub const status_features_ok: u32 = 8;
 
@@ -144,6 +147,9 @@ pub const Device = struct {
     status: u32 = 0,
     device_features_sel: u32 = 0,
     driver_features_sel: u32 = 0,
+    /// What the driver took of feature word 0: a write cache asks whether
+    /// FLUSH was among it.
+    driver_features_low: u32 = 0,
     interrupt_status: u32 = 0,
 
     queue_sel: u32 = 0,
@@ -200,7 +206,10 @@ pub const Device = struct {
         switch (@as(Reg, @enumFromInt(offset))) {
             .device_features_sel => self.device_features_sel = value,
             .driver_features_sel => self.driver_features_sel = value,
-            .driver_features => {}, // whatever it takes, it may have
+            // Whatever it takes, it may have; word 0 is kept.
+            .driver_features => if (self.driver_features_sel == 0) {
+                self.driver_features_low = value;
+            },
             .queue_sel => self.queue_sel = value,
             .queue_num => self.queues[self.pick()].size = value,
             .queue_desc_lo => self.setLow(&self.queues[self.pick()].desc, value),
@@ -355,6 +364,9 @@ pub const Block = struct {
     /// **AND THE REQUESTS IT WILL NOT SERVE** — see faults.zig. Left alone it
     /// serves every one of them.
     refusals: faults.Drive = .{},
+    /// **A WRITE CACHE** (`DISK_CACHE`, cache.zig), or none: every write is
+    /// durable when it is acknowledged, as it always was.
+    cache: ?*cache_mod.Cache = null,
     /// Every request, written out as it happens, for a caller asking where a
     /// guest's disk traffic actually goes. Off unless somebody asks.
     trace: bool = false,
@@ -365,6 +377,7 @@ pub const Block = struct {
 
     const type_in: u32 = 0; // the guest reads
     const type_out: u32 = 1; // the guest writes
+    const type_flush: u32 = 4; // what was written is to be kept
 
     const status_ok: u8 = 0;
     const status_ioerr: u8 = 1;
@@ -394,7 +407,14 @@ pub const Block = struct {
             // the power was cut in is never answered.
             if (self.refusals.cut != null) return;
             const chain = d.take(ram, queue, &links) orelse break;
-            const answer = self.serve(ram, chain.links);
+            // A cache holds writes only if the driver negotiated FLUSH, or
+            // the disk lies (virtio 1.1 §5.2.5.1).
+            const negotiated = d.driver_features_low & feature_blk_flush != 0;
+            const hold = if (self.cache) |c| blk: {
+                c.negotiated = negotiated;
+                break :blk c.holds(negotiated);
+            } else false;
+            const answer = self.serve(ram, chain.links, hold);
             if (self.refusals.cut != null) return;
             d.complete(ram, queue, chain.head, answer);
         }
@@ -403,7 +423,9 @@ pub const Block = struct {
     /// **THE SPEC'S THREE DESCRIPTORS**: a header the device reads, a data
     /// buffer, and a status byte the device writes. Anything else is refused
     /// rather than guessed at.
-    fn serve(self: *Block, ram: []u8, chain: []const Desc) u32 {
+    fn serve(self: *Block, ram: []u8, chain: []const Desc, hold: bool) u32 {
+        // **A FLUSH HAS NO DATA**: a header and a status byte.
+        if (chain.len == 2) return self.flushRequest(ram, chain[0], chain[1]);
         if (chain.len != 3) return 0;
         const head = chain[0];
         const data = chain[1];
@@ -455,17 +477,40 @@ pub const Block = struct {
                 // unless this is the write it goes in.
                 const sectors = (bytes.len + sector_bytes - 1) / sector_bytes;
                 const landed = @min(bytes.len, self.refusals.lands(sector, sectors) * sector_bytes);
+                if (hold) _ = self.cache.?.wrote(sector, (landed + sector_bytes - 1) / sector_bytes);
                 @memcpy(self.image[@intCast(at)..][0..landed], bytes[0..landed]);
                 self.refusals.rewrote(sector, (landed + sector_bytes - 1) / sector_bytes);
                 if (self.dirty) |bits| disk.mark(bits, sector, (landed + sector_bytes - 1) / sector_bytes);
                 self.writes += 1;
             },
+            type_flush => answer = self.flush(),
             else => answer = status_unsupported,
         }
         writeInt(u8, ram, status.addr, answer);
         // The used ring's length counts everything the device wrote, which
         // includes the status byte.
         return written + 1;
+    }
+
+    /// A flush in its two descriptors: anything but a flush there is
+    /// refused, as any other chain of the wrong shape is.
+    fn flushRequest(self: *Block, ram: []u8, head: Desc, status: Desc) u32 {
+        if (head.len < @sizeOf(Header) or status.len < 1) return 0;
+        if (!inside(ram, head.addr, @sizeOf(Header))) {
+            writeInt(u8, ram, status.addr, status_ioerr);
+            return 1;
+        }
+        const kind = readInt(u32, ram, head.addr);
+        writeInt(u8, ram, status.addr, if (kind == type_flush) self.flush() else status_unsupported);
+        return 1;
+    }
+
+    /// **WHAT WAS WRITTEN IS KEPT**: unsupported where FLUSH was never
+    /// offered, as before.
+    fn flush(self: *Block) u8 {
+        const c = self.cache orelse return status_unsupported;
+        c.flush();
+        return status_ok;
     }
 };
 
@@ -660,13 +705,13 @@ test "a block request with a sector or an address at the top of the range is an 
     writeInt(u32, &ram, 0x400, Block.type_in);
     // A sector whose byte offset is past 2^64: refused, not wrapped to 0.
     writeInt(u64, &ram, 0x408, std.math.maxInt(u64) / 256);
-    _ = block.serve(&ram, &links);
+    _ = block.serve(&ram, &links, false);
     try testing.expectEqual(Block.status_ioerr, readInt(u8, &ram, 0x600));
     // A header at the very top of the address space reads as nothing.
     var high = links;
     high[0].addr = std.math.maxInt(u64) - 4;
     writeInt(u8, &ram, 0x600, 0xFF);
-    _ = block.serve(&ram, &high);
+    _ = block.serve(&ram, &high, false);
     try testing.expectEqual(@as(u64, 0), block.reads);
     try testing.expectEqual(Block.status_ioerr, readInt(u8, &ram, 0x600));
 }
@@ -726,10 +771,67 @@ test "a torn write lands only its first sectors, and marks only those" {
         .{ .addr = 0x1000, .len = 4 * 512, .flags = Desc.next_flag, .next = 2 },
         .{ .addr = 0x600, .len = 1, .flags = Desc.write_flag, .next = 0 },
     };
-    _ = block.serve(&ram, &links);
+    _ = block.serve(&ram, &links, false);
     try testing.expectEqual(@as(u8, 0xEE), image[3 * 512]);
     try testing.expectEqual(@as(u8, 0xEE), image[5 * 512 - 1]);
     try testing.expectEqual(@as(u8, 0), image[5 * 512]); // the third of four: not landed
     try testing.expect(disk.isDirty(&dirty, 4) and !disk.isDirty(&dirty, 5));
     try testing.expectEqual(@as(u64, 2), block.refusals.cut.?.landed);
+}
+
+test "a write cache: held while FLUSH is negotiated, kept by a flush, lost by a power cut" {
+    var image: [16 * 512]u8 = @splat(0);
+    var c = cache_mod.Cache{ .gpa = testing.allocator, .image = &image };
+    defer c.deinit();
+    var block = Block{ .image = &image, .cache = &c };
+    var ram: [8192]u8 = @splat(0);
+    const write = struct {
+        fn f(b: *Block, r: *[8192]u8, sector: u64, fill: u8, hold: bool) u8 {
+            @memset(r[0x1000..][0..512], fill);
+            writeInt(u32, r, 0x400, Block.type_out);
+            writeInt(u64, r, 0x408, sector);
+            const links = [_]Desc{
+                .{ .addr = 0x400, .len = 16, .flags = Desc.next_flag, .next = 1 },
+                .{ .addr = 0x1000, .len = 512, .flags = Desc.next_flag, .next = 2 },
+                .{ .addr = 0x600, .len = 1, .flags = Desc.write_flag, .next = 0 },
+            };
+            _ = b.serve(r, &links, hold);
+            return readInt(u8, r, 0x600);
+        }
+    }.f;
+    const flush = [_]Desc{
+        .{ .addr = 0x400, .len = 16, .flags = Desc.next_flag, .next = 1 },
+        .{ .addr = 0x600, .len = 1, .flags = Desc.write_flag, .next = 0 },
+    };
+    try testing.expectEqual(Block.status_ok, write(&block, &ram, 2, 0xAA, true));
+    writeInt(u32, &ram, 0x400, Block.type_flush);
+    try testing.expectEqual(@as(u32, 1), block.serve(&ram, &flush, true));
+    try testing.expectEqual(Block.status_ok, readInt(u8, &ram, 0x600));
+    try testing.expectEqual(Block.status_ok, write(&block, &ram, 3, 0xBB, true));
+    try testing.expectEqual(@as(u8, 0xBB), image[3 * 512]); // its reads see it
+    c.lose();
+    try testing.expectEqual(@as(u8, 0xAA), image[2 * 512]); // flushed: kept
+    try testing.expectEqual(@as(u8, 0), image[3 * 512]); // not: lost
+    // Write-through (FLUSH not negotiated): nothing held, nothing lost.
+    try testing.expectEqual(Block.status_ok, write(&block, &ram, 4, 0xCC, false));
+    c.lose();
+    try testing.expectEqual(@as(u8, 0xCC), image[4 * 512]);
+    // With no cache, FLUSH was never offered, and is refused as before.
+    var plain = Block{ .image = &image };
+    try testing.expectEqual(@as(u32, 0), plain.device().features_low & feature_blk_flush);
+    writeInt(u32, &ram, 0x400, Block.type_flush);
+    _ = plain.serve(&ram, &flush, false);
+    try testing.expectEqual(Block.status_unsupported, readInt(u8, &ram, 0x600));
+}
+
+test "the driver's feature word 0 is kept, on mmio" {
+    var image: [512]u8 = @splat(0);
+    var block = Block{ .image = &image };
+    var d = block.device();
+    var ram: [64]u8 = @splat(0);
+    d.write(&ram, 0x024, 1);
+    d.write(&ram, 0x020, 1); // word 1: not word 0
+    d.write(&ram, 0x024, 0);
+    d.write(&ram, 0x020, feature_blk_flush);
+    try testing.expectEqual(feature_blk_flush, d.driver_features_low);
 }
