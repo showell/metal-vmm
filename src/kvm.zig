@@ -44,6 +44,13 @@ pub const get_regs = code(read, 0x81, @sizeOf(Regs));
 pub const set_regs = code(write, 0x82, @sizeOf(Regs));
 pub const get_sregs = code(read, 0x83, @sizeOf(Sregs));
 pub const set_sregs = code(write, 0x84, @sizeOf(Sregs));
+/// **AN INTERRUPT, FROM US.** With no interrupt controller in the kernel the
+/// vCPU's local APIC is this program's (apic.zig), and this is how what it
+/// decides reaches the processor: one vector, taken at the next entry if the
+/// guest can take it then.
+pub const interrupt = code(write, 0x86, @sizeOf(Interrupt));
+pub const enable_cap = code(write, 0xa3, @sizeOf(EnableCap));
+pub const set_msr_filter = code(write, 0xc6, @sizeOf(MsrFilter));
 
 // ── the structures ───────────────────────────────────────────────────────────
 
@@ -161,6 +168,44 @@ comptime {
     std.debug.assert(@sizeOf(CpuidEntry) == 40);
 }
 
+pub const Interrupt = extern struct { irq: u32 };
+
+pub const EnableCap = extern struct {
+    cap: u32,
+    flags: u32 = 0,
+    args: [4]u64 = .{ 0, 0, 0, 0 },
+    pad: [64]u8 = @splat(0),
+};
+
+/// **SOME MSRS ARE OURS TO ANSWER.** KVM answers every MSR itself unless told
+/// otherwise; with this capability and a filter that denies some, a denied
+/// access exits to us instead (`Exit.rdmsr`/`wrmsr`).
+pub const cap_x86_user_space_msr: u32 = 188;
+pub const msr_exit_reason_filter: u64 = 1 << 2;
+
+pub const MsrFilterRange = extern struct {
+    flags: u32 = 0,
+    nmsrs: u32 = 0,
+    base: u32 = 0,
+    /// One bit per MSR from `base`: 1 lets KVM answer it, 0 sends it to us.
+    bitmap: ?[*]const u8 = null,
+};
+pub const msr_filter_read: u32 = 1 << 0;
+pub const msr_filter_write: u32 = 1 << 1;
+
+pub const MsrFilter = extern struct {
+    /// 0: an MSR no range names is KVM's to answer.
+    flags: u32 = 0,
+    ranges: [16]MsrFilterRange = @splat(.{}),
+};
+
+comptime {
+    std.debug.assert(@sizeOf(Interrupt) == 4);
+    std.debug.assert(@sizeOf(EnableCap) == 104);
+    std.debug.assert(@sizeOf(MsrFilterRange) == 24);
+    std.debug.assert(@sizeOf(MsrFilter) == 392);
+}
+
 // ── what the processor came back for ─────────────────────────────────────────
 
 pub const Exit = enum(u32) {
@@ -168,9 +213,12 @@ pub const Exit = enum(u32) {
     io = 2,
     hlt = 5,
     mmio = 6,
+    irq_window_open = 7,
     shutdown = 8,
     fail_entry = 9,
     internal_error = 17,
+    rdmsr = 29,
+    wrmsr = 30,
     _,
 };
 
@@ -213,6 +261,24 @@ comptime {
     std.debug.assert(@sizeOf(Run) == 32);
     std.debug.assert(@sizeOf(IoExit) == 16);
     std.debug.assert(@sizeOf(MmioExit) == 24);
+}
+
+/// An MSR the filter sent to us. `error` set to 1 makes the guest take a #GP,
+/// as for an MSR the processor does not have.
+pub const MsrExit = extern struct {
+    @"error": u8,
+    pad: [7]u8,
+    reason: u32,
+    index: u32,
+    data: u64,
+};
+
+comptime {
+    std.debug.assert(@sizeOf(MsrExit) == 24);
+}
+
+pub fn msrExit(page: []align(std.heap.page_size_min) u8) *MsrExit {
+    return @ptrCast(@alignCast(page.ptr + @sizeOf(Run)));
 }
 
 /// The port-I/O exit's details, which live in the union just past the head.

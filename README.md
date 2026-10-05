@@ -9,6 +9,12 @@ and serves pages byte-identical to curl's. What it found is in
 the bare-metal layer, one of which bricks a volume. Read that section first if
 you are picking this up again.
 
+**RESUMED 2026-10-05: interrupts** (branch `interrupts`). gopher-metal has
+halted between frames since its v4, on a droplet: `sti; hlt`, woken by the
+network card's MSI-X message or the APIC timer. `TRANSPORT=pci` is a
+PC-shaped machine with that path in it, deterministic, and `rest.sh` holds
+it to the microvm-shaped one. See **Interrupts, at a halt** below.
+
 A virtual machine monitor of our own, aimed at one kind of guest: a small
 freestanding kernel that polls, runs on one core, and takes its clock as an
 argument. [gopher-metal](https://github.com/showell/gopher-metal)'s probes and
@@ -40,9 +46,11 @@ counters get wrong about once in a trillion; concurrent cores interleave
 arbitrarily; and input has to enter only where the hypervisor says.
 
 This guest hands three of those over for nothing. Its clock is already a
-parameter rather than something it reads. It takes **no interrupts at all** —
-it polls. It is single-threaded, and refuses to compile otherwise. Every byte
-it sees crosses one seam.
+parameter rather than something it reads. It takes **interrupts only at a
+halt** (`sti; hlt`, and off again at once): on the microvm-shaped machine it
+never halts at all, and on the PC-shaped one the instruction an interrupt is
+taken at is always the one after that `hlt`. It is single-threaded, and
+refuses to compile otherwise. Every byte it sees crosses one seam.
 
 So a monitor that owns every input is a few hundred lines rather than a
 research project, and once it owns every input, the same guest and the same
@@ -74,6 +82,7 @@ into a layer**, and the host half is the emulator.
 | fault injection on the wire | **works** — lose the guest's nth frame, or one in n, and watch its own timers deal with it |
 | fault injection on the disk | **works** — refuse the guest's nth request, or one in n, and see what it says |
 | the real server as the guest | **works** — angry-gopher's own route table, serving its own site, page identical to curl's |
+| a PC-shaped machine | **works** (`TRANSPORT=pci`) — virtio on a PCI bus, MSI-X, a local APIC with a TSC-deadline timer; the server halts between frames and wakes on interrupts, the same page and the same run twice |
 
 A boot costs about 100 ms, most of it spent zeroing the guest's `.bss`. QEMU's
 `microvm` boots the same kernel in about 130. **Speed is not the argument** —
@@ -145,11 +154,49 @@ EDX:EAX exactly as the instruction would have.
 **The file on disk is untouched** — the substitution happens in the copy in
 guest memory, so QEMU still runs the same bytes and stays an honest oracle.
 
-Two bytes is a short pattern to search for, and a `0F 31` inside some other
-instruction's operand would corrupt the guest silently. Counted across nine of
-gopher-metal's kernels, the number of these pairs in the loadable segment
-equals the number of `rdtsc` instructions a disassembler finds, every time: 34
-in `clock`, 12 in `stdhttp`, 2 in `block`, none in `rng`.
+**Only a marked `rdtsc` is rewritten.** Two bytes is too short a pattern:
+the first loader rewrote every `0F 31`, which held across nine probe kernels,
+until gopher.elf (2026-10-05) had 87 such pairs and 77 `rdtsc`s, and the
+other ten sat inside other instructions, which the rewrite corrupted: an
+invalid opcode just after "listening on port 80". gopher-metal's `tsc.read`
+now puts `mov $"mvmc", %ecx` (`B9 6D 76 6D 63`) before its `rdtsc`, and only
+the `rdtsc` after that mark becomes a question. Elsewhere the `mov` costs a
+register.
+
+## Interrupts, at a halt
+
+`TRANSPORT=pci` is the machine a droplet is, as far as gopher-metal can tell:
+
+- **a PCI bus** (`pci.zig`): a host bridge in slot 0, and the disk, the card
+  and the entropy as modern virtio-pci functions, one memory BAR each with
+  their four virtio windows and an MSI-X table. The devices behind them are
+  the mmio window's own; only the registers in front differ. The guest asks a
+  bus when there is one and never mixes the two, so on this machine the mmio
+  window is empty.
+- **a local APIC** (`apic.zig`): the registers the guest starts it with, the
+  timer in TSC-deadline mode, and the vectors waiting. KVM's own APIC would
+  keep the host's time, so the vCPU has none in the kernel, and every
+  interrupt is injected from here (`KVM_INTERRUPT`).
+- **a halt is an event, not a wait.** At the guest's `hlt` the clock moves
+  straight to the earlier of the timer's deadline and the next frame due on
+  the wire; the wire is pumped (a frame delivered is an MSI-X message); the
+  APIC's highest waiting vector is injected. The halt's length is computed,
+  never waited, so a run is still a function of the guest alone.
+
+**The deadline is a marked write too.** IA32_APIC_BASE comes here through an
+MSR filter (`KVM_X86_SET_MSR_FILTER`), but on a host with the VMX preemption
+timer, like this one, KVM's fast path takes IA32_TSC_DEADLINE before the
+filter sees it. So gopher-metal marks that one `wrmsr` with
+`mov $"mvmd", %esi`, and the loader makes it `out 0xE1, al`, answered from
+the registers.
+
+    ./rest.sh all     every route: the page the microvm-shaped machine
+                      serves, the same run twice, and real rests
+
+With a 5 ms wire each route halts a few times and takes timer and MSI-X
+interrupts both. At 200 ms, `/` halts 361 times, 356 woken by the timer at
+its 1 ms slice, and pays one retransmission timeout, as it should when the
+round trip is longer than the table's least timeout.
 
 ## Reading it
 

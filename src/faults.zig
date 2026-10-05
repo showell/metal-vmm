@@ -143,6 +143,12 @@ pub const Wire = struct {
         return slot.bytes[0..slot.len];
     }
 
+    /// When the oldest frame in flight arrives, if one is.
+    pub fn nextDue(self: *const Wire) ?u64 {
+        if (self.first >= self.next) return null;
+        return self.held[self.first % in_flight].due_ns;
+    }
+
     /// The frame `ready` offered has been delivered.
     pub fn take(self: *Wire) void {
         if (self.first < self.next) self.first += 1;

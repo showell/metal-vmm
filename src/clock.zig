@@ -59,6 +59,12 @@ pub const Clock = struct {
     }
 };
 
+/// The first instant at which `rdtsc` answers at least `ticks`: where a halt
+/// waiting for a TSC deadline moves the clock to.
+pub fn nsAt(ticks: u64) u64 {
+    return @intCast((@as(u128, ticks) * std.time.ns_per_s + tsc_hz - 1) / tsc_hz);
+}
+
 // ── the interval timer ───────────────────────────────────────────────────────
 
 /// The i8254, channel 0, latched and read — which is all any guest here does

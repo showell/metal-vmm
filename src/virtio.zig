@@ -69,13 +69,13 @@ const Reg = enum(u64) {
 /// **VIRTIO_F_VERSION_1, AND NOTHING ELSE.** It is bit 32, so it appears in
 /// the high word — which is why the driver selects word 1 before reading. A
 /// device that does not offer it is refused outright by this guest.
-const feature_version_1_high: u32 = 1 << (32 - 32);
+pub const feature_version_1_high: u32 = 1 << (32 - 32);
 
-const status_features_ok: u32 = 8;
+pub const status_features_ok: u32 = 8;
 
 /// The most descriptors a queue here may have. The guest's block queue is 8;
 /// answering a larger maximum is what lets it choose.
-const queue_max: u32 = 256;
+pub const queue_max: u32 = 256;
 
 // ── the rings, as both sides see them ────────────────────────────────────────
 
@@ -113,6 +113,13 @@ pub const Chain = struct { head: u16, links: []const Desc };
 /// receive queue holds the buffers until a frame turns up for them.
 pub const Notified = *const fn (context: *anyopaque, device: *Device, ram: []u8, queue: u32) void;
 
+pub const Completion = struct {
+    context: *anyopaque,
+    done: *const fn (context: *anyopaque, queue: u32) void,
+};
+
+const avail_no_interrupt: u16 = 1;
+
 pub const Device = struct {
     id: u32,
     /// What this device offers in feature word 0. VERSION_1 lives in word 1
@@ -138,6 +145,11 @@ pub const Device = struct {
     /// How many requests it has served, for a host that wants to say what a
     /// guest actually asked of it.
     served: u64 = 0,
+    /// **WHO HEARS THAT A REQUEST IS DONE**: on PCI, the function whose MSI-X
+    /// message it may become (pci.zig). Not told when the driver asked for
+    /// no interrupts on that queue (VIRTQ_AVAIL_F_NO_INTERRUPT). Null on mmio,
+    /// where the guest only polls.
+    completion: ?Completion = null,
 
     pub fn read(self: *Device, offset: u64, len: u32) u64 {
         if (offset >= @intFromEnum(Reg.config)) {
@@ -238,6 +250,9 @@ pub const Device = struct {
         writeInt(u32, ram, at + 4, written);
         writeInt(u16, ram, q.used + 2, used_idx +% 1);
         self.served += 1;
+        if (self.completion) |c| {
+            if (readInt(u16, ram, q.avail) & avail_no_interrupt == 0) c.done(c.context, index);
+        }
     }
 };
 

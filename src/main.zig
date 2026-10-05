@@ -40,6 +40,8 @@ const entropy = @import("entropy.zig");
 const disk = @import("disk.zig");
 const faults = @import("faults.zig");
 const wire = @import("peer.zig");
+const apic = @import("apic.zig");
+const pci = @import("pci.zig");
 
 /// How much RAM the guest gets. The probes were written against `-m 512`.
 const ram_bytes: usize = 512 * 1024 * 1024;
@@ -177,6 +179,26 @@ fn textRange(image: []const u8, head: *const ElfHeader) struct { lo: u64, hi: u6
 /// `mov $"mvmc", %ecx` (`B9 6D 76 6D 63`) right before its `rdtsc`; this
 /// rewrites the `rdtsc` after that mark and nothing else. A guest that reads the
 /// counter without the mark reads the host's, which this does not see.
+/// **THE APIC TIMER'S DEADLINE IS ANSWERED THE SAME WAY.** KVM's fast path
+/// for IA32_TSC_DEADLINE takes the guest's `wrmsr` before the MSR filter
+/// (`ownTheApicMsrs`) sees it, on a host with the VMX preemption timer — this
+/// one. So gopher-metal marks that one write with `mov $"mvmd", %esi`
+/// (`BE 6D 76 6D 64`), and its `wrmsr` (`0F 30`) becomes `out 0xE1, al`
+/// (`E6 E1`): a port write whose registers say which MSR and what value.
+fn rewriteDeadlineWrites(segment: []u8) usize {
+    const mark = [_]u8{ 0xBE, 'm', 'v', 'm', 'd' };
+    const marked_wrmsr = mark ++ [2]u8{ 0x0F, 0x30 };
+    const out_to_us = [2]u8{ 0xE6, @as(u8, @intCast(msr_port)) };
+    var found: usize = 0;
+    var at: usize = 0;
+    while (std.mem.indexOfPos(u8, segment, at, &marked_wrmsr)) |k| {
+        @memcpy(segment[k + mark.len ..][0..2], &out_to_us);
+        found += 1;
+        at = k + marked_wrmsr.len;
+    }
+    return found;
+}
+
 fn rewriteClockReads(segment: []u8) usize {
     const mark = [_]u8{ 0xB9, 'm', 'v', 'm', 'c' };
     const marked_rdtsc = mark ++ [2]u8{ 0x0F, 0x31 };
@@ -235,6 +257,7 @@ fn load(ram: []u8, image: []const u8) LoadError!Loaded {
                 @memset(ram[to + in_file ..][0 .. in_memory - in_file], 0);
                 if (ph.flags & ProgramHeader.executable != 0) {
                     clock_reads += rewriteClockReads(ram[to..][0..in_file]);
+                    _ = rewriteDeadlineWrites(ram[to..][0..in_file]);
                 }
             },
             ProgramHeader.note => {
@@ -312,11 +335,14 @@ fn writeGdt(ram: []u8) void {
 /// minus the two instructions that would let the guest reach outside this
 /// program for entropy. Without any of it the guest cannot enter long mode;
 /// see `kvm.get_supported_cpuid`.
-fn describeProcessor(dev: linux.fd_t, vcpu: linux.fd_t) !void {
+fn describeProcessor(dev: linux.fd_t, vcpu: linux.fd_t, pc: bool) !void {
     var buffer: kvm.CpuidBuffer = undefined;
     buffer.head = .{ .nent = kvm.max_cpuid_entries };
     _ = try kvm.call(dev, kvm.get_supported_cpuid, @intFromPtr(&buffer));
-    for (buffer.entries[0..buffer.head.nent]) |*e| forgetTheDice(e);
+    for (buffer.entries[0..buffer.head.nent]) |*e| {
+        forgetTheDice(e);
+        if (pc) sayTheApic(e);
+    }
     _ = try kvm.call(vcpu, kvm.set_cpuid2, @intFromPtr(&buffer));
 }
 
@@ -332,6 +358,31 @@ fn forgetTheDice(e: *kvm.CpuidEntry) void {
     const rdseed: u32 = 1 << 18; // leaf 7 subleaf 0, EBX
     if (e.function == 1) e.ecx &= ~rdrand;
     if (e.function == 7 and e.index == 0) e.ebx &= ~rdseed;
+}
+
+/// **THE PC-SHAPED MACHINE HAS AN APIC WITH A DEADLINE TIMER** (apic.zig),
+/// and says so where gopher-metal looks before it starts one: leaf 1's APIC
+/// bit and TSC-deadline bit. No x2APIC: its registers are MSRs this machine
+/// does not answer.
+fn sayTheApic(e: *kvm.CpuidEntry) void {
+    if (e.function != 1) return;
+    e.edx |= 1 << 9; // APIC
+    e.ecx |= 1 << 24; // TSC-deadline
+    e.ecx &= ~@as(u32, 1 << 21); // x2APIC
+}
+
+/// **THE APIC'S MSRS ARE OURS.** With no interrupt controller in the kernel,
+/// KVM would answer IA32_APIC_BASE itself and drop IA32_TSC_DEADLINE on the
+/// floor. A filter that denies the two sends every access to them here.
+fn ownTheApicMsrs(vm: linux.fd_t) !void {
+    var cap = kvm.EnableCap{ .cap = kvm.cap_x86_user_space_msr, .args = .{ kvm.msr_exit_reason_filter, 0, 0, 0 } };
+    _ = try kvm.call(vm, kvm.enable_cap, @intFromPtr(&cap));
+    const deny = [1]u8{0};
+    var filter = kvm.MsrFilter{};
+    const both = kvm.msr_filter_read | kvm.msr_filter_write;
+    filter.ranges[0] = .{ .flags = both, .nmsrs = 1, .base = apic.msr_apic_base, .bitmap = &deny };
+    filter.ranges[1] = .{ .flags = both, .nmsrs = 1, .base = apic.msr_tsc_deadline, .bitmap = &deny };
+    _ = try kvm.call(vm, kvm.set_msr_filter, @intFromPtr(&filter));
 }
 
 /// **WHO CALLED IT**, as far as a stack can be guessed: with no frame
@@ -432,6 +483,8 @@ const exit_door: u16 = 0xF4;
 /// a write there can only be one of the loader's substitutions — see
 /// `rewriteClockReads`.
 const tsc_port: u16 = 0xE0;
+/// Where a marked deadline `wrmsr` lands (`rewriteDeadlineWrites`).
+const msr_port: u16 = 0xE1;
 
 // ── the interval timer ────────────────────────────────────────────────────────
 
@@ -464,6 +517,19 @@ const Machine = struct {
     asked: bool = false,
     card: ?*net.Net = null,
     card_device: ?*virtio.Device = null,
+    /// **THE PC-SHAPED MACHINE** (`TRANSPORT=pci`): the devices on a PCI bus,
+    /// and the local APIC their MSI-X messages and the timer go to. Null is
+    /// the microvm-shaped machine, where the guest polls and never halts.
+    bus: ?*pci.Bus = null,
+    lapic: apic.Apic = .{},
+    /// A vector `rest` chose while the guest could not take it yet; injected
+    /// when KVM says the window is open.
+    waiting: ?u8 = null,
+    /// The guest's halts, and the virtual time they skipped.
+    halts: u64 = 0,
+    halted_ns: u64 = 0,
+    /// MSR accesses the filter sent here.
+    msrs: u64 = 0,
     /// **EXITS SINCE THE GUEST LAST DID ANYTHING.** A character printed or a
     /// device doorbell rung is progress; reading the clock and polling memory
     /// is not. A machine whose time is its guest's curiosity can count a hang
@@ -475,6 +541,7 @@ const Machine = struct {
     absent: u64 = 0,
 
     fn out(self: *Machine, port: u16, bytes: []const u8) void {
+        if (self.bus) |bus| if (pci.isPort(port)) return bus.out(port, bytes);
         switch (port) {
             com1 => if (self.line_control & divisor_latch == 0) {
                 _ = linux.write(1, bytes.ptr, bytes.len);
@@ -534,6 +601,15 @@ const Machine = struct {
     /// also how a guest discovers there is no device: virtio's magic value is
     /// the first thing it reads, and zero is not it.
     fn memory(self: *Machine, addr: u64, is_write: bool, data: []u8) void {
+        if (self.bus) |bus| if (bus.memory(self.ram, addr, is_write, data)) {
+            if (is_write) self.quiet = 0;
+            return;
+        };
+        if (self.bus != null and apic.inWindow(addr)) {
+            const offset = addr - apic.base;
+            if (is_write) self.lapic.write(offset, @truncate(readLittle(data))) else writeLittle(data, self.lapic.read(offset));
+            return;
+        }
         if (virtio.inWindow(addr)) {
             const slot: usize = @intCast((addr - virtio.window_base) / virtio.slot_stride);
             const offset = (addr - virtio.window_base) % virtio.slot_stride;
@@ -552,6 +628,7 @@ const Machine = struct {
     }
 
     fn in(self: *Machine, port: u16, bytes: []u8) void {
+        if (self.bus) |bus| if (pci.isPort(port)) return bus.in(port, bytes);
         @memset(bytes, 0);
         if (bytes.len == 0) return;
         switch (port) {
@@ -583,6 +660,49 @@ fn answerClock(vcpu: linux.fd_t, ticks: u64) !void {
     regs.rax = ticks & 0xFFFFFFFF;
     regs.rdx = ticks >> 32;
     _ = try kvm.call(vcpu, kvm.set_regs, @intFromPtr(&regs));
+}
+
+/// **THE GUEST HALTED (`sti; hlt`), SO TIME GOES STRAIGHT TO WHAT WAKES IT.**
+/// Nothing it does can happen until an interrupt arrives, and only two things
+/// raise one: the APIC's timer at its deadline, and the card's MSI-X message
+/// when a frame the wire holds is delivered. The clock moves to the earlier of
+/// the two, the wire is pumped, and the APIC's highest waiting vector is
+/// injected. A run is still a function of the guest alone: the halt's length
+/// is computed, never waited. False when nothing at all can wake it.
+fn rest(vcpu: linux.fd_t, run: *kvm.Run, machine: *Machine) !bool {
+    machine.halts += 1;
+    const began = machine.time.ns;
+    while (true) {
+        machine.lapic.tick(machine.time.ticks());
+        if (machine.lapic.next()) |v| {
+            machine.halted_ns += machine.time.ns - began;
+            // At a halt after `sti` the guest can take it now; if KVM says
+            // otherwise, at the first moment it can.
+            if (run.ready_for_interrupt_injection != 0) {
+                try inject(vcpu, v);
+            } else {
+                machine.waiting = v;
+                run.request_interrupt_window = 1;
+            }
+            return true;
+        }
+        const now = machine.time.ns;
+        var wake: ?u64 = null;
+        if (machine.lapic.timerDue()) |due| wake = clock.nsAt(due);
+        // A frame due already but undelivered has no buffer to go to, and
+        // waits for the guest, not the clock.
+        if (machine.card) |card| if (card.line.nextDue()) |due| if (due > now) {
+            wake = if (wake) |w| @min(w, due) else due;
+        };
+        const at = wake orelse return false;
+        machine.time.ns = @max(now, at);
+        machine.pump();
+    }
+}
+
+fn inject(vcpu: linux.fd_t, vector: u8) !void {
+    var irq = kvm.Interrupt{ .irq = vector };
+    _ = try kvm.call(vcpu, kvm.interrupt, @intFromPtr(&irq));
 }
 
 /// How long a guest may go without printing anything or touching a device
@@ -627,6 +747,13 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
                         try answerClock(vcpu, machine.time.ticks());
                         continue;
                     }
+                    if (io.port == msr_port) {
+                        var regs: kvm.Regs = undefined;
+                        _ = try kvm.call(vcpu, kvm.get_regs, @intFromPtr(&regs));
+                        machine.msrs += 1;
+                        _ = machine.lapic.writeMsr(@truncate(regs.rcx), (regs.rdx << 32) | (regs.rax & 0xFFFF_FFFF));
+                        continue;
+                    }
                     machine.out(io.port, data);
                     if (machine.stopped) |code| return code;
                 } else {
@@ -637,7 +764,33 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
                 const m = kvm.mmioExit(page);
                 machine.memory(m.phys_addr, m.is_write != 0, m.data[0..@intCast(m.len)]);
             },
-            .hlt => return machine.stopped orelse 0,
+            .hlt => {
+                if (machine.bus == null) return machine.stopped orelse 0;
+                if (!try rest(vcpu, run, machine)) {
+                    std.debug.print("metal-vmm: the guest halted with nothing that could wake it\n", .{});
+                    return machine.stopped orelse 0;
+                }
+            },
+            .irq_window_open => {
+                run.request_interrupt_window = 0;
+                if (machine.waiting) |v| {
+                    machine.waiting = null;
+                    try inject(vcpu, v);
+                }
+            },
+            .rdmsr => {
+                machine.msrs += 1;
+                const m = kvm.msrExit(page);
+                if (machine.lapic.readMsr(m.index)) |v| {
+                    m.data = v;
+                    m.@"error" = 0;
+                } else m.@"error" = 1;
+            },
+            .wrmsr => {
+                machine.msrs += 1;
+                const m = kvm.msrExit(page);
+                m.@"error" = if (machine.lapic.writeMsr(m.index, m.data)) 0 else 1;
+            },
             .shutdown => {
                 std.debug.print("metal-vmm: the guest shut down (a triple fault, most likely)\n", .{});
                 report(vcpu, machine.ram, text);
@@ -690,6 +843,18 @@ fn numbers(schedule: *faults.Schedule, environ: std.process.Environ, name: []con
 }
 
 /// What was done to this run, if anything was.
+/// The PC-shaped machine's halts and interrupts, on the error stream.
+fn reportRest(machine: *const Machine) void {
+    var messages: u64 = 0;
+    for (machine.bus.?.functions) |f| if (f) |g| {
+        messages += g.messages;
+    };
+    std.debug.print("metal-vmm: {d} halts skipped {d} ms; {d} interrupts taken ({d} timer, {d} MSI-X messages); {d} APIC MSR accesses\n", .{
+        machine.halts,             machine.halted_ns / std.time.ns_per_ms, machine.lapic.taken,
+        machine.lapic.timer_fired, messages,                               machine.msrs,
+    });
+}
+
 fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void {
     if (card.line.configured()) reportFaults("wire", "frames sent", &card.line.lost, ns);
     if (block.refusals.configured()) {
@@ -805,6 +970,16 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     const vm: linux.fd_t = @intCast(try kvm.call(dev, kvm.create_vm, 0));
     defer _ = linux.close(vm);
 
+    // **`TRANSPORT=pci` IS THE PC-SHAPED MACHINE**: the devices on a PCI bus,
+    // an APIC, and a guest that halts between frames, as gopher-metal does on
+    // a droplet. Unset is the microvm-shaped machine check.sh compares with
+    // QEMU's microvm.
+    const pc = if (init.environ.getPosix("TRANSPORT")) |t| std.mem.eql(u8, t, "pci") else false;
+    if (pc) ownTheApicMsrs(vm) catch |e| {
+        std.debug.print("metal-vmm: this KVM will not hand over the APIC's MSRs ({s}): TRANSPORT=pci needs Linux 5.10 or later\n", .{@errorName(e)});
+        return 2;
+    };
+
     const ram = try posix.mmap(null, ram_bytes, .{ .READ = true, .WRITE = true }, .{ .TYPE = .PRIVATE, .ANONYMOUS = true }, -1, 0);
     var region = kvm.MemoryRegion{
         .slot = 0,
@@ -826,7 +1001,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     const page_size = try kvm.call(dev, kvm.get_vcpu_mmap_size, 0);
     const page = try posix.mmap(null, page_size, .{ .READ = true, .WRITE = true }, .{ .TYPE = .SHARED }, vcpu, 0);
 
-    try describeProcessor(dev, vcpu);
+    try describeProcessor(dev, vcpu, pc);
     try enterProtectedMode(vcpu, loaded.entry, start_info);
 
     // **THE DEVICES GO IN THE FIRST SLOTS**, which is not what QEMU does (it
@@ -846,21 +1021,30 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         // question like "why is one chat message eighty writes" gets answered.
         if (init.environ.getPosix("DISK_TRACE")) |_| block.trace = true;
         block_device = block.device();
-        machine.devices[0] = &block_device;
+        if (!pc) machine.devices[0] = &block_device;
     }
     // **THE WIRE ENDS HERE, ON PURPOSE.** There is always a network device,
     // because the machine at the other end of it is this program and costs
     // nothing when nobody talks to it.
     var card = net.Net{};
     var net_device = card.device();
-    machine.devices[1] = &net_device;
+    if (!pc) machine.devices[1] = &net_device;
     machine.card = &card;
     machine.card_device = &net_device;
     // **AND THERE IS ALWAYS ENTROPY**, for the same reason: it is ours, it is
     // seeded, and it costs nothing when nobody draws from it.
     var dice = entropy.Entropy{};
     var dice_device = dice.device();
-    machine.devices[2] = &dice_device;
+    if (!pc) machine.devices[2] = &dice_device;
+    // The same three, in slots of a PCI bus instead. The guest asks for each
+    // kind by type, so the order is only the order a scan finds them in.
+    var bus = pci.Bus{};
+    if (pc) {
+        machine.bus = &bus;
+        if (disk_path != null) _ = bus.plug(1, &block_device, &machine.lapic);
+        _ = bus.plug(2, &net_device, &machine.lapic);
+        _ = bus.plug(3, &dice_device, &machine.lapic);
+    }
 
     tellTheFaults(&card.line, &block.refusals, init.environ);
 
@@ -888,6 +1072,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // stream: a run with a perfect wire says nothing, so the probes' output
     // stays comparable with QEMU's.
     reportRun(&card, &block, machine.time.ns);
+    if (pc) reportRest(&machine);
     // **THE FILE LEARNS WHAT HAPPENED ONLY NOW**, and only the sectors the
     // guest actually wrote. A run that never gets here leaves the image as it
     // found it — see disk.zig.
@@ -933,6 +1118,8 @@ test {
     _ = @import("virtio.zig");
     _ = @import("net.zig");
     _ = @import("peer.zig");
+    _ = @import("apic.zig");
+    _ = @import("pci.zig");
 }
 
 /// A tiny ELF with one loadable segment and one PVH note, built by hand so the
