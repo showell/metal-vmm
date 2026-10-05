@@ -82,7 +82,7 @@ From the review (`docs/reviews/REVIEW-interrupts.md`), most urgent first:
 9. **Done in item 5 (CC).** **The deadline timer between halts (H2).** `tick` runs only in `rest`, so
    a deadline passed while running reads back unchanged and is lost when
    rewritten; gopher-metal wakes less often here than on a droplet.
-10. **A halt with interrupts off stops the machine (M1).** `rest` ignores
+10. **Done (CC).** **A halt with interrupts off stops the machine (M1).** `rest` ignores
    `if_flag`, so `cli; hlt` resumes past the `hlt` later, which no PC does.
 11. **Done (CC).** **A vector is in service only once injected (M2).** The not-ready branch
     of `rest` strands a vector in service and ends the run; untested.
