@@ -28,4 +28,18 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     }) });
     b.step("test", "The parts that can be checked without a processor").dependOn(&b.addRunArtifact(tests).step);
+
+    // Many runs' coverage, one table: `zig build coverage-merge -- a.jsonl b.jsonl`.
+    const merge = b.addExecutable(.{
+        .name = "coverage-merge",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/coverage_merge.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    b.installArtifact(merge);
+    const run_merge = b.addRunArtifact(merge);
+    if (b.args) |args| run_merge.addArgs(args);
+    b.step("coverage-merge", "Many runs' coverage JSONL as one table: zig build coverage-merge -- [--floor f] a.jsonl ...").dependOn(&run_merge.step);
 }

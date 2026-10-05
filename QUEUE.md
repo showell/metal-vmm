@@ -122,7 +122,7 @@ bottom.
     in a model of the guest's table (`tcp_sim: a client that stayed through
     a flood got its whole answer` is the simulator's version).
 
-22. **Coverage across runs** (the explorer's memory; groundwork). Item 18's
+22. **Done (CC).** **Coverage across runs** (the explorer's memory; groundwork). Item 18's
     table covers one run. Give `coverage.zig` a merge: many runs' JSONL
     (each line tagged with the run's `FAULT_SEED` or its knobs) into one
     table that says, per property, which run reached it first and how many

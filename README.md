@@ -405,6 +405,15 @@ that printed any ends with one line on the error stream:
 
     metal-vmm: coverage: 7 of 23 properties reached (6 hold, 0 broken), from 412 lines over 1 boots
 
+**And across many runs.** Each run's lines in a `COVERAGE_OUT` file follow a
+line naming it (`{"metal_vmm_run":{"seed":4711,"knobs":"..."}}`, which
+`report.py` passes over). `zig build coverage-merge -- [--floor f] a.jsonl
+...` merges any number of such files, or the judge's `sdk.jsonl` (a run per
+boot), into one table: every property's verdict, how many runs reached it
+and which first, and the ones only one run ever reached. With a floor it
+fails as `report.py --floor` does: a FAIL, a floor property missed, or a
+floor line gone stale.
+
 ### And the disk can refuse
 
 Same idea one layer over: `DISK_REFUSE=3` answers the guest's third request
