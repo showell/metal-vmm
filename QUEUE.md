@@ -543,7 +543,7 @@ this machine survives.
      read answered, or a rewritten `out` whose RIP KVM skips on the next
      entry). The simplest rule is to snapshot only between exits, after the
      answer is written, which is where this program's loop already is.
-  7. **Guest memory**, 512 MiB. A full copy is about 0.1 s here. A
+  7. **Guest memory**, 512 MiB. A full copy should take on the order of a tenth of a second (an estimate from memory bandwidth, not measured here). A
      copy-on-write mapping, or KVM's dirty-page log, would make a branch
      cheap. Which one is the box's call.
   8. **And no host time anywhere.** The TSC is this program's (rewritten),
