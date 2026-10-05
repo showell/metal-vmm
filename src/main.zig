@@ -42,6 +42,7 @@ const faults = @import("faults.zig");
 const wire = @import("peer.zig");
 const apic = @import("apic.zig");
 const coverage = @import("coverage.zig");
+const knobs = @import("knobs.zig");
 const pci = @import("pci.zig");
 
 /// How much RAM the guest gets. The probes were written against `-m 512`.
@@ -1003,31 +1004,31 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
 /// reach the guest (`WIRE_LATENCY_US=250`), and which of its disk requests come
 /// back refused (`DISK_REFUSE=3,9`, `DISK_REFUSE_RATE=100`). Nothing set is a
 /// machine that works perfectly, which is what check.sh runs on.
-fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, rough: *wire.Rough, environ: std.process.Environ) void {
-    numbers(&line.lost, environ, "WIRE_EAT");
-    numbers(&line.peer_lost, environ, "PEER_EAT");
-    numbers(&line.peer_damaged, environ, "PEER_DAMAGE");
-    if (environ.getPosix("PEER_LOSS")) |n| line.peer_lost.rate = std.fmt.parseInt(u32, n, 10) catch 0;
-    if (environ.getPosix("PEER_DAMAGE_RATE")) |n| line.peer_damaged.rate = std.fmt.parseInt(u32, n, 10) catch 0;
+fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, rough: *wire.Rough, k: *const knobs.Knobs) void {
+    numbers(&line.lost, k, "WIRE_EAT");
+    numbers(&line.peer_lost, k, "PEER_EAT");
+    numbers(&line.peer_damaged, k, "PEER_DAMAGE");
+    if (k.get("PEER_LOSS")) |n| line.peer_lost.rate = std.fmt.parseInt(u32, n, 10) catch 0;
+    if (k.get("PEER_DAMAGE_RATE")) |n| line.peer_damaged.rate = std.fmt.parseInt(u32, n, 10) catch 0;
     rough.retransmits = line.hurtsPeer();
     // **THE PEER'S OWN MISBEHAVIOUR** (peer.zig, `Rough`): times in
     // microseconds of the machine's clock from when it opened, sizes in
     // bytes of the answer.
-    if (count(environ, "PEER_RESET_AT")) |us| rough.reset_after_ns = us * std.time.ns_per_us;
-    if (count(environ, "PEER_RESET_OFF")) |n| rough.reset_off = @truncate(n);
-    if (count(environ, "PEER_VANISH_AFTER")) |n| rough.vanish_after = @intCast(n);
-    if (count(environ, "PEER_FLOOD")) |n| rough.flood = @intCast(@min(n, 32));
-    if (count(environ, "PEER_FLOOD_GAP_US")) |us| rough.flood_gap_ns = us * std.time.ns_per_us;
-    if (count(environ, "PEER_SHUT_AFTER")) |n| rough.shut_after = @intCast(n);
-    if (count(environ, "PEER_SHUT_FOR_US")) |us| rough.shut_for_ns = us * std.time.ns_per_us;
-    if (count(environ, "PEER_MSS")) |n| if (n > 0) {
+    if (knob(k, "PEER_RESET_AT")) |us| rough.reset_after_ns = us * std.time.ns_per_us;
+    if (knob(k, "PEER_RESET_OFF")) |n| rough.reset_off = @truncate(n);
+    if (knob(k, "PEER_VANISH_AFTER")) |n| rough.vanish_after = @intCast(n);
+    if (knob(k, "PEER_FLOOD")) |n| rough.flood = @intCast(@min(n, 32));
+    if (knob(k, "PEER_FLOOD_GAP_US")) |us| rough.flood_gap_ns = us * std.time.ns_per_us;
+    if (knob(k, "PEER_SHUT_AFTER")) |n| rough.shut_after = @intCast(n);
+    if (knob(k, "PEER_SHUT_FOR_US")) |us| rough.shut_for_ns = us * std.time.ns_per_us;
+    if (knob(k, "PEER_MSS")) |n| if (n > 0) {
         rough.mss = @intCast(n);
     };
-    numbers(&drive.refused, environ, "DISK_REFUSE");
-    if (environ.getPosix("WIRE_LOSS")) |n| line.lost.rate = std.fmt.parseInt(u32, n, 10) catch 0;
-    if (environ.getPosix("DISK_REFUSE_RATE")) |n| drive.refused.rate = std.fmt.parseInt(u32, n, 10) catch 0;
-    if (environ.getPosix("DISK_WRITES_ONLY")) |_| drive.writes_only = true;
-    if (environ.getPosix("WIRE_LATENCY_US")) |n| {
+    numbers(&drive.refused, k, "DISK_REFUSE");
+    if (k.get("WIRE_LOSS")) |n| line.lost.rate = std.fmt.parseInt(u32, n, 10) catch 0;
+    if (k.get("DISK_REFUSE_RATE")) |n| drive.refused.rate = std.fmt.parseInt(u32, n, 10) catch 0;
+    if (k.get("DISK_WRITES_ONLY")) |_| drive.writes_only = true;
+    if (k.get("WIRE_LATENCY_US")) |n| {
         line.latency_ns = (std.fmt.parseInt(u64, n, 10) catch 0) * std.time.ns_per_us;
     }
 }
@@ -1038,8 +1039,14 @@ fn count(environ: std.process.Environ, name: []const u8) ?u64 {
     return std.fmt.parseInt(u64, text, 10) catch null;
 }
 
-fn numbers(schedule: *faults.Schedule, environ: std.process.Environ, name: []const u8) void {
-    const list = environ.getPosix(name) orelse return;
+/// One number a fault knob says, if it says one.
+fn knob(k: *const knobs.Knobs, name: []const u8) ?u64 {
+    const text = k.get(name) orelse return null;
+    return std.fmt.parseInt(u64, text, 10) catch null;
+}
+
+fn numbers(schedule: *faults.Schedule, k: *const knobs.Knobs, name: []const u8) void {
+    const list = k.get(name) orelse return;
     var at: usize = 0;
     var each = std.mem.tokenizeScalar(u8, list, ',');
     while (each.next()) |one| {
@@ -1264,7 +1271,16 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         _ = bus.plug(3, &dice_device, &machine.lapic);
     }
 
-    tellTheFaults(&card.line, &block.refusals, &card.peer.rough, init.environ);
+    // **THE FAULTS: A SEED'S, UNDER WHAT THE ENVIRONMENT SETS BY HAND**
+    // (knobs.zig). A seeded run says what it chose, as the knobs that would
+    // repeat it without the seed.
+    var turned = if (count(init.environ, "FAULT_SEED")) |seed| knobs.Knobs.fromSeed(seed) else knobs.Knobs{};
+    turned.overlay(init.environ);
+    if (count(init.environ, "FAULT_SEED")) |seed| {
+        var line: [1024]u8 = undefined;
+        std.debug.print("metal-vmm: FAULT_SEED={d} is {s}\n", .{ seed, turned.format(&line) });
+    }
+    tellTheFaults(&card.line, &block.refusals, &card.peer.rough, &turned);
     if (count(init.environ, "PATIENCE_S")) |seconds| machine.patience_ns = seconds * std.time.ns_per_s;
     // **COVERAGE LINES TO A FILE OF THEIR OWN**, appended: each boot of a
     // sweep adds its lines to the same JSONL, as the judge's do.
@@ -1353,6 +1369,7 @@ test {
     _ = @import("apic.zig");
     _ = @import("pci.zig");
     _ = @import("coverage.zig");
+    _ = @import("knobs.zig");
 }
 
 /// A tiny ELF with one loadable segment and one PVH note, built by hand so the
@@ -1697,4 +1714,70 @@ test "a guest that rests past its patience with nothing done is idle; anything d
     machine.progressed();
     machine.time.ns += 5 * std.time.ns_per_s;
     try testing.expect(!machine.rested());
+}
+
+/// An environment, by hand.
+const FakeEnv = struct {
+    pairs: []const [2][]const u8,
+
+    pub fn getPosix(self: FakeEnv, name: []const u8) ?[]const u8 {
+        for (self.pairs) |p| if (std.mem.eql(u8, p[0], name)) return p[1];
+        return null;
+    }
+};
+
+test "the knobs reach the wire, the disk and the peer, a seed's or the environment's alike" {
+    var by_hand = knobs.Knobs{};
+    by_hand.overlay(FakeEnv{ .pairs = &.{
+        .{ "WIRE_EAT", "3,9" },  .{ "PEER_EAT", "2" },         .{ "WIRE_LATENCY_US", "250" },
+        .{ "DISK_REFUSE", "4" }, .{ "DISK_WRITES_ONLY", "1" }, .{ "PEER_RESET_AT", "3000" },
+        .{ "PEER_FLOOD", "4" },  .{ "PEER_MSS", "100" },
+    } });
+    var line = faults.Wire{};
+    var drive = faults.Drive{};
+    var rough = wire.Rough{};
+    tellTheFaults(&line, &drive, &rough, &by_hand);
+    try testing.expectEqualSlices(u32, &.{ 3, 9 }, line.lost.named[0..2]);
+    try testing.expectEqual(@as(u32, 2), line.peer_lost.named[0]);
+    try testing.expectEqual(@as(u64, 250 * std.time.ns_per_us), line.latency_ns);
+    try testing.expectEqual(@as(u32, 4), drive.refused.named[0]);
+    try testing.expect(drive.writes_only);
+    try testing.expect(rough.retransmits); // the peer's frames may be lost
+    try testing.expectEqual(@as(?u64, 3000 * std.time.ns_per_us), rough.reset_after_ns);
+    try testing.expectEqual(@as(u8, 4), rough.flood);
+    try testing.expectEqual(@as(?usize, 100), rough.mss);
+
+    // A seed's schedule, applied, is its printed knobs applied by hand.
+    var printed: [1024]u8 = undefined;
+    for (0..50) |seed| {
+        const drawn = knobs.Knobs.fromSeed(seed);
+        var pairs: [knobs.names.len][2][]const u8 = undefined;
+        var n: usize = 0;
+        const text = drawn.format(&printed);
+        if (!std.mem.eql(u8, text, "none")) {
+            var each = std.mem.tokenizeScalar(u8, text, ' ');
+            while (each.next()) |kv| : (n += 1) {
+                const eq = std.mem.indexOfScalar(u8, kv, '=').?;
+                pairs[n] = .{ kv[0..eq], kv[eq + 1 ..] };
+            }
+        }
+        var again = knobs.Knobs{};
+        again.overlay(FakeEnv{ .pairs = pairs[0..n] });
+        var a_line = faults.Wire{};
+        var a_drive = faults.Drive{};
+        var a_rough = wire.Rough{};
+        var b_line = faults.Wire{};
+        var b_drive = faults.Drive{};
+        var b_rough = wire.Rough{};
+        tellTheFaults(&a_line, &a_drive, &a_rough, &drawn);
+        tellTheFaults(&b_line, &b_drive, &b_rough, &again);
+        try testing.expectEqual(a_rough, b_rough);
+        try testing.expectEqual(a_line.latency_ns, b_line.latency_ns);
+        try testing.expectEqualSlices(u32, &a_line.lost.named, &b_line.lost.named);
+        try testing.expectEqual(a_line.lost.rate, b_line.lost.rate);
+        try testing.expectEqualSlices(u32, &a_line.peer_lost.named, &b_line.peer_lost.named);
+        try testing.expectEqualSlices(u32, &a_line.peer_damaged.named, &b_line.peer_damaged.named);
+        try testing.expectEqualSlices(u32, &a_drive.refused.named, &b_drive.refused.named);
+        try testing.expectEqual(a_drive.writes_only, b_drive.writes_only);
+    }
 }

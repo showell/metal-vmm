@@ -361,6 +361,16 @@ With none of these set the peer is the plain client it always was, frame for
 frame, and no run here changes. The guest's coverage properties these reach
 are gopher-metal's to measure (its `coverage/floor-metal.txt`).
 
+### One seed for all of it
+
+`FAULT_SEED=n` turns all of these knobs at once, each family by its own
+chance and from a documented range (the table in `knobs.zig`), so "seed 4711"
+names one exact run. A knob set by hand wins over the seed. A seeded run
+says first, on the error stream, what it chose, as the knobs that repeat it
+without the seed:
+
+    metal-vmm: FAULT_SEED=4711 is WIRE_EAT=12 WIRE_LATENCY_US=8143 PEER_FLOOD=3 PEER_FLOOD_GAP_US=212998
+
 ### What the guest says it reached
 
 A gopher-metal kernel built `-Dcoverage` prints zig-coverage-sdk's JSONL on

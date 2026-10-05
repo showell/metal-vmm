@@ -85,7 +85,7 @@ bottom.
     stderr line names how many properties were reached. Pure logic: the line
     parser and the table are unit-testable without a guest. gopher-metal's
     `long.sh` will use it in place of its grep.
-19. **One seed names a run's whole fault schedule** (groundwork, as 18).
+19. **Done (CC).** **One seed names a run's whole fault schedule** (groundwork, as 18).
     Today a run's faults are a handful of knobs (WIRE_*, DISK_*, PEER_*).
     `FAULT_SEED=n` should choose them all, deterministically and printably:
     which frames each way are lost or damaged, latency, disk refusals, and
