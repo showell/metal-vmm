@@ -26,6 +26,7 @@ printf 'pristine volume' > "$T/site.img"
 #   5       exit 1 (stuck): FAIL
 #   6       a coverage property broken: FAIL
 #   7       the guest writes a sound volume, and the page: ok
+#   8       a lossy wire, and the peer gives up: no page, allowed
 cat > "$T/vmm" <<'EOF'
 #!/bin/bash
 img="$2"
@@ -47,6 +48,7 @@ case "$s" in
   5) code=1 ;;
   6) ev Always "tcp: an always" true false; broken=1 ;;
   7) printf 'sound, written' > "$img"; ev Sometimes "tcp: only seed 7" true true ;;
+  8) page=""; status=0; echo "metal-vmm: the first client gave up: it sent the same thing too often, unanswered" >&2 ;;
 esac
 printf '%s' "$page" > "$PEER_BODY"
 echo "peer: $status \"$page\""
@@ -61,7 +63,7 @@ EOF
 chmod +x "$T/vmm" "$T/sound"
 [ -x "$HERE/zig-out/bin/coverage-merge" ] || { echo "no coverage-merge: zig build"; exit 1; }
 
-out=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 1 7 2>&1)
+out=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 1 8 2>&1)
 code=$?
 
 expect "the unhurt run" '^unhurt: exit 0, status 200, 5 bytes of /' "$out"
@@ -72,9 +74,10 @@ expect "seed 4" '^4 .*FAIL: the volume is not sound' "$out"
 expect "seed 5" '^5 .*FAIL: exit 1 (unhurt: 0)' "$out"
 expect "seed 6" '^6 .*FAIL: 1 coverage properties broken' "$out"
 expect "seed 7" '^7 .* ok ' "$out"
+expect "seed 8" '^8 .*differs (allowed: the peer gave up)' "$out"
 expect "the coverage merge" 'FAIL Always .*tcp: an always' "$out"
 expect "a rare property" 'tcp: only seed 7  (FAULT_SEED=7)' "$out"
-expect "the summary" '^7 seeds: 2 ok, 1 differ as their faults allow, 4 failed' "$out"
+expect "the summary" '^8 seeds: 2 ok, 2 differ as their faults allow, 4 failed' "$out"
 expect "a failing seed, as knobs" 'FAULT_SEED=4: FAIL: the volume is not sound' "$out"
 expect "how to repeat it" 'repeat it: DISK_WRITES_ONLY=1 TRANSPORT=pci' "$out"
 [ $code = 1 ] || { echo "FAIL: sweep.sh exited $code, not 1"; fail=1; }

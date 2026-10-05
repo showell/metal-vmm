@@ -311,7 +311,7 @@ crash on the peer's own input.
 **Next, after 22-40** (2026-10-05 evening; Steve is away, so take these in
 order without waiting; the box answers when he is back).
 
-41. **(metal-vmm) The peer review's findings, P1-P5 and S1**, in the order
+41. **Done (CC): P1 (TIME-WAIT, closed ports), P2 (persist probes, WL1/WL2; the window itself in 39a), P3 with P5 (RFC 6298 timing, fast retransmit, go-back; RFC 5961 resets), and P6, P7 in the same lines; S1 (`sweep.sh` now excuses a page the peer itself gave up or vanished from, by a stderr line; `sweep_test.sh` has a seed for it). P4 waits for the box.** **(metal-vmm) The peer review's findings, P1-P5 and S1**, in the order
     `REVIEW-peer.md` gives: P1 first (the 23953 class: a finished peer goes
     silent where TIME-WAIT answers), then P2, P3 with P5, S1. P4 waits for
     the box's gates, as the review says.

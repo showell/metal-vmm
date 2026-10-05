@@ -421,7 +421,8 @@ without the seed:
 PC-shaped machine. A seed fails if its exit is not the unhurt run's, it
 broke a coverage property, the volume it wrote is not sound (`sound.sh`), or
 its page is not the unhurt run's when nothing it did excuses that (a reset,
-a vanished peer and a refused disk request do). It stops at nothing, merges
+a vanished peer, a refused disk request and a peer that gave up do: the run
+says the last on stderr). It stops at nothing, merges
 every run's coverage (`FLOOR=<file>` to gate on one), and ends with the
 failing seeds as the knobs that repeat them. `./sweep_test.sh` checks its
 verdicts against a fake machine told in advance what each seed does.

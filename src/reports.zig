@@ -104,6 +104,29 @@ pub fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void
     }
     var buf: [2048]u8 = undefined;
     std.debug.print("{s}", .{unspent(&card.line, &card.peer, &block.refusals, &buf)});
+    if (peerEnd(&card.peer.tcp)) |line| std.debug.print("{s}", .{line});
+}
+
+/// **WHEN THE PEER ITSELF LET THE PAGE GO** (REVIEW-peer.md S1): the first
+/// client gave up, having sent the same thing too often unanswered, or
+/// vanished as `PEER_VANISH_AFTER` asked. A run whose page is missing for
+/// either reason missed it through the peer's own doing, and sweep.sh
+/// excuses it by this line. Nothing for any other end.
+pub fn peerEnd(c: *const wire.Tcp) ?[]const u8 {
+    return switch (c.state) {
+        .gave_up => "metal-vmm: the first client gave up: it sent the same thing too often, unanswered\n",
+        .gone => "metal-vmm: the first client vanished, as PEER_VANISH_AFTER asked\n",
+        else => null,
+    };
+}
+
+test "the peer's own end is said when it gave up or vanished, and only then" {
+    var c = wire.Tcp{};
+    for (std.enums.values(wire.Tcp.State)) |state| {
+        c.state = state;
+        const said = peerEnd(&c);
+        try testing.expectEqual(state == .gave_up or state == .gone, said != null);
+    }
 }
 
 /// **WHAT THE CLIENT GOT**, as main prints it on stdout at any end that is
