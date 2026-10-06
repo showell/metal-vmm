@@ -704,7 +704,24 @@ effect of adding a property.
     holds them. Keep a list as you go: every error each module can answer.
     Phase B's error list comes from it.
 
-77. **Phase B: the door** (gopher-metal). The Store, as [a web server in a
+77. **Done (CC, 2026-10-06).** gopher-metal `store.zig`, `store_model.zig`,
+    `store_fat.zig`, `store_test.zig`. **Phase report:**
+    - *Reached:* every operation and error agrees between the model and the
+      FAT store (a script of 33 steps, and 5 seeds of 300), trees compared
+      whole after each; `replace` is wholly old or wholly new after a cut
+      at every request it makes, plain and torn; `append` old or new;
+      `write` old, new or neither. A planted in-place `replace` fails.
+    - *Parked:* none.
+    - *Asked:* two, under Questions: `fat16.remove` on a directory, and
+      whether FAT should refuse what the Store refuses in a name.
+    - *Surprised me:* no seventh operation was wanted; `list` meets `.` and
+      `..` and the Store hides them; and the flush before `replace`'s rename
+      cannot be shown on a disk in memory (for the box, in COVERAGE.md).
+    - *The floor:* 187 before, 187 after (the Store's properties come with
+      `store_sim`, item 79). `zig build test`: 918 of 920, 2 skipped and
+      named.
+
+    **Was:** **Phase B: the door** (gopher-metal). The Store, as [a web server in a
     box](http://143.244.172.148:9100/notes/a-web-server-in-a-box.md) drafts it: **read whole, write whole,
     append, list, remove, replace**, and nothing else. Write:
     - the interface, as a zig type, with the errors it can answer, taken
@@ -997,6 +1014,24 @@ this machine survives.
 
 *(For the box or Steve. Take the next item; do not wait.)*
 
+- **(CC, item 77) A finding: `fat16.remove` takes a directory.** It drops
+  the directory's entry like a file's and leaves the directory's clusters,
+  and everything under it, allocated and reachable from nothing: `check`
+  reports a leak. Linux's unlink answers EISDIR. Reached through io.zig's
+  `deleteFile` only if the application deletes a directory by that call,
+  which I have not looked for (angry-gopher is not in my container). The
+  test is `fat16_test.zig`'s "remove refuses a directory, and leaves the
+  volume clean (red until the ruling)", skipped by name; it fails as
+  described without the skip. The Store refuses a directory either way.
+- **(CC, item 77) A question: should FAT refuse what the Store refuses in a
+  name?** `fat16.writeFileIn` checks a name's length only, so `a:b`,
+  `what?` or a trailing dot are written as given, in the long name. FAT's
+  spec forbids `"*/:<>?\|` in long names, and Windows and Linux's vfat
+  refuse to make them; whether fsck.fat or a Linux mount minds one already
+  there I could not check here (no fsck in my container). The Store checks
+  first, so nothing it writes has one. If angry-gopher can put a user's
+  text in a file name (a chat topic?), the box knows.
+
 - **(CC, item 59) Answered: Steve approved the merge of `box/v18`;** item
   59 is built on it (see item 59).
 
@@ -1288,6 +1323,10 @@ take. The box reads it at merge time.)*
   named properties show MISS there. Calling those tests' setups from a
   `properties` tier, or a `floor_sim` drive of each, would put them on the
   floor. Each costs a full directory or a deep tree: minutes of runtime.
+- **store_test's agreement is one volume size, FAT16 only** (gopher-metal
+  `src/store_test.zig`): `store_sim` (item 79) takes FAT32 and a full
+  volume, where `NoSpace` lives. Until then `NoSpace` is untested at the
+  Store.
 - **The `writeRuns` re-checks** (a chain that ends before its size, past
   `chainEnd`'s walk) wait on a disk that lies between two reads; a
   `floor_sim` case with `Block.Fault.garbage` at the right request number
