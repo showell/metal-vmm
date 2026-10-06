@@ -142,6 +142,10 @@ pub const Table = struct {
             self.boots += 1;
             return;
         }
+        // A numeric comparison's guidance line (the SDK's
+        // `alwaysGreaterThan` and the rest): its assertion has a line of its
+        // own, which is what the table counts.
+        if (value.object.get("antithesis_guidance") != null) return;
         const event = value.object.get("antithesis_assert") orelse {
             self.malformed += 1;
             return;
@@ -292,8 +296,8 @@ pub const Serial = struct {
 
 /// **WHAT NAMES A RUN IN A JSONL OF MANY**: a line of its own, written by
 /// this program when `COVERAGE_OUT` opens, before the guest's first. The
-/// SDK's `tools/report.py` passes over it, as over any line that is not an
-/// assertion.
+/// SDK's `tools/report.py` reads it as the start of a run, however many
+/// times its guest boots, and names the run by its seed or its knobs.
 pub const run_key = "metal_vmm_run";
 
 /// `{"metal_vmm_run":{"seed":4711,"knobs":"WIRE_EAT=3"}}`, the seed null when
@@ -308,203 +312,6 @@ pub fn runLine(buf: []u8, seed: ?u64, knobs: []const u8) ![]const u8 {
     return w.buffered();
 }
 
-/// **THE EXPLORER'S MEMORY**: every property over many runs, which run
-/// reached it first, how many runs reached it, and so which ones only one
-/// run ever did, the rare ones worth steering toward.
-///
-/// A run is a `metal_vmm_run` line and what follows it, however many times
-/// its guest boots. A file with no such line, such as the judge's
-/// `sdk.jsonl`, is a run per boot (`antithesis_sdk` line).
-pub const Merged = struct {
-    pub const Row = struct {
-        property: Property,
-        runs: u32 = 0,
-        first_run: u32 = 0,
-        /// The last run counted in `runs`, so a run counts once.
-        last_run: ?u32 = null,
-
-        pub fn rare(self: *const Row) bool {
-            return self.runs == 1;
-        }
-    };
-
-    allocator: std.mem.Allocator,
-    /// Each run's name: its seed, else its knobs, else where it was found.
-    runs: std.ArrayList([]const u8) = .empty,
-    rows: std.StringArrayHashMapUnmanaged(Row) = .empty,
-    malformed: u64 = 0,
-    /// Within the file being read: whether its runs are marked, and its boots.
-    marked: bool = false,
-    boots: u32 = 0,
-    in_run: bool = false,
-
-    pub fn init(allocator: std.mem.Allocator) Merged {
-        return .{ .allocator = allocator };
-    }
-
-    pub fn deinit(self: *Merged) void {
-        for (self.runs.items) |name| self.allocator.free(name);
-        self.runs.deinit(self.allocator);
-        for (self.rows.keys()) |id| self.allocator.free(id);
-        self.rows.deinit(self.allocator);
-    }
-
-    /// One file's lines, `name` saying where they came from.
-    pub fn addFile(self: *Merged, name: []const u8, text: []const u8) !void {
-        self.marked = false;
-        self.boots = 0;
-        self.in_run = false;
-        var lines = std.mem.splitScalar(u8, text, '\n');
-        while (lines.next()) |raw| {
-            const line = std.mem.trimEnd(u8, raw, "\r");
-            if (line.len == 0) continue;
-            try self.addLine(name, line);
-        }
-    }
-
-    fn startRun(self: *Merged, owned_name: []const u8) !void {
-        try self.runs.append(self.allocator, owned_name);
-        self.in_run = true;
-    }
-
-    fn addLine(self: *Merged, file: []const u8, line: []const u8) !void {
-        var arena = std.heap.ArenaAllocator.init(self.allocator);
-        defer arena.deinit();
-        const value = std.json.parseFromSliceLeaky(std.json.Value, arena.allocator(), line, .{}) catch {
-            self.malformed += 1;
-            return;
-        };
-        if (value != .object) {
-            self.malformed += 1;
-            return;
-        }
-        if (value.object.get(run_key)) |run| {
-            self.marked = true;
-            try self.startRun(try self.runName(run, file));
-            return;
-        }
-        if (value.object.get("antithesis_sdk") != null) {
-            self.boots += 1;
-            if (!self.marked) try self.startRun(try std.fmt.allocPrint(self.allocator, "{s}, boot {d}", .{ file, self.boots }));
-            return;
-        }
-        const event = value.object.get("antithesis_assert") orelse return;
-        if (event != .object) {
-            self.malformed += 1;
-            return;
-        }
-        const e = event.object;
-        const id = Table.text(e.get("id")) orelse return self.bad();
-        const kind = Kind.parse(Table.text(e.get("display_type")) orelse return self.bad()) orelse return self.bad();
-        const hit = Table.flag(e.get("hit")) orelse return self.bad();
-        const condition = Table.flag(e.get("condition")) orelse return self.bad();
-        if (!self.in_run) try self.startRun(try self.allocator.dupe(u8, file));
-        const run: u32 = @intCast(self.runs.items.len - 1);
-
-        const slot = try self.rows.getOrPut(self.allocator, id);
-        if (!slot.found_existing) {
-            slot.key_ptr.* = try self.allocator.dupe(u8, id);
-            slot.value_ptr.* = .{ .property = .{ .kind = kind } };
-        }
-        const row = slot.value_ptr;
-        if (!hit) return;
-        if (condition) row.property.trues += 1 else row.property.falses += 1;
-        if (row.last_run != run) {
-            if (row.runs == 0) row.first_run = run;
-            row.runs += 1;
-            row.last_run = run;
-        }
-    }
-
-    fn bad(self: *Merged) void {
-        self.malformed += 1;
-    }
-
-    fn runName(self: *Merged, run: std.json.Value, file: []const u8) ![]const u8 {
-        if (run == .object) {
-            if (run.object.get("seed")) |seed| if (seed == .integer) return std.fmt.allocPrint(self.allocator, "FAULT_SEED={d}", .{seed.integer});
-            if (Table.text(run.object.get("knobs"))) |k| {
-                return self.allocator.dupe(u8, if (std.mem.eql(u8, k, "none")) "a run with no faults" else k);
-            }
-        }
-        return std.fmt.allocPrint(self.allocator, "{s}, run {d}", .{ file, self.runs.items.len + 1 });
-    }
-
-    /// **THE TABLE, AND THE FLOOR'S VERDICT.** Every property, contradicted
-    /// ones first, then missed, then holding: its verdict, kind, how many runs
-    /// reached it and which first. Then the rare ones. With a `floor` (one
-    /// message a line, `#` for comments, as `tools/report.py --floor` reads
-    /// it), a floor property missed fails, and so does a floor line naming no
-    /// property: a floor gone stale. Answers whether the runs pass: no FAIL
-    /// and, with a floor, nothing under it.
-    pub fn report(self: *const Merged, w: *std.Io.Writer, floor: ?[]const u8) !bool {
-        var broken: usize = 0;
-        var missed: usize = 0;
-        var holding: usize = 0;
-        for ([_]u8{ 0, 1, 2 }) |pass| {
-            var it = self.rows.iterator();
-            while (it.next()) |entry| {
-                const row = entry.value_ptr;
-                const p = &row.property;
-                const band: u8 = if (p.broken()) 0 else if (!p.holds()) 1 else 2;
-                if (band != pass) continue;
-                switch (band) {
-                    0 => broken += 1,
-                    1 => missed += 1,
-                    else => holding += 1,
-                }
-                try w.print("{s} {s:<19} {s}  ({d} of {d} runs", .{
-                    ([_][]const u8{ "FAIL", "MISS", "ok  " })[band], displayName(p.kind), entry.key_ptr.*, row.runs, self.runs.items.len,
-                });
-                if (row.runs > 0) try w.print(", first {s}", .{self.runs.items[row.first_run]});
-                try w.writeAll(")\n");
-            }
-        }
-        var rare: usize = 0;
-        var it = self.rows.iterator();
-        while (it.next()) |entry| if (entry.value_ptr.rare()) {
-            if (rare == 0) try w.writeAll("\nreached by one run only:\n");
-            rare += 1;
-            try w.print("  {s}  ({s})\n", .{ entry.key_ptr.*, self.runs.items[entry.value_ptr.first_run] });
-        };
-        try w.print("\n{d} runs, {d} properties: {d} hold, {d} missed, {d} broken; {d} rare", .{
-            self.runs.items.len, self.rows.count(), holding, missed, broken, rare,
-        });
-        if (self.malformed > 0) try w.print("; {d} lines could not be read", .{self.malformed});
-        try w.writeAll("\n");
-
-        var under: usize = 0;
-        var stale: usize = 0;
-        if (floor) |text| {
-            var lines = std.mem.splitScalar(u8, text, '\n');
-            while (lines.next()) |raw| {
-                const line = std.mem.trim(u8, raw, " \t\r");
-                if (line.len == 0 or line[0] == '#') continue;
-                const row = self.rows.getPtr(line) orelse {
-                    stale += 1;
-                    try w.print("floor: STALE {s} (no run declared it)\n", .{line});
-                    continue;
-                };
-                if (!row.property.holds() and !row.property.broken()) {
-                    under += 1;
-                    try w.print("floor: MISS {s}\n", .{line});
-                }
-            }
-            try w.print("floor: {d} missed, {d} stale\n", .{ under, stale });
-        }
-        return broken == 0 and under == 0 and stale == 0;
-    }
-
-    fn displayName(k: Kind) []const u8 {
-        return switch (k) {
-            .always => "Always",
-            .always_or_unreachable => "AlwaysOrUnreachable",
-            .sometimes => "Sometimes",
-            .reachable => "Reachable",
-            .@"unreachable" => "Unreachable",
-        };
-    }
-};
 
 // ── what can be checked without a guest ──────────────────────────────────────
 
@@ -637,6 +444,15 @@ test "a line that is not the SDK's JSON is counted, kept in the JSONL, and says 
     try testing.expect(std.mem.endsWith(u8, s.summary(&buf).?, "could not be read\n"));
 }
 
+test "a comparison's guidance line is the SDK's, kept in the JSONL, and not counted as unreadable" {
+    var s = Serial{ .withhold = true };
+    var c = Captured{};
+    const g = "{\"antithesis_guidance\":{\"guidance_data\":{\"left\":2,\"right\":2},\"guidance_type\":\"numeric\",\"message\":\"slots\",\"id\":\"slots\",\"maximize\":true,\"hit\":true}}";
+    byBytes(&s, prefix ++ g ++ "\n", .{ .exit = 1, .ns = 1 }, &c);
+    try testing.expectEqual(@as(u64, 0), s.table.malformed);
+    try testing.expectEqualStrings(g ++ "\n", c.written());
+}
+
 test "a run that printed no coverage line says nothing about it" {
     var s = Serial{};
     var c = Captured{};
@@ -645,112 +461,13 @@ test "a run that printed no coverage line says nothing about it" {
     try testing.expect(s.summary(&buf) == null);
 }
 
-// ── many runs, merged ───────────────────────────────────────────────────────
-
-fn mergedReport(m: *const Merged, floor: ?[]const u8, out: []u8) !struct { text: []const u8, pass: bool } {
-    var w: std.Io.Writer = .fixed(out);
-    const pass = try m.report(&w, floor);
-    return .{ .text = w.buffered(), .pass = pass };
-}
-
 test "a run line names its seed, or its knobs" {
     var buf: [256]u8 = undefined;
     try testing.expectEqualStrings("{\"metal_vmm_run\":{\"seed\":4711,\"knobs\":\"WIRE_EAT=3\"}}", try runLine(&buf, 4711, "WIRE_EAT=3"));
     try testing.expectEqualStrings("{\"metal_vmm_run\":{\"seed\":null,\"knobs\":\"none\"}}", try runLine(&buf, null, "none"));
 }
 
-test "many runs, one table: who reached each property first, how many did, and the rare ones" {
-    var buf: [256]u8 = undefined;
-    const a = comptime sdkEvent("Sometimes", "tcp: a lost SYN-ACK is sent again", true, true);
-    const a_decl = comptime sdkEvent("Sometimes", "tcp: a lost SYN-ACK is sent again", false, false);
-    const r = comptime sdkEvent("Sometimes", "tcp: an exact reset closes a connection", true, true);
-    const r_decl = comptime sdkEvent("Sometimes", "tcp: an exact reset closes a connection", false, false);
-    const n_decl = comptime sdkEvent("Reachable", "tcp: backoff reaches the RTO cap", false, false);
-    var m = Merged.init(testing.allocator);
-    defer m.deinit();
-    // One file, two marked runs; the second boots twice and is still one run.
-    const file1 = try std.mem.concat(testing.allocator, u8, &.{
-        try runLine(&buf, 1, "WIRE_EAT=3"), "\n", boot, "\n", a_decl, "\n", r_decl, "\n", n_decl, "\n", a, "\n",
-    });
-    defer testing.allocator.free(file1);
-    try m.addFile("sweep.jsonl", file1);
-    const file2 = try std.mem.concat(testing.allocator, u8, &.{
-        try runLine(&buf, 2, "PEER_RESET_AT=500"), "\n", boot,   "\n", a_decl, "\n", a, "\n", r, "\n",
-        boot,                                      "\n", a_decl, "\n", a,      "\n",
-    });
-    defer testing.allocator.free(file2);
-    try m.addFile("sweep2.jsonl", file2);
 
-    try testing.expectEqual(@as(usize, 2), m.runs.items.len);
-    const syn = m.rows.getPtr("tcp: a lost SYN-ACK is sent again").?;
-    try testing.expectEqual(@as(u32, 2), syn.runs);
-    try testing.expectEqualStrings("FAULT_SEED=1", m.runs.items[syn.first_run]);
-    const reset = m.rows.getPtr("tcp: an exact reset closes a connection").?;
-    try testing.expect(reset.rare());
-    try testing.expectEqualStrings("FAULT_SEED=2", m.runs.items[reset.first_run]);
-    try testing.expectEqual(@as(u32, 0), m.rows.getPtr("tcp: backoff reaches the RTO cap").?.runs);
 
-    var out: [4096]u8 = undefined;
-    const got = try mergedReport(&m, null, &out);
-    try testing.expect(got.pass); // a MISS without a floor is not a failure
-    try testing.expect(std.mem.indexOf(u8, got.text, "MISS Reachable           tcp: backoff reaches the RTO cap  (0 of 2 runs)") != null);
-    try testing.expect(std.mem.indexOf(u8, got.text, "ok   Sometimes           tcp: a lost SYN-ACK is sent again  (2 of 2 runs, first FAULT_SEED=1)") != null);
-    try testing.expect(std.mem.indexOf(u8, got.text, "reached by one run only:\n  tcp: an exact reset closes a connection  (FAULT_SEED=2)") != null);
-    try testing.expect(std.mem.indexOf(u8, got.text, "2 runs, 3 properties: 2 hold, 1 missed, 0 broken; 1 rare") != null);
-}
 
-test "a file with no run lines is a run per boot, as the judge's sdk.jsonl is" {
-    const a = comptime sdkEvent("Sometimes", "p", true, true);
-    var m = Merged.init(testing.allocator);
-    defer m.deinit();
-    try m.addFile("sdk.jsonl", boot ++ "\n" ++ a ++ "\n" ++ boot ++ "\n" ++ boot ++ "\n" ++ a ++ "\n");
-    try testing.expectEqual(@as(usize, 3), m.runs.items.len);
-    try testing.expectEqualStrings("sdk.jsonl, boot 1", m.runs.items[0]);
-    try testing.expectEqual(@as(u32, 2), m.rows.getPtr("p").?.runs);
-}
 
-test "the floor: a property on it missed fails, a line naming none is stale, a FAIL fails anyway" {
-    const ok_line = comptime sdkEvent("Sometimes", "reached", true, true);
-    const missed = comptime sdkEvent("Sometimes", "not reached", false, false);
-    var m = Merged.init(testing.allocator);
-    defer m.deinit();
-    try m.addFile("a", boot ++ "\n" ++ ok_line ++ "\n" ++ missed ++ "\n");
-    var out: [4096]u8 = undefined;
-    try testing.expect((try mergedReport(&m, "# comment\nreached\n", &out)).pass);
-    const under = try mergedReport(&m, "reached\nnot reached\n", &out);
-    try testing.expect(!under.pass);
-    try testing.expect(std.mem.indexOf(u8, under.text, "floor: MISS not reached") != null);
-    const stale = try mergedReport(&m, "reached\nnever declared\n", &out);
-    try testing.expect(!stale.pass);
-    try testing.expect(std.mem.indexOf(u8, stale.text, "floor: STALE never declared") != null);
-
-    var f = Merged.init(testing.allocator);
-    defer f.deinit();
-    try f.addFile("b", boot ++ "\n" ++ comptime sdkEvent("Always", "an always", true, false) ++ "\n");
-    const failed = try mergedReport(&f, null, &out);
-    try testing.expect(!failed.pass);
-    try testing.expect(std.mem.startsWith(u8, failed.text, "FAIL Always"));
-}
-
-test "a line that is not JSON is counted, and the rest are read" {
-    var m = Merged.init(testing.allocator);
-    defer m.deinit();
-    try m.addFile("a", boot ++ "\n{oops\n" ++ comptime sdkEvent("Reachable", "r", true, true) ++ "\r\n");
-    try testing.expectEqual(@as(u64, 1), m.malformed);
-    try testing.expectEqual(@as(u32, 1), m.rows.getPtr("r").?.runs);
-}
-
-test "a run with no seed is named by its knobs, or as having no faults" {
-    var buf: [128]u8 = undefined;
-    var m = Merged.init(testing.allocator);
-    defer m.deinit();
-    const r = comptime sdkEvent("Reachable", "r", true, true);
-    const a = try std.mem.concat(testing.allocator, u8, &.{ try runLine(&buf, null, "none"), "\n", r, "\n" });
-    defer testing.allocator.free(a);
-    const b = try std.mem.concat(testing.allocator, u8, &.{ try runLine(&buf, null, "WIRE_EAT=4"), "\n", r, "\n" });
-    defer testing.allocator.free(b);
-    try m.addFile("x", a);
-    try m.addFile("y", b);
-    try testing.expectEqualStrings("a run with no faults", m.runs.items[0]);
-    try testing.expectEqualStrings("WIRE_EAT=4", m.runs.items[1]);
-}

@@ -18,15 +18,18 @@
 #     (allowed: ...)". A cut volume must still be sound: that is FAT's crash
 #     consistency, measured.
 #
-# Every run's coverage goes to one JSONL, merged at the end (coverage-merge,
-# with FLOOR=<file> if set). The sweep ends with the failing seeds, each as
+# Every run's coverage goes to one JSONL, judged at the end by
+# zig-coverage-sdk's tools/report.py, which names each run by its seed (with
+# FLOOR=<file> if set). The sweep ends with the failing seeds, each as
 # the knobs that repeat it without the seed. It exits 1 if any seed failed
 # or the merge did.
 #
 # Environment: GUESTS, SITE and PATH_WANTED (default /) as rest.sh has them;
 # TRANSPORT (default pci, the machine that rests); FLOOR; RUN_TIMEOUT
 # (seconds, default 300); KEEP=<dir> keeps every run's log, page and the
-# coverage JSONL there. VMM, MERGE and SOUND name the programs, for a test.
+# coverage JSONL there. VMM, REPORT and SOUND name the programs, for a test;
+# REPORT is $COVERAGE_SDK/tools/report.py, the SDK a sibling checkout unless
+# COVERAGE_SDK says where (as gopher-metal's long.sh reads it).
 # VOLUME_SITE=<image> attaches a fresh copy of that image to every run as its
 # volume (scsi.zig), so each seed also draws the volume's faults
 # (knobs.zig, `withVolume`); its copy must be sound too, and VOLUME_CUT_AFTER
@@ -40,13 +43,14 @@ PATH_WANTED="${PATH_WANTED:-/}"
 FIRST="${1:-1}"
 LAST="${2:-100}"
 VMM="${VMM:-$HERE/zig-out/bin/metal-vmm}"
-MERGE="${MERGE:-$HERE/zig-out/bin/coverage-merge}"
+COVERAGE_SDK="${COVERAGE_SDK:-$HERE/../zig-coverage-sdk}"
+REPORT="${REPORT:-$COVERAGE_SDK/tools/report.py}"
 SOUND="${SOUND:-$HERE/sound.sh}"
 export TRANSPORT="${TRANSPORT:-pci}"
 RUN_TIMEOUT="${RUN_TIMEOUT:-300}"
 if [ -n "${KEEP:-}" ]; then WORK="$KEEP"; mkdir -p "$WORK"; else WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT; fi
 [ -x "$VMM" ] || { echo "no $VMM; run: zig build"; exit 1; }
-[ -x "$MERGE" ] || { echo "no $MERGE; run: zig build"; exit 1; }
+[ -f "$REPORT" ] || { echo "no $REPORT; set COVERAGE_SDK=<zig-coverage-sdk checkout>"; exit 1; }
 [ -f "$KERNEL" ] || { echo "no $KERNEL"; exit 1; }
 [ -f "$SITE" ] || { echo "no volume at $SITE; set SITE=<image>"; exit 1; }
 COVERAGE="$WORK/coverage.jsonl"
@@ -129,8 +133,8 @@ done
 echo
 echo "coverage over the sweep:"
 merged=0
-if [ -n "${FLOOR:-}" ]; then "$MERGE" --floor "$FLOOR" "$COVERAGE" || merged=1
-else "$MERGE" "$COVERAGE" || merged=1; fi
+if [ -n "${FLOOR:-}" ]; then python3 "$REPORT" "$COVERAGE" --floor "$FLOOR" || merged=1
+else python3 "$REPORT" "$COVERAGE" || merged=1; fi
 
 echo
 total=$((LAST - FIRST + 1))

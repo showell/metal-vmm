@@ -464,13 +464,14 @@ that printed any ends with one line on the error stream:
     metal-vmm: coverage: 7 of 23 properties reached (6 hold, 0 broken), from 412 lines over 1 boots
 
 **And across many runs.** Each run's lines in a `COVERAGE_OUT` file follow a
-line naming it (`{"metal_vmm_run":{"seed":4711,"knobs":"..."}}`, which
-`report.py` passes over). `zig build coverage-merge -- [--floor f] a.jsonl
-...` merges any number of such files, or the judge's `sdk.jsonl` (a run per
-boot), into one table: every property's verdict, how many runs reached it
-and which first, and the ones only one run ever reached. With a floor it
-fails as `report.py --floor` does: a FAIL, a floor property missed, or a
-floor line gone stale.
+line naming it (`{"metal_vmm_run":{"seed":4711,"knobs":"..."}}`). The SDK's
+`tools/report.py a.jsonl [b.jsonl ...] [--floor f]` reads any number of such
+files, or the judge's `sdk.jsonl` (a run per boot), as one table: every
+property's verdict, how many runs reached it and which first, each numeric
+comparison's edge and which run came nearest it, and the properties only one
+run ever reached. `sweep.sh` ends with it. (It was `zig build
+coverage-merge` here until item 62 folded it into the SDK.) A comparison's
+`antithesis_guidance` lines are kept in the JSONL like any other.
 
 ### And nothing the guest does kills this program
 

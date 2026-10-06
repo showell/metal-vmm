@@ -47,17 +47,4 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(fuzz);
     b.step("fuzz", "Every guest-facing model under a seeded stream of guest input: zig build fuzz -Dseeds=n").dependOn(&b.addRunArtifact(fuzz).step);
 
-    // Many runs' coverage, one table: `zig build coverage-merge -- a.jsonl b.jsonl`.
-    const merge = b.addExecutable(.{
-        .name = "coverage-merge",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/coverage_merge.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    b.installArtifact(merge);
-    const run_merge = b.addRunArtifact(merge);
-    if (b.args) |args| run_merge.addArgs(args);
-    b.step("coverage-merge", "Many runs' coverage JSONL as one table: zig build coverage-merge -- [--floor f] a.jsonl ...").dependOn(&run_merge.step);
 }

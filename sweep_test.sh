@@ -3,7 +3,8 @@
 # whose every seed is a run told in advance, and a fake sound.sh, and its
 # verdicts and summary are checked against what each seed was told to do.
 #
-#   ./sweep_test.sh           # needs zig-out/bin/coverage-merge (zig build)
+#   ./sweep_test.sh           # needs zig-coverage-sdk's tools/report.py
+#                             # (a sibling checkout, or COVERAGE_SDK=<dir>)
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 T="$(mktemp -d)"
@@ -61,7 +62,8 @@ if grep -q UNSOUND "$1"; then echo "  1 complaint"; exit 1; fi
 echo "  sound"
 EOF
 chmod +x "$T/vmm" "$T/sound"
-[ -x "$HERE/zig-out/bin/coverage-merge" ] || { echo "no coverage-merge: zig build"; exit 1; }
+REPORT="${COVERAGE_SDK:-$HERE/../zig-coverage-sdk}/tools/report.py"
+[ -f "$REPORT" ] || { echo "no $REPORT: set COVERAGE_SDK"; exit 1; }
 
 out=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 1 8 2>&1)
 code=$?
@@ -75,7 +77,8 @@ expect "seed 5" '^5 .*FAIL: exit 1 (unhurt: 0)' "$out"
 expect "seed 6" '^6 .*FAIL: 1 coverage properties broken' "$out"
 expect "seed 7" '^7 .* ok ' "$out"
 expect "seed 8" '^8 .*differs (allowed: the peer gave up)' "$out"
-expect "the coverage merge" 'FAIL Always .*tcp: an always' "$out"
+expect "the coverage report" '^FAIL  *Always  *tcp: an always' "$out"
+expect "how many runs reached it" 'tcp: common  (tcp.zig:1; reached by 9 of 9 runs, first a run with no faults' "$out"
 expect "a rare property" 'tcp: only seed 7  (FAULT_SEED=7)' "$out"
 expect "the summary" '^8 seeds: 2 ok, 2 differ as their faults allow, 4 failed' "$out"
 expect "a failing seed, as knobs" 'FAULT_SEED=4: FAIL: the volume is not sound' "$out"
@@ -86,7 +89,8 @@ expect "how to repeat it" 'repeat it: DISK_WRITES_ONLY=1 TRANSPORT=pci' "$out"
 printf 'tcp: common\n' > "$T/floor"
 good=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" FLOOR="$T/floor" "$HERE/sweep.sh" 7 7 2>&1)
 [ $? = 0 ] || { echo "FAIL: a clean sweep did not pass:"; echo "$good" | sed 's/^/    /'; fail=1; }
-expect "a clean sweep's floor" 'floor: 0 missed, 0 stale' "$good"
+expect "a clean sweep's floor" '^2 runs, 2 properties, 1 on the floor' "$good"
+if grep -q "under the floor" <<< "$good"; then echo "FAIL: a clean sweep is under its floor"; fail=1; fi
 
 if [ $fail = 0 ]; then echo "sweep_test: every verdict and the summary as told"; fi
 exit $fail

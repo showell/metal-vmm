@@ -997,8 +997,8 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         }
         machine.coverage_fd = @intCast(jsonl);
         machine.serial.withhold = true;
-        // Which run the lines that follow are, for a merge of many
-        // (coverage.zig, `Merged`): its seed, and the knobs that repeat it.
+        // Which run the lines that follow are, for a report over many (the
+        // SDK's `tools/report.py`): its seed, and the knobs that repeat it.
         var knob_text: [1024]u8 = undefined;
         var run_buf: [1200]u8 = undefined;
         if (coverage.runLine(&run_buf, count(init.environ, "FAULT_SEED"), turned.format(&knob_text))) |run| {

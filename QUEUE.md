@@ -469,7 +469,21 @@ merges 49-54 once they finish. Keep working on your branch meanwhile.
 **The SDK** (Steve, 2026-10-06; CLOUD_WORK.md, "zig-coverage-sdk: the SDK").
 Take these after 55-59, before 60's proposals.
 
-61. **(zig-coverage-sdk) Numeric guidance: how close a run came to a limit.**
+61. **Done (CC, 2026-10-06).** zig-coverage-sdk `a4c8ab7`: `alwaysGreaterThan`,
+    `alwaysGreaterThanOrEqualTo`, `alwaysLessThan`, `alwaysLessThanOrEqualTo`
+    and the four `sometimes...`, after the Go SDK (`rich_assert.go`): judged
+    as their plain kind, `left`/`right` in the details, and an
+    `antithesis_guidance` line in its `guidanceInfo` JSON at each new edge.
+    When a guidance line goes out is this SDK's rule (first call and each new
+    edge): antithesis.com is blocked from this container and the Go tracker's
+    file was not reachable, so README says so. `Site` is 128 bytes now.
+    `report.py` gives each one's edge and the run that reached it (`afef771`).
+    gopher-metal `claude/great-wright-i7aste`: slots in use and half-opens
+    (`tcp.zig`, 2 of 2 in the simulator, as predicted), timeouts against
+    `max_retries`, FAT's free clusters and directory entries, the page
+    cache's bytes against its budget; properties only. metal-vmm's in-run
+    table skips guidance lines rather than counting them unreadable.
+    **Was:** **(zig-coverage-sdk) Numeric guidance: how close a run came to a limit.**
     Antithesis's SDK has comparisons that remember extremes
     (`AlwaysGreaterThan`, `AlwaysGreaterThanOrEqualTo`, `AlwaysLessThan`,
     `AlwaysLessThanOrEqualTo`, and the `Sometimes` forms), so a report can say
@@ -484,7 +498,19 @@ Take these after 55-59, before 60's proposals.
     entries (`fat16.zig`), the longest backoff, and the page cache's bytes
     held. Adding a property to kernel code is fine (item 36's rule);
     changing what it does is not.
-62. **(zig-coverage-sdk, metal-vmm) One report over many runs.** The SDK's
+62. **Done (CC, 2026-10-06).** `report.py` reads many files; a run is a
+    `metal_vmm_run` line and what follows (else a run per boot); each
+    property says how many runs reached it and which first, and the ones
+    only one run reached are listed (zig-coverage-sdk `afef771`, with
+    `tools/report_test.py`). `sweep.sh` now ends with it
+    (`COVERAGE_SDK`, a sibling checkout by default; `sweep_test.sh` passes
+    with its three merge-worded expectations moved to the report's), and
+    `coverage-merge` and `Merged` are gone; the in-run table stays.
+    `long.sh` already used `report.py`, and the lines it greps are
+    unchanged. One thing `Merged` did that `report.py` does not: it counted
+    an unreadable line and went on, where `report.py` stops. It does not
+    matter for `COVERAGE_OUT`, which writes only whole lines. **Was:**
+    **(zig-coverage-sdk, metal-vmm) One report over many runs.** The SDK's
     `tools/report.py` and metal-vmm's `zig build coverage-merge` (item 22)
     both read the same JSONL, and the merge has what the report lacks: which
     run first reached each property, how many runs reached it, and the
