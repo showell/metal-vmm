@@ -400,7 +400,34 @@ merges 49-54 once they finish. Keep working on your branch meanwhile.
     `origin/box/v18` for this one item; say so in the commit), since
     `antithesis-sdk` does not have v18 yet. Steve's standing rule applies:
     **an omitted flush is presumed a bug unless a comment defends it.**
-60. **Your proposals again** when 55-59 are done.
+**The SDK** (Steve, 2026-10-06; CLOUD_WORK.md, "zig-coverage-sdk: the SDK").
+Take these after 55-59, before 60's proposals.
+
+61. **(zig-coverage-sdk) Numeric guidance: how close a run came to a limit.**
+    Antithesis's SDK has comparisons that remember extremes
+    (`AlwaysGreaterThan`, `AlwaysGreaterThanOrEqualTo`, `AlwaysLessThan`,
+    `AlwaysLessThanOrEqualTo`, and the `Sometimes` forms), so a report can say
+    "the most slots any run had in use" or "the fewest free clusters any run
+    left", and an explorer can steer toward the edge. Add them to
+    `src/coverage.zig` under their names in Zig's case, with the JSON their
+    docs give where they give one; `tools/report.py` shows each one's extreme
+    and which run reached it. Then use them where they would have told us
+    something this week, without changing behavior: the table's slots in use
+    and half-opens (`tcp.zig`; the simulator's 2 slots against the kernel's
+    256 is the gap they would have shown), FAT's free clusters and directory
+    entries (`fat16.zig`), the longest backoff, and the page cache's bytes
+    held. Adding a property to kernel code is fine (item 36's rule);
+    changing what it does is not.
+62. **(zig-coverage-sdk, metal-vmm) One report over many runs.** The SDK's
+    `tools/report.py` and metal-vmm's `zig build coverage-merge` (item 22)
+    both read the same JSONL, and the merge has what the report lacks: which
+    run first reached each property, how many runs reached it, and the
+    properties only one run ever reached. Fold those into `report.py`,
+    reading item 22's run tags, with tests; then have metal-vmm's
+    `sweep.sh` and gopher-metal's `long.sh` use it, and retire
+    `coverage-merge` (metal-vmm's in-run table, item 18, stays: it is a
+    different job). If retiring it is wrong, say why under Questions.
+60. **Your proposals again** when 55-59 and 61-62 are done.
 
 ## Proposed
 

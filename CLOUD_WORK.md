@@ -102,7 +102,7 @@ box's scripts check, ask how to check it here:
 
 ## The branches, all of them
 
-Two repos, one queue (this repo's `QUEUE.md`, on `interrupts`). Nothing else
+Three repos, one queue (this repo's `QUEUE.md`, on `interrupts`). Nothing else
 is live; if you see a branch not listed here, ask under Questions before
 building on it.
 
@@ -113,12 +113,32 @@ building on it.
 | metal-vmm | `master` | the box | untouched until Steve merges `interrupts` |
 | gopher-metal | `antithesis-sdk` | the box | the base for the simulators: branch from it, the box merges into it |
 | gopher-metal | `claude/<your session's name>` | you | simulator work, rebased on `origin/antithesis-sdk` |
+| zig-coverage-sdk | `main` | the box | the base for SDK work: branch from it, the box merges into it |
+| zig-coverage-sdk | `claude/<your session's name>` | you | SDK work, rebased on `origin/main` |
 | gopher-metal | `box/v18` | the box | the next image after v17: flush before any response leaves (B11). Read it; do not branch from it |
 | gopher-metal | `master` | the box | **what serves lynrummy.com. Never push, never branch from it.** |
 
 Use the same `claude/<name>` in both repos. Each QUEUE.md item says which
 repo it is in; an item in gopher-metal is merged there, and its answer comes
 here like any other.
+
+## zig-coverage-sdk: the SDK
+
+Since 2026-10-06 you work on github.com/showell/zig-coverage-sdk too: the
+properties API (`src/coverage.zig`), its scanner (`tools/scan.zig`) and its
+report (`tools/report.py`). Read its README first, "Where this differs from
+Antithesis" above all: those differences are decisions, not gaps.
+
+- **gopher-metal builds against it as a sibling checkout**
+  (`.path = "../zig-coverage-sdk"` in its `build.zig.zon`), with no version
+  pin. A merge into `main` changes gopher-metal's build at once. So every
+  existing call keeps compiling and meaning what it meant; add, never
+  change. Say in the commit what gopher-metal would see.
+- **Follow Antithesis's documented names and JSON** for anything they have
+  (their SDK docs and the JSONL they describe), and say where you could not.
+  The README's line stays: inspired by Antithesis, not endorsed, not yet
+  compatible.
+- Its tests are `zig build test` there; `tools/report.py` has its own.
 
 ## gopher-metal: the simulators
 
