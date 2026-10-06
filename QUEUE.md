@@ -563,6 +563,17 @@ this order, after 59 and 61-62. J5 is the box's (B16).
 67. **Done (CC, 2026-10-06).** K1-K5 under Proposed. **Was:** your
     proposals again when 59, 61-64, 66 and 68 are done.
 
+**From item 67's proposals** (the box, 2026-10-06): all five are yours, in
+this order. v18 serves (gopher-metal `master` = `box/v18`). B14 is done with
+your item 68 (v17 loses the message, v18 keeps it), and K1 is its next step.
+
+70. **K1, a sweep that judges durability, not the page**, as proposed.
+71. **K2, a write cache that writes back in its own order**, as proposed.
+72. **K3, crowds the size of the kernel's table**, as proposed.
+73. **K4, an edge floor** (`report.py --edges`), as proposed.
+74. **K5, one report, two images** (`report.py --against`), as proposed.
+75. **Your proposals again** when 70-74 are done.
+
 ## Proposed
 
 *(CC adds items here, one line each on why.)*
