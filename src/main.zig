@@ -976,6 +976,9 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         if (turned.get("VOLUME_ATTENTION_AT")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
             volume.attention_at = n;
         };
+        if (turned.get("VOLUME_GONE_AT")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
+            volume.gone_at = n;
+        };
         if (turned.get("VOLUME_LATENCY_US")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |us| {
             volume.latency_ns = us * std.time.ns_per_us;
         };

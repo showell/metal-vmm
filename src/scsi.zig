@@ -113,6 +113,11 @@ pub const Scsi = struct {
     /// resized under a droplet tells it; the command it is told on is not
     /// performed. `commands` counts every command; `attentions` those told.
     attention_at: ?u64 = null,
+    /// **A VOLUME THAT GOES AWAY** (`VOLUME_GONE_AT=n`): from the nth
+    /// command the controller answers BAD_TARGET, as one whose DO volume
+    /// was detached under it does. `gone_answered` counts them.
+    gone_at: ?u64 = null,
+    gone_answered: u64 = 0,
     commands: u64 = 0,
     attentions: u64 = 0,
     reads: u64 = 0,
@@ -235,6 +240,10 @@ pub const Scsi = struct {
         if (lun[0] != 1 or lun[1] != 0) return .{ .response = response_bad_target };
         const lun_n = (@as(u16, lun[2] & 0x3F) << 8) | lun[3];
         self.commands += 1;
+        if (self.gone_at) |n| if (self.commands >= n) {
+            self.gone_answered += 1;
+            return .{ .response = response_bad_target };
+        };
         if (self.attention_at) |n| if (self.commands == n) {
             self.attention = asc_capacity_changed;
         };
@@ -360,6 +369,11 @@ pub const Scsi = struct {
             std.fmt.bufPrint(&told_buf, "; UNIT ATTENTION at command {d} {s}", .{ n, if (self.commands >= n and self.attention == null) "told" else "never told" }) catch ""
         else
             "";
+        var gone_buf: [96]u8 = undefined;
+        const gone = if (self.gone_at) |n|
+            std.fmt.bufPrint(&gone_buf, "; gone from command {d}, {d} commands answered BAD_TARGET", .{ n, self.gone_answered }) catch ""
+        else
+            "";
         var waited_buf: [64]u8 = undefined;
         const waited = if (self.latency_ns != 0)
             std.fmt.bufPrint(&waited_buf, "; {d} ms waited on it (VOLUME_LATENCY_US)", .{self.waited_ns / std.time.ns_per_ms}) catch ""
@@ -370,8 +384,8 @@ pub const Scsi = struct {
             std.fmt.bufPrint(&failed_buf, " ({d} failed, VOLUME_SYNC_FAIL)", .{self.sync_failed}) catch ""
         else
             "";
-        return std.fmt.bufPrint(buf, "metal-vmm: volume: {s}; {d} reads, {d} writes, {d} SYNCHRONIZE CACHE{s}, {d} MODE SENSE{s}{s}{s}\n", .{
-            mode, self.reads, self.writes, self.synchronizes, failed, self.mode_senses, told, waited,
+        return std.fmt.bufPrint(buf, "metal-vmm: volume: {s}; {d} reads, {d} writes, {d} SYNCHRONIZE CACHE{s}, {d} MODE SENSE{s}{s}{s}{s}\n", .{
+            mode, self.reads, self.writes, self.synchronizes, failed, self.mode_senses, told, gone, waited,
             if (self.power.cut != null) (if (lost > 0) "; the power cut lost sectors never synchronized" else "; the power cut lost nothing") else "",
         }) catch "metal-vmm: volume\n";
     }
@@ -700,4 +714,23 @@ test "VOLUME_ATTENTION_AT: the nth command meets UNIT ATTENTION, is not performe
     vol.attention_at = 4; // the INQUIRY below
     try testing.expect(FakeDriver.good(g.send(&d, 0, 0, &[6]u8{ op_inquiry, 0, 0, 0, 36, 0 }, .from_disk, 36)));
     try testing.expectEqual(key_unit_attention, g.send(&d, 0, 0, &[10]u8{ op_read_capacity, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .from_disk, 8).key);
+}
+
+test "VOLUME_GONE_AT: from the nth command, BAD_TARGET, and nothing written" {
+    var image: [16 * 512]u8 = @splat('o');
+    var vol = Scsi{ .image = &image, .attention = null, .gone_at = 2 };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
+    for (0..3) |_| {
+        const o = g.rw(&d, true, 2, 1);
+        try testing.expectEqual(response_bad_target, o.response);
+    }
+    try testing.expectEqual(response_bad_target, g.synchronize(&d).response);
+    try testing.expectEqual(@as(u8, 'o'), image[2 * 512]);
+    try testing.expectEqual(@as(u64, 4), vol.gone_answered);
+    var buf: [256]u8 = undefined;
+    try testing.expect(std.mem.indexOf(u8, vol.line(&buf), "; gone from command 2, 4 commands answered BAD_TARGET") != null);
 }

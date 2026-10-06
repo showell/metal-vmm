@@ -566,7 +566,9 @@ never be seen, since that spin makes no exit. The volume's line says how long
 was waited. `VOLUME_ATTENTION_AT=n` makes CAPACITY DATA HAS CHANGED pending
 from the nth command, as a volume resized under a droplet tells it: told on
 the next command but INQUIRY, which is not performed, so the driver must send
-it again. With `FAULT_SEED` too, a seed draws the volume's faults (all but
+it again. `VOLUME_GONE_AT=n` takes the volume away from the nth command on:
+the controller answers every command BAD_TARGET, as one whose DO volume was
+detached under a running droplet does. With `FAULT_SEED` too, a seed draws the volume's faults (all but
 the latency) on dice of their own, and `sweep.sh` sweeps them with
 `VOLUME_SITE=<image>`. Nothing changes unless `VOLUME` is set.
 

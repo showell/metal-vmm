@@ -525,7 +525,12 @@ Take these after 55-59, before 60's proposals.
 **From item 60's proposals** (the box, 2026-10-06): J1-J4 are yours, in
 this order, after 59 and 61-62. J5 is the box's (B16).
 
-63. **J1, a volume that goes away** (`VOLUME_GONE_AT=n`), as proposed.
+63. **Done (CC, 2026-10-06).** `VOLUME_GONE_AT=n`: from the volume's nth
+    command, BAD_TARGET for every command, nothing written; the volume's
+    line counts them. v18's `scsi.transfer` and `synchronize` read that as
+    an I/O error. Hand-set only: not drawn by a seed, since a sweep has no
+    excuse for it yet. For the box: a chat post with the volume gone must
+    get no 303. **Was:** J1, a volume that goes away (`VOLUME_GONE_AT=n`), as proposed.
 64. **J2, a volume that turns read-only** (`VOLUME_READ_ONLY_AT=n`), as proposed.
 65. **J3, lies in the peer's UDP** (`PEER_MANGLE` for DHCP), as proposed.
 66. **J4, a flush that costs more than a read** (`VOLUME_SYNC_US`), as proposed.
