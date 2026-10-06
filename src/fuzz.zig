@@ -187,6 +187,7 @@ pub fn run(seed: u64) u64 {
     if (vr.uintLessThan(u8, 4) == 0) w.volume.power.cut_after = vr.uintLessThan(u64, 40);
     if (vr.uintLessThan(u8, 4) == 0) w.volume.attention_at = vr.uintLessThan(u64, 60);
     if (vr.uintLessThan(u8, 8) == 0) w.volume.gone_at = vr.uintLessThan(u64, 300);
+    if (vr.uintLessThan(u8, 8) == 0) w.volume.read_only_at = vr.uintLessThan(u64, 300);
     if (vr.uintLessThan(u8, 4) == 0) {
         w.volume.sync_fail_at = vr.uintLessThan(u64, 40);
         w.volume.sync_fail_for = vr.uintLessThan(u64, 4);

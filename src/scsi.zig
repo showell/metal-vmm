@@ -58,9 +58,12 @@ pub const status_check_condition: u8 = 2;
 /// Sense keys, and the additional sense codes that say why (SPC-4 §4.5.6).
 pub const key_medium_error: u8 = 3;
 pub const key_illegal_request: u8 = 5;
+pub const key_data_protect: u8 = 7;
 pub const key_unit_attention: u8 = 6;
 const asc_write_error: u8 = 0x0C;
 const asc_invalid_opcode: u8 = 0x20;
+/// WRITE PROTECTED.
+pub const asc_write_protected: u8 = 0x27;
 const asc_lba_out_of_range: u8 = 0x21;
 const asc_invalid_field: u8 = 0x24;
 const asc_lun_not_supported: u8 = 0x25;
@@ -118,6 +121,13 @@ pub const Scsi = struct {
     /// was detached under it does. `gone_answered` counts them.
     gone_at: ?u64 = null,
     gone_answered: u64 = 0,
+    /// **A VOLUME THAT TURNS READ-ONLY** (`VOLUME_READ_ONLY_AT=n`): from
+    /// the nth command MODE SENSE says WP and every WRITE is DATA PROTECT,
+    /// as a DO volume the host has made read-only after an I/O error.
+    /// Reads and SYNCHRONIZE CACHE still answer. `protected` counts the
+    /// writes refused.
+    read_only_at: ?u64 = null,
+    protected: u64 = 0,
     commands: u64 = 0,
     attentions: u64 = 0,
     reads: u64 = 0,
@@ -142,6 +152,11 @@ pub const Scsi = struct {
         std.mem.writeInt(u16, c[30..32], 255, .little); // max_target
         std.mem.writeInt(u32, c[32..36], 16383, .little); // max_lun
         return d;
+    }
+
+    fn readOnly(self: *const Scsi) bool {
+        const n = self.read_only_at orelse return false;
+        return self.commands >= n;
     }
 
     /// What the caching page's WCE bit says: a cache, unless it lies.
@@ -244,6 +259,10 @@ pub const Scsi = struct {
             self.gone_answered += 1;
             return .{ .response = response_bad_target };
         };
+        if (self.read_only_at) |n| if (self.commands >= n and cdb[0] == op_write) {
+            self.protected += 1;
+            return self.check(key_data_protect, asc_write_protected);
+        };
         if (self.attention_at) |n| if (self.commands == n) {
             self.attention = asc_capacity_changed;
         };
@@ -322,6 +341,8 @@ pub const Scsi = struct {
         if (control == 3) return self.check(key_illegal_request, asc_saving_not_supported);
         var data: [8 + 20]u8 = @splat(0);
         std.mem.writeInt(u16, data[0..2], data.len - 2, .big); // mode data length
+        // The device-specific parameter's WP bit (SBC-3 §6.4.1).
+        if (self.readOnly()) data[3] = 0x80;
         data[8] = page_caching;
         data[9] = 18; // page length
         // Current and default values say the cache; changeable says none.
@@ -374,6 +395,11 @@ pub const Scsi = struct {
             std.fmt.bufPrint(&gone_buf, "; gone from command {d}, {d} commands answered BAD_TARGET", .{ n, self.gone_answered }) catch ""
         else
             "";
+        var ro_buf: [96]u8 = undefined;
+        const ro = if (self.read_only_at) |n|
+            std.fmt.bufPrint(&ro_buf, "; read-only from command {d}, {d} writes refused", .{ n, self.protected }) catch ""
+        else
+            "";
         var waited_buf: [64]u8 = undefined;
         const waited = if (self.latency_ns != 0)
             std.fmt.bufPrint(&waited_buf, "; {d} ms waited on it (VOLUME_LATENCY_US)", .{self.waited_ns / std.time.ns_per_ms}) catch ""
@@ -384,8 +410,8 @@ pub const Scsi = struct {
             std.fmt.bufPrint(&failed_buf, " ({d} failed, VOLUME_SYNC_FAIL)", .{self.sync_failed}) catch ""
         else
             "";
-        return std.fmt.bufPrint(buf, "metal-vmm: volume: {s}; {d} reads, {d} writes, {d} SYNCHRONIZE CACHE{s}, {d} MODE SENSE{s}{s}{s}{s}\n", .{
-            mode, self.reads, self.writes, self.synchronizes, failed, self.mode_senses, told, gone, waited,
+        return std.fmt.bufPrint(buf, "metal-vmm: volume: {s}; {d} reads, {d} writes, {d} SYNCHRONIZE CACHE{s}, {d} MODE SENSE{s}{s}{s}{s}{s}\n", .{
+            mode, self.reads, self.writes, self.synchronizes, failed, self.mode_senses, told, gone, ro, waited,
             if (self.power.cut != null) (if (lost > 0) "; the power cut lost sectors never synchronized" else "; the power cut lost nothing") else "",
         }) catch "metal-vmm: volume\n";
     }
@@ -733,4 +759,26 @@ test "VOLUME_GONE_AT: from the nth command, BAD_TARGET, and nothing written" {
     try testing.expectEqual(@as(u64, 4), vol.gone_answered);
     var buf: [256]u8 = undefined;
     try testing.expect(std.mem.indexOf(u8, vol.line(&buf), "; gone from command 2, 4 commands answered BAD_TARGET") != null);
+}
+
+test "VOLUME_READ_ONLY_AT: from the nth command WP is said, writes are DATA PROTECT, and reads still answer" {
+    var image: [16 * 512]u8 = @splat('o');
+    var vol = Scsi{ .image = &image, .attention = null, .read_only_at = 2 };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
+    const refused = g.rw(&d, true, 2, 1);
+    try testing.expectEqual(status_check_condition, refused.status);
+    try testing.expectEqual(key_data_protect, refused.key);
+    try testing.expectEqual(asc_write_protected, refused.asc);
+    try testing.expectEqual(@as(u8, 'o'), image[2 * 512]);
+    try testing.expect(FakeDriver.good(g.rw(&d, false, 1, 1)));
+    try testing.expectEqual(@as(u8, 'a'), g.ram[FakeDriver.data_at]);
+    try testing.expect(FakeDriver.good(g.synchronize(&d)));
+    // MODE SENSE's header says WP.
+    _ = g.wce(&d);
+    try testing.expectEqual(@as(u8, 0x80), g.ram[FakeDriver.data_at + 3] & 0x80);
+    try testing.expectEqual(@as(u64, 1), vol.protected);
 }

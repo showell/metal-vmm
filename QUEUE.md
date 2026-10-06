@@ -531,7 +531,11 @@ this order, after 59 and 61-62. J5 is the box's (B16).
     an I/O error. Hand-set only: not drawn by a seed, since a sweep has no
     excuse for it yet. For the box: a chat post with the volume gone must
     get no 303. **Was:** J1, a volume that goes away (`VOLUME_GONE_AT=n`), as proposed.
-64. **J2, a volume that turns read-only** (`VOLUME_READ_ONLY_AT=n`), as proposed.
+64. **Done (CC, 2026-10-06).** `VOLUME_READ_ONLY_AT=n`: from the volume's
+    nth command, MODE SENSE's WP bit, and every WRITE CHECK CONDITION, DATA
+    PROTECT (7h), WRITE PROTECTED (27h); reads and SYNCHRONIZE CACHE still
+    answer. Hand-set only. For the box: every save after it must fail
+    visibly, none confirmed. **Was:** J2, a volume that turns read-only (`VOLUME_READ_ONLY_AT=n`), as proposed.
 65. **J3, lies in the peer's UDP** (`PEER_MANGLE` for DHCP), as proposed.
 66. **J4, a flush that costs more than a read** (`VOLUME_SYNC_US`), as proposed.
 67. **Your proposals again** when 59 and 61-66 are done.

@@ -568,7 +568,10 @@ from the nth command, as a volume resized under a droplet tells it: told on
 the next command but INQUIRY, which is not performed, so the driver must send
 it again. `VOLUME_GONE_AT=n` takes the volume away from the nth command on:
 the controller answers every command BAD_TARGET, as one whose DO volume was
-detached under a running droplet does. With `FAULT_SEED` too, a seed draws the volume's faults (all but
+detached under a running droplet does. `VOLUME_READ_ONLY_AT=n` turns it
+read-only from the nth command: MODE SENSE says WP and every WRITE is DATA
+PROTECT, while reads and SYNCHRONIZE CACHE still answer, as a DO volume the
+host has made read-only after an I/O error. With `FAULT_SEED` too, a seed draws the volume's faults (all but
 the latency) on dice of their own, and `sweep.sh` sweeps them with
 `VOLUME_SITE=<image>`. Nothing changes unless `VOLUME` is set.
 

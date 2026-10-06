@@ -51,8 +51,8 @@
 //! `PEER_PIPELINE`, a client's habit, nor `DHCP_LEASE_S`, a lease short
 //! enough to run out only means something to a run a person reads, nor
 //! `VOLUME_CACHE`, `VOLUME_CUT_AFTER`, `VOLUME_SYNC_FAIL`,
-//! `VOLUME_SYNC_FAIL_FOR`, `VOLUME_LATENCY_US`, `VOLUME_ATTENTION_AT` and
-//! `VOLUME_GONE_AT`, which need a volume a person
+//! `VOLUME_SYNC_FAIL_FOR`, `VOLUME_LATENCY_US`, `VOLUME_ATTENTION_AT`,
+//! `VOLUME_GONE_AT` and `VOLUME_READ_ONLY_AT`, which need a volume a person
 //! attached (`VOLUME`). Set by hand, they print with the rest.
 //!
 //! The peer's ranges are gopher-metal's `tcp_sim.zig` `Rough`'s and
@@ -72,7 +72,7 @@ pub const names = [_][]const u8{
     "RTC_BOOTS_AT",       "PEER_DRIP_US",      "PEER_PIPELINE",    "DHCP_LEASE_S",
     "VOLUME_CACHE",       "VOLUME_CUT_AFTER",  "VOLUME_SYNC_FAIL", "VOLUME_SYNC_FAIL_FOR",
     "PEER_MANGLE",        "PEER_MANGLE_RATE",  "PEER_MANGLE_KIND", "VOLUME_LATENCY_US",
-    "VOLUME_ATTENTION_AT", "VOLUME_GONE_AT",
+    "VOLUME_ATTENTION_AT", "VOLUME_GONE_AT",   "VOLUME_READ_ONLY_AT",
 };
 
 fn index(comptime name: []const u8) usize {
@@ -268,7 +268,7 @@ test "different seeds turn different knobs, and every knob is turned by some see
         last_len = f.len;
     }
     for (turned, names) |t, n| {
-        // Twenty-one knobs only a person sets: a seed's runs keep to the flood
+        // Twenty-two knobs only a person sets: a seed's runs keep to the flood
         // and rates of the table above, and name no sector.
         if (!t and !std.mem.eql(u8, n, "PEER_DAMAGE_RATE") and !std.mem.eql(u8, n, "DISK_REFUSE_RATE") and
             !std.mem.eql(u8, n, "PEER_FLOOD_AT_US") and !std.mem.eql(u8, n, "DISK_BAD_SECTOR") and
@@ -280,7 +280,7 @@ test "different seeds turn different knobs, and every knob is turned by some see
             !std.mem.eql(u8, n, "VOLUME_SYNC_FAIL") and !std.mem.eql(u8, n, "VOLUME_SYNC_FAIL_FOR") and
             !std.mem.eql(u8, n, "PEER_MANGLE_RATE") and !std.mem.eql(u8, n, "PEER_MANGLE_KIND") and
             !std.mem.eql(u8, n, "VOLUME_LATENCY_US") and !std.mem.eql(u8, n, "VOLUME_ATTENTION_AT") and
-            !std.mem.eql(u8, n, "VOLUME_GONE_AT"))
+            !std.mem.eql(u8, n, "VOLUME_GONE_AT") and !std.mem.eql(u8, n, "VOLUME_READ_ONLY_AT"))
         {
             std.debug.print("never turned: {s}\n", .{n});
             return error.TestUnexpectedResult;
