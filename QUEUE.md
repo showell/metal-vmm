@@ -638,6 +638,11 @@ question is answered by v18 (`io.durable`).
   and from v18, each with `VOLUME_CACHE=lie` and `VOLUME_CUT_AFTER` at the
   write after a chat message's 303: v17 loses the message, v18 keeps it.
   Then H5 (`PEER_PIPELINE`) and H2 (`DHCP_LEASE_S`) against gopher.elf.
+- **B15. The invariants in the kernel, as `always`** (Steve's SDK question,
+  2026-10-06): a `-Dcoverage` gopher.elf calls `tcp_check.check` after every
+  `handle` and `transmit` as one `always("tcp: the table's invariants hold")`,
+  and FAT's own `check` at the end of a run, so every metal-vmm run checks
+  what the simulators check, on the real kernel. Production builds unchanged.
 
 **2026-10-06 morning, the box: items 47 and 48 merged** (gopher-metal
 `4953f7e`, 829/830 with 1 skipped; metal-vmm `49f46ab`, 221/221, `check.sh`
