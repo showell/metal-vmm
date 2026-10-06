@@ -50,11 +50,12 @@
 //! `PEER_DRIP_US`, a slow client, which a sweep would wait out, nor
 //! `PEER_PIPELINE`, a client's habit, nor `DHCP_LEASE_S`, a lease short
 //! enough to run out only means something to a run a person reads, nor
-//! `VOLUME_CACHE`, `VOLUME_CUT_AFTER`, `VOLUME_SYNC_FAIL`,
-//! `VOLUME_SYNC_FAIL_FOR`, `VOLUME_LATENCY_US`, `VOLUME_ATTENTION_AT`,
-//! `VOLUME_GONE_AT`, `VOLUME_READ_ONLY_AT`, `VOLUME_SYNC_US` and
-//! `VOLUME_CUT_AT_EXIT`, which need a volume a person
-//! attached (`VOLUME`). Set by hand, they print with the rest.
+//! the volume's knobs on a run without `VOLUME`. With a volume attached,
+//! `withVolume` draws `VOLUME_CACHE`, `VOLUME_CACHE_KEEPS`,
+//! `VOLUME_CUT_AFTER`, `VOLUME_SYNC_FAIL`, `VOLUME_SYNC_FAIL_FOR` and
+//! `VOLUME_ATTENTION_AT`; it never draws `VOLUME_LATENCY_US`,
+//! `VOLUME_GONE_AT`, `VOLUME_READ_ONLY_AT`, `VOLUME_SYNC_US` or
+//! `VOLUME_CUT_AT_EXIT`. Set by hand, they print with the rest.
 //!
 //! The peer's ranges are gopher-metal's `tcp_sim.zig` `Rough`'s and
 //! `Scenario`'s, where they have one.
