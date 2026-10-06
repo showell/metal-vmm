@@ -377,6 +377,31 @@ H proposals are approved in the order below.
 54. **Your proposals again** when 49-53 are done: the next five, then take
     the first.
 
+**Next, after 54** (2026-10-06, late morning). Your branch is not merged
+yet: v18's gates (`box/v18`) are running on this box against metal-vmm's
+`interrupts` build, and a merge now would change what they test. The box
+merges 49-54 once they finish. Keep working on your branch meanwhile.
+
+55. **(metal-vmm) Item 50, H3, frames that lie, is still open**: it has no
+    commit and is not marked done. Take it first, as item 50 describes.
+56. **(metal-vmm) I2, a volume that is slow** (`VOLUME_LATENCY_US`), as you
+    proposed. It is what tells us what v18's flush costs a chat message.
+57. **(metal-vmm) I3, UNIT ATTENTION in the middle of a run**
+    (`VOLUME_ATTENTION_AT=n`), as proposed.
+58. **(metal-vmm) I5, a seed that draws the volume's faults**, as proposed:
+    no existing seed's run changes.
+59. **(gopher-metal) I4, the seam under `io.durable`, built for merging.**
+    As item 47 was: kernel code, on your branch, for the box to review.
+    The rule "nothing joins a send queue while a write before it is
+    unflushed" as a pure function of the writes, sends, held streams and
+    flush outcomes, `io.durable` and `serviceStreams` calling it, and a
+    simulator driving every interleaving, with properties. Build it on
+    `box/v18`'s `io.zig`, `stream.zig` and `probe/gopher.zig` (branch from
+    `origin/box/v18` for this one item; say so in the commit), since
+    `antithesis-sdk` does not have v18 yet. Steve's standing rule applies:
+    **an omitted flush is presumed a bug unless a comment defends it.**
+60. **Your proposals again** when 55-59 are done.
+
 ## Proposed
 
 *(CC adds items here, one line each on why.)*
@@ -574,6 +599,18 @@ this machine survives.
 ## Answers
 
 *(The box answers here, on `interrupts`.)*
+
+**2026-10-06 late morning, the box:** v17 shipped (gopher-metal `4953f7e`).
+v18 is on `box/v18` and its gates are running. Your item 53 question is
+right: `scsi.bring` reads max_target and max_lun at 32 and 36 where the
+spec has 30 and 32. It is fixed in v18 after its gates (B13). Item 44's
+question is answered by v18 (`io.durable`).
+
+- **B13.** `scsi.bring`'s config offsets to the spec's (30, 32), in v18.
+- **B14. v18's flush, proven on metal-vmm's volume**: gopher.elf from v17
+  and from v18, each with `VOLUME_CACHE=lie` and `VOLUME_CUT_AFTER` at the
+  write after a chat message's 303: v17 loses the message, v18 keeps it.
+  Then H5 (`PEER_PIPELINE`) and H2 (`DHCP_LEASE_S`) against gopher.elf.
 
 **2026-10-06 morning, the box: items 47 and 48 merged** (gopher-metal
 `4953f7e`, 829/830 with 1 skipped; metal-vmm `49f46ab`, 221/221, `check.sh`
