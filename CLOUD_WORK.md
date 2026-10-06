@@ -166,6 +166,12 @@ about the module, not a gap in the simulator. So:
   `tcp.zig`, `fat16.zig` or any module the kernel runs is a seed kept as a
   named regression test, failing, plus a line under Questions. The box fixes
   it and decides whether it needs a new image for the site.
+- **Since 2026-10-06, the Store too** (QUEUE 76-81): its interface, model,
+  FAT store, strict Linux store and `store_sim` are new files the image
+  doesn't use, so they're yours to write *and* to fix. Properties may go in
+  any module the kernel runs (item 36's rule: observe, never steer). The
+  rule above still holds for those modules: a defect in one is a named
+  failing test plus a line under Questions, and the box fixes it.
 - `zig build test` there takes about a minute; `zig build properties
   -Dseeds=n` sweeps. Run the sweep at a size your container can afford and
   say the size in the commit.
@@ -180,3 +186,47 @@ about the module, not a gap in the simulator. So:
 - A review has this shape: what holds up; findings by severity, each with the
   failure it causes and how likely it is; fix shapes; and nothing fixed in
   the review commit itself.
+
+## Long assignments
+
+A long assignment (the first: QUEUE items 76-81, 2026-10-06) is meant to run
+for hours with no one to ask, so it hands you more judgment than an ordinary
+item. These rules are what make that safe.
+
+How to work, on any long assignment:
+
+- **Every item ends in a command and a number.** Say in the commit what
+  `zig build properties` (or the test) printed: "`proto`: 11 of 12 reached;
+  the 12th is under Questions".
+- **Park after about three attempts.** If an item has taken about three
+  tries without a passing test, write what you know under Questions (what
+  you tried, what failed, the shortest reproduction), mark the item
+  **parked**, and take the next one. Parked is not failed; the box can often
+  settle it in a minute with KVM.
+- **A refusal is reported, never routed around.** If your own checks stop
+  you, say what stopped you under Questions and move on.
+- **You decide:** names, file layout, test structure, which simulator reaches
+  which property, module order within a phase, and fixes to your own earlier
+  work. **You ask, under Questions, and keep going:** a seventh Store
+  operation, anything that changes kernel behavior, anything in angry-gopher,
+  and anything that looks like a bug in production.
+- **A found bug is a test first.** Write the failing case. If the bug is in
+  code you wrote for this assignment (the Store, a simulator), fix it in the
+  same commit. If it's in a module the kernel runs, file it under Questions
+  as a bug, with the test committed but left out of the default run
+  *and named there*, so it's visible, never silently skipped. Then move on.
+- **Green at every push.** Each commit leaves `zig build test` and `zig build
+  properties` passing. Push after every item. Merge `interrupts` and
+  `antithesis-sdk` into your branches at phase boundaries, not mid-phase.
+- **A phase report, five lines,** under the phase's item when it's done:
+  what was reached, what's parked, what was asked, what surprised you, and
+  the floor's count before and after.
+
+**Debt, calibrated.** Leave freely, and write one line in **the debt
+ledger** (a new section at the end of `QUEUE.md`: what, where, what fixing it
+would take): duplicated helpers across simulators, a crude generator that
+still reaches the property, an awkward property name, a module reached only
+by a host test so far. **Never**, whatever it saves: a test weakened or an
+oracle loosened until it passes; a property that can't fire, written to make
+the count look good; a skip without a name; kernel behavior changed as a side
+effect of adding a property.
