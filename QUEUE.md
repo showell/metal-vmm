@@ -331,7 +331,7 @@ order without waiting; the box answers when he is back).
     (`PEER_RETRY=1`), with the run's end saying how many times the request
     was sent; whether the volume holds the message once is the box's check.
 46. **Done (CC, `Rtc.from`).** **(metal-vmm) F5, the calendar as a knob** (`RTC_BOOTS_AT=unix`).
-47. **(gopher-metal) REVIEW-flood's option 4, revival, in tcp.zig.**
+47. **Done (CC, gopher-metal `53be28e` on `claude/great-wright-i7aste`, for the box to review and merge): the 14 rough and 21 crowd seeds green, every seed without a give-way frame for frame unchanged, the ring measured (all 35 pass from 8 entries), the cost in the commit (9,216 B of Table on the stack, 1.3 KiB of text). One thing beyond the review: the ACK revives at any sequence, not only IRS + 1, since `syn_received` acknowledges rather than resets a segment ahead (a request in several segments, the first lost); found by seed 11277.** **(gopher-metal) REVIEW-flood's option 4, revival, in tcp.zig.**
     Steve ruled yes (2026-10-05): build it for merging. The box reviews the
     diff and merges it into `antithesis-sdk`; it reaches the site only in
     the next image, which Steve is holding for now. The 14 rough seeds and the 21
@@ -341,7 +341,7 @@ order without waiting; the box answers when he is back).
     flood outlasts it, measured. Say in the commit what the change costs
     the kernel (bytes, a branch on which path). This is the one place you
     change kernel code; on your branch, as always.
-48. **Your proposals again** when 41-47 are done, as in item 32: the next
+48. **Done (CC): H1-H5 under Proposed; H1 built (`PEER_DRIP_US`), not yet run against gopher.elf: with `PEER_CLIENTS` and `PEER_MSS=1` it asks how many slow clients keep a good one out.** **Your proposals again** when 41-47 are done, as in item 32: the next
     five, one line each on why, then take the first.
 
 ## Proposed
@@ -448,6 +448,30 @@ From item 36 (CC):
   that refuses only the next write of more than one sector reaches it
   every time. test_disk.zig is not the simulators' to change.
 
+From item 48: the next five, most finding first (CC):
+
+- **H1. A slow client** (`PEER_DRIP_US=us`: each segment of the request a
+  gap after the last, with `PEER_MSS` to make them small). gopher.zig serves
+  only a whole request and lets go only of a connection silent for
+  `idle_ns`, so a client that is never silent and never done may hold its
+  slot for as long as it drips; with `PEER_CLIENTS`, how many such clients
+  it takes to keep a good one out is the measure. **Taken; see item 48.**
+- **H5. Pipelining** (`PEER_PIPELINE=1`: the second request sent with the
+  first). gopher.zig answers one request and closes with the second still
+  unread; whether the table sends a FIN or a reset then, and whether the
+  client still gets the whole first answer, is the case Apache's
+  lingering close exists for.
+- **H3. Frames that lie, from the peer** (`PEER_MANGLE=n`): an IP total
+  length past the frame, IP options, a fragment, a TCP data offset past
+  the segment, a zero window with data. The guest's parser sees only well
+  formed frames today; the VMM's fuzzer covers the VMM, not the guest.
+- **H2. A lease that ends** (`DHCP_LEASE_S=n`, the peer's offer): does
+  gopher-metal renew at T1 or rebind at T2? If not, a real network takes
+  its address back while it serves.
+- **H4. A simulator for `ready.zig`** (gopher-metal): whether a request
+  head is whole, over every split of the bytes, at the receive buffer's
+  edge, and past it (the 431 path).
+
 Folded into existing items rather than new ones: M4, L1, L2, L3 into item 4
 (MSI-X); L4 into item 5 (APIC); L5 (0xCF9) waits until a reset is something
 this machine survives.
@@ -479,18 +503,9 @@ this machine survives.
   property of the request alone; or the judge compares only requests in
   the same position. The box's call.
 
-- **(CC, item 33) A crowd finds item 24's class without a flood.** 21 of the
-  first 10,000 crowd seeds fail, all one way: a real client's handshake,
-  slowed past `min_rto_ns` by a lost SYN-ACK or ACK while every slot is
-  taken, looks like a flood's stuck half-open, and another real client's
-  SYN takes its slot (`oldestHalfOpen`); its next segment draws a reset.
-  So the ruling on item 24's 14 rough seeds is a ruling on these too. They
-  are named in tcp_sim.zig (`crowd_red`, a skipped test), and `properties`
-  runs crowds on only its first 500 seeds (none fail there) unless
-  `-Dcrowd-seeds` asks for more. A table that answered the evicted
-  client's ACK with a SYN-ACK again, or kept a SYN cookie, would not lose
-  it; that is the box's call.
-
+- **(CC, item 33) A crowd finds item 24's class without a flood.**
+  Answered by item 47: revival makes all 21 crowd seeds green, and
+  `properties` crowds every seed again by default.
 - **(CC, item 23) `sweep.sh` is new** (no existing script changed), with
   `sweep_test.sh` for its logic. Please run it on gopher.elf, e.g. `SITE=...
   ./sweep.sh 1 200`, and answer here: how long a seed takes, which seeds fail
