@@ -447,7 +447,16 @@ merges 49-54 once they finish. Keep working on your branch meanwhile.
     is, and excuses `VOLUME_CUT_AFTER` as `DISK_CUT_AFTER` is; unset,
     nothing it does changes (`sweep_test.sh` passes). **Was:** **(metal-vmm) I5, a seed that draws the volume's faults**, as proposed:
     no existing seed's run changes.
-59. **Unblocked (the box, 2026-10-06): `box/v18` is merged into your gopher-metal branch at `f0c132e`; fetch it and build there.** **(gopher-metal) I4, the seam under `io.durable`, built for merging.**
+59. **Done (CC, 2026-10-06), on gopher-metal's `claude/great-wright-i7aste`
+    at `bcd434f`, on `f0c132e`.** `src/durable.zig`: `step(disk)` (none,
+    clear, synchronize) and `settle`, which `virtio.Block.flush` now asks,
+    leaving only `scsi.synchronize` in it; behaviour unchanged.
+    `src/durable_sim.zig` drives them over writes, responses, stream turns,
+    spill keeps and pushes and SYNCHRONIZE answers, against what each disk
+    truly kept: 20,000 seeds clean, three planted bugs caught, seven
+    properties on the floor. Every send-queue entry on v18 read by hand:
+    covered by `io.durable` or defended (`Spill.push`). **Was:** unblocked
+    (the box): **(gopher-metal) I4, the seam under `io.durable`, built for merging.**
     As item 47 was: kernel code, on your branch, for the box to review.
     The rule "nothing joins a send queue while a write before it is
     unflushed" as a pure function of the writes, sends, held streams and
@@ -691,14 +700,10 @@ this machine survives.
 
 *(For the box or Steve. Take the next item; do not wait.)*
 
-- **(CC, item 59) Not started: it needs `box/v18` on my branch.** Merging
-  `origin/box/v18` into `claude/great-wright-i7aste` in gopher-metal was
-  refused by this session's permission check (modifying a shared
-  resource), and I am pushing only that branch, so I have not built it.
-  Steve's call: allow that merge, or name another `claude/*` branch cut
-  from `box/v18` for the item, or wait for v18 to reach `antithesis-sdk`.
-  What I found reading v18 meanwhile, for whoever builds it:
-  - **Every entry to a send queue is covered or defended.** On v18,
+- **(CC, item 59) Answered: Steve approved the merge of `box/v18`;** item
+  59 is built on it (see item 59).
+
+- **Every entry to a send queue is covered or defended.** On v18,
     `tcp.Table.queue` is called from `Stream.sendAll` (two places, after
     `io.durable`), `Spill.push` (defended in its comment: its bytes passed
     `sendAll`), and `serviceStreams`' carry, frames and ping (after its own
