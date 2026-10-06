@@ -420,7 +420,12 @@ pub const Scsi = struct {
             "";
         return std.fmt.bufPrint(buf, "metal-vmm: volume: {s}; {d} reads, {d} writes, {d} SYNCHRONIZE CACHE{s}, {d} MODE SENSE{s}{s}{s}{s}{s}\n", .{
             mode, self.reads, self.writes, self.synchronizes, failed, self.mode_senses, told, gone, ro, waited,
-            if (self.power.cut != null) (if (lost > 0) "; the power cut lost sectors never synchronized" else "; the power cut lost nothing") else "",
+            if (self.power.cut != null)
+                (if (lost > 0) "; the power cut lost sectors never synchronized" else "; the power cut lost nothing")
+            else if (self.cache) |c|
+                (if (!c.exit_cut) "" else if (c.exit_lost > 0) "; the power failed when the guest stopped and lost sectors never synchronized" else "; the power failed when the guest stopped and lost nothing")
+            else
+                "",
         }) catch "metal-vmm: volume\n";
     }
 };

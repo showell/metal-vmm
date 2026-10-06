@@ -542,7 +542,16 @@ this order, after 59 and 61-62. J5 is the box's (B16).
     command; the volume's line says the wait and SYNCHRONIZE CACHE's share
     of it. For the box: v17 and v18 with `VOLUME_LATENCY_US=500
     VOLUME_SYNC_US=5000`, say, and a chat post's time. **Was:** J4, a flush that costs more than a read (`VOLUME_SYNC_US`), as proposed.
-68. **(metal-vmm) The power fails when the guest stops: `VOLUME_CUT_AT_EXIT=1`**
+68. **Done (CC, 2026-10-06).** `VOLUME_CUT_AT_EXIT=1`: at every end, the
+    exit door, idle, or a bad one, `cutAtExit` has each write cache (the
+    volume's and `DISK_CACHE`'s) lose what was never synchronized
+    (`Cache.loseAtExit`) before the reports and before the image is written
+    back. One line counts each one's loss, and the volume's and the disk's
+    own lines say the power failed when the guest stopped. Hand-set only.
+    After a `VOLUME_CUT_AFTER` cut it loses nothing more. Not run against a
+    guest here (no KVM): B14 is
+    `VOLUME=<copy> VOLUME_CACHE=1 VOLUME_CUT_AT_EXIT=1`, a chat post, and
+    then the volume read back. **Was:** **(metal-vmm) The power fails when the guest stops: `VOLUME_CUT_AT_EXIT=1`**
     (the box, 2026-10-06, for B14). At the exit door, or any other end,
     each cache loses what was never synchronized (`Cache.lose`), as
     `VOLUME_CUT_AFTER` does, and the volume's line says so. Why: B14 posts

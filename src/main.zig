@@ -317,6 +317,9 @@ pub const Machine = struct {
     drive: ?*const faults.Drive = null,
     /// The disk's write cache (`DISK_CACHE`), which a power cut empties.
     write_cache: ?*cache.Cache = null,
+    /// `VOLUME_CUT_AT_EXIT=1`: every cache loses its unsynchronized writes
+    /// at the run's end (`cutAtExit`).
+    cut_at_exit: bool = false,
     /// **THE VOLUME** (`VOLUME`, scsi.zig): its power is the machine's, so
     /// a cut in either disk empties both caches.
     volume: ?*scsi.Scsi = null,
@@ -716,6 +719,27 @@ fn readAll(path: [:0]const u8, into: []u8) ?[]const u8 {
 
 /// What the volume was asked, if one was attached (`VOLUME`): a run without
 /// one says nothing new.
+/// **THE POWER FAILS WHEN THE GUEST STOPS** (`VOLUME_CUT_AT_EXIT=1`, QUEUE
+/// item 68): every write cache loses what was never synchronized, before
+/// anything is reported or written back, whatever the end. So a write the
+/// guest answered for and never synchronized is gone, even when the
+/// response that confirmed it came after the last write. One line says
+/// what each lost.
+fn cutAtExit(machine: *Machine) void {
+    if (!machine.cut_at_exit) return;
+    var disk_lost: u64 = 0;
+    var volume_lost: u64 = 0;
+    if (machine.write_cache) |c| {
+        c.loseAtExit();
+        disk_lost = c.exit_lost;
+    }
+    if (machine.volume) |v| if (v.cache) |c| {
+        c.loseAtExit();
+        volume_lost = c.exit_lost;
+    };
+    std.debug.print("metal-vmm: the power failed when the guest stopped (VOLUME_CUT_AT_EXIT): {d} volume sectors and {d} disk sectors never synchronized were lost\n", .{ volume_lost, disk_lost });
+}
+
 fn reportVolume(machine: *const Machine) void {
     const v = machine.volume orelse return;
     var buf: [256]u8 = undefined;
@@ -970,6 +994,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
             volume_cache = .{ .gpa = std.heap.page_allocator, .image = volume.image, .lies = std.mem.eql(u8, how, "lie") };
             volume.cache = &volume_cache;
         }
+        if (turned.get("VOLUME_CUT_AT_EXIT")) |text| machine.cut_at_exit = std.mem.eql(u8, text, "1");
         if (turned.get("VOLUME_CUT_AFTER")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
             volume.power.cut_after = n;
         };
@@ -1057,6 +1082,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // below are the first thing anybody reads after a guest gets stuck, so
     // they are reported before the error goes anywhere.
     const code = serve(vcpu, page, &machine, .{ .lo = loaded.text_lo, .hi = loaded.text_hi }) catch |e| {
+        cutAtExit(&machine);
         reportRun(&card, &block, machine.time.ns);
         reportVolume(&machine);
         reports.cost(&machine, &card, &block);
@@ -1083,6 +1109,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // **WHAT THE WIRE DID, IF IT WAS ASKED TO DO ANYTHING**, on the error
     // stream: a run with a perfect wire says nothing, so the probes' output
     // stays comparable with QEMU's.
+    cutAtExit(&machine);
     reportRun(&card, &block, machine.time.ns);
     reportVolume(&machine);
     if (pc) reportRest(&machine);

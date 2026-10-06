@@ -573,7 +573,12 @@ the controller answers every command BAD_TARGET, as one whose DO volume was
 detached under a running droplet does. `VOLUME_READ_ONLY_AT=n` turns it
 read-only from the nth command: MODE SENSE says WP and every WRITE is DATA
 PROTECT, while reads and SYNCHRONIZE CACHE still answer, as a DO volume the
-host has made read-only after an I/O error. With `FAULT_SEED` too, a seed draws the volume's faults (all but
+host has made read-only after an I/O error. `VOLUME_CUT_AT_EXIT=1` fails
+the power when the guest stops, at any end: every write cache (the volume's
+`VOLUME_CACHE`, the disk's `DISK_CACHE`) loses what was never synchronized
+before anything is reported or written back, and a line says how many
+sectors each lost. That is the cut `VOLUME_CUT_AFTER` cannot place: after a
+response that came after the last write. With `FAULT_SEED` too, a seed draws the volume's faults (all but
 the latency) on dice of their own, and `sweep.sh` sweeps them with
 `VOLUME_SITE=<image>`. Nothing changes unless `VOLUME` is set.
 

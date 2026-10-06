@@ -31,6 +31,9 @@ pub const Cache = struct {
     /// Writes held, and sectors put back by a power cut.
     held: u64 = 0,
     lost: u64 = 0,
+    /// The power failed at the run's end (`loseAtExit`), and what it lost.
+    exit_cut: bool = false,
+    exit_lost: u64 = 0,
     /// Whether any write was ever held, and whether the driver negotiated
     /// FLUSH, for the report.
     write_back: bool = false,
@@ -69,6 +72,16 @@ pub const Cache = struct {
 
     /// **THE POWER IS CUT**: every sector written since the last flush is
     /// what it was before.
+    /// **THE POWER FAILS WHEN THE GUEST STOPS** (`VOLUME_CUT_AT_EXIT=1`):
+    /// what was never synchronized is lost at the run's end, as at a cut,
+    /// and the line says it was this. `exit_lost` is what it lost.
+    pub fn loseAtExit(self: *Cache) void {
+        const before = self.lost;
+        self.lose();
+        self.exit_cut = true;
+        self.exit_lost = self.lost - before;
+    }
+
     pub fn lose(self: *Cache) void {
         var it = self.durable.iterator();
         while (it.next()) |e| {
@@ -86,7 +99,9 @@ pub const Cache = struct {
             "write-back, the guest having negotiated FLUSH"
         else
             "write-back, though the guest did not negotiate FLUSH (DISK_CACHE=lie)";
-        const end = if (cut)
+        const end = if (self.exit_cut and !cut)
+            std.fmt.bufPrint(buf[0..], "metal-vmm: disk: a write cache, {s}; {d} writes held, {d} flushes; the power failed when the guest stopped and lost {d} sectors never flushed\n", .{ mode, self.held, self.flushes, self.exit_lost })
+        else if (cut)
             std.fmt.bufPrint(buf[0..], "metal-vmm: disk: a write cache, {s}; {d} writes held, {d} flushes; the power cut lost {d} sectors never flushed\n", .{ mode, self.held, self.flushes, self.lost })
         else
             std.fmt.bufPrint(buf[0..], "metal-vmm: disk: a write cache, {s}; {d} writes held, {d} flushes\n", .{ mode, self.held, self.flushes });
@@ -139,4 +154,22 @@ test "the cache's line says which it was" {
     c.negotiated = true;
     c.lost = 3;
     try testing.expect(std.mem.indexOf(u8, c.line(&buf, true), "lost 3 sectors never flushed") != null);
+}
+
+test "VOLUME_CUT_AT_EXIT: at the run's end what was never flushed is lost, and the line says it was the end" {
+    var image: [8 * sector_bytes]u8 = @splat('o');
+    var c = Cache{ .gpa = testing.allocator, .image = &image };
+    defer c.deinit();
+    c.negotiated = true;
+    try testing.expect(c.wrote(0, 1));
+    @memset(image[0..sector_bytes], 'a');
+    c.flush();
+    try testing.expect(c.wrote(1, 2));
+    @memset(image[sector_bytes .. 3 * sector_bytes], 'b');
+    c.loseAtExit();
+    try testing.expectEqual(@as(u8, 'a'), image[0]);
+    try testing.expectEqual(@as(u8, 'o'), image[sector_bytes]);
+    try testing.expectEqual(@as(u64, 2), c.exit_lost);
+    var buf: [256]u8 = undefined;
+    try testing.expect(std.mem.indexOf(u8, c.line(&buf, false), "the power failed when the guest stopped and lost 2 sectors never flushed") != null);
 }
