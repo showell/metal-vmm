@@ -22,7 +22,7 @@ stands; read it, and `src/pci.zig` and `src/apic.zig`, before anything else.
   the default channel is git.
 - **The box Claude** works on Steve's development droplet, which has KVM and
   QEMU. It runs the guests: `check.sh`, `same.sh`, `site.sh`, `rest.sh`,
-  `lossy.sh` and the rest. It merges your branch into `interrupts` once the
+  `lossy.sh` and the rest. It merges your branch into `master` once the
   unit tests pass and runs the guests alongside: they catch edge cases, which
   come back to you as new items. It owns gopher-metal, the guest side of
   every contract here.
@@ -35,7 +35,7 @@ is the box Claude's or Steve's to do, write it under "Questions" in
 `QUEUE.md` and take the next item. Do not wait.
 **An item in the CC section of `QUEUE.md` is permission to start it**:
 never ask Steve or the box whether to. When you finish one, `git fetch` and
-reread `QUEUE.md` on `interrupts`, since the box adds items as it goes. Only
+reread `QUEUE.md` on `master`, since the box adds items as it goes. Only
 an empty queue ends a session.
 
 ## Most of it is logic
@@ -86,8 +86,8 @@ box's scripts check, ask how to check it here:
 ## Git is the channel
 
 - **Push to the branch your session is given** (see "The branches"). Never
-  to `master`, `interrupts` or `antithesis-sdk`, which are the box's.
-- **Rebase on `origin/interrupts` before every push.** The box merges your
+  to `master` or `main`, which are the box's.
+- **Rebase on `origin/master` before every push.** The box merges your
   branch, so a stale base costs it a conflict.
 - **One topic per commit.** Its message says what changed and why, what you
   verified (`zig build test`, `zig fmt --check src`), and what you could not
@@ -96,27 +96,28 @@ box's scripts check, ask how to check it here:
   - Mark an item yours in your branch when you start it.
   - Mark it done in the commit that finishes it.
   - Add items you discover under "Proposed", with a line each on why.
-- **The box answers on `interrupts`:** in `QUEUE.md` under "Answers", in a
+- **The box answers on `master`:** in `QUEUE.md` under "Answers", in a
   `docs/reviews/REVIEW-*.md` file, or in the merge itself. Fetch it to see
   them.
 
 ## The branches, all of them
 
-Three repos, one queue (this repo's `QUEUE.md`, on `interrupts`). Nothing else
-is live; if you see a branch not listed here, ask under Questions before
-building on it.
+Every repo works on **`master`** (since 2026-10-06, Steve: "these are all
+Steve-owned projects"). One queue: this repo's `QUEUE.md`, on `master`.
+Nothing else is live; if you see a branch not listed here, ask under
+Questions before building on it.
 
 | repo | branch | whose | what |
 |---|---|---|---|
-| metal-vmm | `interrupts` | the box | the base: you branch from it, the box merges into it |
-| metal-vmm | `claude/<your session's name>` | you | your work, rebased on `origin/interrupts` |
-| metal-vmm | `master` | the box | untouched until Steve merges `interrupts` |
-| gopher-metal | `antithesis-sdk` | the box | the base for the simulators: branch from it, the box merges into it |
-| gopher-metal | `claude/<your session's name>` | you | simulator work, rebased on `origin/antithesis-sdk` |
-| zig-coverage-sdk | `main` | the box | the base for SDK work: branch from it, the box merges into it |
-| zig-coverage-sdk | `claude/<your session's name>` | you | SDK work, rebased on `origin/main` |
-| gopher-metal | `box/v18` | the box | the next image after v17: flush before any response leaves (B11). Read it; do not branch from it |
-| gopher-metal | `master` | the box | **what serves lynrummy.com. Never push, never branch from it.** |
+| metal-vmm | `master` | the box | the base: you branch from it, the box merges into it |
+| gopher-metal | `master` | the box | the base: you branch from it, the box merges into it |
+| zig-coverage-sdk | `main` | the box | the base: you branch from it, the box merges into it |
+| each of them | `claude/<your session's name>` | you | your work, rebased on that repo's base |
+
+**What serves lynrummy.com is a tag, not a branch**: gopher-metal's `vN`
+(today `v18`), and its README's "Serving" line says which. `master` may be
+ahead of it. `interrupts` and `antithesis-sdk` are retired: both are merged
+into `master`; don't branch from them.
 
 Use the same `claude/<name>` in both repos. Each QUEUE.md item says which
 repo it is in; an item in gopher-metal is merged there, and its answer comes
@@ -146,8 +147,7 @@ Since 2026-10-05 you work in gopher-metal too, on the **simulators and
 properties only**: `src/tcp_sim.zig`, `src/fat_sim.zig`, `src/properties.zig`,
 new simulators beside them, their regression seeds, and `coverage/floor-sim.txt`
 (raise it; never lower it without a line in QUEUE.md saying why). Read its
-`CLAUDE.md` on `antithesis-sdk` (master's still says a cloud session stops:
-it predates this) and its `COVERAGE.md`, then `TCP_TESTING.md`.
+`CLAUDE.md` and its `COVERAGE.md`, then `TCP_TESTING.md`.
 
 **Why the simulators exist: they keep the layers honest.** A simulator drives
 only pure logic, code that needs no driver, no device, and no clock but the
@@ -216,8 +216,8 @@ How to work, on any long assignment:
   as a bug, with the test committed but left out of the default run
   *and named there*, so it's visible, never silently skipped. Then move on.
 - **Green at every push.** Each commit leaves `zig build test` and `zig build
-  properties` passing. Push after every item. Merge `interrupts` and
-  `antithesis-sdk` into your branches at phase boundaries, not mid-phase.
+  properties` passing. Push after every item. Merge each repo's `master` (or
+  `main`) into your branches at phase boundaries, not mid-phase.
 - **A phase report, five lines,** under the phase's item when it's done:
   what was reached, what's parked, what was asked, what surprised you, and
   the floor's count before and after.

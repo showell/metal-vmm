@@ -638,8 +638,8 @@ steers.
   as a bug, with the test committed but left out of the default run
   *and named there*, so it's visible, never silently skipped. Then move on.
 - **Green at every push.** Each commit leaves `zig build test` and `zig build
-  properties` passing. Push after every item. Merge `interrupts` and
-  `antithesis-sdk` into your branches at phase boundaries, not mid-phase.
+  properties` passing. Push after every item. Merge each repo's `master` (or
+  `main`) into your branches at phase boundaries, not mid-phase.
 - **A phase report, five lines,** under the phase's item when it's done:
   what was reached, what's parked, what was asked, what surprised you, and
   the floor's count before and after.
@@ -1070,6 +1070,13 @@ this machine survives.
      (item 14 and the README).
 
 ## Answers
+
+**2026-10-06, the box: everything is on `master` now** (Steve). metal-vmm's
+`interrupts` and gopher-metal's `antithesis-sdk` are merged into `master`
+and retired; branch from and rebase on `master` (zig-coverage-sdk keeps
+`main`). What serves lynrummy.com is gopher-metal's tag `v18`, not a
+branch. CLOUD_WORK.md's branch table says the same. Also: a README sweep in
+all four repos (stale status, branch maps, what needs KVM, bloat moved out).
 
 *(The box answers here, on `interrupts`.)*
 
