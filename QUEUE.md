@@ -560,7 +560,8 @@ this order, after 59 and 61-62. J5 is the box's (B16).
     write of the post comes before the 303 and none after, so no
     `VOLUME_CUT_AFTER=n` puts the cut after the response. A person's knob,
     not a seed's. Then B14 is: v17 loses the message, v18 keeps it.
-67. **Your proposals again** when 59, 61-64, 66 and 68 are done.
+67. **Done (CC, 2026-10-06).** K1-K5 under Proposed. **Was:** your
+    proposals again when 59, 61-64, 66 and 68 are done.
 
 ## Proposed
 
@@ -748,6 +749,42 @@ From item 60: the next five, most finding first (CC):
   "tcp: a damaged segment is dropped" already is), so a sweep's merged
   coverage says which of `PEER_MANGLE`'s lies each parser met, rather than
   only that the page held.
+
+From item 67: the next five, most finding first (CC):
+
+- **K1. A sweep that judges durability, not the page** (`sweep.sh` with
+  `POST=<request>`): each seed posts one chat message, with the volume's
+  faults drawn (item 58) and `VOLUME_CUT_AT_EXIT=1` always on, and its
+  verdict reads the volume afterwards: **a 303 for a message the volume
+  does not hold fails**, whatever else the seed did; no 303 and no message
+  is allowed. That is B14's property swept over thousands of fault
+  schedules instead of one, and it is the first use of the volume knobs
+  that does not need an excuse for a page that differs. It needs a reader
+  for the chat file on a FAT image (mtools, as `sound.sh` uses fsck).
+- **K2. A write cache that writes back in its own order**
+  (`VOLUME_CACHE_KEEPS=k`: at a cut, each unsynchronized sector reaches
+  the media with chance 1/k, chosen by the seed, not none of them). A real
+  cache drains in an order of its own, so after a cut the volume can hold
+  a directory entry without its data, or a FAT chain without its entry.
+  `VOLUME_CACHE=1`'s all-or-nothing never shows those; `sound.sh` after
+  such a cut is FAT's crash consistency under reordering, measured.
+- **K3. Crowds the size of the kernel's table** (gopher-metal,
+  `tcp_sim.zig`): item 61's comparisons showed the simulator's table
+  peaks at 2 slots of 2, and a crowd's at 8, where gopher.zig holds 256.
+  A crowd tier of 64 to 256 slots and as many clients, few seeds, so
+  `oldestHalfOpen`'s scan and revival meet a table as full as prod's. Its
+  cost is the question; the sweep says the size in the commit.
+- **K4. An edge floor** (zig-coverage-sdk, `report.py --edges <file>`):
+  a line `tcp: slots in use stay within the table  >= 64` fails a run
+  whose comparison never came that close, as `--floor` fails a property
+  never reached. Without it, K3's gap is visible only to someone reading
+  the report. And note: an edge is the nearest `left - right`, so 2 of 2
+  and 256 of 256 are the same edge (0); the floor should judge `left`.
+- **K5. One report, two images** (zig-coverage-sdk, `report.py --against
+  <b.jsonl>`): the properties one run set reached and the other did not,
+  and the edges that moved. v17 against v18 under the same seeds says
+  what v18's flush changed in the kernel's own properties, beside the
+  page and the volume.
 
 Folded into existing items rather than new ones: M4, L1, L2, L3 into item 4
 (MSI-X); L4 into item 5 (APIC); L5 (0xCF9) waits until a reset is something
