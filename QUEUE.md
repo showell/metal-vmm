@@ -738,7 +738,23 @@ effect of adding a property.
     seems to need a seventh operation, ask under Questions, and in the
     meantime write the case down as a test that the six can't express.
 
-78. **Phase C: the other side of the floor** (gopher-metal). The same work
+78. **Done (CC, 2026-10-06).** gopher-metal, one commit. **Phase report:**
+    - *Reached:* `proto` 12 of 12, `arp` 6 of 6 (`floor_sim`, field by
+      field: a datagram or ARP request as a sender writes it, one field
+      wrong, the IP checksum made right again so each meets its own check),
+      `request_heap` 4 of 4. `stream` 7 named, 0 reached here. B15 built
+      both ways against angry-gopher `f5d360e`, not run.
+    - *Parked:* none. `stream` is not parked but unreachable by design: it
+      imports the I/O; its seam is under Proposed, its knobs in COVERAGE.md.
+    - *Asked:* under Questions, what B15's "end of a run" should be.
+    - *Surprised me:* gopher.elf could be built here after all, from
+      angry-gopher's public repo with its generated assets stubbed locally;
+      and a stop may leave four kinds of finding, so "the volume checks
+      clean" would have failed every cut run: B15 judges damage only
+      (`fat16.Problem.damage`).
+    - *The floor:* 187 before, 209 after; the same 2 long-tier lines under.
+
+    **Was:** **Phase C: the other side of the floor** (gopher-metal). The same work
     as phase A, for `proto`, `arp`, `stream` and `Spill`, and `request_heap`;
     plus B15: a `-Dcoverage` kernel calls `tcp_check.check` after every
     `handle` and `transmit` as one `always("tcp: the table's invariants
@@ -784,6 +800,16 @@ effect of adding a property.
 The same text, for reading: http://143.244.172.148:9100/notes/cc-the-floor-and-the-store.md
 
 ## Proposed
+
+From item 78 (CC): **the seam under `stream.zig`.** Its waits are pure
+decisions over a connection's state, a clock and progress: "has the peer
+taken anything since `since` (`una` moved, or bytes queued)? is `idle_ns`
+past? is the connection still established?" Pulled out as a `Wait` that is
+handed `(now, state, una, queued)` and answers `go on`, `gave up idle` or
+`gone`, with the queueing, `pump` and `rest` left behind in `Stream`, the
+seven refusals named in item 78 could be reached by a simulator over
+`tcp.Table` (as `ready_sim` does for `ready.zig`). The box decides: it is
+the response path.
 
 *(CC adds items here, one line each on why.)*
 
@@ -1013,6 +1039,14 @@ this machine survives.
 ## Questions
 
 *(For the box or Steve. Take the next item; do not wait.)*
+
+- **(CC, item 78) B15's "end of a run".** gopher.elf never ends a run itself:
+  metal-vmm ends it from outside (idle, a cut, a timeout), so there is no
+  moment to run FAT's check "at the end". I check after every request in a
+  `-Dcoverage` build (the state after the last request is the state the run
+  ended in) and at every boot in every build (the next boot sees the last
+  run's end). If you want literally the end, metal-vmm could ask for it: a
+  port write the guest answers with a check, before metal-vmm stops it.
 
 - **(CC, item 77) A finding: `fat16.remove` takes a directory.** It drops
   the directory's entry like a file's and leaves the directory's clusters,
