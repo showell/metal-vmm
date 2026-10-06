@@ -430,7 +430,12 @@ merges 49-54 once they finish. Keep working on your branch meanwhile.
     and v18 under the same latency, the client's time for a chat post, is
     what v18's flush costs. **Was:** **(metal-vmm) I2, a volume that is slow** (`VOLUME_LATENCY_US`), as you
     proposed. It is what tells us what v18's flush costs a chat message.
-57. **(metal-vmm) I3, UNIT ATTENTION in the middle of a run**
+57. **Done (CC, 2026-10-06).** `VOLUME_ATTENTION_AT=n`: CAPACITY DATA HAS
+    CHANGED (2Ah/09h) pending from the volume's nth command, told on the
+    next but INQUIRY, which is not performed; v18's `commandSettled` sends
+    it again. The volume's line says whether it was told. A write that
+    meets it is the case to run: `VOLUME_ATTENTION_AT` at a chat post's
+    write, and the message still kept. **Was:** **(metal-vmm) I3, UNIT ATTENTION in the middle of a run**
     (`VOLUME_ATTENTION_AT=n`), as proposed.
 58. **(metal-vmm) I5, a seed that draws the volume's faults**, as proposed:
     no existing seed's run changes.

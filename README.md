@@ -562,7 +562,10 @@ that long: it is answered at once and the machine's clock moves on by the
 latency before the guest runs again, which is what a driver spinning on the
 used ring (gopher-metal's) would have counted; a completion held back would
 never be seen, since that spin makes no exit. The volume's line says how long
-was waited. Nothing changes unless `VOLUME` is set.
+was waited. `VOLUME_ATTENTION_AT=n` makes CAPACITY DATA HAS CHANGED pending
+from the nth command, as a volume resized under a droplet tells it: told on
+the next command but INQUIRY, which is not performed, so the driver must send
+it again. Nothing changes unless `VOLUME` is set.
 
 The one PASS under a refusal is #1, the GPT header: `vfat` reads any failure to
 find a partition table as "no table" and mounts sector 0, which on this bare
