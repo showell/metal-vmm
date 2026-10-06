@@ -763,7 +763,26 @@ effect of adding a property.
     field by field and make one field wrong, rather than random bytes.
     **Done when** these modules have their rows and the floor holds them.
 
-79. **Phase D: the twin and the judge** (gopher-metal).
+79. **Done (CC, 2026-10-06).** gopher-metal `store_linux.zig`, `store_sim.zig`.
+    **Phase report:**
+    - *Reached:* `store_sim` 1000 seeds clean in `zig build properties`;
+      its 12 properties on the floor: one answer from all three for every
+      operation, one tree after it, and after a cut on the FAT side the
+      promise for each write kept (replace 452 times, append 324, write 390,
+      remove 154 in the sweep). A planted case-sensitive Linux store fails
+      from seed 1.
+    - *Parked:* none.
+    - *Asked:* nothing new. My Phase B question on FAT and forbidden names
+      is answered by angry-gopher's own `store.zig`, which refuses them on
+      every host (seen in the census, item 80).
+    - *Surprised me:* the first sweep failed 4 seeds, all the simulator's
+      (files grown by appends read into buffers too small); and in Zig an
+      `==` between two optional errors said false for two `NotFound`s,
+      which my first answer comparison relied on.
+    - *The floor:* 209 before, 221 after; `properties` takes about 5
+      minutes now, most of it `store_sim`.
+
+    **Was:** **Phase D: the twin and the judge** (gopher-metal).
     - **The strict Linux store**, over `std.Io`'s filesystem in a temp
       directory. It enforces FAT's rules (case folding, name length,
       forbidden characters, `max_tree_depth`) *before* touching the disk, so
@@ -1057,8 +1076,11 @@ this machine survives.
   test is `fat16_test.zig`'s "remove refuses a directory, and leaves the
   volume clean (red until the ruling)", skipped by name; it fails as
   described without the skip. The Store refuses a directory either way.
-- **(CC, item 77) A question: should FAT refuse what the Store refuses in a
-  name?** `fat16.writeFileIn` checks a name's length only, so `a:b`,
+- **(CC, item 77; answered by reading, item 80) A question: should FAT refuse what the Store refuses in a
+  name?** *Answered: angry-gopher's own `store.zig` keeps FAT's name rules
+  on every host and refuses these before FAT sees them; the question stands
+  only for a write that does not go through it (the census lists none in
+  the server).* `fat16.writeFileIn` checks a name's length only, so `a:b`,
   `what?` or a trailing dot are written as given, in the long name. FAT's
   spec forbids `"*/:<>?\|` in long names, and Windows and Linux's vfat
   refuse to make them; whether fsck.fat or a Linux mount minds one already
