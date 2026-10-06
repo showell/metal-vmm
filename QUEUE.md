@@ -395,8 +395,12 @@ H proposals are approved in the order below.
     answers six commands, and a knob for the WCE bit with `DISK_CACHE`'s
     semantics (`lie` included) is what lets a run show v18's flush keeping
     a message that the cache would have lost.
-54. **Your proposals again** when 49-53 are done: the next five, then take
-    the first.
+54. **Done (CC, 2026-10-06).** I1-I5 under Proposed; I1 built:
+    `VOLUME_SYNC_FAIL=n` (`VOLUME_SYNC_FAIL_FOR=k`) answers the nth
+    SYNCHRONIZE CACHE, and the k-1 after it, MEDIUM ERROR and keeps
+    nothing; the volume's line says how many failed. **Was:** your
+    proposals again when 49-53 are done: the next five, then take the
+    first.
 
 **Next, after 54** (2026-10-06, late morning). Your branch is not merged
 yet: v18's gates (`box/v18`) are running on this box against metal-vmm's
@@ -550,6 +554,39 @@ From item 48: the next five, most finding first (CC):
 - **H4. A simulator for `ready.zig`** (gopher-metal): whether a request
   head is whole, over every split of the bytes, at the receive buffer's
   edge, and past it (the 431 path).
+
+From item 54: the next five, most finding first (CC):
+
+- **I1. A SYNCHRONIZE CACHE that fails** (`VOLUME_SYNC_FAIL=n`,
+  `VOLUME_SYNC_FAIL_FOR=k`: MEDIUM ERROR, nothing kept). v18's `io.durable`
+  logs a failed flush and lets the response go out, and tries again before
+  the next one. So one failure then a cut (`VOLUME_CUT_AFTER`) is a 303 for
+  a message the volume lost, and k failures in a row are k responses sent
+  on writes not yet kept: the measure of that choice. **Taken; see item
+  54.**
+- **I2. A volume that is slow** (`VOLUME_LATENCY_US=us`: each command
+  answered that long after its doorbell, on the guest's clock). A DO volume
+  is network storage, milliseconds a command; here it answers at once. v18
+  sends a SYNCHRONIZE CACHE before every response after a write, so what a
+  chat message costs in time on a real volume is unknown until the volume
+  takes time. Needs the completion deferred to a later exit, as the wire's
+  latency is.
+- **I3. UNIT ATTENTION in the middle of a run** (`VOLUME_ATTENTION_AT=n`:
+  the nth command answers it, as a DO volume resized or its path reset
+  does, with CAPACITY DATA HAS CHANGED or POWER ON). v18's `commandSettled`
+  sends it again; a write that meets it is the case to watch, and whether
+  the capacity is ever read again.
+- **I4. The seam under `io.durable`** (gopher-metal, the box's): the rule
+  "nothing is queued to send while a write before it is unflushed" pulled
+  out of io.zig as a pure function of what was written and what is about
+  to be sent, so a simulator can drive it over any interleaving of writes,
+  sends, held streams and failed flushes. Today it can be checked only by a
+  guest on a machine.
+- **I5. A seed that draws the volume's faults** (`FAULT_SEED` with
+  `VOLUME` set: `VOLUME_CUT_AFTER`, `VOLUME_SYNC_FAIL`, `VOLUME_CACHE`),
+  so `sweep.sh` can sweep chat's real write path as it sweeps the boot
+  disk's. Changes no existing seed's run: their draws come first, and the
+  volume's are taken only when one is attached.
 
 Folded into existing items rather than new ones: M4, L1, L2, L3 into item 4
 (MSI-X); L4 into item 5 (APIC); L5 (0xCF9) waits until a reset is something

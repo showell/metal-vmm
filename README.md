@@ -539,8 +539,10 @@ them and says it writes through (WCE=0), so a driver that believes it never
 synchronizes. `VOLUME_CUT_AFTER=n` cuts the power after the volume's nth
 write; either disk's cut empties both caches. The run ends with
 `metal-vmm: volume: ...`, its reads, writes, SYNCHRONIZE CACHEs and MODE
-SENSEs, and whether a cut lost anything. Nothing changes unless `VOLUME` is
-set.
+SENSEs, and whether a cut lost anything. `VOLUME_SYNC_FAIL=n` (with
+`VOLUME_SYNC_FAIL_FOR=k`, 1 by default) answers the nth SYNCHRONIZE CACHE,
+and the k-1 after it, MEDIUM ERROR, keeping nothing: a cache that cannot
+reach its media. Nothing changes unless `VOLUME` is set.
 
 The one PASS under a refusal is #1, the GPT header: `vfat` reads any failure to
 find a partition table as "no table" and mounts sector 0, which on this bare

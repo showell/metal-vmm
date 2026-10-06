@@ -183,6 +183,10 @@ pub fn run(seed: u64) u64 {
     defer w.volume_cache.deinit();
     if (vr.boolean()) w.volume.cache = &w.volume_cache;
     if (vr.uintLessThan(u8, 4) == 0) w.volume.power.cut_after = vr.uintLessThan(u64, 40);
+    if (vr.uintLessThan(u8, 4) == 0) {
+        w.volume.sync_fail_at = vr.uintLessThan(u64, 40);
+        w.volume.sync_fail_for = vr.uintLessThan(u64, 4);
+    }
     for (0..steps) |step| {
         current_step = 2 * steps + step;
         volumeSide(w, vr);

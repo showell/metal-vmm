@@ -56,8 +56,10 @@ pub const status_good: u8 = 0;
 pub const status_check_condition: u8 = 2;
 
 /// Sense keys, and the additional sense codes that say why (SPC-4 §4.5.6).
+pub const key_medium_error: u8 = 3;
 pub const key_illegal_request: u8 = 5;
 pub const key_unit_attention: u8 = 6;
+const asc_write_error: u8 = 0x0C;
 const asc_invalid_opcode: u8 = 0x20;
 const asc_lba_out_of_range: u8 = 0x21;
 const asc_invalid_field: u8 = 0x24;
@@ -85,6 +87,12 @@ pub const Scsi = struct {
     cache: ?*cache_mod.Cache = null,
     /// **THE POWER** (`VOLUME_CUT_AFTER`): only its cut is used here.
     power: faults.Drive = .{},
+    /// **A CACHE THAT CANNOT REACH ITS MEDIA** (`VOLUME_SYNC_FAIL=n`,
+    /// `VOLUME_SYNC_FAIL_FOR=k`): the nth SYNCHRONIZE CACHE, and the k-1
+    /// after it, answer MEDIUM ERROR, and what they were to keep stays held.
+    sync_fail_at: ?u64 = null,
+    sync_fail_for: u64 = 1,
+    sync_failed: u64 = 0,
     /// UNIT ATTENTION, owed to the first command but INQUIRY.
     attention: bool = true,
     reads: u64 = 0,
@@ -216,13 +224,19 @@ pub const Scsi = struct {
             op_read_capacity => self.capacity(in),
             op_mode_sense => self.modeSense(cdb, in),
             op_read, op_write => self.transfer(cdb, op == op_write, out, in),
-            op_synchronize => blk: {
-                self.synchronizes += 1;
-                if (self.cache) |c| c.flush();
-                break :blk .{};
-            },
+            op_synchronize => self.synchronize(),
             else => self.check(key_illegal_request, asc_invalid_opcode),
         };
+    }
+
+    fn synchronize(self: *Scsi) Answer {
+        self.synchronizes += 1;
+        if (self.sync_fail_at) |at| if (self.synchronizes >= at and self.synchronizes - at < self.sync_fail_for) {
+            self.sync_failed += 1;
+            return self.check(key_medium_error, asc_write_error);
+        };
+        if (self.cache) |c| c.flush();
+        return .{};
     }
 
     fn give(in: ?[]u8, bytes: []const u8, allocated: usize) u32 {
@@ -312,8 +326,13 @@ pub const Scsi = struct {
         else
             "write-through";
         const lost: u64 = if (self.cache) |c| c.lost else 0;
-        return std.fmt.bufPrint(buf, "metal-vmm: volume: {s}; {d} reads, {d} writes, {d} SYNCHRONIZE CACHE, {d} MODE SENSE{s}\n", .{
-            mode, self.reads, self.writes, self.synchronizes, self.mode_senses,
+        var failed_buf: [64]u8 = undefined;
+        const failed = if (self.sync_fail_at != null)
+            std.fmt.bufPrint(&failed_buf, " ({d} failed, VOLUME_SYNC_FAIL)", .{self.sync_failed}) catch ""
+        else
+            "";
+        return std.fmt.bufPrint(buf, "metal-vmm: volume: {s}; {d} reads, {d} writes, {d} SYNCHRONIZE CACHE{s}, {d} MODE SENSE{s}\n", .{
+            mode, self.reads, self.writes, self.synchronizes, failed, self.mode_senses,
             if (self.power.cut != null) (if (lost > 0) "; the power cut lost sectors never synchronized" else "; the power cut lost nothing") else "",
         }) catch "metal-vmm: volume\n";
     }
@@ -574,4 +593,36 @@ test "a chain of another shape, or a header too short, is not answered" {
         .{ .addr = FakeDriver.response_at, .len = response_len, .flags = Desc.write_flag, .next = 0 },
     };
     try testing.expectEqual(@as(u32, 0), vol.serve(&g.ram, &outside));
+}
+
+test "VOLUME_SYNC_FAIL: the nth SYNCHRONIZE CACHE fails, keeps nothing, and the next keeps it all" {
+    var image: [16 * 512]u8 = @splat('o');
+    var c = cache_mod.Cache{ .gpa = testing.allocator, .image = &image };
+    defer c.deinit();
+    var vol = Scsi{ .image = &image, .cache = &c, .attention = false, .sync_fail_at = 2, .sync_fail_for = 2 };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
+    try testing.expect(FakeDriver.good(g.synchronize(&d)));
+    @memset(g.ram[FakeDriver.data_at..][0..512], 'b');
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 2, 1)));
+    // The second and third fail as a medium error, as v18's `synchronize`
+    // reads one: not ILLEGAL REQUEST, so not taken for a disk with no cache.
+    for (0..2) |_| {
+        const o = g.synchronize(&d);
+        try testing.expectEqual(status_check_condition, o.status);
+        try testing.expectEqual(key_medium_error, o.key);
+    }
+    var buf: [256]u8 = undefined;
+    try testing.expect(std.mem.indexOf(u8, vol.line(&buf), "3 SYNCHRONIZE CACHE (2 failed, VOLUME_SYNC_FAIL)") != null);
+    // Sector 2 is still held: a cut now would lose it.
+    try testing.expectEqual(@as(u32, 1), c.durable.count());
+    // The fourth succeeds, and keeps it.
+    try testing.expect(FakeDriver.good(g.synchronize(&d)));
+    c.lose();
+    try testing.expectEqual(@as(u8, 'a'), image[1 * 512]);
+    try testing.expectEqual(@as(u8, 'b'), image[2 * 512]);
+    try testing.expectEqual(@as(u64, 2), vol.sync_failed);
 }

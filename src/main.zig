@@ -952,7 +952,8 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     };
     // **THE VOLUME'S CACHE AND POWER** (`VOLUME_CACHE=1|lie`,
     // `VOLUME_CUT_AFTER=n`, scsi.zig): its WCE bit, said truly or not, and
-    // the write the power goes after.
+    // the write the power goes after; and the SYNCHRONIZE CACHEs that fail
+    // (`VOLUME_SYNC_FAIL=n`, `VOLUME_SYNC_FAIL_FOR=k`).
     var volume_cache: cache.Cache = undefined;
     defer if (volume.cache) |c| c.deinit();
     if (machine.volume != null) {
@@ -962,6 +963,12 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         }
         if (turned.get("VOLUME_CUT_AFTER")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
             volume.power.cut_after = n;
+        };
+        if (turned.get("VOLUME_SYNC_FAIL")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
+            volume.sync_fail_at = n;
+        };
+        if (turned.get("VOLUME_SYNC_FAIL_FOR")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
+            volume.sync_fail_for = n;
         };
     }
     if (count(init.environ, "PATIENCE_S")) |seconds| machine.patience_ns = seconds * std.time.ns_per_s;
