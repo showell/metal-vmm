@@ -914,7 +914,12 @@ spec has 30 and 32. It is fixed in v18 after its gates (B13). Item 44's
 question is answered by v18 (`io.durable`).
 
 - **B13.** `scsi.bring`'s config offsets to the spec's (30, 32), in v18.
-- **B14. v18's flush, proven on metal-vmm's volume**: gopher.elf from v17
+- **B14 done (2026-10-06, with item 68):** a chat post to gopher.elf on a
+  volume, `VOLUME_CUT_AT_EXIT=1`. Honest cache (`VOLUME_CACHE=1`): v17 0
+  SYNCHRONIZE CACHE, 303, message lost; v18 1 SYNCHRONIZE CACHE, 303, message
+  kept. Lying cache: both lose it, as expected (WCE=0 is believed). Still
+  open: H5 and H2 against gopher.elf, and this as a `long.sh` scenario (B19).
+- **B14 (as first written; `lie` was the wrong cache). v18's flush, proven on metal-vmm's volume**: gopher.elf from v17
   and from v18, each with `VOLUME_CACHE=lie` and `VOLUME_CUT_AFTER` at the
   write after a chat message's 303: v17 loses the message, v18 keeps it.
   Then H5 (`PEER_PIPELINE`) and H2 (`DHCP_LEASE_S`) against gopher.elf.
