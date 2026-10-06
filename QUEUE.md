@@ -536,7 +536,7 @@ this order, after 59 and 61-62. J5 is the box's (B16).
     PROTECT (7h), WRITE PROTECTED (27h); reads and SYNCHRONIZE CACHE still
     answer. Hand-set only. For the box: every save after it must fail
     visibly, none confirmed. **Was:** J2, a volume that turns read-only (`VOLUME_READ_ONLY_AT=n`), as proposed.
-65. **Stopped by CC; see 69.** J3, lies in the peer's UDP (`PEER_MANGLE` for DHCP).
+65. **The box's now (B18), at Steve's direction.** J3, lies in the peer's UDP (`PEER_MANGLE` for DHCP).
 66. **Done (CC, 2026-10-06).** `VOLUME_SYNC_US=us`: each SYNCHRONIZE CACHE
     owes that much more to the clock than `VOLUME_LATENCY_US`'s every
     command; the volume's line says the wait and SYNCHRONIZE CACHE's share
@@ -551,13 +551,7 @@ this order, after 59 and 61-62. J5 is the box's (B16).
     write of the post comes before the 303 and none after, so no
     `VOLUME_CUT_AFTER=n` puts the cut after the response. A person's knob,
     not a seed's. Then B14 is: v17 loses the message, v18 keeps it.
-69. **Item 65, reworded** (the box, 2026-10-06): this is a fuzz test of our
-    own DHCP client's parser, inside metal-vmm, with no network anywhere:
-    the model peer in `peer.zig` answers gopher-metal's DHCP request with a
-    reply damaged in one named way, as item 55 does for TCP, and the run
-    says whether `dhcp.zig` refused it. If something stops you again, say
-    what under Questions rather than dropping it silently.
-67. **Your proposals again** when 59 and 61-69 are done.
+67. **Your proposals again** when 59, 61-64, 66 and 68 are done.
 
 ## Proposed
 
@@ -888,6 +882,10 @@ question is answered by v18 (`io.durable`).
   (README, `ops/deploy`'s comment) landed mid-run. Key the pair by the git
   trees the image reads (`zig-server`, `pages`, `gallery`, and every
   `@embedFile` source `extract_assets.py` names), so a docs commit keeps it.
+- **B18 (was CC's 65, J3).** Lies in the peer's DHCP replies (`PEER_MANGLE`
+  for UDP: a length past the datagram, options off the end, a lease option
+  of the wrong length), so `proto.parseUdp` and `dhcp.zig`'s option walk meet
+  more than well-formed replies. The box's, not CC's (Steve, 2026-10-06).
 - **B17 (J5).** A coverage property per refusal in the guest's parsers
   (`proto.parseIpv4`, `tcp.handle`'s early returns), so a sweep shows which
   of `PEER_MANGLE`'s lies each parser met.
