@@ -797,7 +797,25 @@ effect of adding a property.
     **Done when** `store_sim` runs 1,000 seeds clean in `zig build
     properties`, and its properties are on the floor.
 
-80. **Phase E: the rest, and the census** (gopher-metal, with a doc about
+80. **Done (CC, 2026-10-06).** gopher-metal, one commit; `STORE-CENSUS.md`.
+    **Phase report:**
+    - *Reached:* `pvh` 4 of 4, `restart` 6 of 6 (with `pure_sim`'s 7),
+      `pages` 5 of 5, `rtc`'s decoding 6 of 6, `pit`'s settling 3 of 3,
+      `admin_reset`'s parsing 2 of 2, `ready` 1 of 1. Every module in `src/`
+      has a COVERAGE.md row. The census: 143 calls, 84 on the six, 23 not.
+    - *Parked:* none.
+    - *Asked:* the census's 23 calls that fit none of the six (`has`,
+      `stat`, `readAt`, `makeDir`, `removeTree`), each a question for Steve,
+      with where each might go; and 13 knobs proposed for the device-only
+      refusals, under COVERAGE.md's "For the box".
+    - *Surprised me:* angry-gopher already has a Store of its own, of twelve
+      operations, keeping FAT's rules on every host; `readAt` (Range
+      requests) is the likeliest seventh for ours. And two of my own oracles
+      were wrong before the code was: the page heap keeps a page for its
+      bitmap, and a foreign free panics on purpose.
+    - *The floor:* 221 before, 248 after; the same 2 long-tier lines under.
+
+    **Was:** **Phase E: the rest, and the census** (gopher-metal, with a doc about
     angry-gopher).
     - The rest of the floor, as in phases A and C: `scsi`, `virtio`'s rings,
       `pvh`'s memory map, `civil`, `wallclock`, `restart`. **Every** module
