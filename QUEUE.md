@@ -351,7 +351,7 @@ H proposals are approved in the order below.
 49. **Done (CC, `Rough.pipeline`; not yet run against gopher.elf).** **(metal-vmm) H5, pipelining** (`PEER_PIPELINE=1`), as you proposed it:
     does the table send a FIN or a reset with the second request unread, and
     does the client still get the whole first answer.
-50. **(metal-vmm) H3, frames that lie, from the peer** (`PEER_MANGLE=n`),
+50. **Done in item 55 (CC).** **(metal-vmm) H3, frames that lie, from the peer** (`PEER_MANGLE=n`),
     as proposed, in `FAULT_SEED`'s ranges. Every mangled frame must be
     dropped or refused by the guest, never crash it or reach the
     application; say which of gopher-metal's parsers (`proto.zig`,
@@ -407,7 +407,18 @@ yet: v18's gates (`box/v18`) are running on this box against metal-vmm's
 `interrupts` build, and a merge now would change what they test. The box
 merges 49-54 once they finish. Keep working on your branch meanwhile.
 
-55. **(metal-vmm) Item 50, H3, frames that lie, is still open**: it has no
+55. **Done (CC, 2026-10-06), with item 50.** `PEER_MANGLE=n[,m]` (and
+    `_RATE`, `_KIND`): a lying copy ahead of the frame picked, twelve kinds
+    (`src/mangle.zig`), each checked in a unit test against a port of
+    gopher-metal's own checks to be refused by the one `Kind.check` names
+    (`proto.parseIpv4`: version, header length and options, checksum,
+    total past the frame, fragment; `tcp.Table.handle`: too short for TCP,
+    not our address, not our port, data offset), and `zero_window` to reach
+    the connection. Drawn by a seed one time in four, last of its knobs,
+    so a quarter of seeds change their run; `sweep.sh` already fails a
+    seed whose page differs under it, which is the property. Fuzzed on dice
+    of its own. **Was:** **(metal-vmm) Item 50, H3, frames that lie, is
+    still open**: it has no
     commit and is not marked done. Take it first, as item 50 describes.
 56. **(metal-vmm) I2, a volume that is slow** (`VOLUME_LATENCY_US`), as you
     proposed. It is what tells us what v18's flush costs a chat message.
@@ -595,6 +606,15 @@ this machine survives.
 ## Questions
 
 *(For the box or Steve. Take the next item; do not wait.)*
+
+- **(CC, item 55) B14 wants `VOLUME_CACHE=1`, not `lie`.** Under `lie`
+  the volume holds writes and says WCE=0 in MODE SENSE, and v18's
+  `Block.flush` believes it (`write_cache == false`) and sends no
+  SYNCHRONIZE CACHE, so v18 loses the message too. `VOLUME_CACHE=1` says
+  WCE=1: v18 synchronizes and keeps it, v17 sends nothing and loses it,
+  which is the comparison B14 means. `lie` is the case where v18's rule
+  "a disk that says it writes through is believed" is a choice, and it
+  shows the loss, as it should.
 
 - **(CC, item 53) gopher-metal's `scsi.bring` reads max_target and max_lun
   4 bytes late.** virtio 1.2 §5.6.4 (and Linux's `virtio_scsi.h`) put

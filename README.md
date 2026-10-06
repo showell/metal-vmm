@@ -363,6 +363,21 @@ measured, and `sweep.sh` does it for every seed that cuts the power.
 
 ### And the peer can misbehave
 
+**And it can lie** (`PEER_MANGLE=n[,m]`, `PEER_MANGLE_RATE=k`, mangle.zig):
+the frame picked arrives after a copy of it that lies in one way, its sums
+made right so it meets the check meant for it: an IP version not 4, a
+header shorter than 20 bytes or with options, a bad header checksum, a total
+length past the frame or shorter than a TCP header, a fragment, an address
+or a port not the guest's, a TCP data offset too short or past the segment.
+Each kind in turn, or the one `PEER_MANGLE_KIND` names; the copy's data is
+`X`s. The guest must drop every one, so the run must end with the page the
+run without it gets: `sweep.sh` does not excuse a page that differs under
+it. `zero_window` alone is no lie (a window of 0 with the frame's own data,
+which must be taken). Only TCP frames get a copy; the schedule counts every
+frame. A seed draws it one time in four, last of all its knobs. The run
+ends saying which lies were sent and which of gopher-metal's checks
+(`proto.parseIpv4`, `tcp.Table.handle`) each meets.
+
 **The wire can lose and damage what the peer sends too**: `PEER_EAT=n` (or
 `n,m`) and `PEER_LOSS=k` as for the guest's frames, and `PEER_DAMAGE=n` and
 `PEER_DAMAGE_RATE=k`, which change a byte of the segment's checksum so the

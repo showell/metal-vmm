@@ -9,6 +9,7 @@ const net = @import("net.zig");
 const clock = @import("clock.zig");
 const entropy = @import("entropy.zig");
 const disk = @import("disk.zig");
+const mangle = @import("mangle.zig");
 const faults = @import("faults.zig");
 const wire = @import("peer.zig");
 const apic = @import("apic.zig");
@@ -94,6 +95,11 @@ pub fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void
     if (card.line.configured()) reportFaults("wire", "frames sent", &card.line.lost, ns);
     if (card.line.peer_lost.configured()) reportFaults("peer", "frames sent", &card.line.peer_lost, ns);
     if (card.line.peer_damaged.configured()) reportFaults("peer damage", "frames sent", &card.line.peer_damaged, ns);
+    if (card.line.peer_mangled.configured()) {
+        reportFaults("peer lies", "frames sent", &card.line.peer_mangled, ns);
+        var line: [512]u8 = undefined;
+        std.debug.print("{s}", .{mangledKinds(&card.line, &line)});
+    }
     if (block.refusals.configured()) {
         const shown: usize = @intCast(@min(block.refusals.refused.picked_count, block.refusals.sectors.len));
         reportFaultsWith("disk", "requests", &block.refusals.refused, ns, block.refusals.sectors[0..shown], block.refusals.kinds[0..shown]);
@@ -225,6 +231,35 @@ test "what the client got: one line, or its size, and a line a client when there
     , client(&peer, &buf));
 }
 
+/// **WHICH LIES WERE TOLD** (`PEER_MANGLE`): each kind sent, and the
+/// guest's check it meets (mangle.zig).
+pub fn mangledKinds(line: *const faults.Wire, buf: []u8) []const u8 {
+    var at: usize = 0;
+    const head = std.fmt.bufPrint(buf, "metal-vmm: peer lies:", .{}) catch return "";
+    at = head.len;
+    var any = false;
+    for (line.mangled, 0..) |n, i| {
+        if (n == 0) continue;
+        const k: mangle.Kind = @enumFromInt(i);
+        const out = std.fmt.bufPrint(buf[at..], "{s} {d} {s} ({s})", .{ if (any) "," else "", n, @tagName(k), k.check() }) catch break;
+        at += out.len;
+        any = true;
+    }
+    if (!any) {
+        const out = std.fmt.bufPrint(buf[at..], " none sent", .{}) catch "";
+        at += out.len;
+    }
+    if (line.mangled_not_tcp > 0) {
+        const out = std.fmt.bufPrint(buf[at..], "; {d} frames picked were not TCP", .{line.mangled_not_tcp}) catch "";
+        at += out.len;
+    }
+    if (at < buf.len) {
+        buf[at] = '\n';
+        at += 1;
+    }
+    return buf[0..at];
+}
+
 /// **A KNOB WHOSE MOMENT NEVER CAME SAYS SO**, one line each: a frame or a
 /// request named past the last there was, a reset due when there was no
 /// connection to reset, a vanish or a shut past the whole answer, a flood or
@@ -242,6 +277,7 @@ pub fn unspent(line: *const faults.Wire, peer: *const wire.Peer, drive: *const f
         .{ .name = "WIRE_EAT", .s = &line.lost, .of = "the guest sent" },
         .{ .name = "PEER_EAT", .s = &line.peer_lost, .of = "the peer sent" },
         .{ .name = "PEER_DAMAGE", .s = &line.peer_damaged, .of = "the peer sent" },
+        .{ .name = "PEER_MANGLE", .s = &line.peer_mangled, .of = "the peer sent" },
         .{ .name = "DISK_REFUSE", .s = &drive.refused, .of = if (drive.writes_only) "the guest wrote" else if (drive.reads_only) "the guest read" else "the guest made" },
     };
     for (named) |n| for (n.s.named) |k| {
@@ -422,6 +458,7 @@ test "the bad sectors' line" {
 pub fn pickedWord(what: []const u8) []const u8 {
     if (std.mem.eql(u8, what, "wire") or std.mem.eql(u8, what, "peer")) return "lost";
     if (std.mem.eql(u8, what, "peer damage")) return "damaged";
+    if (std.mem.eql(u8, what, "peer lies")) return "sent after a lying copy";
     return "refused";
 }
 

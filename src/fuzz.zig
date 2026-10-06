@@ -6,7 +6,8 @@
 //! and the interval timer and the real-time clock. And the peer's side: its
 //! clients, asking requests of any size, answered by whatever segments a
 //! guest might send them (item 37 was a 20 KB request it could not send).
-//! And a volume's SCSI controller (scsi.zig), on dice of its own.
+//! And a volume's SCSI controller (scsi.zig), and the peer's lying frames
+//! (mangle.zig), each on dice of its own.
 //!
 //! What must hold for every seed:
 //!   - nothing panics: an overflow, a read past guest memory, an `unreachable`
@@ -32,6 +33,7 @@ const peer_zig = @import("peer.zig");
 const frames = @import("frames.zig");
 const scsi = @import("scsi.zig");
 const cache_mod = @import("cache.zig");
+const mangle = @import("mangle.zig");
 
 /// Guest memory: small, so that random addresses land inside it often.
 const ram_bytes = 64 * 1024;
@@ -191,7 +193,37 @@ pub fn run(seed: u64) u64 {
         current_step = 2 * steps + step;
         volumeSide(w, vr);
     }
+    // **THE PEER'S LIES** (mangle.zig), on dice of their own: frames that
+    // are the peer's TCP, then bent anywhere, each made into every kind.
+    var lie_prng = std.Random.DefaultPrng.init(seed ^ 0x6c_69_65_73); // "lies"
+    const lr = lie_prng.random();
+    for (0..steps / 4) |step| {
+        current_step = 3 * steps + step;
+        lies(w, lr);
+    }
     return w.hash.final();
+}
+
+fn lies(w: *World, r: std.Random) void {
+    var buf: [2048]u8 = undefined;
+    var data: [1400]u8 = undefined;
+    const n = r.uintLessThan(usize, data.len);
+    r.bytes(data[0..n]);
+    const frame = frames.fakeTo(&buf, r.int(u16), r.int(u8), r.int(u32), r.int(u32), data[0..n]);
+    var bent: [2048]u8 = undefined;
+    @memcpy(bent[0..frame.len], frame);
+    // Now and then a byte of the headers anything, or the frame cut short.
+    if (r.boolean()) bent[r.uintLessThan(usize, 54)] = r.int(u8);
+    const len = if (r.uintLessThan(u8, 4) == 0) r.uintLessThan(usize, frame.len + 1) else frame.len;
+    for (mangle.kinds) |k| {
+        var out: [2048]u8 = undefined;
+        const lie = mangle.mangle(bent[0..len], k, &out) orelse {
+            w.note(0);
+            continue;
+        };
+        w.hash.update(lie);
+        w.card.line.hold(lie, w.now);
+    }
 }
 
 /// **A SCSI REQUEST SHAPED AS GOPHER-METAL SHAPES ONE, WITH ITS FIELDS

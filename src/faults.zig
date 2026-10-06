@@ -23,6 +23,7 @@
 //! this guest can survive. `lossy.sh` and `flaky.sh` draw those maps.
 
 const std = @import("std");
+const mangle = @import("mangle.zig");
 
 /// **WHICH ONES.** The same question for a frame on the wire and a request to
 /// the disk, so it is asked in one place: this is the nth of them — was n
@@ -105,6 +106,15 @@ pub const Wire = struct {
     /// peer ever sends. Each has its own dice.
     peer_lost: Schedule = .init(0x70_65_65_72_6c_6f_73_65), // "peerlose"
     peer_damaged: Schedule = .init(0x70_65_65_72_68_75_72_74), // "peerhurt"
+    /// **AND WHICH ARRIVE AFTER A COPY THAT LIES** (`PEER_MANGLE`,
+    /// mangle.zig): the copy first, of the kind `mangle_kind` names or the
+    /// next in turn, then the frame. Only TCP frames have a copy; the
+    /// schedule still counts every frame, as the others do.
+    peer_mangled: Schedule = .init(0x70_65_65_72_6c_69_65_73), // "peerlies"
+    mangle_kind: ?mangle.Kind = null,
+    /// Copies sent, by kind, and frames picked that were not TCP.
+    mangled: [mangle.kinds.len]u32 = @splat(0),
+    mangled_not_tcp: u32 = 0,
     /// How long a frame takes to reach the guest. Zero means it arrives in the
     /// same breath the guest's frame was sent, which is what the probes have
     /// always seen and what makes the peer look like a function call.
@@ -147,7 +157,9 @@ pub const Wire = struct {
         // Both are asked of every frame, so each counts every frame.
         const lose = self.peer_lost.picks();
         const damage = self.peer_damaged.picks();
+        const lie = self.peer_mangled.picks();
         if (lose) return;
+        if (lie) self.lieFirst(bytes, now);
         const slot = &self.held[self.next % in_flight];
         // A full wire drops the oldest rather than the newest, which is what a
         // queue that overflows does.
@@ -160,6 +172,26 @@ pub const Wire = struct {
             slot.bytes[if (tcp) 34 + 16 else 24] ^= 0x5A; // a checksum's byte
         }
         self.next += 1;
+    }
+
+    /// The lying copy of `bytes`, put on the wire ahead of it.
+    fn lieFirst(self: *Wire, bytes: []const u8, now: u64) void {
+        var total: u32 = 0;
+        for (self.mangled) |n| total += n;
+        const kind = self.mangle_kind orelse mangle.kinds[total % mangle.kinds.len];
+        var out: [frame_bytes + 64]u8 = undefined;
+        const copy = mangle.mangle(bytes, kind, &out) orelse {
+            self.mangled_not_tcp += 1;
+            return;
+        };
+        if (copy.len > frame_bytes) return;
+        const slot = &self.held[self.next % in_flight];
+        if (self.next - self.first >= in_flight) self.first += 1;
+        slot.due_ns = now + self.latency_ns;
+        slot.len = copy.len;
+        @memcpy(slot.bytes[0..copy.len], copy);
+        self.next += 1;
+        self.mangled[@intFromEnum(kind)] += 1;
     }
 
     /// The next frame that has arrived, or nothing. In the order they were
@@ -530,4 +562,24 @@ test "a range picks every one in it, and with numbers past eight of them" {
     try testing.expectEqual(@as(usize, 38), picked);
     // The first eight are remembered by number; the rest only counted.
     try testing.expectEqualSlices(u32, &.{ 2, 5, 6, 7, 8, 9, 10, 11 }, &s.picked);
+}
+
+test "PEER_MANGLE: the picked frame arrives after a copy that lies, each kind in turn, and a frame not TCP has none" {
+    const frames_zig = @import("frames.zig");
+    var w = Wire{};
+    w.peer_mangled.named[0] = .{ .lo = 2, .hi = 3 };
+    var buf: [256]u8 = undefined;
+    const frame = frames_zig.fakeTo(&buf, 80, 0x18, 1, 2, "hello");
+    w.hold(frame, 0); // the first: as sent
+    w.hold(frame, 0); // the second: a lie, then itself
+    w.hold(frame[0..20], 0); // the third: not TCP, so no copy
+    const want = [_]bool{ false, true, false, false };
+    for (want) |lies| {
+        const got = w.ready(0).?;
+        try testing.expectEqual(lies, !std.mem.eql(u8, got, frame) and got.len != 20);
+        w.take();
+    }
+    try testing.expectEqual(@as(?[]const u8, null), w.ready(0));
+    try testing.expectEqual(@as(u32, 1), w.mangled[0]);
+    try testing.expectEqual(@as(u32, 1), w.mangled_not_tcp);
 }

@@ -34,9 +34,11 @@
 //! | `PEER_FLOOD` | 1/4 | 1-8 SYNs, `PEER_FLOOD_GAP_US` 10,000-400,000 |
 //! | `PEER_SHUT_AFTER` | 1/4 | 1-20,000 bytes, `PEER_SHUT_FOR_US` 10,000-5,000,000 |
 //! | `PEER_MSS` | 1/4 | 1-1460 |
-//! | `DISK_ROT` | 1/8 | sector 0-4095, byte 0-511 (drawn last) |
+//! | `DISK_ROT` | 1/8 | sector 0-4095, byte 0-511 |
+//! | `PEER_MANGLE` | 1/4 | 1-3 of frames 1-40 (drawn last) |
 //!
-//! `PEER_FLOOD_AT_US`, `PEER_DAMAGE_RATE` and `DISK_REFUSE_RATE` are
+//! `PEER_FLOOD_AT_US`, `PEER_DAMAGE_RATE`, `PEER_MANGLE_RATE`,
+//! `PEER_MANGLE_KIND` and `DISK_REFUSE_RATE` are
 //! never drawn: a seed's flood starts with the client, and a seed's peer
 //! damage and disk refusals are named, not rated. Nor are `DISK_BAD_SECTOR`
 //! and `DISK_READS_ONLY`: a sector is worth naming only on a volume whose
@@ -68,6 +70,7 @@ pub const names = [_][]const u8{
     "PEER_IGNORE_WINDOW", "DISK_ROT",          "DISK_CACHE",       "PEER_RETRY",
     "RTC_BOOTS_AT",       "PEER_DRIP_US",      "PEER_PIPELINE",    "DHCP_LEASE_S",
     "VOLUME_CACHE",       "VOLUME_CUT_AFTER",  "VOLUME_SYNC_FAIL", "VOLUME_SYNC_FAIL_FOR",
+    "PEER_MANGLE",        "PEER_MANGLE_RATE",  "PEER_MANGLE_KIND",
 };
 
 fn index(comptime name: []const u8) usize {
@@ -144,6 +147,9 @@ pub const Knobs = struct {
         if (chance(r, 4)) k.number(index("PEER_MSS"), r.intRangeAtMost(u64, 1, 1460));
         // Drawn last, so every knob above is what each seed always drew.
         if (chance(r, 8)) k.pair(index("DISK_ROT"), r.uintLessThan(u64, 4096), r.uintLessThan(u64, 512));
+        // And after it, frames that lie (mangle.zig): one to three of the
+        // first 40, each kind in turn.
+        if (chance(r, 4)) k.list(index("PEER_MANGLE"), r, r.intRangeAtMost(u32, 1, 3), 1, 40);
         return k;
     }
 
@@ -238,7 +244,7 @@ test "different seeds turn different knobs, and every knob is turned by some see
         last_len = f.len;
     }
     for (turned, names) |t, n| {
-        // Sixteen knobs only a person sets: a seed's runs keep to the flood
+        // Eighteen knobs only a person sets: a seed's runs keep to the flood
         // and rates of the table above, and name no sector.
         if (!t and !std.mem.eql(u8, n, "PEER_DAMAGE_RATE") and !std.mem.eql(u8, n, "DISK_REFUSE_RATE") and
             !std.mem.eql(u8, n, "PEER_FLOOD_AT_US") and !std.mem.eql(u8, n, "DISK_BAD_SECTOR") and
@@ -247,7 +253,8 @@ test "different seeds turn different knobs, and every knob is turned by some see
             !std.mem.eql(u8, n, "RTC_BOOTS_AT") and !std.mem.eql(u8, n, "PEER_DRIP_US") and
             !std.mem.eql(u8, n, "PEER_PIPELINE") and !std.mem.eql(u8, n, "DHCP_LEASE_S") and
             !std.mem.eql(u8, n, "VOLUME_CACHE") and !std.mem.eql(u8, n, "VOLUME_CUT_AFTER") and
-            !std.mem.eql(u8, n, "VOLUME_SYNC_FAIL") and !std.mem.eql(u8, n, "VOLUME_SYNC_FAIL_FOR"))
+            !std.mem.eql(u8, n, "VOLUME_SYNC_FAIL") and !std.mem.eql(u8, n, "VOLUME_SYNC_FAIL_FOR") and
+            !std.mem.eql(u8, n, "PEER_MANGLE_RATE") and !std.mem.eql(u8, n, "PEER_MANGLE_KIND"))
         {
             std.debug.print("never turned: {s}\n", .{n});
             return error.TestUnexpectedResult;

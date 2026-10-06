@@ -2,6 +2,7 @@
 //! turned (knobs.zig), set on the wire, the disk and the peer before a run.
 
 const std = @import("std");
+const mangle = @import("mangle.zig");
 const kvm = @import("kvm.zig");
 const virtio = @import("virtio.zig");
 const net = @import("net.zig");
@@ -74,6 +75,11 @@ pub fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, rough: *wire.Roug
     numbers(&line.peer_damaged, k, "PEER_DAMAGE");
     if (k.get("PEER_LOSS")) |n| line.peer_lost.rate = std.fmt.parseInt(u32, n, 10) catch 0;
     if (k.get("PEER_DAMAGE_RATE")) |n| line.peer_damaged.rate = std.fmt.parseInt(u32, n, 10) catch 0;
+    // **FRAMES THAT LIE** (mangle.zig): which frames get a lying copy
+    // first, and of which kind, else each kind in turn.
+    numbers(&line.peer_mangled, k, "PEER_MANGLE");
+    if (k.get("PEER_MANGLE_RATE")) |n| line.peer_mangled.rate = std.fmt.parseInt(u32, n, 10) catch 0;
+    if (k.get("PEER_MANGLE_KIND")) |name| line.mangle_kind = std.meta.stringToEnum(mangle.Kind, name);
     // **A CLIENT THAT IGNORES THE WINDOW** sends what the guest must throw
     // away, so its timer runs to send it again.
     if (k.get("PEER_IGNORE_WINDOW")) |_| rough.ignore_window = true;

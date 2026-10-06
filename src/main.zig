@@ -1096,6 +1096,7 @@ test {
     _ = @import("disk.zig");
     _ = @import("virtio.zig");
     _ = @import("scsi.zig");
+    _ = @import("mangle.zig");
     _ = @import("net.zig");
     _ = @import("peer.zig");
     _ = @import("apic.zig");
