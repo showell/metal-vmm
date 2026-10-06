@@ -447,7 +447,7 @@ merges 49-54 once they finish. Keep working on your branch meanwhile.
     is, and excuses `VOLUME_CUT_AFTER` as `DISK_CUT_AFTER` is; unset,
     nothing it does changes (`sweep_test.sh` passes). **Was:** **(metal-vmm) I5, a seed that draws the volume's faults**, as proposed:
     no existing seed's run changes.
-59. **(gopher-metal) I4, the seam under `io.durable`, built for merging.**
+59. **Waiting (CC, 2026-10-06): not started, see Questions.** **(gopher-metal) I4, the seam under `io.durable`, built for merging.**
     As item 47 was: kernel code, on your branch, for the box to review.
     The rule "nothing joins a send queue while a write before it is
     unflushed" as a pure function of the writes, sends, held streams and
@@ -457,7 +457,8 @@ merges 49-54 once they finish. Keep working on your branch meanwhile.
     `origin/box/v18` for this one item; say so in the commit), since
     `antithesis-sdk` does not have v18 yet. Steve's standing rule applies:
     **an omitted flush is presumed a bug unless a comment defends it.**
-60. **Your proposals again** when 55-59 are done.
+60. **Done (CC, 2026-10-06), with 59 waiting.** J1-J5 under Proposed.
+    **Was:** your proposals again when 55-59 are done.
 
 ## Proposed
 
@@ -620,6 +621,32 @@ From item 54: the next five, most finding first (CC):
   disk's. Changes no existing seed's run: their draws come first, and the
   volume's are taken only when one is attached.
 
+From item 60: the next five, most finding first (CC):
+
+- **J1. A volume that goes away** (`VOLUME_GONE_AT=n`: from the nth
+  command the controller answers BAD_TARGET, as a DO volume detached under
+  a running droplet does). Chat's data is then unreachable mid-run: does a
+  post get a 5xx and not a 303, and does the next boot say "the volume this
+  machine serves is not attached" rather than serve from the boot disk?
+- **J2. A volume that turns read-only** (`VOLUME_READ_ONLY_AT=n`: MODE
+  SENSE's WP bit, and WRITE answered DATA PROTECT, key 7), which is what a
+  DO volume does after an I/O error on the host. Every save must fail
+  visibly; none may be confirmed.
+- **J3. Lies in the peer's UDP** (`PEER_MANGLE` for its DHCP frames: a UDP
+  length past the datagram, DHCP options running off the end, a lease
+  option of the wrong length). Item 55 mangles only TCP, so
+  `proto.parseUdp` and `dhcp.zig`'s option walk have only met well-formed
+  replies.
+- **J4. A flush that costs more than a read** (`VOLUME_SYNC_US`, beside
+  `VOLUME_LATENCY_US`): on network storage SYNCHRONIZE CACHE is the slow
+  command, and v18 sends one per response after a write, so its own price
+  is the number item 56 is for.
+- **J5 (the box's). A coverage property per refusal in the guest's
+  parsers** (`proto.parseIpv4`'s and `tcp.handle`'s early returns, as
+  "tcp: a damaged segment is dropped" already is), so a sweep's merged
+  coverage says which of `PEER_MANGLE`'s lies each parser met, rather than
+  only that the page held.
+
 Folded into existing items rather than new ones: M4, L1, L2, L3 into item 4
 (MSI-X); L4 into item 5 (APIC); L5 (0xCF9) waits until a reset is something
 this machine survives.
@@ -627,6 +654,35 @@ this machine survives.
 ## Questions
 
 *(For the box or Steve. Take the next item; do not wait.)*
+
+- **(CC, item 59) Not started: it needs `box/v18` on my branch.** Merging
+  `origin/box/v18` into `claude/great-wright-i7aste` in gopher-metal was
+  refused by this session's permission check (modifying a shared
+  resource), and I am pushing only that branch, so I have not built it.
+  Steve's call: allow that merge, or name another `claude/*` branch cut
+  from `box/v18` for the item, or wait for v18 to reach `antithesis-sdk`.
+  What I found reading v18 meanwhile, for whoever builds it:
+  - **Every entry to a send queue is covered or defended.** On v18,
+    `tcp.Table.queue` is called from `Stream.sendAll` (two places, after
+    `io.durable`), `Spill.push` (defended in its comment: its bytes passed
+    `sendAll`), and `serviceStreams`' carry, frames and ping (after its own
+    `io.durable` at the top); `probe/http.zig` and `probe/ladder.zig` are
+    other probes. `table.finish` sends no data. So no omitted flush is
+    undefended today.
+  - **The seam**: a pure `durable.zig` with a disk as `{ unflushed,
+    write_cache: ?bool, asks: bool }` (asks: it is SCSI, so it can be
+    told to synchronize) and `step(disk)`: `.none` (nothing written),
+    `.clear` (virtio-blk without FLUSH, or a disk that says it writes
+    through: durable once written) or `.synchronize`; and `settle(disk,
+    step, ok)`. `Block.flush` becomes `step`, then `scsi.synchronize` only
+    for `.synchronize`, then `settle`. The simulator drives `step` and
+    `settle` over writes, responses, stream turns, spill pushes and
+    SYNCHRONIZE outcomes (good, failed, ILLEGAL REQUEST), against what each
+    disk truly does (a cache, none, or one that lies), with properties: no
+    output claims a write not yet durable but after a flush that failed
+    for it (counted, the defended case) or a disk that lied; no
+    synchronize with nothing written since the last good one; after a
+    failure the next output synchronizes again.
 
 - **(CC, item 55) B14 wants `VOLUME_CACHE=1`, not `lie`.** Under `lie`
   the volume holds writes and says WCE=0 in MODE SENSE, and v18's
