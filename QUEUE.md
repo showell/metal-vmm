@@ -437,7 +437,15 @@ merges 49-54 once they finish. Keep working on your branch meanwhile.
     meets it is the case to run: `VOLUME_ATTENTION_AT` at a chat post's
     write, and the message still kept. **Was:** **(metal-vmm) I3, UNIT ATTENTION in the middle of a run**
     (`VOLUME_ATTENTION_AT=n`), as proposed.
-58. **(metal-vmm) I5, a seed that draws the volume's faults**, as proposed:
+58. **Done (CC, 2026-10-06).** `knobs.withVolume`: with `FAULT_SEED` and
+    `VOLUME` both set, a seed also draws `VOLUME_CACHE` (1 or lie),
+    `VOLUME_CUT_AFTER`, `VOLUME_SYNC_FAIL` (`_FOR`) and
+    `VOLUME_ATTENTION_AT`, on dice of their own; a test holds every other
+    knob of 500 seeds to what it was, and a run without a volume draws none.
+    **`sweep.sh` changed, additively**: `VOLUME_SITE=<image>` gives each run
+    a fresh copy as its volume, checks it with `sound.sh` as the boot disk
+    is, and excuses `VOLUME_CUT_AFTER` as `DISK_CUT_AFTER` is; unset,
+    nothing it does changes (`sweep_test.sh` passes). **Was:** **(metal-vmm) I5, a seed that draws the volume's faults**, as proposed:
     no existing seed's run changes.
 59. **(gopher-metal) I4, the seam under `io.durable`, built for merging.**
     As item 47 was: kernel code, on your branch, for the box to review.

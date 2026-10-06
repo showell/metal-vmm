@@ -565,7 +565,9 @@ never be seen, since that spin makes no exit. The volume's line says how long
 was waited. `VOLUME_ATTENTION_AT=n` makes CAPACITY DATA HAS CHANGED pending
 from the nth command, as a volume resized under a droplet tells it: told on
 the next command but INQUIRY, which is not performed, so the driver must send
-it again. Nothing changes unless `VOLUME` is set.
+it again. With `FAULT_SEED` too, a seed draws the volume's faults (all but
+the latency) on dice of their own, and `sweep.sh` sweeps them with
+`VOLUME_SITE=<image>`. Nothing changes unless `VOLUME` is set.
 
 The one PASS under a refusal is #1, the GPT header: `vfat` reads any failure to
 find a partition table as "no table" and mounts sector 0, which on this bare

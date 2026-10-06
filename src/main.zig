@@ -923,6 +923,8 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // (knobs.zig). A seeded run says what it chose, as the knobs that would
     // repeat it without the seed.
     var turned = if (count(init.environ, "FAULT_SEED")) |seed| knobs.Knobs.fromSeed(seed) else knobs.Knobs{};
+    // A seed's volume faults, only with a volume, so no run without one moves.
+    if (count(init.environ, "FAULT_SEED")) |seed| if (init.environ.getPosix("VOLUME") != null) turned.withVolume(seed);
     turned.overlay(init.environ);
     if (count(init.environ, "FAULT_SEED")) |seed| {
         var line: [1024]u8 = undefined;

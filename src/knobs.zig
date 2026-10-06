@@ -86,7 +86,7 @@ const Span = struct { at: u16, len: u16 };
 pub const Knobs = struct {
     /// What the seed chose, as the text a person would have typed.
     drawn: [names.len]?Span = @splat(null),
-    text: [512]u8 = undefined,
+    text: [640]u8 = undefined,
     used: usize = 0,
     /// What the environment set, which wins.
     set: [names.len]?[]const u8 = @splat(null),
@@ -153,6 +153,28 @@ pub const Knobs = struct {
         // first 40, each kind in turn.
         if (chance(r, 4)) k.list(index("PEER_MANGLE"), r, r.intRangeAtMost(u32, 1, 3), 1, 40);
         return k;
+    }
+
+    /// **AND THE VOLUME'S, WHEN ONE IS ATTACHED** (`VOLUME`, scsi.zig), on
+    /// dice of their own: every knob `fromSeed` drew is what it was, and a
+    /// run without a volume draws none of these. Not `VOLUME_LATENCY_US`,
+    /// which a sweep would wait out.
+    pub fn withVolume(self: *Knobs, seed: u64) void {
+        var prng = std.Random.DefaultPrng.init(seed ^ 0x76_6f_6c_75_6d_65); // "volume"
+        const r = prng.random();
+        if (chance(r, 2)) self.word(index("VOLUME_CACHE"), if (chance(r, 4)) "lie" else "1");
+        if (chance(r, 6)) self.number(index("VOLUME_CUT_AFTER"), r.intRangeAtMost(u64, 1, 60));
+        if (chance(r, 4)) {
+            self.number(index("VOLUME_SYNC_FAIL"), r.intRangeAtMost(u64, 1, 20));
+            if (r.boolean()) self.number(index("VOLUME_SYNC_FAIL_FOR"), r.intRangeAtMost(u64, 2, 5));
+        }
+        if (chance(r, 4)) self.number(index("VOLUME_ATTENTION_AT"), r.intRangeAtMost(u64, 1, 200));
+    }
+
+    fn word(self: *Knobs, i: usize, text: []const u8) void {
+        @memcpy(self.text[self.used..][0..text.len], text);
+        self.drawn[i] = .{ .at = @intCast(self.used), .len = @intCast(text.len) };
+        self.used += text.len;
     }
 
     fn chance(r: std.Random, one_in: u32) bool {
@@ -360,4 +382,25 @@ test "no seed and no knobs: nothing is turned" {
     var buf: [64]u8 = undefined;
     try testing.expectEqualStrings("none", k.format(&buf));
     for (names) |n| try testing.expect(k.get(n) == null);
+}
+
+test "a volume's knobs are drawn only with a volume, on dice of their own" {
+    var buf_a: [1024]u8 = undefined;
+    var buf_b: [1024]u8 = undefined;
+    var turned = [_]bool{false} ** 5;
+    const vol = [_][]const u8{ "VOLUME_CACHE", "VOLUME_CUT_AFTER", "VOLUME_SYNC_FAIL", "VOLUME_SYNC_FAIL_FOR", "VOLUME_ATTENTION_AT" };
+    for (0..500) |seed| {
+        const plain = Knobs.fromSeed(seed);
+        var with = Knobs.fromSeed(seed);
+        with.withVolume(seed);
+        for (vol) |n| try testing.expect(plain.get(n) == null);
+        // Every knob the seed drew without a volume, it draws with one.
+        for (names) |n| if (plain.get(n)) |v| try testing.expectEqualStrings(v, with.get(n).?);
+        for (vol, 0..) |n, i| if (with.get(n) != null) {
+            turned[i] = true;
+        };
+        _ = plain.format(&buf_a);
+        _ = with.format(&buf_b);
+    }
+    for (turned) |t| try testing.expect(t);
 }
