@@ -878,6 +878,13 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         std.debug.print("metal-vmm: FAULT_SEED={d} is {s}\n", .{ seed, turned.format(&line) });
     }
     tellTheFaults(&card.line, &block.refusals, &card.peer.rough, &turned);
+    // **THE LEASE THE PEER HANDS OUT** (`DHCP_LEASE_S`, a day unset): a
+    // short one runs out within a run, and the run's end says whether the
+    // guest renewed it.
+    if (turned.get("DHCP_LEASE_S")) |text| {
+        card.peer.lease_s = std.math.clamp(std.fmt.parseInt(u32, text, 10) catch 86_400, 1, std.math.maxInt(u32));
+        card.peer.lease_named = true;
+    }
     // **THE CALENDAR AS A KNOB** (`RTC_BOOTS_AT=unix`): the day the chip
     // boots on, from 1970 to 9999. Every run with it boots on that instant.
     if (turned.get("RTC_BOOTS_AT")) |text| {

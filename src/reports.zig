@@ -108,6 +108,10 @@ pub fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void
     if (pipelined(&card.peer.tcp)) |line| std.debug.print("{s}", .{line});
     if (card.peer.rough.retry > 0)
         std.debug.print("metal-vmm: the first client sent its request {d} times (PEER_RETRY={d})\n", .{ card.peer.sends(), card.peer.rough.retry });
+    if (card.peer.lease_named) {
+        var line: [512]u8 = undefined;
+        std.debug.print("{s}", .{card.peer.leaseLine(ns, &line)});
+    }
     if (block.cache) |c| {
         var line: [256]u8 = undefined;
         std.debug.print("{s}", .{c.line(&line, block.refusals.cut != null)});

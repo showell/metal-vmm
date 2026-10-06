@@ -360,7 +360,15 @@ H proposals are approved in the order below.
     and `tcp.zig`, so it is the simulators' to drive: every split of a
     request head's bytes, at the receive buffer's edge and past it (the
     431 path), against a reference parse.
-52. **(metal-vmm) H2, a lease that ends** (`DHCP_LEASE_S=n`). The peer's
+52. **Done (CC, 2026-10-06).** `DHCP_LEASE_S=s` is the lease the peer's
+    OFFER and ACK carry; each ACK while one is held is a renewal, one after
+    it ran out is counted late, and the run's end (only when the knob is
+    set, so no script's output changes) says
+    `metal-vmm: dhcp: a lease of s s; r renewals, l requests after it ran
+    out; it was held to the end` or `...; it ran out at t s of the guest's
+    time, unrenewed`. A knob only a person sets (not drawn). What the box
+    runs: `DHCP_LEASE_S=60` on a run past a minute, to see if gopher-metal
+    renews. **(metal-vmm) H2, a lease that ends** (`DHCP_LEASE_S=n`). The peer's
     side only; whether gopher-metal renews is what the box runs it to see.
 53. **(metal-vmm) The SCSI half of item 44.** Prod keeps chat's data on a
     DigitalOcean volume over virtio-scsi (gopher-metal `scsi.zig`), not

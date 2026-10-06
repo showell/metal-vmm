@@ -385,6 +385,7 @@ times are microseconds after it opens, sizes are bytes of the answer:
 | `PEER_PIPELINE=1` | sends its second request with the first, before any answer (it asks twice at least); the run ends saying how many answers came whole and whether the guest ended it with a FIN or a reset |
 | `PEER_DRIP_US=us` | sends each segment of its request `us` after the last (with `PEER_MSS` to make them small): a slow client, never silent and not done for a long while |
 | `PEER_RETRY=n` | asks again, on a new connection, what got no answer at all (closed or reset before a byte came), up to `n` times, as a browser does; the run ends saying how many times the request was sent |
+| `DHCP_LEASE_S=s` | offers and acknowledges a DHCP lease of `s` seconds (a day unset); the run ends saying how many requests renewed it, how many came after it ran out, and whether it was held to the end or ran out unrenewed, and when |
 | `PEER_IGNORE_WINDOW=1` | sends all its request at once, past the window the guest offered, and sends again what the guest threw away; a plain client keeps to the window |
 | `PEER_MSS=n` | sends its request `n` bytes a segment (never more than the guest's announced MSS, which it keeps to anyway: 536 if it announced none, 1460 at most) |
 
