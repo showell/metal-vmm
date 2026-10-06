@@ -537,7 +537,11 @@ this order, after 59 and 61-62. J5 is the box's (B16).
     answer. Hand-set only. For the box: every save after it must fail
     visibly, none confirmed. **Was:** J2, a volume that turns read-only (`VOLUME_READ_ONLY_AT=n`), as proposed.
 65. **J3, lies in the peer's UDP** (`PEER_MANGLE` for DHCP), as proposed.
-66. **J4, a flush that costs more than a read** (`VOLUME_SYNC_US`), as proposed.
+66. **Done (CC, 2026-10-06).** `VOLUME_SYNC_US=us`: each SYNCHRONIZE CACHE
+    owes that much more to the clock than `VOLUME_LATENCY_US`'s every
+    command; the volume's line says the wait and SYNCHRONIZE CACHE's share
+    of it. For the box: v17 and v18 with `VOLUME_LATENCY_US=500
+    VOLUME_SYNC_US=5000`, say, and a chat post's time. **Was:** J4, a flush that costs more than a read (`VOLUME_SYNC_US`), as proposed.
 67. **Your proposals again** when 59 and 61-66 are done.
 
 ## Proposed

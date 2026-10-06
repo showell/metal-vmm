@@ -108,6 +108,11 @@ pub const Scsi = struct {
     latency_ns: u64 = 0,
     owed_ns: u64 = 0,
     waited_ns: u64 = 0,
+    /// **A FLUSH THAT COSTS MORE** (`VOLUME_SYNC_US`): what each
+    /// SYNCHRONIZE CACHE costs on top of `latency_ns`, since on network
+    /// storage it is the slow command. `sync_waited_ns` is its share.
+    sync_latency_ns: u64 = 0,
+    sync_waited_ns: u64 = 0,
     /// UNIT ATTENTION, owed to the first command but INQUIRY.
     /// Pending: the additional sense code it is told with, POWER ON first.
     attention: ?u8 = asc_power_on,
@@ -288,6 +293,9 @@ pub const Scsi = struct {
 
     fn synchronize(self: *Scsi) Answer {
         self.synchronizes += 1;
+        self.owed_ns += self.sync_latency_ns;
+        self.waited_ns += self.sync_latency_ns;
+        self.sync_waited_ns += self.sync_latency_ns;
         if (self.sync_fail_at) |at| if (self.synchronizes >= at and self.synchronizes - at < self.sync_fail_for) {
             self.sync_failed += 1;
             return self.check(key_medium_error, asc_write_error);
@@ -401,8 +409,8 @@ pub const Scsi = struct {
         else
             "";
         var waited_buf: [64]u8 = undefined;
-        const waited = if (self.latency_ns != 0)
-            std.fmt.bufPrint(&waited_buf, "; {d} ms waited on it (VOLUME_LATENCY_US)", .{self.waited_ns / std.time.ns_per_ms}) catch ""
+        const waited = if (self.latency_ns != 0 or self.sync_latency_ns != 0)
+            std.fmt.bufPrint(&waited_buf, "; {d} ms waited on it, {d} ms of it on SYNCHRONIZE CACHE", .{ self.waited_ns / std.time.ns_per_ms, self.sync_waited_ns / std.time.ns_per_ms }) catch ""
         else
             "";
         var failed_buf: [64]u8 = undefined;
@@ -716,7 +724,7 @@ test "VOLUME_LATENCY_US: each command answered at once, and owed to the clock" {
     try testing.expect(FakeDriver.good(g.synchronize(&d)));
     try testing.expectEqual(@as(u64, 4 * std.time.ns_per_ms), vol.owed_ns);
     var buf: [256]u8 = undefined;
-    try testing.expect(std.mem.indexOf(u8, vol.line(&buf), "; 4 ms waited on it") != null);
+    try testing.expect(std.mem.indexOf(u8, vol.line(&buf), "; 4 ms waited on it, 0 ms of it on SYNCHRONIZE CACHE") != null);
 }
 
 test "VOLUME_ATTENTION_AT: the nth command meets UNIT ATTENTION, is not performed, and is sent again" {
@@ -781,4 +789,17 @@ test "VOLUME_READ_ONLY_AT: from the nth command WP is said, writes are DATA PROT
     _ = g.wce(&d);
     try testing.expectEqual(@as(u8, 0x80), g.ram[FakeDriver.data_at + 3] & 0x80);
     try testing.expectEqual(@as(u64, 1), vol.protected);
+}
+
+test "VOLUME_SYNC_US: a SYNCHRONIZE CACHE costs that much more than another command" {
+    var image: [16 * 512]u8 = @splat(0);
+    var vol = Scsi{ .image = &image, .attention = null, .latency_ns = std.time.ns_per_ms, .sync_latency_ns = 10 * std.time.ns_per_ms };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
+    try testing.expect(FakeDriver.good(g.synchronize(&d)));
+    try testing.expectEqual(@as(u64, 12 * std.time.ns_per_ms), vol.owed_ns);
+    var buf: [256]u8 = undefined;
+    try testing.expect(std.mem.indexOf(u8, vol.line(&buf), "; 12 ms waited on it, 10 ms of it on SYNCHRONIZE CACHE") != null);
 }

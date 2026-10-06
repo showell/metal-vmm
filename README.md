@@ -562,8 +562,10 @@ reach its media. `VOLUME_LATENCY_US=us` makes every command cost the guest
 that long: it is answered at once and the machine's clock moves on by the
 latency before the guest runs again, which is what a driver spinning on the
 used ring (gopher-metal's) would have counted; a completion held back would
-never be seen, since that spin makes no exit. The volume's line says how long
-was waited. `VOLUME_ATTENTION_AT=n` makes CAPACITY DATA HAS CHANGED pending
+never be seen, since that spin makes no exit. `VOLUME_SYNC_US=us` costs each
+SYNCHRONIZE CACHE that much more, the slow command on network storage. The
+volume's line says how long was waited, and how much of it on SYNCHRONIZE
+CACHE. `VOLUME_ATTENTION_AT=n` makes CAPACITY DATA HAS CHANGED pending
 from the nth command, as a volume resized under a droplet tells it: told on
 the next command but INQUIRY, which is not performed, so the driver must send
 it again. `VOLUME_GONE_AT=n` takes the volume away from the nth command on:
