@@ -557,7 +557,12 @@ write; either disk's cut empties both caches. The run ends with
 SENSEs, and whether a cut lost anything. `VOLUME_SYNC_FAIL=n` (with
 `VOLUME_SYNC_FAIL_FOR=k`, 1 by default) answers the nth SYNCHRONIZE CACHE,
 and the k-1 after it, MEDIUM ERROR, keeping nothing: a cache that cannot
-reach its media. Nothing changes unless `VOLUME` is set.
+reach its media. `VOLUME_LATENCY_US=us` makes every command cost the guest
+that long: it is answered at once and the machine's clock moves on by the
+latency before the guest runs again, which is what a driver spinning on the
+used ring (gopher-metal's) would have counted; a completion held back would
+never be seen, since that spin makes no exit. The volume's line says how long
+was waited. Nothing changes unless `VOLUME` is set.
 
 The one PASS under a refusal is #1, the GPT header: `vfat` reads any failure to
 find a partition table as "no table" and mounts sector 0, which on this bare

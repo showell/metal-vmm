@@ -93,6 +93,16 @@ pub const Scsi = struct {
     sync_fail_at: ?u64 = null,
     sync_fail_for: u64 = 1,
     sync_failed: u64 = 0,
+    /// **A VOLUME THAT TAKES TIME** (`VOLUME_LATENCY_US`): each command
+    /// answered costs the guest this long. gopher-metal waits on a command
+    /// by spinning on the used ring, which no exit interrupts, so a
+    /// completion held back would never be seen; instead it is answered at
+    /// once and the machine's clock moves on by the latency before the
+    /// guest runs again, which is what its spin would have counted.
+    /// `owed_ns` is what the run loop has yet to add; `waited_ns` all of it.
+    latency_ns: u64 = 0,
+    owed_ns: u64 = 0,
+    waited_ns: u64 = 0,
     /// UNIT ATTENTION, owed to the first command but INQUIRY.
     attention: bool = true,
     reads: u64 = 0,
@@ -136,6 +146,8 @@ pub const Scsi = struct {
             if (self.power.cut != null) return;
             const chain = d.take(ram, queue, &links) orelse break;
             const written = self.serve(ram, chain.links);
+            self.owed_ns += self.latency_ns;
+            self.waited_ns += self.latency_ns;
             // The command the power went out in is never answered.
             if (self.power.cut != null) return;
             d.complete(ram, queue, chain.head, written);
@@ -326,13 +338,18 @@ pub const Scsi = struct {
         else
             "write-through";
         const lost: u64 = if (self.cache) |c| c.lost else 0;
+        var waited_buf: [64]u8 = undefined;
+        const waited = if (self.latency_ns != 0)
+            std.fmt.bufPrint(&waited_buf, "; {d} ms waited on it (VOLUME_LATENCY_US)", .{self.waited_ns / std.time.ns_per_ms}) catch ""
+        else
+            "";
         var failed_buf: [64]u8 = undefined;
         const failed = if (self.sync_fail_at != null)
             std.fmt.bufPrint(&failed_buf, " ({d} failed, VOLUME_SYNC_FAIL)", .{self.sync_failed}) catch ""
         else
             "";
-        return std.fmt.bufPrint(buf, "metal-vmm: volume: {s}; {d} reads, {d} writes, {d} SYNCHRONIZE CACHE{s}, {d} MODE SENSE{s}\n", .{
-            mode, self.reads, self.writes, self.synchronizes, failed, self.mode_senses,
+        return std.fmt.bufPrint(buf, "metal-vmm: volume: {s}; {d} reads, {d} writes, {d} SYNCHRONIZE CACHE{s}, {d} MODE SENSE{s}{s}\n", .{
+            mode, self.reads, self.writes, self.synchronizes, failed, self.mode_senses, waited,
             if (self.power.cut != null) (if (lost > 0) "; the power cut lost sectors never synchronized" else "; the power cut lost nothing") else "",
         }) catch "metal-vmm: volume\n";
     }
@@ -625,4 +642,17 @@ test "VOLUME_SYNC_FAIL: the nth SYNCHRONIZE CACHE fails, keeps nothing, and the 
     try testing.expectEqual(@as(u8, 'a'), image[1 * 512]);
     try testing.expectEqual(@as(u8, 'b'), image[2 * 512]);
     try testing.expectEqual(@as(u64, 2), vol.sync_failed);
+}
+
+test "VOLUME_LATENCY_US: each command answered at once, and owed to the clock" {
+    var image: [16 * 512]u8 = @splat(0);
+    var vol = Scsi{ .image = &image, .attention = false, .latency_ns = 2 * std.time.ns_per_ms };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
+    try testing.expect(FakeDriver.good(g.synchronize(&d)));
+    try testing.expectEqual(@as(u64, 4 * std.time.ns_per_ms), vol.owed_ns);
+    var buf: [256]u8 = undefined;
+    try testing.expect(std.mem.indexOf(u8, vol.line(&buf), "; 4 ms waited on it") != null);
 }

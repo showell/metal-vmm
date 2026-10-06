@@ -562,6 +562,13 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
             reportCut(cut);
             return machine.stopped orelse 0;
         };
+        // **WHAT THE VOLUME'S COMMANDS TOOK** (`VOLUME_LATENCY_US`), paid
+        // to the clock before the guest runs again: its spin on the used
+        // ring would have counted that long.
+        if (machine.volume) |v| {
+            machine.time.ns += v.owed_ns;
+            v.owed_ns = 0;
+        }
         if (machine.volume) |v| if (v.power.cut) |cut| {
             if (machine.write_cache) |c| c.lose();
             if (v.cache) |c| c.lose();
@@ -963,6 +970,9 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         }
         if (turned.get("VOLUME_CUT_AFTER")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
             volume.power.cut_after = n;
+        };
+        if (turned.get("VOLUME_LATENCY_US")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |us| {
+            volume.latency_ns = us * std.time.ns_per_us;
         };
         if (turned.get("VOLUME_SYNC_FAIL")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
             volume.sync_fail_at = n;

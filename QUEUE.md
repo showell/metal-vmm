@@ -420,7 +420,15 @@ merges 49-54 once they finish. Keep working on your branch meanwhile.
     of its own. **Was:** **(metal-vmm) Item 50, H3, frames that lie, is
     still open**: it has no
     commit and is not marked done. Take it first, as item 50 describes.
-56. **(metal-vmm) I2, a volume that is slow** (`VOLUME_LATENCY_US`), as you
+56. **Done (CC, 2026-10-06).** `VOLUME_LATENCY_US=us`: each command the
+    volume answers is owed to the clock, which the run loop pays before the
+    guest runs again. Not a completion held back: gopher-metal's `Q.wait`
+    spins on the used ring with `pause` and makes no exit, so it would
+    never see one (the same limit as `dhcp.exchange`, faults.zig); the
+    spin's TSC reads see the time pass instead, as `busy_ticks` does on a
+    droplet. The volume's line adds "N ms waited on it". For the box: v17
+    and v18 under the same latency, the client's time for a chat post, is
+    what v18's flush costs. **Was:** **(metal-vmm) I2, a volume that is slow** (`VOLUME_LATENCY_US`), as you
     proposed. It is what tells us what v18's flush costs a chat message.
 57. **(metal-vmm) I3, UNIT ATTENTION in the middle of a run**
     (`VOLUME_ATTENTION_AT=n`), as proposed.
