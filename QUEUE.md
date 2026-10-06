@@ -567,7 +567,19 @@ this order, after 59 and 61-62. J5 is the box's (B16).
 this order. v18 serves (gopher-metal `master` = `box/v18`). B14 is done with
 your item 68 (v17 loses the message, v18 keeps it), and K1 is its next step.
 
-70. **K1, a sweep that judges durability, not the page**, as proposed.
+70. **Done (CC, 2026-10-06).** `sweep.sh` with `POST=<request>`,
+    `READ_BACK=<path>`, `MARK=<text>` and `VOLUME_SITE`: each seed posts
+    with `VOLUME_CUT_AT_EXIT=1` and its drawn volume faults, then an unhurt
+    boot on a copy of that volume asks for `READ_BACK`. A 303 whose message
+    the read-back lacks fails, but under `VOLUME_CACHE=lie` or
+    `VOLUME_SYNC_FAIL` ("lost (allowed: ...)", the design's own losses, as
+    `durable_sim` excuses them). No reader for FAT on the image: the
+    kernel itself reads it back, as the README's write-path check did, so
+    no mtools. The page is not compared; the attached volume is still
+    checked with `sound.sh`. `sweep_durable_test.sh`, seven seeds told in
+    advance; `sweep_test.sh` unchanged and passing. Not run against
+    gopher.elf here (no KVM): the box's B14 request and `/chat/recent` are
+    the obvious `POST` and `READ_BACK`. **Was:** K1, a sweep that judges durability, not the page, as proposed.
 71. **K2, a write cache that writes back in its own order**, as proposed.
 72. **K3, crowds the size of the kernel's table**, as proposed.
 73. **K4, an edge floor** (`report.py --edges`), as proposed.

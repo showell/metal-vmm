@@ -34,6 +34,24 @@
 # volume (scsi.zig), so each seed also draws the volume's faults
 # (knobs.zig, `withVolume`); its copy must be sound too, and VOLUME_CUT_AFTER
 # may cost the page as DISK_CUT_AFTER does. Unset, nothing here changes.
+#
+# **A SWEEP THAT JUDGES DURABILITY, NOT THE PAGE** (QUEUE item 70): with
+# POST=<request file>, READ_BACK=<path> and MARK=<text>, and VOLUME_SITE,
+# every run sends POST's bytes (a chat post, with its session cookie) instead
+# of asking for a page, with VOLUME_CUT_AT_EXIT=1, so each write cache loses
+# what was never synchronized when the guest stops. Then the same kernel is
+# booted again, unhurt, on a copy of that volume, and asked for READ_BACK.
+# The verdict:
+#
+#   - **told 303, and MARK is not in the read-back: FAIL**, whatever else the
+#     seed did, but where the volume's cache lied (VOLUME_CACHE=lie: WCE=0 is
+#     believed) or a SYNCHRONIZE CACHE failed (VOLUME_SYNC_FAIL: the response
+#     goes out anyway, by design), which are "lost (allowed: ...)";
+#   - not told 303: nothing was promised, kept or not;
+#   - a read-back boot that gets no page: FAIL.
+#
+# The page is not compared. The unhurt run must be told 303 and keep MARK,
+# and the pristine volume must not hold it, or nothing can be judged.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
@@ -53,6 +71,13 @@ if [ -n "${KEEP:-}" ]; then WORK="$KEEP"; mkdir -p "$WORK"; else WORK="$(mktemp 
 [ -f "$REPORT" ] || { echo "no $REPORT; set COVERAGE_SDK=<zig-coverage-sdk checkout>"; exit 1; }
 [ -f "$KERNEL" ] || { echo "no $KERNEL"; exit 1; }
 [ -f "$SITE" ] || { echo "no volume at $SITE; set SITE=<image>"; exit 1; }
+DURABLE=""
+if [ -n "${POST:-}" ]; then
+  [ -f "$POST" ] || { echo "no request at POST=$POST"; exit 1; }
+  [ -n "${READ_BACK:-}" ] && [ -n "${MARK:-}" ] || { echo "POST needs READ_BACK=<path> and MARK=<text>"; exit 1; }
+  [ -n "${VOLUME_SITE:-}" ] || { echo "POST needs VOLUME_SITE=<image>: the message is kept on the volume"; exit 1; }
+  DURABLE=yes
+fi
 COVERAGE="$WORK/coverage.jsonl"
 : > "$COVERAGE"
 
@@ -60,16 +85,33 @@ COVERAGE="$WORK/coverage.jsonl"
 run() {
   local name="$1"; shift
   cp "$SITE" "$WORK/$name.img"
-  local volume=()
+  local volume=() post=()
   if [ -n "${VOLUME_SITE:-}" ]; then
     cp "$VOLUME_SITE" "$WORK/$name.vol"
     volume=(VOLUME="$WORK/$name.vol")
   fi
-  env "$@" "${volume[@]}" COVERAGE_OUT="$COVERAGE" PEER_BODY="$WORK/$name.body" \
+  [ -z "$DURABLE" ] || post=(PEER_REQUEST="$POST" VOLUME_CUT_AT_EXIT=1)
+  env "$@" "${volume[@]}" "${post[@]}" COVERAGE_OUT="$COVERAGE" PEER_BODY="$WORK/$name.body" \
     timeout "$RUN_TIMEOUT" "$VMM" "$KERNEL" "$WORK/$name.img" "" "$PATH_WANTED" > "$WORK/$name.log" 2>&1
   echo $? > "$WORK/$name.exit"
   [ -f "$WORK/$name.body" ] || : > "$WORK/$name.body"
 }
+
+# read_back <name> [volume]: an unhurt boot on a copy of that run's volume
+# (or the one named), asking for READ_BACK; its page in <name>.read, its
+# status in <name>.readstatus. The run's own volume stays as the run left it,
+# for sound.sh.
+read_back() {
+  local name="$1" vol="${2:-$WORK/$1.vol}"
+  cp "$SITE" "$WORK/$name.readimg"
+  cp "$vol" "$WORK/$name.readvol"
+  env VOLUME="$WORK/$name.readvol" PEER_BODY="$WORK/$name.read" \
+    timeout "$RUN_TIMEOUT" "$VMM" "$KERNEL" "$WORK/$name.readimg" "" "$READ_BACK" > "$WORK/$name.readlog" 2>&1
+  [ -f "$WORK/$name.read" ] || : > "$WORK/$name.read"
+  sed -n 's/^peer: \([0-9]*\).*/\1/p' "$WORK/$name.readlog" | head -1 > "$WORK/$name.readstatus"
+  rm -f "$WORK/$name.readimg" "$WORK/$name.readvol"
+}
+kept() { grep -qF -- "$MARK" "$WORK/$1.read"; }
 
 status_of() { sed -n 's/^peer: \([0-9]*\).*/\1/p' "$WORK/$1.log" | head -1; }
 knobs_of() { sed -n 's/^metal-vmm: FAULT_SEED=[0-9]* is //p' "$WORK/$1.log" | head -1; }
@@ -93,6 +135,23 @@ verdict() {
   if [ -n "${VOLUME_SITE:-}" ] && ! cmp -s "$WORK/$name.vol" "$VOLUME_SITE"; then
     "$SOUND" "$WORK/$name.vol" > "$WORK/$name.vsound" 2>&1 || why="$why, the attached volume is not sound"
   fi
+  if [ -n "$DURABLE" ]; then
+    local read_status
+    read_status=$(cat "$WORK/$name.readstatus")
+    if [ "$read_status" != "200" ]; then
+      why="$why, the read-back boot got no page (status ${read_status:-none})"
+    elif [ "$status" = 303 ] && ! kept "$name"; then
+      case " $knobs" in *" VOLUME_CACHE=lie"*) excuse="VOLUME_CACHE=lie" ;; esac
+      case " $knobs" in *" VOLUME_SYNC_FAIL="*) excuse="$excuse${excuse:+, }VOLUME_SYNC_FAIL" ;; esac
+      [ -n "$excuse" ] || why="$why, told 303 and the message is not on the volume"
+    fi
+    if [ -n "$why" ]; then echo "FAIL: ${why#, }"
+    elif [ -n "$excuse" ]; then echo "lost (allowed: $excuse)"
+    elif [ "$status" = 303 ]; then echo "ok, kept"
+    elif kept "$name"; then echo "ok, not told, kept"
+    else echo "ok, not told, not kept"; fi
+    return
+  fi
   if [ "$status" != "$(status_of unhurt)" ] || ! cmp -s "$WORK/$name.body" "$WORK/unhurt.body"; then
     for k in PEER_RESET_AT PEER_VANISH_AFTER DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DISK_ROT VOLUME_CUT_AFTER; do
       case " $knobs" in *" $k="*) excuse="$excuse${excuse:+, }$k" ;; esac
@@ -109,6 +168,16 @@ verdict() {
 
 run unhurt
 unhurt_status=$(status_of unhurt)
+if [ -n "$DURABLE" ]; then
+  read_back pristine "$VOLUME_SITE"
+  read_back unhurt
+  ! kept pristine || { echo "the pristine volume already holds MARK: nothing can be judged"; exit 2; }
+  if [ "$unhurt_status" != 303 ] || ! kept unhurt; then
+    echo "the unhurt post was told ${unhurt_status:-nothing} and its read-back $(kept unhurt && echo holds || echo lacks) MARK: nothing can be judged"
+    exit 2
+  fi
+  echo "durability: each seed posts $POST, then reads back $READ_BACK for \"$MARK\""
+fi
 echo "unhurt: exit $(cat "$WORK/unhurt.exit"), status ${unhurt_status:-none}, $(wc -c < "$WORK/unhurt.body") bytes of $PATH_WANTED"
 [ -n "$unhurt_status" ] || echo "  (the unhurt run got no page: every seed is judged against that)"
 printf '%-6s %-4s %-6s %-8s %-40s %s\n' seed exit status bytes verdict knobs
@@ -119,10 +188,11 @@ allowed=0
 seed="$FIRST"
 while [ "$seed" -le "$LAST" ]; do
   run "seed$seed" FAULT_SEED="$seed"
+  [ -z "$DURABLE" ] || read_back "seed$seed"
   v=$(verdict "seed$seed")
   case "$v" in
-    ok) ok=$((ok + 1)) ;;
-    differs*) allowed=$((allowed + 1)) ;;
+    ok*) ok=$((ok + 1)) ;;
+    differs* | lost*) allowed=$((allowed + 1)) ;;
     *) failing="$failing $seed" ;;
   esac
   printf '%-6s %-4s %-6s %-8s %-40s %s\n' "$seed" "$(cat "$WORK/seed$seed.exit")" "$(status_of "seed$seed")" \
@@ -138,9 +208,17 @@ else python3 "$REPORT" "$COVERAGE" || merged=1; fi
 
 echo
 total=$((LAST - FIRST + 1))
-echo "$total seeds: $ok ok, $allowed differ as their faults allow, $(echo $failing | wc -w) failed"
+if [ -n "$DURABLE" ]; then
+  echo "$total seeds: $ok ok, $allowed lost as their faults allow, $(echo $failing | wc -w) failed"
+else
+  echo "$total seeds: $ok ok, $allowed differ as their faults allow, $(echo $failing | wc -w) failed"
+fi
 for s in $failing; do
   echo "  FAULT_SEED=$s: $(verdict "seed$s")"
-  echo "    repeat it: $(knobs_of "seed$s") TRANSPORT=$TRANSPORT $VMM $KERNEL <volume> \"\" $PATH_WANTED"
+  if [ -n "$DURABLE" ]; then
+    echo "    repeat it: $(knobs_of "seed$s") PEER_REQUEST=$POST VOLUME=<a copy of $VOLUME_SITE> VOLUME_CUT_AT_EXIT=1 TRANSPORT=$TRANSPORT $VMM $KERNEL <disk> \"\" /; then read back $READ_BACK"
+  else
+    echo "    repeat it: $(knobs_of "seed$s") TRANSPORT=$TRANSPORT $VMM $KERNEL <volume> \"\" $PATH_WANTED"
+  fi
 done
 [ -z "$failing" ] && [ $merged = 0 ]

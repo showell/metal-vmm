@@ -450,6 +450,20 @@ every run's coverage (`FLOOR=<file>` to gate on one), and ends with the
 failing seeds as the knobs that repeat them. `./sweep_test.sh` checks its
 verdicts against a fake machine told in advance what each seed does.
 
+**A sweep that judges durability, not the page:** with `POST=<request
+file>`, `READ_BACK=<path>`, `MARK=<text>` and `VOLUME_SITE=<image>`, each
+seed sends a chat post (its session cookie in the request) with
+`VOLUME_CUT_AT_EXIT=1` and the volume's faults its seed draws, and then the
+same kernel boots again, unhurt, on a copy of that volume and asks for
+`READ_BACK`. **A 303 for a message the read-back does not hold fails**,
+whatever the seed did, but where the cache lied (`VOLUME_CACHE=lie`) or a
+SYNCHRONIZE CACHE failed (`VOLUME_SYNC_FAIL`), where losing it is the
+design's and the verdict says "lost (allowed: ...)". No 303 promised
+nothing. A read-back that gets no page fails. It is B14, swept: the unhurt
+post must be told 303 and keep `MARK`, and the pristine volume must not
+hold it, or the sweep stops with exit 2. `./sweep_durable_test.sh` checks
+its verdicts the same way.
+
 ### What the guest says it reached
 
 A gopher-metal kernel built `-Dcoverage` prints zig-coverage-sdk's JSONL on
