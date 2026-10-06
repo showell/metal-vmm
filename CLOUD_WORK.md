@@ -113,6 +113,7 @@ building on it.
 | metal-vmm | `master` | the box | untouched until Steve merges `interrupts` |
 | gopher-metal | `antithesis-sdk` | the box | the base for the simulators: branch from it, the box merges into it |
 | gopher-metal | `claude/<your session's name>` | you | simulator work, rebased on `origin/antithesis-sdk` |
+| gopher-metal | `box/v18` | the box | the next image after v17: flush before any response leaves (B11). Read it; do not branch from it |
 | gopher-metal | `master` | the box | **what serves lynrummy.com. Never push, never branch from it.** |
 
 Use the same `claude/<name>` in both repos. Each QUEUE.md item says which
