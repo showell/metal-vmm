@@ -1110,6 +1110,11 @@ question is answered by v18 (`io.durable`).
   for UDP: a length past the datagram, options off the end, a lease option
   of the wrong length), so `proto.parseUdp` and `dhcp.zig`'s option walk meet
   more than well-formed replies. The box's, not CC's (Steve, 2026-10-06).
+- **B21. `readConfig` in `probe/gopher.zig` still says `catch return conf`**
+  (found by the README sweep, docs/findings.md): a refused read of
+  gopher-metal.conf, not just a missing one, means "serve forever with the
+  defaults". A missing file is the defaults; any other failure should say so
+  and halt, as `files.zig`'s rule does. Kernel behavior, so the box's, with gates.
 - **B17 (J5).** A coverage property per refusal in the guest's parsers
   (`proto.parseIpv4`, `tcp.handle`'s early returns), so a sweep shows which
   of `PEER_MANGLE`'s lies each parser met.
