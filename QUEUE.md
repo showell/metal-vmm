@@ -370,7 +370,20 @@ H proposals are approved in the order below.
     runs: `DHCP_LEASE_S=60` on a run past a minute, to see if gopher-metal
     renews. **(metal-vmm) H2, a lease that ends** (`DHCP_LEASE_S=n`). The peer's
     side only; whether gopher-metal renews is what the box runs it to see.
-53. **(metal-vmm) The SCSI half of item 44.** Prod keeps chat's data on a
+53. **Done (CC, 2026-10-06): built, it was small.** `VOLUME=<file>` is a
+    virtio-scsi controller (device 8, three queues, QEMU's config numbers)
+    with one disk at 0:0 (`src/scsi.zig`), answering the six commands v18
+    sends and TEST UNIT READY; UNIT ATTENTION once after power-on, which
+    v18's `commandSettled` sends again; BAD_TARGET elsewhere.
+    `VOLUME_CACHE=1|lie` is the WCE bit with `DISK_CACHE`'s semantics, and
+    `VOLUME_CUT_AFTER=n` the power. Tested by a fake driver that builds
+    requests as v18's `scsi.command` does, and in fuzz.zig on dice of its
+    own (every existing seed is the run it was). What the box runs, with a
+    FAT16 volume image chat's data is on: `VOLUME=vol.img VOLUME_CACHE=1
+    VOLUME_CUT_AFTER=n` on v18 keeps the message a 303 confirmed, and on
+    `antithesis-sdk`'s `scsi.zig` (no flush) loses it; `VOLUME_CACHE=lie`
+    loses it on both. One finding for the driver, under Questions. **Was:**
+    **(metal-vmm) The SCSI half of item 44.** Prod keeps chat's data on a
     DigitalOcean volume over virtio-scsi (gopher-metal `scsi.zig`), not
     virtio-blk, and `scsi.zig` sends no SYNCHRONIZE CACHE either. If
     metal-vmm has no virtio-scsi device, write down under Questions what
@@ -545,6 +558,17 @@ this machine survives.
 ## Questions
 
 *(For the box or Steve. Take the next item; do not wait.)*
+
+- **(CC, item 53) gopher-metal's `scsi.bring` reads max_target and max_lun
+  4 bytes late.** virtio 1.2 §5.6.4 (and Linux's `virtio_scsi.h`) put
+  `max_channel` at 28 (le16), `max_target` at 30 (le16) and `max_lun` at
+  32 (le32); `bring` reads `configRead16(device, 32)` and
+  `configRead32(device, 36)`. So its max_target is max_lun's low half
+  (QEMU's 16383, clamped to 63) and its max_lun is whatever lies past the
+  config (QEMU on PCI answers all ones there, clamped to 7; metal-vmm
+  answers 0). It finds a disk at 0:0 either way, and would miss one at a
+  LUN past 0 here. 30 and 32 are the spec's; the box's call, being driver
+  code.
 
 - **(CC, item 44) gopher-metal never flushes, and never negotiates FLUSH.**
   Its virtio driver (`negotiate`, `want_low`) asks for no feature in word 0

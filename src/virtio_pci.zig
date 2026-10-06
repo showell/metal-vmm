@@ -70,6 +70,7 @@ pub const Function = struct {
         return switch (self.device.id) {
             virtio.device_id_net => 0x02_00_00, // network, ethernet
             virtio.device_id_block => 0x01_00_00, // mass storage, SCSI-ish
+            virtio.device_id_scsi => 0x01_00_00, // mass storage, SCSI
             else => 0xFF_00_00, // unclassified
         };
     }

@@ -6,6 +6,7 @@
 //! and the interval timer and the real-time clock. And the peer's side: its
 //! clients, asking requests of any size, answered by whatever segments a
 //! guest might send them (item 37 was a 20 KB request it could not send).
+//! And a volume's SCSI controller (scsi.zig), on dice of its own.
 //!
 //! What must hold for every seed:
 //!   - nothing panics: an overflow, a read past guest memory, an `unreachable`
@@ -29,6 +30,8 @@ const clock = @import("clock.zig");
 const coverage = @import("coverage.zig");
 const peer_zig = @import("peer.zig");
 const frames = @import("frames.zig");
+const scsi = @import("scsi.zig");
+const cache_mod = @import("cache.zig");
 
 /// Guest memory: small, so that random addresses land inside it often.
 const ram_bytes = 64 * 1024;
@@ -80,6 +83,10 @@ const World = struct {
     pit: clock.Pit = .{},
     rtc: clock.Rtc = .{},
     peer: peer_zig.Peer = .{},
+    volume_image: [disk_bytes]u8 = @splat(0),
+    volume: scsi.Scsi = undefined,
+    volume_device: virtio.Device = undefined,
+    volume_cache: cache_mod.Cache = undefined,
     request: [24 * 1024]u8 = undefined,
     now: u64 = 0,
     hash: std.hash.Wyhash = .init(0),
@@ -92,6 +99,8 @@ const World = struct {
         _ = self.bus.plug(1, &self.block_device, &self.lapic);
         _ = self.bus.plug(2, &self.card_device, &self.lapic);
         _ = self.bus.plug(3, &self.dice_device, &self.lapic);
+        self.volume = .{ .image = &self.volume_image };
+        self.volume_device = self.volume.device();
     }
 
     fn note(self: *World, value: u64) void {
@@ -165,7 +174,121 @@ pub fn run(seed: u64) u64 {
         w.now += pr.uintLessThan(u64, 5_000_000);
         peerSide(w, pr);
     }
+    // **THE VOLUME'S HALF** (scsi.zig), on dice of its own for the same
+    // reason: a SCSI controller and its disk, with a write cache that tells
+    // the truth or lies, and the power cut after some write.
+    var volume_prng = std.Random.DefaultPrng.init(seed ^ 0x73_63_73_69); // "scsi"
+    const vr = volume_prng.random();
+    w.volume_cache = .{ .gpa = std.heap.page_allocator, .image = &w.volume_image, .lies = vr.boolean() };
+    defer w.volume_cache.deinit();
+    if (vr.boolean()) w.volume.cache = &w.volume_cache;
+    if (vr.uintLessThan(u8, 4) == 0) w.volume.power.cut_after = vr.uintLessThan(u64, 40);
+    for (0..steps) |step| {
+        current_step = 2 * steps + step;
+        volumeSide(w, vr);
+    }
     return w.hash.final();
+}
+
+/// **A SCSI REQUEST SHAPED AS GOPHER-METAL SHAPES ONE, WITH ITS FIELDS
+/// WRONG**: the header, the data and the response anywhere and any length,
+/// in any order now and then; a LUN, a command of the six or any other, an
+/// LBA and a count of anything. Or a queue laid out any way, or a sync.
+fn volumeSide(w: *World, r: std.Random) void {
+    const d = &w.volume_device;
+    if (r.uintLessThan(u8, 8) == 0) {
+        const qi = r.uintLessThan(usize, d.queues.len);
+        const q = &d.queues[qi];
+        q.desc = if (r.boolean()) r.uintLessThan(u64, ram_bytes) else pick(r);
+        q.avail = if (r.boolean()) r.uintLessThan(u64, ram_bytes) else pick(r);
+        q.used = if (r.boolean()) r.uintLessThan(u64, ram_bytes) else pick(r);
+        q.size = @truncate(if (r.boolean()) r.uintLessThan(u64, 300) else pick(r));
+        q.ready = @truncate(pick(r) & 1);
+        d.notified(d.context, d, &w.ram, @intCast(qi));
+        w.note(virtio.readInt(u16, &w.ram, q.used +% 2));
+        return;
+    }
+    if (r.uintLessThan(u8, 16) == 0) {
+        w.note(d.read(0x100 + r.uintLessThan(u64, 48), @intCast(width(r))));
+        return;
+    }
+    const q = &d.queues[scsi.request_queue];
+    q.* = .{ .size = 8, .ready = 1, .desc = 0x100, .avail = 0x200, .used = 0x300 };
+    d.may_dma = true;
+    const header: u64 = if (r.uintLessThan(u8, 8) != 0) 0x400 else pick(r);
+    const response: u64 = if (r.uintLessThan(u8, 8) != 0) 0x500 else pick(r);
+    const data: u64 = if (r.uintLessThan(u8, 8) != 0) 0x1000 else pick(r);
+    // A count near the disk's 64 sectors, and as often as not the buffer
+    // that fits it, so that reads and writes land as well as fail.
+    const count = r.uintLessThan(u16, 10);
+    const data_len: u32 = switch (r.uintLessThan(u8, 4)) {
+        0, 1 => @as(u32, count) * 512,
+        2 => 512 * r.uintLessThan(u32, 9),
+        else => @truncate(pick(r)),
+    };
+    const header_len: u32 = if (r.uintLessThan(u8, 8) != 0) scsi.request_len else @truncate(pick(r));
+    const response_len: u32 = if (r.uintLessThan(u8, 8) != 0) scsi.response_len else @truncate(pick(r));
+    const wr = virtio.Desc.write_flag;
+    const nx = virtio.Desc.next_flag;
+    // none, from the disk, to the disk, or any flags at all.
+    const Link = struct { addr: u64, len: u32, flags: u16 };
+    var links: [3]Link = undefined;
+    var n: usize = 3;
+    switch (r.uintLessThan(u8, 4)) {
+        0 => {
+            links[0] = .{ .addr = header, .len = header_len, .flags = 0 };
+            links[1] = .{ .addr = response, .len = response_len, .flags = wr };
+            n = 2;
+        },
+        1 => {
+            links[0] = .{ .addr = header, .len = header_len, .flags = 0 };
+            links[1] = .{ .addr = response, .len = response_len, .flags = wr };
+            links[2] = .{ .addr = data, .len = data_len, .flags = wr };
+        },
+        2 => {
+            links[0] = .{ .addr = header, .len = header_len, .flags = 0 };
+            links[1] = .{ .addr = data, .len = data_len, .flags = 0 };
+            links[2] = .{ .addr = response, .len = response_len, .flags = wr };
+        },
+        else => {
+            n = r.intRangeAtMost(usize, 1, 3);
+            for (links[0..n]) |*l| l.* = .{ .addr = if (r.boolean()) 0x400 else pick(r), .len = @truncate(pick(r)), .flags = r.int(u16) & wr };
+        },
+    }
+    for (links[0..n], 0..) |l, i| {
+        const desc = 0x100 + i * @sizeOf(virtio.Desc);
+        virtio.writeInt(u64, &w.ram, desc, l.addr);
+        virtio.writeInt(u32, &w.ram, desc + 8, l.len);
+        virtio.writeInt(u16, &w.ram, desc + 12, l.flags | @as(u16, if (i + 1 < n) nx else 0));
+        virtio.writeInt(u16, &w.ram, desc + 14, @intCast(i + 1));
+    }
+    // The header at 0x400: the LUN field, then the CDB at 19.
+    if (header == 0x400) {
+        // The disk's address, 0:0, but now and then another.
+        var lun = [8]u8{ 1, 0, 0x40, 0, 0, 0, 0, 0 };
+        if (r.uintLessThan(u8, 8) == 0) r.bytes(lun[0..4]);
+        @memcpy(w.ram[0x400..][0..8], &lun);
+        const ops = [_]u8{ scsi.op_test_unit_ready, scsi.op_inquiry, scsi.op_read_capacity, scsi.op_mode_sense, scsi.op_read, scsi.op_write, scsi.op_synchronize };
+        var cdb: [scsi.cdb_size]u8 = undefined;
+        r.bytes(&cdb);
+        cdb[0] = if (r.uintLessThan(u8, 8) != 0) ops[r.uintLessThan(usize, ops.len)] else r.int(u8);
+        if (r.uintLessThan(u8, 4) != 0) {
+            std.mem.writeInt(u32, cdb[2..6], r.uintLessThan(u32, 72), .big);
+            std.mem.writeInt(u16, cdb[7..9], count, .big);
+        }
+        @memcpy(w.ram[0x400 + 19 ..][0..scsi.cdb_size], &cdb);
+    }
+    virtio.writeInt(u16, &w.ram, 0x200, 0);
+    virtio.writeInt(u16, &w.ram, 0x204, 0);
+    virtio.writeInt(u16, &w.ram, 0x202, 1);
+    q.last_avail = 0;
+    d.notified(d.context, d, &w.ram, scsi.request_queue);
+    w.note(virtio.readInt(u32, &w.ram, 0x500 + 8));
+    w.note(w.volume.writes);
+    if (r.uintLessThan(u8, 32) == 0) {
+        w.volume_cache.lose();
+        w.volume.power.cut = null;
+    }
 }
 
 /// Ports 0xCF8-0xCFF and their neighbours, at any width.
@@ -232,7 +355,9 @@ fn apicOps(w: *World, r: std.Random) void {
 fn queues(w: *World, r: std.Random) void {
     const devices = [_]*virtio.Device{ &w.block_device, &w.card_device, &w.dice_device };
     const d = devices[r.uintLessThan(usize, devices.len)];
-    const qi = r.uintLessThan(usize, d.queues.len);
+    // Two, as there were before the SCSI controller's third: a seed's draws
+    // stay the run they were. The volume's queues are `volumeSide`'s.
+    const qi = r.uintLessThan(usize, 2);
     const q = &d.queues[qi];
     if (r.boolean()) {
         q.desc = if (r.boolean()) r.uintLessThan(u64, ram_bytes) else pick(r);

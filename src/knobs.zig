@@ -47,7 +47,9 @@
 //! `RTC_BOOTS_AT`, a date a person picks for what it means, nor
 //! `PEER_DRIP_US`, a slow client, which a sweep would wait out, nor
 //! `PEER_PIPELINE`, a client's habit, nor `DHCP_LEASE_S`, a lease short
-//! enough to run out only means something to a run a person reads. Set by hand, they print with the rest.
+//! enough to run out only means something to a run a person reads, nor
+//! `VOLUME_CACHE` and `VOLUME_CUT_AFTER`, which need a volume a person
+//! attached (`VOLUME`). Set by hand, they print with the rest.
 //!
 //! The peer's ranges are gopher-metal's `tcp_sim.zig` `Rough`'s and
 //! `Scenario`'s, where they have one.
@@ -64,6 +66,7 @@ pub const names = [_][]const u8{
     "PEER_FLOOD_AT_US",   "PEER_SHUT_AFTER",   "PEER_SHUT_FOR_US", "PEER_MSS",
     "PEER_IGNORE_WINDOW", "DISK_ROT",          "DISK_CACHE",       "PEER_RETRY",
     "RTC_BOOTS_AT",       "PEER_DRIP_US",      "PEER_PIPELINE",    "DHCP_LEASE_S",
+    "VOLUME_CACHE",       "VOLUME_CUT_AFTER",
 };
 
 fn index(comptime name: []const u8) usize {
@@ -234,14 +237,15 @@ test "different seeds turn different knobs, and every knob is turned by some see
         last_len = f.len;
     }
     for (turned, names) |t, n| {
-        // Twelve knobs only a person sets: a seed's runs keep to the flood
+        // Fourteen knobs only a person sets: a seed's runs keep to the flood
         // and rates of the table above, and name no sector.
         if (!t and !std.mem.eql(u8, n, "PEER_DAMAGE_RATE") and !std.mem.eql(u8, n, "DISK_REFUSE_RATE") and
             !std.mem.eql(u8, n, "PEER_FLOOD_AT_US") and !std.mem.eql(u8, n, "DISK_BAD_SECTOR") and
             !std.mem.eql(u8, n, "DISK_READS_ONLY") and !std.mem.eql(u8, n, "PEER_IGNORE_WINDOW") and
             !std.mem.eql(u8, n, "DISK_CACHE") and !std.mem.eql(u8, n, "PEER_RETRY") and
             !std.mem.eql(u8, n, "RTC_BOOTS_AT") and !std.mem.eql(u8, n, "PEER_DRIP_US") and
-            !std.mem.eql(u8, n, "PEER_PIPELINE") and !std.mem.eql(u8, n, "DHCP_LEASE_S"))
+            !std.mem.eql(u8, n, "PEER_PIPELINE") and !std.mem.eql(u8, n, "DHCP_LEASE_S") and
+            !std.mem.eql(u8, n, "VOLUME_CACHE") and !std.mem.eql(u8, n, "VOLUME_CUT_AFTER"))
         {
             std.debug.print("never turned: {s}\n", .{n});
             return error.TestUnexpectedResult;

@@ -526,6 +526,22 @@ either way, as a disk that lies about its cache does. The run ends saying
 which, and how many writes a cut lost. Off unless asked: offering FLUSH
 changes what the guest negotiates.
 
+**And a volume, as prod has one.** `VOLUME=<file>` attaches a second disk,
+a SCSI disk at target 0, LUN 0 of a virtio-scsi controller (scsi.zig), which
+is how a DigitalOcean droplet reaches chat's data (gopher-metal `scsi.zig`).
+It answers INQUIRY, READ CAPACITY(10), MODE SENSE(10)'s caching page,
+READ(10), WRITE(10), SYNCHRONIZE CACHE(10) and TEST UNIT READY; anything
+else is ILLEGAL REQUEST, another target is BAD_TARGET, and the first command
+after power-on but INQUIRY is UNIT ATTENTION, as a real disk's is. Its file
+keeps the run's writes as the boot disk's does. `VOLUME_CACHE=1` holds its
+writes until SYNCHRONIZE CACHE and says so (WCE=1); `VOLUME_CACHE=lie` holds
+them and says it writes through (WCE=0), so a driver that believes it never
+synchronizes. `VOLUME_CUT_AFTER=n` cuts the power after the volume's nth
+write; either disk's cut empties both caches. The run ends with
+`metal-vmm: volume: ...`, its reads, writes, SYNCHRONIZE CACHEs and MODE
+SENSEs, and whether a cut lost anything. Nothing changes unless `VOLUME` is
+set.
+
 The one PASS under a refusal is #1, the GPT header: `vfat` reads any failure to
 find a partition table as "no table" and mounts sector 0, which on this bare
 volume is right. On a partitioned disk the same fallback fails the mount, so the
