@@ -356,7 +356,9 @@ H proposals are approved in the order below.
     dropped or refused by the guest, never crash it or reach the
     application; say which of gopher-metal's parsers (`proto.zig`,
     `net.zig`, `tcp.zig`) each kind exercises.
-51. **(gopher-metal) H4, a simulator for `ready.zig`.** It imports only `std`
+51. **Done (CC, 2026-10-06; marked late).** gopher-metal `src/ready_sim.zig`
+    (`2e7ea96`), merged; its properties on the floor, and item 80 named
+    `ready.zig`'s own refusal, which it reaches. **Was:** **(gopher-metal) H4, a simulator for `ready.zig`.** It imports only `std`
     and `tcp.zig`, so it is the simulators' to drive: every split of a
     request head's bytes, at the receive buffer's edge and past it (the
     431 path), against a reference parse.
