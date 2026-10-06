@@ -366,10 +366,14 @@ H proposals are approved in the order below.
     DigitalOcean volume over virtio-scsi (gopher-metal `scsi.zig`), not
     virtio-blk, and `scsi.zig` sends no SYNCHRONIZE CACHE either. If
     metal-vmm has no virtio-scsi device, write down under Questions what
-    the smallest one gopher-metal's driver would accept needs (the commands
-    `scsi.zig` sends, and MODE SENSE's caching page, so a run can say "this
-    disk caches writes"), and build it if it is small. The box measures
-    what prod's volume reports (B11).
+    the smallest one gopher-metal's driver would accept needs, and build it
+    if it is small. **Read `scsi.zig` on gopher-metal's `box/v18`, not
+    `antithesis-sdk`** (B11, built 2026-10-06): it now also sends MODE
+    SENSE(10) for the caching page at bring-up and SYNCHRONIZE CACHE(10)
+    before any response that follows a write (`io.durable`). So the model
+    answers six commands, and a knob for the WCE bit with `DISK_CACHE`'s
+    semantics (`lie` included) is what lets a run show v18's flush keeping
+    a message that the cache would have lost.
 54. **Your proposals again** when 49-53 are done: the next five, then take
     the first.
 
