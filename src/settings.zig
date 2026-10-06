@@ -91,6 +91,7 @@ pub fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, rough: *wire.Roug
     if (knob(k, "PEER_SHUT_FOR_US")) |us| rough.shut_for_ns = us * std.time.ns_per_us;
     if (knob(k, "PEER_RETRY")) |n| rough.retry = @intCast(@min(n, 100));
     if (knob(k, "PEER_DRIP_US")) |us| rough.drip_ns = us * std.time.ns_per_us;
+    if (k.get("PEER_PIPELINE")) |_| rough.pipeline = true;
     if (knob(k, "PEER_MSS")) |n| if (n > 0) {
         rough.mss = @intCast(n);
     };

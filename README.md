@@ -382,6 +382,7 @@ times are microseconds after it opens, sizes are bytes of the answer:
 | `PEER_VANISH_AFTER=n` | neither sends nor hears once it has `n` bytes of the answer |
 | `PEER_FLOOD=n`, `PEER_FLOOD_GAP_US=us`, `PEER_FLOOD_AT_US=us` | sends `n` SYNs that never finish (up to 25,536), each from its own address in 198.51.100.x and port, `us` apart (10 ms by default), starting `PEER_FLOOD_AT_US` after the opening (at once by default); a thousand fills gopher.zig's 256 slots four times over |
 | `PEER_SHUT_AFTER=n`, `PEER_SHUT_FOR_US=us` | shuts its receive window once it has `n` bytes, takes nothing while it is shut, then says it is open |
+| `PEER_PIPELINE=1` | sends its second request with the first, before any answer (it asks twice at least); the run ends saying how many answers came whole and whether the guest ended it with a FIN or a reset |
 | `PEER_DRIP_US=us` | sends each segment of its request `us` after the last (with `PEER_MSS` to make them small): a slow client, never silent and not done for a long while |
 | `PEER_RETRY=n` | asks again, on a new connection, what got no answer at all (closed or reset before a byte came), up to `n` times, as a browser does; the run ends saying how many times the request was sent |
 | `PEER_IGNORE_WINDOW=1` | sends all its request at once, past the window the guest offered, and sends again what the guest threw away; a plain client keeps to the window |

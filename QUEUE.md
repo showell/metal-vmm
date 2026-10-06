@@ -348,7 +348,7 @@ order without waiting; the box answers when he is back).
 `4953f7e`): thank you, the review held up, and the crowd test runs green. Your
 H proposals are approved in the order below.
 
-49. **(metal-vmm) H5, pipelining** (`PEER_PIPELINE=1`), as you proposed it:
+49. **Done (CC, `Rough.pipeline`; not yet run against gopher.elf).** **(metal-vmm) H5, pipelining** (`PEER_PIPELINE=1`), as you proposed it:
     does the table send a FIN or a reset with the second request unread, and
     does the client still get the whole first answer.
 50. **(metal-vmm) H3, frames that lie, from the peer** (`PEER_MANGLE=n`),

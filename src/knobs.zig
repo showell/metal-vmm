@@ -45,7 +45,8 @@
 //! reason, nor `DISK_CACHE`, which changes the device the guest negotiates
 //! with, nor `PEER_RETRY`, a client's habit rather than a fault, nor
 //! `RTC_BOOTS_AT`, a date a person picks for what it means, nor
-//! `PEER_DRIP_US`, a slow client, which a sweep would wait out. Set by hand, they print with the rest.
+//! `PEER_DRIP_US`, a slow client, which a sweep would wait out, nor
+//! `PEER_PIPELINE`, a client's habit. Set by hand, they print with the rest.
 //!
 //! The peer's ranges are gopher-metal's `tcp_sim.zig` `Rough`'s and
 //! `Scenario`'s, where they have one.
@@ -61,7 +62,7 @@ pub const names = [_][]const u8{
     "PEER_RESET_OFF",     "PEER_VANISH_AFTER", "PEER_FLOOD",       "PEER_FLOOD_GAP_US",
     "PEER_FLOOD_AT_US",   "PEER_SHUT_AFTER",   "PEER_SHUT_FOR_US", "PEER_MSS",
     "PEER_IGNORE_WINDOW", "DISK_ROT",          "DISK_CACHE",       "PEER_RETRY",
-    "RTC_BOOTS_AT",       "PEER_DRIP_US",
+    "RTC_BOOTS_AT",       "PEER_DRIP_US",      "PEER_PIPELINE",
 };
 
 fn index(comptime name: []const u8) usize {
@@ -232,13 +233,14 @@ test "different seeds turn different knobs, and every knob is turned by some see
         last_len = f.len;
     }
     for (turned, names) |t, n| {
-        // Ten knobs only a person sets: a seed's runs keep to the flood
+        // Eleven knobs only a person sets: a seed's runs keep to the flood
         // and rates of the table above, and name no sector.
         if (!t and !std.mem.eql(u8, n, "PEER_DAMAGE_RATE") and !std.mem.eql(u8, n, "DISK_REFUSE_RATE") and
             !std.mem.eql(u8, n, "PEER_FLOOD_AT_US") and !std.mem.eql(u8, n, "DISK_BAD_SECTOR") and
             !std.mem.eql(u8, n, "DISK_READS_ONLY") and !std.mem.eql(u8, n, "PEER_IGNORE_WINDOW") and
             !std.mem.eql(u8, n, "DISK_CACHE") and !std.mem.eql(u8, n, "PEER_RETRY") and
-            !std.mem.eql(u8, n, "RTC_BOOTS_AT") and !std.mem.eql(u8, n, "PEER_DRIP_US"))
+            !std.mem.eql(u8, n, "RTC_BOOTS_AT") and !std.mem.eql(u8, n, "PEER_DRIP_US") and
+            !std.mem.eql(u8, n, "PEER_PIPELINE"))
         {
             std.debug.print("never turned: {s}\n", .{n});
             return error.TestUnexpectedResult;

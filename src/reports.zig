@@ -105,6 +105,7 @@ pub fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void
     var buf: [2048]u8 = undefined;
     std.debug.print("{s}", .{unspent(&card.line, &card.peer, &block.refusals, &buf)});
     if (peerEnd(&card.peer.tcp)) |line| std.debug.print("{s}", .{line});
+    if (pipelined(&card.peer.tcp)) |line| std.debug.print("{s}", .{line});
     if (card.peer.rough.retry > 0)
         std.debug.print("metal-vmm: the first client sent its request {d} times (PEER_RETRY={d})\n", .{ card.peer.sends(), card.peer.rough.retry });
     if (block.cache) |c| {
@@ -117,6 +118,30 @@ pub fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void
             at, d.rot_byte, d.rot_mask, d.rotted, if (d.rot_healed) ", then the guest wrote it again" else "",
         });
     };
+}
+
+/// **WHAT A PIPELINING CLIENT GOT** (`PEER_PIPELINE`): how many of its
+/// answers came whole, and how the connection ended: the guest's FIN, its
+/// reset, or neither.
+pub fn pipelined(c: *const wire.Tcp) ?[]const u8 {
+    if (!c.rough.pipeline) return null;
+    const Static = struct {
+        var buf: [256]u8 = undefined;
+    };
+    const how = switch (c.state) {
+        .refused => "the guest reset the connection",
+        .closing, .done => "the guest closed it with a FIN",
+        .fin_wait => "it closed, and the guest's FIN never came",
+        else => "it did not end",
+    };
+    return std.fmt.bufPrint(&Static.buf, "metal-vmm: the pipelining client got {d} of {d} answers whole ({d} bytes); {s}\n", .{ c.answers, c.asks, c.received, how }) catch null;
+}
+
+test "a pipelining client's end is said, and nothing for another client" {
+    var c = wire.Tcp{ .asks = 2, .answers = 1, .received = 300, .state = .refused };
+    try testing.expect(pipelined(&c) == null);
+    c.rough.pipeline = true;
+    try testing.expectEqualStrings("metal-vmm: the pipelining client got 1 of 2 answers whole (300 bytes); the guest reset the connection\n", pipelined(&c).?);
 }
 
 /// **WHEN THE PEER ITSELF LET THE PAGE GO** (REVIEW-peer.md S1): the first

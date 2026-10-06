@@ -108,6 +108,9 @@ pub const Rough = struct {
     /// this long after the last, so it is never silent and never done for a
     /// long time (with `PEER_MSS`, a byte at a time if asked).
     drip_ns: ?u64 = null,
+    /// **IT PIPELINES** (`PEER_PIPELINE`): its second request goes with the
+    /// first, before any answer, and it asks at least twice.
+    pipeline: bool = false,
     /// **ITS OWN RETRANSMISSION TIMER RUNS** (RFC 6298): set when the wire
     /// may lose or damage what it sends. A peer whose frames always arrive
     /// never needs to send one twice, so without this the run is the run it
