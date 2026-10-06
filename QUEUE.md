@@ -665,7 +665,32 @@ oracle loosened until it passes; a property that can't fire, written to make
 the count look good; a skip without a name; kernel behavior changed as a side
 effect of adding a property.
 
-76. **Phase A: the ground under the Store** (gopher-metal). Name the refusals
+76. **Done (CC, 2026-10-06).** gopher-metal `claude/great-wright-i7aste`,
+    four commits, rebased on `master`; COVERAGE.md "The floor, module by
+    module", "Errors under the Store" and "For the box". **Phase report:**
+    - *Reached:* `durable` 4 of 4, `gpt` 8 of 8, `page_cache` 15 of 15 (and
+      one `unreachable`), `log_ring` 9 of 9, `kept_log` 5 of 5, `fat16` 61
+      of its 73 non-guards (84 in all, 11 guards); a new `floor_sim` (GPT,
+      the page cache's rare refusals, the redactor, and FAT on damaged
+      volumes, 23 kinds of damage) runs 1000 seeds clean.
+    - *Parked:* none. Unreached, each with its reason in COVERAGE.md:
+      fat16's 4 GiB file; two `writeRuns` re-checks only a disk that lies
+      between two reads reaches; two needing directories this driver did not
+      write; four `fat16_test` meets but `properties` does not run; the
+      long tier's FAT pair, as before. `virtio`'s and `io`'s failed flush
+      are for the box (`VOLUME_SYNC_FAIL=1`).
+    - *Asked:* two knobs, under "For the box": one that answers a read with
+      other bytes once (reaches the `writeRuns` re-checks), and a
+      `DISK_CACHE` that offers FLUSH and fails it (the boot disk's flush).
+    - *Surprised me:* the SDK's catalog ran out of comptime at fat16's 84
+      sites (fixed in zig-coverage-sdk, `catalogFile`); eleven of fat16's
+      refusals were guards behind earlier checks, now `unreachable` with
+      the check that comes first named; and an entry's `slot` is a byte
+      offset, which my first damage drive got wrong (caught before commit).
+    - *The floor:* 125 lines before, 187 after; `zig build properties
+      -Dfloor` leaves the same 2 long-tier FAT lines under it as before.
+
+    **Was:** **Phase A: the ground under the Store** (gopher-metal). Name the refusals
     and invariants in the modules the Store will sit on: `fat16` (its
     refusals not yet named), `page_cache`, `io.durable`, the block driver's
     `flush` in `virtio.zig`, `kept_log`, `log_ring`, `gpt`. A `reachable` for
@@ -1250,3 +1275,20 @@ and H2 were real, and the review is the shape we wanted.
 
 *(One line per shortcut, from item 76 on: what, where, what fixing it would
 take. The box reads it at merge time.)*
+
+- **floor_sim is several small drives in one file** (gopher-metal
+  `src/floor_sim.zig`: GPT, page cache, redactor, damaged FAT). Fine at four;
+  past six or so, split by module. An hour.
+- **Two fat16 refusals need a directory this driver did not write** (a long
+  name of 21 parts; a tree whose entries return after removal). A damage
+  case that writes raw directory entries into `floor_sim`'s volume would
+  reach them. Two hours, mostly getting the long-name checksum right.
+- **`fat16_test.zig`'s limits are not in `properties`** (no 8.3 alias left,
+  a directory at FAT's most entries, too deep to check or remove), so four
+  named properties show MISS there. Calling those tests' setups from a
+  `properties` tier, or a `floor_sim` drive of each, would put them on the
+  floor. Each costs a full directory or a deep tree: minutes of runtime.
+- **The `writeRuns` re-checks** (a chain that ends before its size, past
+  `chainEnd`'s walk) wait on a disk that lies between two reads; a
+  `floor_sim` case with `Block.Fault.garbage` at the right request number
+  could reach them, but finding that number by search is fiddly.
