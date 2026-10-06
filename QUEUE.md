@@ -604,7 +604,11 @@ your item 68 (v17 loses the message, v18 keeps it), and K1 is its next step.
     `report.py --edges <file>` (`message  >= n`) fails a reach short of n
     (EDGE) or a line that names no comparison or has the wrong sign
     (STALE). **Was:** K4, an edge floor (`report.py --edges`), as proposed.
-74. **K5, one report, two images** (`report.py --against`), as proposed.
+74. **Done (CC, 2026-10-06).** zig-coverage-sdk `report.py a.jsonl ...
+    --against b.jsonl ...`: after the report, the properties one set reached
+    and the other did not, the verdicts that differ, and the edges and
+    reaches that moved; the exit status stays the first set's. One more test.
+    **Was:** K5, one report, two images (`report.py --against`), as proposed.
 75. **Folded into 81** (the box, 2026-10-06).
 
 **The mission (the box, for Steve, 2026-10-06).** This is a long assignment,
@@ -831,12 +835,38 @@ effect of adding a property.
 
     **Done when** every module has a row and every disk call has a row.
 
-81. **Your proposals again** when 76–80 and K4–K5 are done, or when
-    everything left is parked.
+81. **Done (CC, 2026-10-06).** N1-N5 under Proposed. **Was:** your proposals
+    again when 76–80 and K4–K5 are done, or when everything left is parked.
 
 The same text, for reading: http://143.244.172.148:9100/notes/cc-the-floor-and-the-store.md
 
 ## Proposed
+
+From item 81: the next five, most finding first (CC):
+
+- **N1. Knobs for the refusals only a device reaches** (metal-vmm, mine to
+  build): gopher-metal COVERAGE.md's "For the box" lists 13 refusals with
+  no knob. The cheapest, in order: `VOLUME_SECTOR=4096` (a disk whose
+  sectors are not 512 bytes), `VOLUME_MODE_PAGES=none` (MODE SENSE without
+  the caching page), `RTC_ABSENT=1` and `RTC_STUCK=1`, `PIT_FROZEN=1`. Each
+  is a model change in metal-vmm and a knob, and each turns a named
+  refusal into one a run can reach.
+- **N2. `store_sim` that fills the volume** (gopher-metal): `NoSpace` is the
+  one Store error no simulator meets (the debt ledger). A tier of small
+  volumes and large files, where FAT refuses and the model and Linux store
+  do not: the oracle is that after `NoSpace` the file is what the
+  operation's promise allows, and the run goes on as after a cut.
+- **N3. `readAt`, if Steve takes it as the seventh** (gopher-metal): the
+  census's likeliest new operation (a picture served in parts). If he
+  does: the interface, the three stores, and `store_sim` reading ranges.
+  If not, a test the six cannot express, as item 77 asked.
+- **N4 (the box's). Run "For the box"**: each knob in COVERAGE.md's list
+  once, under a `-Dcoverage` gopher.elf, and the properties it reaches put
+  on `floor-metal.txt`; the "unverified" marks become verified or not.
+- **N5. The two FAT refusals that need a foreign directory**
+  (gopher-metal, the debt ledger): a `floor_sim` case that writes raw
+  directory entries (a long name of 21 parts; entries that come back after
+  removal), so `unlinkEntry` and `removeTree`'s refusals are met.
 
 From item 78 (CC): **the seam under `stream.zig`.** Its waits are pure
 decisions over a connection's state, a clock and progress: "has the peer
