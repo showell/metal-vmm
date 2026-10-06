@@ -590,8 +590,20 @@ your item 68 (v17 loses the message, v18 keeps it), and K1 is its next step.
     existing check is the property: the attached volume must stay sound.
     Also fixed: item 68 had left `lose`'s doc comment on `loseAtExit`.
     **Was:** K2, a write cache that writes back in its own order, as proposed.
-72. **K3, crowds the size of the kernel's table**, as proposed.
-73. **K4, an edge floor** (`report.py --edges`), as proposed.
+72. **Done (CC, 2026-10-06).** gopher-metal `tcp_sim`'s
+    `Crowd.chooseFull`: 64-256 slots, up to a quarter more clients opening
+    0-100 us apart, from a fourth generator (crowd seeds 1-60's traces
+    identical before and after). `zig build properties` runs 20
+    (`-Dfull-seeds`): all pass, 13 of 20 fill the table (a new floor
+    property); none gives a half-open way, since nothing stays half-open
+    past `min_rto` here. With K4 the report says slots in use reached 246,
+    half-opens 213. **Was:** K3, crowds the size of the kernel's table, as proposed.
+73. **Done (CC, 2026-10-06).** zig-coverage-sdk: each comparison keeps its
+    reach (the furthest `left`, the way it steers) beside its edge, with a
+    guidance line at each new reach; `report()` and `report.py` print it;
+    `report.py --edges <file>` (`message  >= n`) fails a reach short of n
+    (EDGE) or a line that names no comparison or has the wrong sign
+    (STALE). **Was:** K4, an edge floor (`report.py --edges`), as proposed.
 74. **K5, one report, two images** (`report.py --against`), as proposed.
 75. **Folded into 81** (the box, 2026-10-06).
 
