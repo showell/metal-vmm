@@ -34,9 +34,11 @@
 //! | `PEER_FLOOD` | 1/4 | 1-8 SYNs, `PEER_FLOOD_GAP_US` 10,000-400,000 |
 //! | `PEER_SHUT_AFTER` | 1/4 | 1-20,000 bytes, `PEER_SHUT_FOR_US` 10,000-5,000,000 |
 //! | `PEER_MSS` | 1/4 | 1-1460 |
-//! | `DISK_ROT` | 1/8 | sector 0-4095, byte 0-511 (drawn last) |
+//! | `DISK_ROT` | 1/8 | sector 0-4095, byte 0-511 |
+//! | `PEER_MANGLE` | 1/4 | 1-3 of frames 1-40 (drawn last) |
 //!
-//! `PEER_FLOOD_AT_US`, `PEER_DAMAGE_RATE` and `DISK_REFUSE_RATE` are
+//! `PEER_FLOOD_AT_US`, `PEER_DAMAGE_RATE`, `PEER_MANGLE_RATE`,
+//! `PEER_MANGLE_KIND` and `DISK_REFUSE_RATE` are
 //! never drawn: a seed's flood starts with the client, and a seed's peer
 //! damage and disk refusals are named, not rated. Nor are `DISK_BAD_SECTOR`
 //! and `DISK_READS_ONLY`: a sector is worth naming only on a volume whose
@@ -45,7 +47,13 @@
 //! reason, nor `DISK_CACHE`, which changes the device the guest negotiates
 //! with, nor `PEER_RETRY`, a client's habit rather than a fault, nor
 //! `RTC_BOOTS_AT`, a date a person picks for what it means, nor
-//! `PEER_DRIP_US`, a slow client, which a sweep would wait out. Set by hand, they print with the rest.
+//! `PEER_DRIP_US`, a slow client, which a sweep would wait out, nor
+//! `PEER_PIPELINE`, a client's habit, nor `DHCP_LEASE_S`, a lease short
+//! enough to run out only means something to a run a person reads, nor
+//! `VOLUME_CACHE`, `VOLUME_CUT_AFTER`, `VOLUME_SYNC_FAIL`,
+//! `VOLUME_SYNC_FAIL_FOR`, `VOLUME_LATENCY_US` and `VOLUME_ATTENTION_AT`,
+//! which need a volume a person
+//! attached (`VOLUME`). Set by hand, they print with the rest.
 //!
 //! The peer's ranges are gopher-metal's `tcp_sim.zig` `Rough`'s and
 //! `Scenario`'s, where they have one.
@@ -61,7 +69,10 @@ pub const names = [_][]const u8{
     "PEER_RESET_OFF",     "PEER_VANISH_AFTER", "PEER_FLOOD",       "PEER_FLOOD_GAP_US",
     "PEER_FLOOD_AT_US",   "PEER_SHUT_AFTER",   "PEER_SHUT_FOR_US", "PEER_MSS",
     "PEER_IGNORE_WINDOW", "DISK_ROT",          "DISK_CACHE",       "PEER_RETRY",
-    "RTC_BOOTS_AT",       "PEER_DRIP_US",
+    "RTC_BOOTS_AT",       "PEER_DRIP_US",      "PEER_PIPELINE",    "DHCP_LEASE_S",
+    "VOLUME_CACHE",       "VOLUME_CUT_AFTER",  "VOLUME_SYNC_FAIL", "VOLUME_SYNC_FAIL_FOR",
+    "PEER_MANGLE",        "PEER_MANGLE_RATE",  "PEER_MANGLE_KIND", "VOLUME_LATENCY_US",
+    "VOLUME_ATTENTION_AT",
 };
 
 fn index(comptime name: []const u8) usize {
@@ -75,7 +86,7 @@ const Span = struct { at: u16, len: u16 };
 pub const Knobs = struct {
     /// What the seed chose, as the text a person would have typed.
     drawn: [names.len]?Span = @splat(null),
-    text: [512]u8 = undefined,
+    text: [640]u8 = undefined,
     used: usize = 0,
     /// What the environment set, which wins.
     set: [names.len]?[]const u8 = @splat(null),
@@ -138,7 +149,32 @@ pub const Knobs = struct {
         if (chance(r, 4)) k.number(index("PEER_MSS"), r.intRangeAtMost(u64, 1, 1460));
         // Drawn last, so every knob above is what each seed always drew.
         if (chance(r, 8)) k.pair(index("DISK_ROT"), r.uintLessThan(u64, 4096), r.uintLessThan(u64, 512));
+        // And after it, frames that lie (mangle.zig): one to three of the
+        // first 40, each kind in turn.
+        if (chance(r, 4)) k.list(index("PEER_MANGLE"), r, r.intRangeAtMost(u32, 1, 3), 1, 40);
         return k;
+    }
+
+    /// **AND THE VOLUME'S, WHEN ONE IS ATTACHED** (`VOLUME`, scsi.zig), on
+    /// dice of their own: every knob `fromSeed` drew is what it was, and a
+    /// run without a volume draws none of these. Not `VOLUME_LATENCY_US`,
+    /// which a sweep would wait out.
+    pub fn withVolume(self: *Knobs, seed: u64) void {
+        var prng = std.Random.DefaultPrng.init(seed ^ 0x76_6f_6c_75_6d_65); // "volume"
+        const r = prng.random();
+        if (chance(r, 2)) self.word(index("VOLUME_CACHE"), if (chance(r, 4)) "lie" else "1");
+        if (chance(r, 6)) self.number(index("VOLUME_CUT_AFTER"), r.intRangeAtMost(u64, 1, 60));
+        if (chance(r, 4)) {
+            self.number(index("VOLUME_SYNC_FAIL"), r.intRangeAtMost(u64, 1, 20));
+            if (r.boolean()) self.number(index("VOLUME_SYNC_FAIL_FOR"), r.intRangeAtMost(u64, 2, 5));
+        }
+        if (chance(r, 4)) self.number(index("VOLUME_ATTENTION_AT"), r.intRangeAtMost(u64, 1, 200));
+    }
+
+    fn word(self: *Knobs, i: usize, text: []const u8) void {
+        @memcpy(self.text[self.used..][0..text.len], text);
+        self.drawn[i] = .{ .at = @intCast(self.used), .len = @intCast(text.len) };
+        self.used += text.len;
     }
 
     fn chance(r: std.Random, one_in: u32) bool {
@@ -232,13 +268,18 @@ test "different seeds turn different knobs, and every knob is turned by some see
         last_len = f.len;
     }
     for (turned, names) |t, n| {
-        // Ten knobs only a person sets: a seed's runs keep to the flood
+        // Twenty knobs only a person sets: a seed's runs keep to the flood
         // and rates of the table above, and name no sector.
         if (!t and !std.mem.eql(u8, n, "PEER_DAMAGE_RATE") and !std.mem.eql(u8, n, "DISK_REFUSE_RATE") and
             !std.mem.eql(u8, n, "PEER_FLOOD_AT_US") and !std.mem.eql(u8, n, "DISK_BAD_SECTOR") and
             !std.mem.eql(u8, n, "DISK_READS_ONLY") and !std.mem.eql(u8, n, "PEER_IGNORE_WINDOW") and
             !std.mem.eql(u8, n, "DISK_CACHE") and !std.mem.eql(u8, n, "PEER_RETRY") and
-            !std.mem.eql(u8, n, "RTC_BOOTS_AT") and !std.mem.eql(u8, n, "PEER_DRIP_US"))
+            !std.mem.eql(u8, n, "RTC_BOOTS_AT") and !std.mem.eql(u8, n, "PEER_DRIP_US") and
+            !std.mem.eql(u8, n, "PEER_PIPELINE") and !std.mem.eql(u8, n, "DHCP_LEASE_S") and
+            !std.mem.eql(u8, n, "VOLUME_CACHE") and !std.mem.eql(u8, n, "VOLUME_CUT_AFTER") and
+            !std.mem.eql(u8, n, "VOLUME_SYNC_FAIL") and !std.mem.eql(u8, n, "VOLUME_SYNC_FAIL_FOR") and
+            !std.mem.eql(u8, n, "PEER_MANGLE_RATE") and !std.mem.eql(u8, n, "PEER_MANGLE_KIND") and
+            !std.mem.eql(u8, n, "VOLUME_LATENCY_US") and !std.mem.eql(u8, n, "VOLUME_ATTENTION_AT"))
         {
             std.debug.print("never turned: {s}\n", .{n});
             return error.TestUnexpectedResult;
@@ -341,4 +382,25 @@ test "no seed and no knobs: nothing is turned" {
     var buf: [64]u8 = undefined;
     try testing.expectEqualStrings("none", k.format(&buf));
     for (names) |n| try testing.expect(k.get(n) == null);
+}
+
+test "a volume's knobs are drawn only with a volume, on dice of their own" {
+    var buf_a: [1024]u8 = undefined;
+    var buf_b: [1024]u8 = undefined;
+    var turned = [_]bool{false} ** 5;
+    const vol = [_][]const u8{ "VOLUME_CACHE", "VOLUME_CUT_AFTER", "VOLUME_SYNC_FAIL", "VOLUME_SYNC_FAIL_FOR", "VOLUME_ATTENTION_AT" };
+    for (0..500) |seed| {
+        const plain = Knobs.fromSeed(seed);
+        var with = Knobs.fromSeed(seed);
+        with.withVolume(seed);
+        for (vol) |n| try testing.expect(plain.get(n) == null);
+        // Every knob the seed drew without a volume, it draws with one.
+        for (names) |n| if (plain.get(n)) |v| try testing.expectEqualStrings(v, with.get(n).?);
+        for (vol, 0..) |n, i| if (with.get(n) != null) {
+            turned[i] = true;
+        };
+        _ = plain.format(&buf_a);
+        _ = with.format(&buf_b);
+    }
+    for (turned) |t| try testing.expect(t);
 }

@@ -348,10 +348,10 @@ order without waiting; the box answers when he is back).
 `4953f7e`): thank you, the review held up, and the crowd test runs green. Your
 H proposals are approved in the order below.
 
-49. **(metal-vmm) H5, pipelining** (`PEER_PIPELINE=1`), as you proposed it:
+49. **Done (CC, `Rough.pipeline`; not yet run against gopher.elf).** **(metal-vmm) H5, pipelining** (`PEER_PIPELINE=1`), as you proposed it:
     does the table send a FIN or a reset with the second request unread, and
     does the client still get the whole first answer.
-50. **(metal-vmm) H3, frames that lie, from the peer** (`PEER_MANGLE=n`),
+50. **Done in item 55 (CC).** **(metal-vmm) H3, frames that lie, from the peer** (`PEER_MANGLE=n`),
     as proposed, in `FAULT_SEED`'s ranges. Every mangled frame must be
     dropped or refused by the guest, never crash it or reach the
     application; say which of gopher-metal's parsers (`proto.zig`,
@@ -360,9 +360,30 @@ H proposals are approved in the order below.
     and `tcp.zig`, so it is the simulators' to drive: every split of a
     request head's bytes, at the receive buffer's edge and past it (the
     431 path), against a reference parse.
-52. **(metal-vmm) H2, a lease that ends** (`DHCP_LEASE_S=n`). The peer's
+52. **Done (CC, 2026-10-06).** `DHCP_LEASE_S=s` is the lease the peer's
+    OFFER and ACK carry; each ACK while one is held is a renewal, one after
+    it ran out is counted late, and the run's end (only when the knob is
+    set, so no script's output changes) says
+    `metal-vmm: dhcp: a lease of s s; r renewals, l requests after it ran
+    out; it was held to the end` or `...; it ran out at t s of the guest's
+    time, unrenewed`. A knob only a person sets (not drawn). What the box
+    runs: `DHCP_LEASE_S=60` on a run past a minute, to see if gopher-metal
+    renews. **(metal-vmm) H2, a lease that ends** (`DHCP_LEASE_S=n`). The peer's
     side only; whether gopher-metal renews is what the box runs it to see.
-53. **(metal-vmm) The SCSI half of item 44.** Prod keeps chat's data on a
+53. **Done (CC, 2026-10-06): built, it was small.** `VOLUME=<file>` is a
+    virtio-scsi controller (device 8, three queues, QEMU's config numbers)
+    with one disk at 0:0 (`src/scsi.zig`), answering the six commands v18
+    sends and TEST UNIT READY; UNIT ATTENTION once after power-on, which
+    v18's `commandSettled` sends again; BAD_TARGET elsewhere.
+    `VOLUME_CACHE=1|lie` is the WCE bit with `DISK_CACHE`'s semantics, and
+    `VOLUME_CUT_AFTER=n` the power. Tested by a fake driver that builds
+    requests as v18's `scsi.command` does, and in fuzz.zig on dice of its
+    own (every existing seed is the run it was). What the box runs, with a
+    FAT16 volume image chat's data is on: `VOLUME=vol.img VOLUME_CACHE=1
+    VOLUME_CUT_AFTER=n` on v18 keeps the message a 303 confirmed, and on
+    `antithesis-sdk`'s `scsi.zig` (no flush) loses it; `VOLUME_CACHE=lie`
+    loses it on both. One finding for the driver, under Questions. **Was:**
+    **(metal-vmm) The SCSI half of item 44.** Prod keeps chat's data on a
     DigitalOcean volume over virtio-scsi (gopher-metal `scsi.zig`), not
     virtio-blk, and `scsi.zig` sends no SYNCHRONIZE CACHE either. If
     metal-vmm has no virtio-scsi device, write down under Questions what
@@ -374,23 +395,59 @@ H proposals are approved in the order below.
     answers six commands, and a knob for the WCE bit with `DISK_CACHE`'s
     semantics (`lie` included) is what lets a run show v18's flush keeping
     a message that the cache would have lost.
-54. **Your proposals again** when 49-53 are done: the next five, then take
-    the first.
+54. **Done (CC, 2026-10-06).** I1-I5 under Proposed; I1 built:
+    `VOLUME_SYNC_FAIL=n` (`VOLUME_SYNC_FAIL_FOR=k`) answers the nth
+    SYNCHRONIZE CACHE, and the k-1 after it, MEDIUM ERROR and keeps
+    nothing; the volume's line says how many failed. **Was:** your
+    proposals again when 49-53 are done: the next five, then take the
+    first.
 
 **Next, after 54** (2026-10-06, late morning). Your branch is not merged
 yet: v18's gates (`box/v18`) are running on this box against metal-vmm's
 `interrupts` build, and a merge now would change what they test. The box
 merges 49-54 once they finish. Keep working on your branch meanwhile.
 
-55. **(metal-vmm) Item 50, H3, frames that lie, is still open**: it has no
+55. **Done (CC, 2026-10-06), with item 50.** `PEER_MANGLE=n[,m]` (and
+    `_RATE`, `_KIND`): a lying copy ahead of the frame picked, twelve kinds
+    (`src/mangle.zig`), each checked in a unit test against a port of
+    gopher-metal's own checks to be refused by the one `Kind.check` names
+    (`proto.parseIpv4`: version, header length and options, checksum,
+    total past the frame, fragment; `tcp.Table.handle`: too short for TCP,
+    not our address, not our port, data offset), and `zero_window` to reach
+    the connection. Drawn by a seed one time in four, last of its knobs,
+    so a quarter of seeds change their run; `sweep.sh` already fails a
+    seed whose page differs under it, which is the property. Fuzzed on dice
+    of its own. **Was:** **(metal-vmm) Item 50, H3, frames that lie, is
+    still open**: it has no
     commit and is not marked done. Take it first, as item 50 describes.
-56. **(metal-vmm) I2, a volume that is slow** (`VOLUME_LATENCY_US`), as you
+56. **Done (CC, 2026-10-06).** `VOLUME_LATENCY_US=us`: each command the
+    volume answers is owed to the clock, which the run loop pays before the
+    guest runs again. Not a completion held back: gopher-metal's `Q.wait`
+    spins on the used ring with `pause` and makes no exit, so it would
+    never see one (the same limit as `dhcp.exchange`, faults.zig); the
+    spin's TSC reads see the time pass instead, as `busy_ticks` does on a
+    droplet. The volume's line adds "N ms waited on it". For the box: v17
+    and v18 under the same latency, the client's time for a chat post, is
+    what v18's flush costs. **Was:** **(metal-vmm) I2, a volume that is slow** (`VOLUME_LATENCY_US`), as you
     proposed. It is what tells us what v18's flush costs a chat message.
-57. **(metal-vmm) I3, UNIT ATTENTION in the middle of a run**
+57. **Done (CC, 2026-10-06).** `VOLUME_ATTENTION_AT=n`: CAPACITY DATA HAS
+    CHANGED (2Ah/09h) pending from the volume's nth command, told on the
+    next but INQUIRY, which is not performed; v18's `commandSettled` sends
+    it again. The volume's line says whether it was told. A write that
+    meets it is the case to run: `VOLUME_ATTENTION_AT` at a chat post's
+    write, and the message still kept. **Was:** **(metal-vmm) I3, UNIT ATTENTION in the middle of a run**
     (`VOLUME_ATTENTION_AT=n`), as proposed.
-58. **(metal-vmm) I5, a seed that draws the volume's faults**, as proposed:
+58. **Done (CC, 2026-10-06).** `knobs.withVolume`: with `FAULT_SEED` and
+    `VOLUME` both set, a seed also draws `VOLUME_CACHE` (1 or lie),
+    `VOLUME_CUT_AFTER`, `VOLUME_SYNC_FAIL` (`_FOR`) and
+    `VOLUME_ATTENTION_AT`, on dice of their own; a test holds every other
+    knob of 500 seeds to what it was, and a run without a volume draws none.
+    **`sweep.sh` changed, additively**: `VOLUME_SITE=<image>` gives each run
+    a fresh copy as its volume, checks it with `sound.sh` as the boot disk
+    is, and excuses `VOLUME_CUT_AFTER` as `DISK_CUT_AFTER` is; unset,
+    nothing it does changes (`sweep_test.sh` passes). **Was:** **(metal-vmm) I5, a seed that draws the volume's faults**, as proposed:
     no existing seed's run changes.
-59. **(gopher-metal) I4, the seam under `io.durable`, built for merging.**
+59. **Unblocked (the box, 2026-10-06): `box/v18` is merged into your gopher-metal branch at `f0c132e`; fetch it and build there.** **(gopher-metal) I4, the seam under `io.durable`, built for merging.**
     As item 47 was: kernel code, on your branch, for the box to review.
     The rule "nothing joins a send queue while a write before it is
     unflushed" as a pure function of the writes, sends, held streams and
@@ -427,7 +484,17 @@ Take these after 55-59, before 60's proposals.
     `sweep.sh` and gopher-metal's `long.sh` use it, and retire
     `coverage-merge` (metal-vmm's in-run table, item 18, stays: it is a
     different job). If retiring it is wrong, say why under Questions.
-60. **Your proposals again** when 55-59 and 61-62 are done.
+60. **Done (CC, 2026-10-06), with 59 waiting.** J1-J5 under Proposed.
+    **Was:** your proposals again when 55-59 are done.
+
+**From item 60's proposals** (the box, 2026-10-06): J1-J4 are yours, in
+this order, after 59 and 61-62. J5 is the box's (B16).
+
+63. **J1, a volume that goes away** (`VOLUME_GONE_AT=n`), as proposed.
+64. **J2, a volume that turns read-only** (`VOLUME_READ_ONLY_AT=n`), as proposed.
+65. **J3, lies in the peer's UDP** (`PEER_MANGLE` for DHCP), as proposed.
+66. **J4, a flush that costs more than a read** (`VOLUME_SYNC_US`), as proposed.
+67. **Your proposals again** when 59 and 61-66 are done.
 
 ## Proposed
 
@@ -557,6 +624,65 @@ From item 48: the next five, most finding first (CC):
   head is whole, over every split of the bytes, at the receive buffer's
   edge, and past it (the 431 path).
 
+From item 54: the next five, most finding first (CC):
+
+- **I1. A SYNCHRONIZE CACHE that fails** (`VOLUME_SYNC_FAIL=n`,
+  `VOLUME_SYNC_FAIL_FOR=k`: MEDIUM ERROR, nothing kept). v18's `io.durable`
+  logs a failed flush and lets the response go out, and tries again before
+  the next one. So one failure then a cut (`VOLUME_CUT_AFTER`) is a 303 for
+  a message the volume lost, and k failures in a row are k responses sent
+  on writes not yet kept: the measure of that choice. **Taken; see item
+  54.**
+- **I2. A volume that is slow** (`VOLUME_LATENCY_US=us`: each command
+  answered that long after its doorbell, on the guest's clock). A DO volume
+  is network storage, milliseconds a command; here it answers at once. v18
+  sends a SYNCHRONIZE CACHE before every response after a write, so what a
+  chat message costs in time on a real volume is unknown until the volume
+  takes time. Needs the completion deferred to a later exit, as the wire's
+  latency is.
+- **I3. UNIT ATTENTION in the middle of a run** (`VOLUME_ATTENTION_AT=n`:
+  the nth command answers it, as a DO volume resized or its path reset
+  does, with CAPACITY DATA HAS CHANGED or POWER ON). v18's `commandSettled`
+  sends it again; a write that meets it is the case to watch, and whether
+  the capacity is ever read again.
+- **I4. The seam under `io.durable`** (gopher-metal, the box's): the rule
+  "nothing is queued to send while a write before it is unflushed" pulled
+  out of io.zig as a pure function of what was written and what is about
+  to be sent, so a simulator can drive it over any interleaving of writes,
+  sends, held streams and failed flushes. Today it can be checked only by a
+  guest on a machine.
+- **I5. A seed that draws the volume's faults** (`FAULT_SEED` with
+  `VOLUME` set: `VOLUME_CUT_AFTER`, `VOLUME_SYNC_FAIL`, `VOLUME_CACHE`),
+  so `sweep.sh` can sweep chat's real write path as it sweeps the boot
+  disk's. Changes no existing seed's run: their draws come first, and the
+  volume's are taken only when one is attached.
+
+From item 60: the next five, most finding first (CC):
+
+- **J1. A volume that goes away** (`VOLUME_GONE_AT=n`: from the nth
+  command the controller answers BAD_TARGET, as a DO volume detached under
+  a running droplet does). Chat's data is then unreachable mid-run: does a
+  post get a 5xx and not a 303, and does the next boot say "the volume this
+  machine serves is not attached" rather than serve from the boot disk?
+- **J2. A volume that turns read-only** (`VOLUME_READ_ONLY_AT=n`: MODE
+  SENSE's WP bit, and WRITE answered DATA PROTECT, key 7), which is what a
+  DO volume does after an I/O error on the host. Every save must fail
+  visibly; none may be confirmed.
+- **J3. Lies in the peer's UDP** (`PEER_MANGLE` for its DHCP frames: a UDP
+  length past the datagram, DHCP options running off the end, a lease
+  option of the wrong length). Item 55 mangles only TCP, so
+  `proto.parseUdp` and `dhcp.zig`'s option walk have only met well-formed
+  replies.
+- **J4. A flush that costs more than a read** (`VOLUME_SYNC_US`, beside
+  `VOLUME_LATENCY_US`): on network storage SYNCHRONIZE CACHE is the slow
+  command, and v18 sends one per response after a write, so its own price
+  is the number item 56 is for.
+- **J5 (the box's). A coverage property per refusal in the guest's
+  parsers** (`proto.parseIpv4`'s and `tcp.handle`'s early returns, as
+  "tcp: a damaged segment is dropped" already is), so a sweep's merged
+  coverage says which of `PEER_MANGLE`'s lies each parser met, rather than
+  only that the page held.
+
 Folded into existing items rather than new ones: M4, L1, L2, L3 into item 4
 (MSI-X); L4 into item 5 (APIC); L5 (0xCF9) waits until a reset is something
 this machine survives.
@@ -564,6 +690,61 @@ this machine survives.
 ## Questions
 
 *(For the box or Steve. Take the next item; do not wait.)*
+
+- **(CC, item 59) Not started: it needs `box/v18` on my branch.** Merging
+  `origin/box/v18` into `claude/great-wright-i7aste` in gopher-metal was
+  refused by this session's permission check (modifying a shared
+  resource), and I am pushing only that branch, so I have not built it.
+  Steve's call: allow that merge, or name another `claude/*` branch cut
+  from `box/v18` for the item, or wait for v18 to reach `antithesis-sdk`.
+  What I found reading v18 meanwhile, for whoever builds it:
+  - **Every entry to a send queue is covered or defended.** On v18,
+    `tcp.Table.queue` is called from `Stream.sendAll` (two places, after
+    `io.durable`), `Spill.push` (defended in its comment: its bytes passed
+    `sendAll`), and `serviceStreams`' carry, frames and ping (after its own
+    `io.durable` at the top); `probe/http.zig` and `probe/ladder.zig` are
+    other probes. `table.finish` sends no data. So no omitted flush is
+    undefended today.
+  - **The seam**: a pure `durable.zig` with a disk as `{ unflushed,
+    write_cache: ?bool, asks: bool }` (asks: it is SCSI, so it can be
+    told to synchronize) and `step(disk)`: `.none` (nothing written),
+    `.clear` (virtio-blk without FLUSH, or a disk that says it writes
+    through: durable once written) or `.synchronize`; and `settle(disk,
+    step, ok)`. `Block.flush` becomes `step`, then `scsi.synchronize` only
+    for `.synchronize`, then `settle`. The simulator drives `step` and
+    `settle` over writes, responses, stream turns, spill pushes and
+    SYNCHRONIZE outcomes (good, failed, ILLEGAL REQUEST), against what each
+    disk truly does (a cache, none, or one that lies), with properties: no
+    output claims a write not yet durable but after a flush that failed
+    for it (counted, the defended case) or a disk that lied; no
+    synchronize with nothing written since the last good one; after a
+    failure the next output synchronizes again.
+  **Answer (the box, 2026-10-06):** merged `origin/box/v18` into
+  `claude/great-wright-i7aste` in gopher-metal (`f0c132e`, unit tests pass);
+  fetch it and build 59 there. Steve's note: your permission checks
+  sometimes refuse what he isn't there to approve. When that happens, do as
+  you did: say what you need here and take the next item. The box does the
+  shared-branch step at its next look.
+
+- **(CC, item 55) B14 wants `VOLUME_CACHE=1`, not `lie`.** Under `lie`
+  the volume holds writes and says WCE=0 in MODE SENSE, and v18's
+  `Block.flush` believes it (`write_cache == false`) and sends no
+  SYNCHRONIZE CACHE, so v18 loses the message too. `VOLUME_CACHE=1` says
+  WCE=1: v18 synchronizes and keeps it, v17 sends nothing and loses it,
+  which is the comparison B14 means. `lie` is the case where v18's rule
+  "a disk that says it writes through is believed" is a choice, and it
+  shows the loss, as it should.
+
+- **(CC, item 53) gopher-metal's `scsi.bring` reads max_target and max_lun
+  4 bytes late.** virtio 1.2 §5.6.4 (and Linux's `virtio_scsi.h`) put
+  `max_channel` at 28 (le16), `max_target` at 30 (le16) and `max_lun` at
+  32 (le32); `bring` reads `configRead16(device, 32)` and
+  `configRead32(device, 36)`. So its max_target is max_lun's low half
+  (QEMU's 16383, clamped to 63) and its max_lun is whatever lies past the
+  config (QEMU on PCI answers all ones there, clamped to 7; metal-vmm
+  answers 0). It finds a disk at 0:0 either way, and would miss one at a
+  LUN past 0 here. 30 and 32 are the spec's; the box's call, being driver
+  code.
 
 - **(CC, item 44) gopher-metal never flushes, and never negotiates FLUSH.**
   Its virtio driver (`negotiate`, `want_low`) asks for no feature in word 0
@@ -643,6 +824,14 @@ question is answered by v18 (`io.durable`).
   `handle` and `transmit` as one `always("tcp: the table's invariants hold")`,
   and FAT's own `check` at the end of a run, so every metal-vmm run checks
   what the simulators check, on the real kernel. Production builds unchanged.
+- **B16. A verdict keyed by what the image reads, not angry-gopher's commit.**
+  v18's `long.sh` passed but kept no verdict: an angry-gopher docs commit
+  (README, `ops/deploy`'s comment) landed mid-run. Key the pair by the git
+  trees the image reads (`zig-server`, `pages`, `gallery`, and every
+  `@embedFile` source `extract_assets.py` names), so a docs commit keeps it.
+- **B17 (J5).** A coverage property per refusal in the guest's parsers
+  (`proto.parseIpv4`, `tcp.handle`'s early returns), so a sweep shows which
+  of `PEER_MANGLE`'s lies each parser met.
 
 **2026-10-06 morning, the box: items 47 and 48 merged** (gopher-metal
 `4953f7e`, 829/830 with 1 skipped; metal-vmm `49f46ab`, 221/221, `check.sh`

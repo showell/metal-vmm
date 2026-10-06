@@ -39,6 +39,8 @@ const vendor_id: u32 = 0x6D766D6D; // "mvmm"
 pub const device_id_block: u32 = 2;
 pub const device_id_net: u32 = 1;
 pub const device_id_entropy: u32 = 4;
+/// A SCSI controller (scsi.zig): a DigitalOcean volume's.
+pub const device_id_scsi: u32 = 8;
 
 const Reg = enum(u64) {
     magic = 0x000,
@@ -140,8 +142,8 @@ pub const Device = struct {
     context: *anyopaque,
     notified: Notified,
     /// Read by the guest at offset 0x100 and up; a block device keeps its
-    /// capacity here.
-    config: [32]u8 = @splat(0),
+    /// capacity here. 36 bytes is a SCSI controller's (scsi.zig).
+    config: [36]u8 = @splat(0),
 
     // What the driver has told us, and what we have told it.
     status: u32 = 0,
@@ -153,9 +155,10 @@ pub const Device = struct {
     interrupt_status: u32 = 0,
 
     queue_sel: u32 = 0,
-    /// Two is enough for both devices here: a block device's one, and a
-    /// network device's receive and transmit.
-    queues: [2]Queue = .{ .{}, .{} },
+    /// Three is enough for every device here: a block device's one, a
+    /// network device's receive and transmit, and a SCSI controller's
+    /// control, event and request queues.
+    queues: [3]Queue = @splat(.{}),
     /// How many of them this kind of device serves: what virtio-pci's
     /// `num_queues` says, and past which a queue reads as absent.
     queue_count: u32 = 2,
@@ -220,7 +223,7 @@ pub const Device = struct {
             .queue_device_hi => self.setHigh(&self.queues[self.pick()].used, value),
             .queue_ready => self.queues[self.pick()].ready = value,
             .queue_notify => {
-                if (value < self.queues.len) self.notified(self.context, self, ram, value);
+                if (value < self.queue_count) self.notified(self.context, self, ram, value);
                 // The driver polls the used ring, but it also reads and
                 // acknowledges this — so a device that never set it would
                 // leave that path dead.
@@ -231,7 +234,7 @@ pub const Device = struct {
                 // A write of zero is a reset, and the driver starts over.
                 if (value == 0) {
                     self.status = 0;
-                    self.queues = .{ .{}, .{} };
+                    self.queues = @splat(.{});
                 } else {
                     // FEATURES_OK is the device's to grant. We take the only
                     // feature this guest asks for, so it is always granted.

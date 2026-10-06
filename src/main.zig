@@ -43,6 +43,7 @@ const wire = @import("peer.zig");
 const apic = @import("apic.zig");
 const cost = @import("cost.zig");
 const cache = @import("cache.zig");
+const scsi = @import("scsi.zig");
 const coverage = @import("coverage.zig");
 const knobs = @import("knobs.zig");
 const pci = @import("pci.zig");
@@ -316,6 +317,9 @@ pub const Machine = struct {
     drive: ?*const faults.Drive = null,
     /// The disk's write cache (`DISK_CACHE`), which a power cut empties.
     write_cache: ?*cache.Cache = null,
+    /// **THE VOLUME** (`VOLUME`, scsi.zig): its power is the machine's, so
+    /// a cut in either disk empties both caches.
+    volume: ?*scsi.Scsi = null,
     /// **THE SERIAL PORT READS THE GUEST'S COVERAGE LINES** (coverage.zig),
     /// and with `COVERAGE_OUT` sends them to this file instead of stdout.
     serial: coverage.Serial = .{},
@@ -554,7 +558,21 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
         if (machine.drive) |d| if (d.cut) |cut| {
             // A write cache loses what was never flushed with it.
             if (machine.write_cache) |c| c.lose();
+            if (machine.volume) |v| if (v.cache) |c| c.lose();
             reportCut(cut);
+            return machine.stopped orelse 0;
+        };
+        // **WHAT THE VOLUME'S COMMANDS TOOK** (`VOLUME_LATENCY_US`), paid
+        // to the clock before the guest runs again: its spin on the used
+        // ring would have counted that long.
+        if (machine.volume) |v| {
+            machine.time.ns += v.owed_ns;
+            v.owed_ns = 0;
+        }
+        if (machine.volume) |v| if (v.power.cut) |cut| {
+            if (machine.write_cache) |c| c.lose();
+            if (v.cache) |c| c.lose();
+            std.debug.print("metal-vmm: the power was cut after the guest's write {d} to the volume (sector {d}, {d} sectors)\n", .{ cut.write, cut.sector, cut.of });
             return machine.stopped orelse 0;
         };
         const rc = linux.ioctl(vcpu, kvm.run, 0);
@@ -694,6 +712,14 @@ fn readAll(path: [:0]const u8, into: []u8) ?[]const u8 {
     const n = linux.read(fd, into.ptr, into.len);
     if (linux.errno(n) != .SUCCESS or n == 0) return null;
     return into[0..n];
+}
+
+/// What the volume was asked, if one was attached (`VOLUME`): a run without
+/// one says nothing new.
+fn reportVolume(machine: *const Machine) void {
+    const v = machine.volume orelse return;
+    var buf: [256]u8 = undefined;
+    std.debug.print("{s}", .{v.line(&buf)});
 }
 
 /// What the client got, for a caller that wants to diff it against another
@@ -858,6 +884,30 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     var dice = entropy.Entropy{};
     var dice_device = dice.device();
     if (!pc) machine.devices[2] = &dice_device;
+    // **A VOLUME, IF ONE IS ATTACHED** (`VOLUME=<file>`, scsi.zig): a SCSI
+    // disk on a virtio-scsi controller, as prod's chat data is.
+    var volume: scsi.Scsi = .{ .image = &.{} };
+    var volume_device: virtio.Device = undefined;
+    var volume_drive: ?disk.Disk = null;
+    // Out here, not in the block below: the disk keeps its path to write
+    // back to at the run's end.
+    var path_buf: [4096]u8 = undefined;
+    if (init.environ.getPosix("VOLUME")) |name| {
+        if (name.len >= path_buf.len) {
+            std.debug.print("metal-vmm: the volume's name is too long: {s}\n", .{name});
+            return 2;
+        }
+        @memcpy(path_buf[0..name.len], name);
+        path_buf[name.len] = 0;
+        volume_drive = disk.Disk.open(path_buf[0..name.len :0]) catch |e| {
+            std.debug.print("metal-vmm: cannot open the volume {s}: {s}\n", .{ name, @errorName(e) });
+            return 2;
+        };
+        volume = .{ .image = volume_drive.?.bytes, .dirty = volume_drive.?.dirty };
+        volume_device = volume.device();
+        machine.volume = &volume;
+        if (!pc) machine.devices[3] = &volume_device;
+    }
     // The same three, in slots of a PCI bus instead. The guest asks for each
     // kind by type, so the order is only the order a scan finds them in.
     var bus = pci.Bus{};
@@ -866,18 +916,28 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         if (disk_path != null) _ = bus.plug(1, &block_device, &machine.lapic);
         _ = bus.plug(2, &net_device, &machine.lapic);
         _ = bus.plug(3, &dice_device, &machine.lapic);
+        if (machine.volume != null) _ = bus.plug(4, &volume_device, &machine.lapic);
     }
 
     // **THE FAULTS: A SEED'S, UNDER WHAT THE ENVIRONMENT SETS BY HAND**
     // (knobs.zig). A seeded run says what it chose, as the knobs that would
     // repeat it without the seed.
     var turned = if (count(init.environ, "FAULT_SEED")) |seed| knobs.Knobs.fromSeed(seed) else knobs.Knobs{};
+    // A seed's volume faults, only with a volume, so no run without one moves.
+    if (count(init.environ, "FAULT_SEED")) |seed| if (init.environ.getPosix("VOLUME") != null) turned.withVolume(seed);
     turned.overlay(init.environ);
     if (count(init.environ, "FAULT_SEED")) |seed| {
         var line: [1024]u8 = undefined;
         std.debug.print("metal-vmm: FAULT_SEED={d} is {s}\n", .{ seed, turned.format(&line) });
     }
     tellTheFaults(&card.line, &block.refusals, &card.peer.rough, &turned);
+    // **THE LEASE THE PEER HANDS OUT** (`DHCP_LEASE_S`, a day unset): a
+    // short one runs out within a run, and the run's end says whether the
+    // guest renewed it.
+    if (turned.get("DHCP_LEASE_S")) |text| {
+        card.peer.lease_s = std.math.clamp(std.fmt.parseInt(u32, text, 10) catch 86_400, 1, std.math.maxInt(u32));
+        card.peer.lease_named = true;
+    }
     // **THE CALENDAR AS A KNOB** (`RTC_BOOTS_AT=unix`): the day the chip
     // boots on, from 1970 to 9999. Every run with it boots on that instant.
     if (turned.get("RTC_BOOTS_AT")) |text| {
@@ -899,6 +959,33 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         block_device.features_low |= virtio.feature_blk_flush;
         machine.write_cache = &write_cache;
     };
+    // **THE VOLUME'S CACHE AND POWER** (`VOLUME_CACHE=1|lie`,
+    // `VOLUME_CUT_AFTER=n`, scsi.zig): its WCE bit, said truly or not, and
+    // the write the power goes after; and the SYNCHRONIZE CACHEs that fail
+    // (`VOLUME_SYNC_FAIL=n`, `VOLUME_SYNC_FAIL_FOR=k`).
+    var volume_cache: cache.Cache = undefined;
+    defer if (volume.cache) |c| c.deinit();
+    if (machine.volume != null) {
+        if (turned.get("VOLUME_CACHE")) |how| {
+            volume_cache = .{ .gpa = std.heap.page_allocator, .image = volume.image, .lies = std.mem.eql(u8, how, "lie") };
+            volume.cache = &volume_cache;
+        }
+        if (turned.get("VOLUME_CUT_AFTER")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
+            volume.power.cut_after = n;
+        };
+        if (turned.get("VOLUME_ATTENTION_AT")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
+            volume.attention_at = n;
+        };
+        if (turned.get("VOLUME_LATENCY_US")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |us| {
+            volume.latency_ns = us * std.time.ns_per_us;
+        };
+        if (turned.get("VOLUME_SYNC_FAIL")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
+            volume.sync_fail_at = n;
+        };
+        if (turned.get("VOLUME_SYNC_FAIL_FOR")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
+            volume.sync_fail_for = n;
+        };
+    }
     if (count(init.environ, "PATIENCE_S")) |seconds| machine.patience_ns = seconds * std.time.ns_per_s;
     // **COVERAGE LINES TO A FILE OF THEIR OWN**, appended: each boot of a
     // sweep adds its lines to the same JSONL, as the judge's do.
@@ -962,6 +1049,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // they are reported before the error goes anywhere.
     const code = serve(vcpu, page, &machine, .{ .lo = loaded.text_lo, .hi = loaded.text_hi }) catch |e| {
         reportRun(&card, &block, machine.time.ns);
+        reportVolume(&machine);
         reports.cost(&machine, &card, &block);
         reportCoverage(&machine);
         // **AN IDLE END IS A SERVER'S NORMAL END**: a guest serving more than
@@ -974,6 +1062,12 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
                 return 1;
             };
         };
+        if (keepsWrites(e)) if (volume_drive) |*on_disk| {
+            _ = on_disk.writeBack() catch |w| {
+                std.debug.print("metal-vmm: the volume would not take the run's writes: {s}\n", .{@errorName(w)});
+                return 1;
+            };
+        };
         if (e == error.GuestIdle and fetch != null) theClient(init.environ, &card.peer);
         return e;
     };
@@ -981,6 +1075,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // stream: a run with a perfect wire says nothing, so the probes' output
     // stays comparable with QEMU's.
     reportRun(&card, &block, machine.time.ns);
+    reportVolume(&machine);
     if (pc) reportRest(&machine);
     reports.cost(&machine, &card, &block);
     reportCoverage(&machine);
@@ -990,6 +1085,12 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     if (drive) |*on_disk| {
         _ = on_disk.writeBack() catch |e| {
             std.debug.print("metal-vmm: the disk would not take the run's writes: {s}\n", .{@errorName(e)});
+            return 1;
+        };
+    }
+    if (volume_drive) |*on_disk| {
+        _ = on_disk.writeBack() catch |e| {
+            std.debug.print("metal-vmm: the volume would not take the run's writes: {s}\n", .{@errorName(e)});
             return 1;
         };
     }
@@ -1009,6 +1110,8 @@ test {
     _ = @import("entropy.zig");
     _ = @import("disk.zig");
     _ = @import("virtio.zig");
+    _ = @import("scsi.zig");
+    _ = @import("mangle.zig");
     _ = @import("net.zig");
     _ = @import("peer.zig");
     _ = @import("apic.zig");

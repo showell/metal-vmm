@@ -27,6 +27,10 @@
 # TRANSPORT (default pci, the machine that rests); FLOOR; RUN_TIMEOUT
 # (seconds, default 300); KEEP=<dir> keeps every run's log, page and the
 # coverage JSONL there. VMM, MERGE and SOUND name the programs, for a test.
+# VOLUME_SITE=<image> attaches a fresh copy of that image to every run as its
+# volume (scsi.zig), so each seed also draws the volume's faults
+# (knobs.zig, `withVolume`); its copy must be sound too, and VOLUME_CUT_AFTER
+# may cost the page as DISK_CUT_AFTER does. Unset, nothing here changes.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
@@ -52,7 +56,12 @@ COVERAGE="$WORK/coverage.jsonl"
 run() {
   local name="$1"; shift
   cp "$SITE" "$WORK/$name.img"
-  env "$@" COVERAGE_OUT="$COVERAGE" PEER_BODY="$WORK/$name.body" \
+  local volume=()
+  if [ -n "${VOLUME_SITE:-}" ]; then
+    cp "$VOLUME_SITE" "$WORK/$name.vol"
+    volume=(VOLUME="$WORK/$name.vol")
+  fi
+  env "$@" "${volume[@]}" COVERAGE_OUT="$COVERAGE" PEER_BODY="$WORK/$name.body" \
     timeout "$RUN_TIMEOUT" "$VMM" "$KERNEL" "$WORK/$name.img" "" "$PATH_WANTED" > "$WORK/$name.log" 2>&1
   echo $? > "$WORK/$name.exit"
   [ -f "$WORK/$name.body" ] || : > "$WORK/$name.body"
@@ -77,8 +86,11 @@ verdict() {
   if ! cmp -s "$WORK/$name.img" "$SITE"; then
     "$SOUND" "$WORK/$name.img" > "$WORK/$name.sound" 2>&1 || why="$why, the volume is not sound"
   fi
+  if [ -n "${VOLUME_SITE:-}" ] && ! cmp -s "$WORK/$name.vol" "$VOLUME_SITE"; then
+    "$SOUND" "$WORK/$name.vol" > "$WORK/$name.vsound" 2>&1 || why="$why, the attached volume is not sound"
+  fi
   if [ "$status" != "$(status_of unhurt)" ] || ! cmp -s "$WORK/$name.body" "$WORK/unhurt.body"; then
-    for k in PEER_RESET_AT PEER_VANISH_AFTER DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DISK_ROT; do
+    for k in PEER_RESET_AT PEER_VANISH_AFTER DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DISK_ROT VOLUME_CUT_AFTER; do
       case " $knobs" in *" $k="*) excuse="$excuse${excuse:+, }$k" ;; esac
     done
     local gone

@@ -195,7 +195,7 @@ pub const Tcp = struct {
         self.* = .{
             .state = .syn_sent,
             .request = ask.request,
-            .asks = @max(ask.asks, 1),
+            .asks = @max(ask.asks, @as(u32, if (rough.pipeline) 2 else 1)),
             .port = ask.port,
             .iss = ask.iss,
             .seq = ask.iss,
@@ -387,6 +387,7 @@ pub const Tcp = struct {
     /// How much of what it asks it may send by now: one request for each
     /// answer that came whole, and one more.
     fn released(self: *const Tcp) usize {
+        if (self.rough.pipeline) return self.request.len * self.asks;
         return self.request.len * @min(self.answers + 1, self.asks);
     }
 
@@ -1286,4 +1287,19 @@ test "PEER_DRIP_US: a slow client sends its request a segment a gap, never silen
     }
     try testing.expectEqualStrings("/slow HTTP/1.1\r\n\r\n", got[0..n]);
     try testing.expectEqual(@as(u64, 5 * 3 * sec), at); // five more segments, three seconds apart
+}
+
+test "PEER_PIPELINE: both requests go before any answer, each in its own segments" {
+    var peer = Peer{ .rough = .{ .pipeline = true } };
+    var theirs: [2048]u8 = undefined;
+    const req = "GET /a HTTP/1.1\r\n\r\n";
+    try opened(&peer, .{ .pipeline = true }, req, 0);
+    try testing.expectEqual(@as(u32, 2), peer.tcp.asks);
+    // `opened` drained the first; the second went with it, unanswered.
+    try testing.expectEqual(@as(u32, 1001 + 2 * req.len), peer.tcp.seq);
+    try testing.expect(peer.more(0) == null);
+    // The first answer, and a FIN: one answer whole, and a FIN back.
+    const answer = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
+    _ = peer.answer(fakeSegment(&theirs, flag_ack | flag_psh | flag_fin, 5001, peer.tcp.seq, answer), ms);
+    try testing.expectEqual(@as(u32, 1), peer.tcp.answers);
 }

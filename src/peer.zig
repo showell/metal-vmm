@@ -108,6 +108,9 @@ pub const Rough = struct {
     /// this long after the last, so it is never silent and never done for a
     /// long time (with `PEER_MSS`, a byte at a time if asked).
     drip_ns: ?u64 = null,
+    /// **IT PIPELINES** (`PEER_PIPELINE`): its second request goes with the
+    /// first, before any answer, and it asks at least twice.
+    pipeline: bool = false,
     /// **ITS OWN RETRANSMISSION TIMER RUNS** (RFC 6298): set when the wire
     /// may lose or damage what it sends. A peer whose frames always arrive
     /// never needs to send one twice, so without this the run is the run it
@@ -167,6 +170,17 @@ pub const Peer = struct {
     /// next opens.
     retried: u8 = 0,
     retry_at: ?u64 = null,
+    /// **THE LEASE IT HANDS OUT** (`DHCP_LEASE_S`, a day by default), and
+    /// what the guest did with it: when the last one ends, how many ACKs
+    /// it was given and how many of them renewed a lease, and how many
+    /// requests came only after the lease had run out.
+    lease_s: u32 = 86_400,
+    /// Whether a person set it, and so whether the run's end says it.
+    lease_named: bool = false,
+    lease_until: ?u64 = null,
+    acks: u32 = 0,
+    renewals: u32 = 0,
+    late: u32 = 0,
 
     pub fn client(self: *Peer, i: usize) *Tcp {
         return if (i == 0) &self.tcp else &self.others[i - 1];
@@ -178,7 +192,7 @@ pub const Peer = struct {
 
     /// What the peer says back to one frame, or nothing.
     pub fn answer(self: *Peer, frame: []const u8, now: u64) ?[]const u8 {
-        if (dhcpIn(frame)) |request| return self.dhcpOut(request);
+        if (dhcpIn(frame)) |request| return self.dhcpOut(request, now);
         const segment = tcpIn(frame) orelse return null;
         // To a flood's address: nobody is there to answer.
         if (!std.mem.eql(u8, &segment.to, &server_ip)) return null;
@@ -291,13 +305,31 @@ pub const Peer = struct {
         return at + @as(u64, self.opened) * self.plan.gap_ns;
     }
 
-    fn dhcpOut(self: *Peer, request: Dhcp) ?[]const u8 {
+    fn dhcpOut(self: *Peer, request: Dhcp, now: u64) ?[]const u8 {
         const kind: u8 = switch (request.kind) {
             msg_discover => msg_offer,
             msg_request => msg_ack,
             else => return null,
         };
-        return writeDhcp(&self.scratch, request, kind);
+        if (kind == msg_ack) {
+            if (self.lease_until) |until| {
+                if (now >= until) self.late += 1 else self.renewals += 1;
+            }
+            self.acks += 1;
+            self.lease_until = now + @as(u64, self.lease_s) * std.time.ns_per_s;
+        }
+        return writeDhcp(&self.scratch, request, kind, self.lease_s);
+    }
+
+    /// The run's lease, in one line, at `now` (its end).
+    pub fn leaseLine(self: *const Peer, now: u64, buf: []u8) []const u8 {
+        const until = self.lease_until orelse
+            return std.fmt.bufPrint(buf, "metal-vmm: dhcp: a lease of {d} s offered, and never taken\n", .{self.lease_s}) catch "";
+        const ended = if (now >= until)
+            std.fmt.bufPrint(buf[200..], "it ran out at {d} s of the guest's time, unrenewed", .{until / std.time.ns_per_s}) catch ""
+        else
+            std.fmt.bufPrint(buf[200..], "it was held to the end", .{}) catch "";
+        return std.fmt.bufPrint(buf[0..200], "metal-vmm: dhcp: a lease of {d} s; {d} renewals, {d} requests after it ran out; {s}\n", .{ self.lease_s, self.renewals, self.late, ended }) catch "";
     }
 };
 
@@ -368,7 +400,7 @@ fn option(payload: []const u8, want: u8) ?u8 {
     return null;
 }
 
-fn writeDhcp(out: []u8, request: Dhcp, kind: u8) []const u8 {
+fn writeDhcp(out: []u8, request: Dhcp, kind: u8, lease_s: u32) []const u8 {
     @memset(out[0 .. 14 + 20 + 8 + 300], 0);
 
     const bootp = out[14 + 20 + 8 ..];
@@ -385,7 +417,9 @@ fn writeDhcp(out: []u8, request: Dhcp, kind: u8) []const u8 {
     var at: usize = 240;
     at = writeOption(bootp, at, opt_message_type, &.{kind});
     at = writeOption(bootp, at, opt_server_id, &server_ip);
-    at = writeOption(bootp, at, opt_lease_time, &.{ 0, 1, 0x51, 0x80 }); // a day
+    var lease: [4]u8 = undefined;
+    writeBe32(&lease, lease_s);
+    at = writeOption(bootp, at, opt_lease_time, &lease);
     at = writeOption(bootp, at, opt_subnet_mask, &netmask);
     at = writeOption(bootp, at, opt_router, &server_ip);
     at = writeOption(bootp, at, opt_dns, &dns_ip);
@@ -705,4 +739,22 @@ test "a client that opened before a flood of a thousand SYNs gets its whole answ
     try testing.expect(table.gave_way > 0);
     try testing.expect(table.holds(server_ip, syn.src_port));
     try testing.expectEqual(@as(u32, 1024 - 255), table.gave_way + table.dropped);
+}
+
+test "DHCP_LEASE_S: the lease offered, renewals counted, and a lease that ran out said" {
+    var peer = Peer{ .lease_s = 60 };
+    var request: [400]u8 = undefined;
+    var buf: [512]u8 = undefined;
+    const offer = peer.answer(fakeDiscover(&request, msg_discover, card_mac, .{ 1, 2, 3, 4 }), 0).?;
+    // The lease time option, 60 seconds, big-endian.
+    const at = std.mem.indexOf(u8, offer[14 + 20 + 8 + 240 ..], &.{ opt_lease_time, 4 }).?;
+    try testing.expectEqual(@as(u32, 60), readBe32(offer[14 + 20 + 8 + 240 + at + 2 ..][0..4]));
+    _ = peer.answer(fakeDiscover(&request, msg_request, card_mac, .{ 1, 2, 3, 4 }), 0).?;
+    try testing.expectEqualStrings("metal-vmm: dhcp: a lease of 60 s; 0 renewals, 0 requests after it ran out; it was held to the end\n", peer.leaseLine(59 * std.time.ns_per_s, &buf));
+    // Renewed at T1, half the lease; then never again.
+    _ = peer.answer(fakeDiscover(&request, msg_request, card_mac, .{ 1, 2, 3, 5 }), 30 * std.time.ns_per_s).?;
+    try testing.expectEqualStrings("metal-vmm: dhcp: a lease of 60 s; 1 renewals, 0 requests after it ran out; it ran out at 90 s of the guest's time, unrenewed\n", peer.leaseLine(120 * std.time.ns_per_s, &buf));
+    // A request after it ran out is late, not a renewal.
+    _ = peer.answer(fakeDiscover(&request, msg_request, card_mac, .{ 1, 2, 3, 6 }), 200 * std.time.ns_per_s).?;
+    try testing.expectEqual(@as(u32, 1), peer.late);
 }

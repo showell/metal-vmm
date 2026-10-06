@@ -363,6 +363,21 @@ measured, and `sweep.sh` does it for every seed that cuts the power.
 
 ### And the peer can misbehave
 
+**And it can lie** (`PEER_MANGLE=n[,m]`, `PEER_MANGLE_RATE=k`, mangle.zig):
+the frame picked arrives after a copy of it that lies in one way, its sums
+made right so it meets the check meant for it: an IP version not 4, a
+header shorter than 20 bytes or with options, a bad header checksum, a total
+length past the frame or shorter than a TCP header, a fragment, an address
+or a port not the guest's, a TCP data offset too short or past the segment.
+Each kind in turn, or the one `PEER_MANGLE_KIND` names; the copy's data is
+`X`s. The guest must drop every one, so the run must end with the page the
+run without it gets: `sweep.sh` does not excuse a page that differs under
+it. `zero_window` alone is no lie (a window of 0 with the frame's own data,
+which must be taken). Only TCP frames get a copy; the schedule counts every
+frame. A seed draws it one time in four, last of all its knobs. The run
+ends saying which lies were sent and which of gopher-metal's checks
+(`proto.parseIpv4`, `tcp.Table.handle`) each meets.
+
 **The wire can lose and damage what the peer sends too**: `PEER_EAT=n` (or
 `n,m`) and `PEER_LOSS=k` as for the guest's frames, and `PEER_DAMAGE=n` and
 `PEER_DAMAGE_RATE=k`, which change a byte of the segment's checksum so the
@@ -382,8 +397,10 @@ times are microseconds after it opens, sizes are bytes of the answer:
 | `PEER_VANISH_AFTER=n` | neither sends nor hears once it has `n` bytes of the answer |
 | `PEER_FLOOD=n`, `PEER_FLOOD_GAP_US=us`, `PEER_FLOOD_AT_US=us` | sends `n` SYNs that never finish (up to 25,536), each from its own address in 198.51.100.x and port, `us` apart (10 ms by default), starting `PEER_FLOOD_AT_US` after the opening (at once by default); a thousand fills gopher.zig's 256 slots four times over |
 | `PEER_SHUT_AFTER=n`, `PEER_SHUT_FOR_US=us` | shuts its receive window once it has `n` bytes, takes nothing while it is shut, then says it is open |
+| `PEER_PIPELINE=1` | sends its second request with the first, before any answer (it asks twice at least); the run ends saying how many answers came whole and whether the guest ended it with a FIN or a reset |
 | `PEER_DRIP_US=us` | sends each segment of its request `us` after the last (with `PEER_MSS` to make them small): a slow client, never silent and not done for a long while |
 | `PEER_RETRY=n` | asks again, on a new connection, what got no answer at all (closed or reset before a byte came), up to `n` times, as a browser does; the run ends saying how many times the request was sent |
+| `DHCP_LEASE_S=s` | offers and acknowledges a DHCP lease of `s` seconds (a day unset); the run ends saying how many requests renewed it, how many came after it ran out, and whether it was held to the end or ran out unrenewed, and when |
 | `PEER_IGNORE_WINDOW=1` | sends all its request at once, past the window the guest offered, and sends again what the guest threw away; a plain client keeps to the window |
 | `PEER_MSS=n` | sends its request `n` bytes a segment (never more than the guest's announced MSS, which it keeps to anyway: 536 if it announced none, 1460 at most) |
 
@@ -523,6 +540,34 @@ flush. A guest that does not negotiate FLUSH is promised write-through
 either way, as a disk that lies about its cache does. The run ends saying
 which, and how many writes a cut lost. Off unless asked: offering FLUSH
 changes what the guest negotiates.
+
+**And a volume, as prod has one.** `VOLUME=<file>` attaches a second disk,
+a SCSI disk at target 0, LUN 0 of a virtio-scsi controller (scsi.zig), which
+is how a DigitalOcean droplet reaches chat's data (gopher-metal `scsi.zig`).
+It answers INQUIRY, READ CAPACITY(10), MODE SENSE(10)'s caching page,
+READ(10), WRITE(10), SYNCHRONIZE CACHE(10) and TEST UNIT READY; anything
+else is ILLEGAL REQUEST, another target is BAD_TARGET, and the first command
+after power-on but INQUIRY is UNIT ATTENTION, as a real disk's is. Its file
+keeps the run's writes as the boot disk's does. `VOLUME_CACHE=1` holds its
+writes until SYNCHRONIZE CACHE and says so (WCE=1); `VOLUME_CACHE=lie` holds
+them and says it writes through (WCE=0), so a driver that believes it never
+synchronizes. `VOLUME_CUT_AFTER=n` cuts the power after the volume's nth
+write; either disk's cut empties both caches. The run ends with
+`metal-vmm: volume: ...`, its reads, writes, SYNCHRONIZE CACHEs and MODE
+SENSEs, and whether a cut lost anything. `VOLUME_SYNC_FAIL=n` (with
+`VOLUME_SYNC_FAIL_FOR=k`, 1 by default) answers the nth SYNCHRONIZE CACHE,
+and the k-1 after it, MEDIUM ERROR, keeping nothing: a cache that cannot
+reach its media. `VOLUME_LATENCY_US=us` makes every command cost the guest
+that long: it is answered at once and the machine's clock moves on by the
+latency before the guest runs again, which is what a driver spinning on the
+used ring (gopher-metal's) would have counted; a completion held back would
+never be seen, since that spin makes no exit. The volume's line says how long
+was waited. `VOLUME_ATTENTION_AT=n` makes CAPACITY DATA HAS CHANGED pending
+from the nth command, as a volume resized under a droplet tells it: told on
+the next command but INQUIRY, which is not performed, so the driver must send
+it again. With `FAULT_SEED` too, a seed draws the volume's faults (all but
+the latency) on dice of their own, and `sweep.sh` sweeps them with
+`VOLUME_SITE=<image>`. Nothing changes unless `VOLUME` is set.
 
 The one PASS under a refusal is #1, the GPT header: `vfat` reads any failure to
 find a partition table as "no table" and mounts sector 0, which on this bare

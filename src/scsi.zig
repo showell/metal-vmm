@@ -1,0 +1,703 @@
+//! **A DIGITALOCEAN VOLUME** (`VOLUME=<file>`, QUEUE.md item 53): a SCSI
+//! disk behind a virtio-scsi controller, which is how prod reaches chat's
+//! data (gopher-metal `scsi.zig`). The boot disk stays virtio-blk; this is
+//! the second disk, and the one whose writes matter.
+//!
+//! **THE SMALLEST CONTROLLER GOPHER-METAL'S DRIVER ACCEPTS.** Three queues
+//! (control, event, requests), of which only the third is ever used; the
+//! default CDB and sense sizes, which the driver insists on; one disk, at
+//! target 0, LUN 0. A request is a 51-byte header the device reads (the
+//! LUN, a tag, and a 32-byte CDB), any data it reads, then a 108-byte
+//! response it writes (sense length, residual, status, the device's own
+//! outcome, sense data), then any data it writes (virtio 1.2 §5.6.6).
+//!
+//! **SIX COMMANDS AND TEST UNIT READY**: INQUIRY, READ CAPACITY(10), MODE
+//! SENSE(10) for the caching page, READ(10), WRITE(10), SYNCHRONIZE
+//! CACHE(10) (SPC-4, SBC-3). Anything else is ILLEGAL REQUEST. A target
+//! with no disk is BAD_TARGET, as QEMU answers, and the first command after
+//! power-on but INQUIRY is UNIT ATTENTION, as a real disk's is: gopher-metal
+//! sends it again.
+//!
+//! **THE WRITE CACHE** (`VOLUME_CACHE`, cache.zig), with `DISK_CACHE`'s
+//! semantics. SCSI negotiates nothing: a disk says in MODE SENSE's caching
+//! page (WCE) whether it answers writes from a cache, and only SYNCHRONIZE
+//! CACHE makes them durable. `VOLUME_CACHE=1` is that disk, saying so.
+//! `VOLUME_CACHE=lie` holds writes and says WCE=0, as a disk that lies
+//! about its cache does: a driver that believes it never synchronizes.
+//! Unset, the disk writes through and says so. Nothing here reads a clock.
+
+const std = @import("std");
+const virtio = @import("virtio.zig");
+const cache_mod = @import("cache.zig");
+const faults = @import("faults.zig");
+const disk = @import("disk.zig");
+
+const Desc = virtio.Desc;
+const Device = virtio.Device;
+const inside = virtio.inside;
+const readInt = virtio.readInt;
+const writeInt = virtio.writeInt;
+
+pub const sector_bytes: u64 = 512;
+
+/// The sizes the driver insists on (virtio 1.2 §5.6.4's defaults), and the
+/// header and response at those sizes.
+pub const cdb_size = 32;
+pub const sense_size = 96;
+pub const request_len = 19 + cdb_size;
+pub const response_len = 12 + sense_size;
+
+pub const request_queue: u32 = 2;
+
+/// The device's outcome (§5.6.6.1) and the disk's SCSI status.
+pub const response_ok: u8 = 0;
+pub const response_bad_target: u8 = 3;
+pub const status_good: u8 = 0;
+pub const status_check_condition: u8 = 2;
+
+/// Sense keys, and the additional sense codes that say why (SPC-4 §4.5.6).
+pub const key_medium_error: u8 = 3;
+pub const key_illegal_request: u8 = 5;
+pub const key_unit_attention: u8 = 6;
+const asc_write_error: u8 = 0x0C;
+const asc_invalid_opcode: u8 = 0x20;
+const asc_lba_out_of_range: u8 = 0x21;
+const asc_invalid_field: u8 = 0x24;
+const asc_lun_not_supported: u8 = 0x25;
+const asc_power_on: u8 = 0x29;
+/// With ASCQ 09h: CAPACITY DATA HAS CHANGED.
+pub const asc_capacity_changed: u8 = 0x2A;
+const asc_saving_not_supported: u8 = 0x39;
+
+pub const op_test_unit_ready: u8 = 0x00;
+pub const op_inquiry: u8 = 0x12;
+pub const op_read_capacity: u8 = 0x25;
+pub const op_read: u8 = 0x28;
+pub const op_write: u8 = 0x2A;
+pub const op_synchronize: u8 = 0x35;
+pub const op_mode_sense: u8 = 0x5A;
+
+const page_caching: u8 = 0x08;
+const page_all: u8 = 0x3F;
+
+pub const Scsi = struct {
+    /// The volume, mapped, as `virtio.Block`'s image is.
+    image: []u8,
+    /// One bit per sector written, for disk.zig to write back.
+    dirty: ?[]u8 = null,
+    /// **A WRITE CACHE** (`VOLUME_CACHE`), or none: write-through.
+    cache: ?*cache_mod.Cache = null,
+    /// **THE POWER** (`VOLUME_CUT_AFTER`): only its cut is used here.
+    power: faults.Drive = .{},
+    /// **A CACHE THAT CANNOT REACH ITS MEDIA** (`VOLUME_SYNC_FAIL=n`,
+    /// `VOLUME_SYNC_FAIL_FOR=k`): the nth SYNCHRONIZE CACHE, and the k-1
+    /// after it, answer MEDIUM ERROR, and what they were to keep stays held.
+    sync_fail_at: ?u64 = null,
+    sync_fail_for: u64 = 1,
+    sync_failed: u64 = 0,
+    /// **A VOLUME THAT TAKES TIME** (`VOLUME_LATENCY_US`): each command
+    /// answered costs the guest this long. gopher-metal waits on a command
+    /// by spinning on the used ring, which no exit interrupts, so a
+    /// completion held back would never be seen; instead it is answered at
+    /// once and the machine's clock moves on by the latency before the
+    /// guest runs again, which is what its spin would have counted.
+    /// `owed_ns` is what the run loop has yet to add; `waited_ns` all of it.
+    latency_ns: u64 = 0,
+    owed_ns: u64 = 0,
+    waited_ns: u64 = 0,
+    /// UNIT ATTENTION, owed to the first command but INQUIRY.
+    /// Pending: the additional sense code it is told with, POWER ON first.
+    attention: ?u8 = asc_power_on,
+    /// **ONE MORE, IN THE MIDDLE OF A RUN** (`VOLUME_ATTENTION_AT=n`): from
+    /// the nth command, CAPACITY DATA HAS CHANGED is pending, as a volume
+    /// resized under a droplet tells it; the command it is told on is not
+    /// performed. `commands` counts every command; `attentions` those told.
+    attention_at: ?u64 = null,
+    commands: u64 = 0,
+    attentions: u64 = 0,
+    reads: u64 = 0,
+    writes: u64 = 0,
+    synchronizes: u64 = 0,
+    mode_senses: u64 = 0,
+    /// Commands answered CHECK CONDITION, UNIT ATTENTION aside.
+    refused: u64 = 0,
+
+    pub fn device(self: *Scsi) Device {
+        var d = Device{ .id = virtio.device_id_scsi, .context = self, .notified = notified, .queue_count = 3 };
+        // struct virtio_scsi_config (§5.6.4), QEMU's numbers.
+        const c = &d.config;
+        std.mem.writeInt(u32, c[0..4], 1, .little); // num_queues: request queues
+        std.mem.writeInt(u32, c[4..8], 126, .little); // seg_max
+        std.mem.writeInt(u32, c[8..12], 0xFFFF, .little); // max_sectors
+        std.mem.writeInt(u32, c[12..16], 128, .little); // cmd_per_lun
+        std.mem.writeInt(u32, c[16..20], 16, .little); // event_info_size
+        std.mem.writeInt(u32, c[20..24], sense_size, .little);
+        std.mem.writeInt(u32, c[24..28], cdb_size, .little);
+        std.mem.writeInt(u16, c[28..30], 0, .little); // max_channel
+        std.mem.writeInt(u16, c[30..32], 255, .little); // max_target
+        std.mem.writeInt(u32, c[32..36], 16383, .little); // max_lun
+        return d;
+    }
+
+    /// What the caching page's WCE bit says: a cache, unless it lies.
+    pub fn saysWce(self: *const Scsi) bool {
+        const c = self.cache orelse return false;
+        return !c.lies;
+    }
+
+    fn notified(context: *anyopaque, d: *Device, ram: []u8, queue: u32) void {
+        const self: *Scsi = @ptrCast(@alignCast(context));
+        // The control and event queues: the driver sends nothing on the one,
+        // and an event buffer is held for an event that never comes.
+        if (queue != request_queue) return;
+        var links: [8]Desc = undefined;
+        var left = d.budget(queue);
+        while (left > 0) : (left -= 1) {
+            if (self.power.cut != null) return;
+            const chain = d.take(ram, queue, &links) orelse break;
+            const written = self.serve(ram, chain.links);
+            self.owed_ns += self.latency_ns;
+            self.waited_ns += self.latency_ns;
+            // The command the power went out in is never answered.
+            if (self.power.cut != null) return;
+            d.complete(ram, queue, chain.head, written);
+        }
+    }
+
+    const Answer = struct {
+        status: u8 = status_good,
+        key: u8 = 0,
+        asc: u8 = 0,
+        ascq: u8 = 0,
+        /// Bytes of data written to the driver, after the response.
+        data: u32 = 0,
+        response: u8 = response_ok,
+    };
+
+    fn check(self: *Scsi, key: u8, asc: u8) Answer {
+        if (key != key_unit_attention) self.refused += 1;
+        return .{ .status = status_check_condition, .key = key, .asc = asc };
+    }
+
+    /// One request: the device-readable descriptors (the header, then any
+    /// data out), then the device-writable (the response, then any data
+    /// in), one descriptor each, as gopher-metal sends them. A chain of any
+    /// other shape is not answered, as `virtio.Block` answers none.
+    pub fn serve(self: *Scsi, ram: []u8, chain: []const Desc) u32 {
+        var readable: [2]Desc = undefined;
+        var writable: [2]Desc = undefined;
+        var r: usize = 0;
+        var w: usize = 0;
+        for (chain) |one| {
+            if (one.flags & Desc.write_flag == 0) {
+                if (w > 0 or r == readable.len) return 0;
+                readable[r] = one;
+                r += 1;
+            } else {
+                if (w == writable.len) return 0;
+                writable[w] = one;
+                w += 1;
+            }
+        }
+        if (r == 0 or w == 0 or (r == 2 and w == 2)) return 0;
+        const head = readable[0];
+        const resp = writable[0];
+        if (head.len < request_len or resp.len < response_len) return 0;
+        if (!inside(ram, head.addr, request_len) or !inside(ram, resp.addr, response_len)) return 0;
+        const out: ?[]u8 = if (r == 2) virtio.buffer(ram, readable[1]) else null;
+        const in: ?[]u8 = if (w == 2) virtio.buffer(ram, writable[1]) else null;
+
+        const lun = ram[@intCast(head.addr)..][0..8];
+        const cdb = ram[@intCast(head.addr + 19)..][0..cdb_size];
+        const a = self.command(lun, cdb, out, in);
+
+        const at: usize = @intCast(resp.addr);
+        @memset(ram[at..][0..response_len], 0);
+        const sense_len: u32 = if (a.status == status_check_condition) 18 else 0;
+        const expected: u32 = if (in) |b| @intCast(b.len) else if (out) |b| @intCast(b.len) else 0;
+        std.mem.writeInt(u32, ram[at..][0..4], sense_len, .little);
+        std.mem.writeInt(u32, ram[at + 4 ..][0..4], expected - @min(expected, a.data), .little);
+        ram[at + 10] = a.status;
+        ram[at + 11] = a.response;
+        if (sense_len > 0) {
+            const s = ram[at + 12 ..][0..18];
+            s[0] = 0x70; // current, fixed format
+            s[2] = a.key;
+            s[7] = 10; // additional length
+            s[12] = a.asc;
+            s[13] = a.ascq;
+        }
+        return response_len + a.data;
+    }
+
+    fn command(self: *Scsi, lun: *const [8]u8, cdb: *const [cdb_size]u8, out: ?[]u8, in: ?[]u8) Answer {
+        // Target 0 is the only one; a LUN other than 0 there has no disk.
+        if (lun[0] != 1 or lun[1] != 0) return .{ .response = response_bad_target };
+        const lun_n = (@as(u16, lun[2] & 0x3F) << 8) | lun[3];
+        self.commands += 1;
+        if (self.attention_at) |n| if (self.commands == n) {
+            self.attention = asc_capacity_changed;
+        };
+        const op = cdb[0];
+        if (op == op_inquiry) return self.inquiry(cdb, in, lun_n == 0);
+        if (lun_n != 0) return self.check(key_illegal_request, asc_lun_not_supported);
+        if (self.attention) |asc| {
+            self.attention = null;
+            self.attentions += 1;
+            var a = self.check(key_unit_attention, asc);
+            if (asc == asc_capacity_changed) a.ascq = 0x09;
+            return a;
+        }
+        return switch (op) {
+            op_test_unit_ready => .{},
+            op_read_capacity => self.capacity(in),
+            op_mode_sense => self.modeSense(cdb, in),
+            op_read, op_write => self.transfer(cdb, op == op_write, out, in),
+            op_synchronize => self.synchronize(),
+            else => self.check(key_illegal_request, asc_invalid_opcode),
+        };
+    }
+
+    fn synchronize(self: *Scsi) Answer {
+        self.synchronizes += 1;
+        if (self.sync_fail_at) |at| if (self.synchronizes >= at and self.synchronizes - at < self.sync_fail_for) {
+            self.sync_failed += 1;
+            return self.check(key_medium_error, asc_write_error);
+        };
+        if (self.cache) |c| c.flush();
+        return .{};
+    }
+
+    fn give(in: ?[]u8, bytes: []const u8, allocated: usize) u32 {
+        const to = in orelse return 0;
+        const n = @min(bytes.len, allocated, to.len);
+        @memcpy(to[0..n], bytes[0..n]);
+        return @intCast(n);
+    }
+
+    fn inquiry(self: *Scsi, cdb: *const [cdb_size]u8, in: ?[]u8, here: bool) Answer {
+        if (cdb[1] & 1 != 0) return self.check(key_illegal_request, asc_invalid_field); // no VPD pages
+        var data: [36]u8 = @splat(' ');
+        // A disk, or a LUN with nothing connected (qualifier 3, type 1Fh).
+        data[0] = if (here) 0x00 else 0x7F;
+        data[1] = 0;
+        data[2] = 5; // SPC-3
+        data[3] = 2; // response data format
+        data[4] = 31; // what follows
+        data[5] = 0;
+        data[6] = 0;
+        data[7] = 0;
+        @memcpy(data[8..16], "METALVMM");
+        @memcpy(data[16..22], "VOLUME");
+        @memcpy(data[32..36], "0001");
+        const allocated = std.mem.readInt(u16, cdb[3..5], .big);
+        return .{ .data = give(in, &data, allocated) };
+    }
+
+    fn capacity(self: *Scsi, in: ?[]u8) Answer {
+        const sectors = self.image.len / sector_bytes;
+        var data: [8]u8 = undefined;
+        const last: u32 = if (sectors == 0) 0 else @intCast(@min(sectors - 1, 0xFFFF_FFFF));
+        std.mem.writeInt(u32, data[0..4], last, .big);
+        std.mem.writeInt(u32, data[4..8], sector_bytes, .big);
+        return .{ .data = give(in, &data, data.len) };
+    }
+
+    /// MODE SENSE(10): the caching page (SBC-3 §6.5.5), with no block
+    /// descriptors, whose WCE bit is the cache's.
+    fn modeSense(self: *Scsi, cdb: *const [cdb_size]u8, in: ?[]u8) Answer {
+        self.mode_senses += 1;
+        const control = cdb[2] >> 6;
+        const page = cdb[2] & 0x3F;
+        if (page != page_caching and page != page_all) return self.check(key_illegal_request, asc_invalid_field);
+        if (control == 3) return self.check(key_illegal_request, asc_saving_not_supported);
+        var data: [8 + 20]u8 = @splat(0);
+        std.mem.writeInt(u16, data[0..2], data.len - 2, .big); // mode data length
+        data[8] = page_caching;
+        data[9] = 18; // page length
+        // Current and default values say the cache; changeable says none.
+        if (control != 1 and self.saysWce()) data[10] = 0x04;
+        const allocated = std.mem.readInt(u16, cdb[7..9], .big);
+        return .{ .data = give(in, &data, allocated) };
+    }
+
+    fn transfer(self: *Scsi, cdb: *const [cdb_size]u8, writing: bool, out: ?[]u8, in: ?[]u8) Answer {
+        const lba: u64 = std.mem.readInt(u32, cdb[2..6], .big);
+        const n: u64 = std.mem.readInt(u16, cdb[7..9], .big);
+        if (lba + n > self.image.len / sector_bytes) return self.check(key_illegal_request, asc_lba_out_of_range);
+        if (n == 0) return .{};
+        const bytes = n * sector_bytes;
+        const at: usize = @intCast(lba * sector_bytes);
+        if (!writing) {
+            const to = in orelse return self.check(key_illegal_request, asc_invalid_field);
+            if (to.len < bytes) return self.check(key_illegal_request, asc_invalid_field);
+            @memcpy(to[0..@intCast(bytes)], self.image[at..][0..@intCast(bytes)]);
+            self.reads += 1;
+            return .{ .data = @intCast(bytes) };
+        }
+        const from = out orelse return self.check(key_illegal_request, asc_invalid_field);
+        if (from.len < bytes) return self.check(key_illegal_request, asc_invalid_field);
+        // As much as lands before the power goes, which is all of it unless
+        // this is the write it goes in.
+        const landed = self.power.lands(lba, n);
+        if (self.cache) |c| _ = c.wrote(lba, landed);
+        const len: usize = @intCast(landed * sector_bytes);
+        @memcpy(self.image[at..][0..len], from[0..len]);
+        if (self.dirty) |bits| disk.mark(bits, lba, landed);
+        self.writes += 1;
+        return .{};
+    }
+
+    /// One line for the run's end, in `buf`.
+    pub fn line(self: *const Scsi, buf: []u8) []const u8 {
+        const mode = if (self.cache) |c|
+            (if (c.lies) "a write cache that says it writes through (VOLUME_CACHE=lie)" else "a write cache, said in MODE SENSE")
+        else
+            "write-through";
+        const lost: u64 = if (self.cache) |c| c.lost else 0;
+        var told_buf: [64]u8 = undefined;
+        const told = if (self.attention_at) |n|
+            std.fmt.bufPrint(&told_buf, "; UNIT ATTENTION at command {d} {s}", .{ n, if (self.commands >= n and self.attention == null) "told" else "never told" }) catch ""
+        else
+            "";
+        var waited_buf: [64]u8 = undefined;
+        const waited = if (self.latency_ns != 0)
+            std.fmt.bufPrint(&waited_buf, "; {d} ms waited on it (VOLUME_LATENCY_US)", .{self.waited_ns / std.time.ns_per_ms}) catch ""
+        else
+            "";
+        var failed_buf: [64]u8 = undefined;
+        const failed = if (self.sync_fail_at != null)
+            std.fmt.bufPrint(&failed_buf, " ({d} failed, VOLUME_SYNC_FAIL)", .{self.sync_failed}) catch ""
+        else
+            "";
+        return std.fmt.bufPrint(buf, "metal-vmm: volume: {s}; {d} reads, {d} writes, {d} SYNCHRONIZE CACHE{s}, {d} MODE SENSE{s}{s}{s}\n", .{
+            mode, self.reads, self.writes, self.synchronizes, failed, self.mode_senses, told, waited,
+            if (self.power.cut != null) (if (lost > 0) "; the power cut lost sectors never synchronized" else "; the power cut lost nothing") else "",
+        }) catch "metal-vmm: volume\n";
+    }
+};
+
+// ── driven as gopher-metal's scsi.zig drives it ─────────────────────────────
+
+const testing = std.testing;
+
+/// A guest's memory with the request queue in it, and the requests built as
+/// gopher-metal's `scsi.command` builds them: the header (51 bytes), then
+/// the data the disk reads or the response, then the data it writes.
+const FakeDriver = struct {
+    ram: [16384]u8 = @splat(0),
+
+    const size: u16 = 8;
+    const desc_at: u64 = 0x100;
+    const avail_at: u64 = desc_at + size * @sizeOf(Desc);
+    const used_at: u64 = avail_at + 4 + size * 2 + 2;
+    const request_at: u64 = 0x800;
+    const response_at: u64 = 0x900;
+    const data_at: u64 = 0x1000;
+
+    const Dir = enum { none, from_disk, to_disk };
+    const Outcome = struct { response: u8, status: u8, key: u8, asc: u8, residual: u32, used: u32 };
+
+    fn open(self: *FakeDriver, d: *Device) void {
+        d.write(&self.ram, 0x030, request_queue); // queue_sel
+        d.write(&self.ram, 0x038, size);
+        d.write(&self.ram, 0x080, desc_at);
+        d.write(&self.ram, 0x090, avail_at);
+        d.write(&self.ram, 0x0a0, used_at);
+        d.write(&self.ram, 0x044, 1);
+    }
+
+    fn desc(self: *FakeDriver, i: u64, one: Desc) void {
+        const at = desc_at + i * @sizeOf(Desc);
+        writeInt(u64, &self.ram, at, one.addr);
+        writeInt(u32, &self.ram, at + 8, one.len);
+        writeInt(u16, &self.ram, at + 12, one.flags);
+        writeInt(u16, &self.ram, at + 14, one.next);
+    }
+
+    fn send(self: *FakeDriver, d: *Device, target: u8, lun: u16, cdb: []const u8, dir: Dir, len: u32) Outcome {
+        @memset(self.ram[request_at..][0..request_len], 0);
+        const field = [8]u8{ 1, target, 0x40 | @as(u8, @truncate(lun >> 8)), @truncate(lun), 0, 0, 0, 0 };
+        @memcpy(self.ram[request_at..][0..8], &field);
+        @memcpy(self.ram[request_at + 19 ..][0..cdb.len], cdb);
+        self.ram[response_at + 10] = 0xFF;
+        self.ram[response_at + 11] = 0xFF;
+        const n = Desc.next_flag;
+        const wr = Desc.write_flag;
+        const req: Desc = .{ .addr = request_at, .len = request_len, .flags = n, .next = 1 };
+        switch (dir) {
+            .none => {
+                self.desc(0, req);
+                self.desc(1, .{ .addr = response_at, .len = response_len, .flags = wr, .next = 0 });
+            },
+            .from_disk => {
+                self.desc(0, req);
+                self.desc(1, .{ .addr = response_at, .len = response_len, .flags = wr | n, .next = 2 });
+                self.desc(2, .{ .addr = data_at, .len = len, .flags = wr, .next = 0 });
+            },
+            .to_disk => {
+                self.desc(0, req);
+                self.desc(1, .{ .addr = data_at, .len = len, .flags = n, .next = 2 });
+                self.desc(2, .{ .addr = response_at, .len = response_len, .flags = wr, .next = 0 });
+            },
+        }
+        const avail_idx = readInt(u16, &self.ram, avail_at + 2);
+        writeInt(u16, &self.ram, avail_at + 4 + @as(u64, avail_idx % size) * 2, 0);
+        writeInt(u16, &self.ram, avail_at + 2, avail_idx +% 1);
+        d.write(&self.ram, 0x050, request_queue);
+        const used_idx = readInt(u16, &self.ram, used_at + 2);
+        const sense_len = readInt(u32, &self.ram, response_at);
+        return .{
+            .response = self.ram[response_at + 11],
+            .status = self.ram[response_at + 10],
+            .key = if (sense_len >= 3) self.ram[response_at + 12 + 2] & 0x0F else 0,
+            .asc = if (sense_len >= 13) self.ram[response_at + 12 + 12] else 0,
+            .residual = readInt(u32, &self.ram, response_at + 4),
+            .used = readInt(u32, &self.ram, used_at + 4 + @as(u64, (used_idx -% 1) % size) * 8 + 4),
+        };
+    }
+
+    /// `commandSettled`: sent again while the disk answers UNIT ATTENTION.
+    fn settled(self: *FakeDriver, d: *Device, cdb: []const u8, dir: Dir, len: u32) Outcome {
+        var tries: u8 = 0;
+        while (true) : (tries += 1) {
+            const o = self.send(d, 0, 0, cdb, dir, len);
+            if (!(o.response == response_ok and o.status == status_check_condition and o.key == key_unit_attention) or tries == 2) return o;
+        }
+    }
+
+    fn good(o: Outcome) bool {
+        return o.response == response_ok and o.status == status_good;
+    }
+
+    fn rw(self: *FakeDriver, d: *Device, writing: bool, lba: u32, sectors: u16) Outcome {
+        const cdb = [10]u8{ if (writing) op_write else op_read, 0, @truncate(lba >> 24), @truncate(lba >> 16), @truncate(lba >> 8), @truncate(lba), 0, @truncate(sectors >> 8), @truncate(sectors), 0 };
+        return self.settled(d, &cdb, if (writing) .to_disk else .from_disk, @as(u32, sectors) * 512);
+    }
+
+    fn synchronize(self: *FakeDriver, d: *Device) Outcome {
+        return self.settled(d, &[10]u8{ op_synchronize, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .none, 0);
+    }
+
+    /// `writeCache`: MODE SENSE(10), the caching page's WCE, or null.
+    fn wce(self: *FakeDriver, d: *Device) ?bool {
+        const want: u16 = 8 + 20;
+        const o = self.settled(d, &[10]u8{ op_mode_sense, 0x08, 0x08, 0, 0, 0, 0, 0, want, 0 }, .from_disk, want);
+        if (!good(o)) return null;
+        const page = self.ram[data_at..][0..want];
+        const p = 8 + ((@as(usize, page[6]) << 8) | page[7]);
+        if (p + 3 > want or page[p] & 0x3F != 0x08) return null;
+        return page[p + 2] & 0x04 != 0;
+    }
+};
+
+/// The configuration as gopher-metal reads it: `virtio.configRead32/16`.
+fn config32(d: *Device, off: u64) u32 {
+    return @truncate(d.read(0x100 + off, 4));
+}
+
+test "brought up as gopher-metal brings it: sizes, INQUIRY, UNIT ATTENTION, READ CAPACITY, MODE SENSE" {
+    var image: [64 * 512]u8 = @splat(0);
+    var vol = Scsi{ .image = &image };
+    var d = vol.device();
+    try testing.expectEqual(@as(u32, cdb_size), config32(&d, 24));
+    try testing.expectEqual(@as(u32, sense_size), config32(&d, 20));
+    // max_target and max_lun where §5.6.4 puts them.
+    try testing.expectEqual(@as(u32, 255), @as(u32, @truncate(d.read(0x100 + 30, 2))));
+    try testing.expectEqual(@as(u32, 16383), config32(&d, 32));
+    var g = FakeDriver{};
+    g.open(&d);
+
+    // Nobody at target 1; nothing connected at LUN 1; a disk at 0:0.
+    try testing.expectEqual(response_bad_target, g.send(&d, 1, 0, &[6]u8{ op_inquiry, 0, 0, 0, 36, 0 }, .from_disk, 36).response);
+    try testing.expect(FakeDriver.good(g.send(&d, 0, 1, &[6]u8{ op_inquiry, 0, 0, 0, 36, 0 }, .from_disk, 36)));
+    try testing.expectEqual(@as(u8, 0x7F), g.ram[FakeDriver.data_at]);
+    const inq = g.send(&d, 0, 0, &[6]u8{ op_inquiry, 0, 0, 0, 36, 0 }, .from_disk, 36);
+    try testing.expect(FakeDriver.good(inq));
+    try testing.expectEqual(@as(u8, 0x00), g.ram[FakeDriver.data_at]);
+    try testing.expectEqual(@as(u32, response_len + 36), inq.used);
+
+    // READ CAPACITY: UNIT ATTENTION once, then the answer.
+    const capacity = [10]u8{ op_read_capacity, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    const first = g.send(&d, 0, 0, &capacity, .from_disk, 8);
+    try testing.expectEqual(status_check_condition, first.status);
+    try testing.expectEqual(key_unit_attention, first.key);
+    try testing.expect(FakeDriver.good(g.settled(&d, &capacity, .from_disk, 8)));
+    try testing.expectEqual(@as(u32, 63), std.mem.readInt(u32, g.ram[FakeDriver.data_at..][0..4], .big));
+    try testing.expectEqual(@as(u32, 512), std.mem.readInt(u32, g.ram[FakeDriver.data_at + 4 ..][0..4], .big));
+
+    // No cache: the caching page says write-through.
+    try testing.expectEqual(@as(?bool, false), g.wce(&d));
+    try testing.expectEqual(@as(u64, 0), vol.refused);
+}
+
+test "a sector written is the sector read back, and past the end is ILLEGAL REQUEST" {
+    var image: [16 * 512]u8 = @splat(0);
+    var bits: [2]u8 = @splat(0);
+    var vol = Scsi{ .image = &image, .dirty = &bits, .attention = null };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    for (g.ram[FakeDriver.data_at..][0 .. 2 * 512], 0..) |*b, i| b.* = @truncate(i * 7);
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 5, 2)));
+    try testing.expectEqualSlices(u8, g.ram[FakeDriver.data_at..][0 .. 2 * 512], image[5 * 512 ..][0 .. 2 * 512]);
+    try testing.expectEqual(@as(u8, 0x60), bits[0]); // sectors 5 and 6
+    @memset(g.ram[FakeDriver.data_at..][0 .. 2 * 512], 0);
+    const back = g.rw(&d, false, 5, 2);
+    try testing.expect(FakeDriver.good(back));
+    try testing.expectEqual(@as(u32, response_len + 1024), back.used);
+    try testing.expectEqualSlices(u8, image[5 * 512 ..][0 .. 2 * 512], g.ram[FakeDriver.data_at..][0 .. 2 * 512]);
+    const past = g.rw(&d, false, 15, 2);
+    try testing.expectEqual(status_check_condition, past.status);
+    try testing.expectEqual(key_illegal_request, past.key);
+    try testing.expectEqual(asc_lba_out_of_range, past.asc);
+    // A command it does not know.
+    const unknown = g.send(&d, 0, 0, &[6]u8{ 0x1B, 0, 0, 0, 0, 0 }, .none, 0);
+    try testing.expectEqual(key_illegal_request, unknown.key);
+    try testing.expectEqual(asc_invalid_opcode, unknown.asc);
+    try testing.expectEqual(@as(u64, 2), vol.refused);
+}
+
+test "VOLUME_CACHE=1: WCE said, writes held until SYNCHRONIZE CACHE, and a power cut loses only what was not synchronized" {
+    var image: [16 * 512]u8 = @splat('o');
+    var c = cache_mod.Cache{ .gpa = testing.allocator, .image = &image };
+    defer c.deinit();
+    var vol = Scsi{ .image = &image, .cache = &c };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    try testing.expectEqual(@as(?bool, true), g.wce(&d));
+    @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
+    try testing.expect(FakeDriver.good(g.synchronize(&d)));
+    @memset(g.ram[FakeDriver.data_at..][0..512], 'b');
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 2, 1)));
+    // Read back from the cache before the cut.
+    try testing.expectEqual(@as(u8, 'b'), image[2 * 512]);
+    c.lose();
+    try testing.expectEqual(@as(u8, 'a'), image[1 * 512]);
+    try testing.expectEqual(@as(u8, 'o'), image[2 * 512]);
+    try testing.expectEqual(@as(u64, 1), vol.synchronizes);
+}
+
+test "VOLUME_CACHE=lie: WCE=0 said and writes held, so a driver that believes it loses them" {
+    var image: [16 * 512]u8 = @splat('o');
+    var c = cache_mod.Cache{ .gpa = testing.allocator, .image = &image, .lies = true };
+    defer c.deinit();
+    var vol = Scsi{ .image = &image, .cache = &c };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    try testing.expectEqual(@as(?bool, false), g.wce(&d));
+    @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 3, 1)));
+    c.lose();
+    try testing.expectEqual(@as(u8, 'o'), image[3 * 512]);
+    var buf: [256]u8 = undefined;
+    try testing.expect(std.mem.indexOf(u8, vol.line(&buf), "says it writes through") != null);
+}
+
+test "VOLUME_CUT_AFTER: the write the power goes after lands, and is never answered" {
+    var image: [16 * 512]u8 = @splat('o');
+    var vol = Scsi{ .image = &image, .attention = null, .power = .{ .cut_after = 2 } };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
+    const served = d.served;
+    _ = g.send(&d, 0, 0, &[10]u8{ op_write, 0, 0, 0, 0, 4, 0, 0, 1, 0 }, .to_disk, 512);
+    try testing.expectEqual(served, d.served);
+    try testing.expectEqual(@as(u8, 'a'), image[4 * 512]);
+    try testing.expect(vol.power.cut != null);
+}
+
+test "a chain of another shape, or a header too short, is not answered" {
+    var image: [4 * 512]u8 = @splat(0);
+    var vol = Scsi{ .image = &image };
+    var g = FakeDriver{};
+    // Writable before readable.
+    const backwards = [_]Desc{
+        .{ .addr = FakeDriver.response_at, .len = response_len, .flags = Desc.write_flag | Desc.next_flag, .next = 1 },
+        .{ .addr = FakeDriver.request_at, .len = request_len, .flags = 0, .next = 0 },
+    };
+    try testing.expectEqual(@as(u32, 0), vol.serve(&g.ram, &backwards));
+    const short = [_]Desc{
+        .{ .addr = FakeDriver.request_at, .len = request_len - 1, .flags = Desc.next_flag, .next = 1 },
+        .{ .addr = FakeDriver.response_at, .len = response_len, .flags = Desc.write_flag, .next = 0 },
+    };
+    try testing.expectEqual(@as(u32, 0), vol.serve(&g.ram, &short));
+    const outside = [_]Desc{
+        .{ .addr = g.ram.len - 10, .len = request_len, .flags = Desc.next_flag, .next = 1 },
+        .{ .addr = FakeDriver.response_at, .len = response_len, .flags = Desc.write_flag, .next = 0 },
+    };
+    try testing.expectEqual(@as(u32, 0), vol.serve(&g.ram, &outside));
+}
+
+test "VOLUME_SYNC_FAIL: the nth SYNCHRONIZE CACHE fails, keeps nothing, and the next keeps it all" {
+    var image: [16 * 512]u8 = @splat('o');
+    var c = cache_mod.Cache{ .gpa = testing.allocator, .image = &image };
+    defer c.deinit();
+    var vol = Scsi{ .image = &image, .cache = &c, .attention = null, .sync_fail_at = 2, .sync_fail_for = 2 };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
+    try testing.expect(FakeDriver.good(g.synchronize(&d)));
+    @memset(g.ram[FakeDriver.data_at..][0..512], 'b');
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 2, 1)));
+    // The second and third fail as a medium error, as v18's `synchronize`
+    // reads one: not ILLEGAL REQUEST, so not taken for a disk with no cache.
+    for (0..2) |_| {
+        const o = g.synchronize(&d);
+        try testing.expectEqual(status_check_condition, o.status);
+        try testing.expectEqual(key_medium_error, o.key);
+    }
+    var buf: [256]u8 = undefined;
+    try testing.expect(std.mem.indexOf(u8, vol.line(&buf), "3 SYNCHRONIZE CACHE (2 failed, VOLUME_SYNC_FAIL)") != null);
+    // Sector 2 is still held: a cut now would lose it.
+    try testing.expectEqual(@as(u32, 1), c.durable.count());
+    // The fourth succeeds, and keeps it.
+    try testing.expect(FakeDriver.good(g.synchronize(&d)));
+    c.lose();
+    try testing.expectEqual(@as(u8, 'a'), image[1 * 512]);
+    try testing.expectEqual(@as(u8, 'b'), image[2 * 512]);
+    try testing.expectEqual(@as(u64, 2), vol.sync_failed);
+}
+
+test "VOLUME_LATENCY_US: each command answered at once, and owed to the clock" {
+    var image: [16 * 512]u8 = @splat(0);
+    var vol = Scsi{ .image = &image, .attention = null, .latency_ns = 2 * std.time.ns_per_ms };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
+    try testing.expect(FakeDriver.good(g.synchronize(&d)));
+    try testing.expectEqual(@as(u64, 4 * std.time.ns_per_ms), vol.owed_ns);
+    var buf: [256]u8 = undefined;
+    try testing.expect(std.mem.indexOf(u8, vol.line(&buf), "; 4 ms waited on it") != null);
+}
+
+test "VOLUME_ATTENTION_AT: the nth command meets UNIT ATTENTION, is not performed, and is sent again" {
+    var image: [16 * 512]u8 = @splat('o');
+    var vol = Scsi{ .image = &image, .attention = null, .attention_at = 2 };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
+    // The second: told, not written; the third, the same write again, lands.
+    @memset(g.ram[FakeDriver.data_at..][0..512], 'b');
+    const told = g.send(&d, 0, 0, &[10]u8{ op_write, 0, 0, 0, 0, 2, 0, 0, 1, 0 }, .to_disk, 512);
+    try testing.expectEqual(key_unit_attention, told.key);
+    try testing.expectEqual(asc_capacity_changed, told.asc);
+    try testing.expectEqual(@as(u8, 'o'), image[2 * 512]);
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 2, 1)));
+    try testing.expectEqual(@as(u8, 'b'), image[2 * 512]);
+    try testing.expectEqual(@as(u64, 1), vol.attentions);
+    // INQUIRY is never told: one pending waits for the next command.
+    vol.attention_at = 4; // the INQUIRY below
+    try testing.expect(FakeDriver.good(g.send(&d, 0, 0, &[6]u8{ op_inquiry, 0, 0, 0, 36, 0 }, .from_disk, 36)));
+    try testing.expectEqual(key_unit_attention, g.send(&d, 0, 0, &[10]u8{ op_read_capacity, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .from_disk, 8).key);
+}
