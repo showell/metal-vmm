@@ -1,24 +1,64 @@
 # metal-vmm
 
-**PARKED 2026-09-18, all green.** Ten milestones in one day: a guest boots,
-mounts a disk, takes a lease, serves HTTP, keeps its own clock, draws its own
-entropy, and can be lied to on purpose about any of it. Nine probes agree with
-QEMU and repeat themselves exactly, and angry-gopher's real server runs on it
-and serves pages byte-identical to curl's. What it found is in
-**Being unhelpful on purpose** below — one defect in the application, three in
-the bare-metal layer, one of which bricks a volume. Read that section first if
-you are picking this up again.
+**Active on `master`, 2026-10-06.** A deterministic hypervisor of our own, on
+KVM, for one kind of guest: [gopher-metal](https://github.com/showell/gopher-metal)'s
+bare-metal kernels, the probes and the real server behind lynrummy.com. It is
+a test machine, never a production one. The same guest with the same seed
+gives the same run, byte for byte, and any input can be withheld or damaged to
+a recipe. The long-term aim is an explorer like Antithesis's, steered by
+[zig-coverage-sdk](https://github.com/showell/zig-coverage-sdk)'s properties
+toward runs no run has reached yet; that explorer is not built.
 
-**RESUMED 2026-10-05: interrupts** (branch `interrupts`). gopher-metal has
-halted between frames since its v4, on a droplet: `sti; hlt`, woken by the
-network card's MSI-X message or the APIC timer. `TRANSPORT=pci` is a
-PC-shaped machine with that path in it, deterministic, and `rest.sh` holds
-it to the microvm-shaped one. See **Interrupts, at a halt** below.
+- **Live work** is in [QUEUE.md](QUEUE.md), one queue for all four repos
+  (zig-coverage-sdk, metal-vmm, gopher-metal, angry-gopher).
+- **A cloud Claude session ("CC")**, which has zig and Python but no KVM or
+  QEMU, reads [CLOUD_WORK.md](CLOUD_WORK.md) first.
+- **Agents** read [CLAUDE.md](CLAUDE.md).
+- **"The box"** is Steve's development droplet, where a local Claude works
+  with him and KVM and QEMU are available. The guests boot only there.
 
-A virtual machine monitor of our own, aimed at one kind of guest: a small
-freestanding kernel that polls, runs on one core, and takes its clock as an
-argument. [gopher-metal](https://github.com/showell/gopher-metal)'s probes and
-its chat server are exactly that.
+Every knob is in [KNOBS.md](KNOBS.md); what the machine has found in the guest
+and the application is in [docs/findings.md](docs/findings.md); reviews are in
+[docs/reviews/](docs/reviews/).
+
+## What runs where
+
+**Anywhere with zig** (no KVM, no guest):
+
+- `zig build test` — every model, the loader, the fuzz regressions, and the
+  determinism rule (`src/determinism.zig`).
+- `zig build fuzz -Dseeds=n` — every guest-facing model under a seeded stream
+  of guest input (`src/fuzz_main.zig`); 1000 seeds by default.
+- `./sweep_test.sh`, `./sweep_durable_test.sh` — `sweep.sh`'s verdicts against
+  a fake machine; they need zig-coverage-sdk's `tools/report.py` (a sibling
+  checkout, or `COVERAGE_SDK=<dir>`).
+- `./sound.sh <image>` — is a disk image still a FAT filesystem; needs only
+  `fsck.vfat`.
+
+**Needs `/dev/kvm`**, a built `zig-out/bin/metal-vmm`, and gopher-metal's
+kernels (`GUESTS`, by default `~/showell_repos/gopher-metal/probe`, built
+there by `zig build kernels`; `gopher.elf` by `./port.sh && zig build gopher`):
+
+| | also needs | what it asks |
+|---|---|---|
+| `zig build run -- <kernel.elf>` | | one run |
+| `./check.sh` | QEMU, `mkfs.vfat`, `fsck.vfat` | is it right: the probes here and under QEMU, words and disks byte for byte |
+| `./same.sh` | `mkfs.vfat` | is it reproducible: each probe twice here |
+| `./site.sh` | QEMU, curl, the site volume | the real server, here and under QEMU |
+| `./rest.sh` | the site volume | the PC-shaped machine against the microvm-shaped one |
+| `./lossy.sh` | | which lost frames the guest survives |
+| `./flaky.sh` | `mkfs.vfat`; the site volume for `gopher` | which refused disk requests it survives |
+| `./sweep.sh` | the site volume, zig-coverage-sdk | a range of seeds, each a whole fault schedule |
+
+"The site volume" is `SITE`, by default
+`~/build/gopher-metal/probe/gopher/pristine.img`, staged by gopher-metal's
+`probe/judge_gopher.py` (which needs a loop mount, and so sudo; the scripts
+here only read it).
+
+## A first run
+
+On the box, with gopher-metal checked out beside this repo and its kernels
+built:
 
     zig build
     zig build run -- ../gopher-metal/probe/rng.elf
@@ -36,6 +76,9 @@ Linux for, in memory this program allocated, printing through a serial port
 this program implements, and exiting through a door this program answers.
 QEMU is not involved.
 
+The full command is `metal-vmm <kernel.elf> [disk.img] [command line] [path to
+fetch]`; the scripts above show it in use.
+
 ## Why write one
 
 **Because determinism is nearly free for this guest, and determinism is the
@@ -52,37 +95,44 @@ never halts at all, and on the PC-shaped one the instruction an interrupt is
 taken at is always the one after that `hlt`. It is single-threaded, and
 refuses to compile otherwise. Every byte it sees crosses one seam.
 
-So a monitor that owns every input is a few hundred lines rather than a
-research project, and once it owns every input, the same guest and the same
+So a monitor that owns every input is ordinary code rather than a research
+project, and once it owns every input, the same guest and the same
 seed give the same run — which is what makes a bug reproducible, a fault
 injectable, and a measurement exact.
 
-The other reason: the devices this has to emulate are virtio-blk and
-virtio-net, and the guest half of both was written next door. **Implementing
-the host half of a protocol you know from the other side is the shortest way
-into a layer**, and the host half is the emulator.
+The other reason: the devices this has to emulate are virtio-blk,
+virtio-net and virtio-scsi, and the guest half of each was written next door.
+**Implementing the host half of a protocol you know from the other side is the
+shortest way into a layer**, and the host half is the emulator.
 
 ## Where it stands
 
+As of 2026-10-06. Two machines: the **microvm-shaped** one (devices in an mmio
+window, no interrupts; the one QEMU's `microvm` is compared with) and the
+**PC-shaped** one (`TRANSPORT=pci`). "Checked against QEMU" means `check.sh`
+or `site.sh`; everything else is checked by unit tests and by this machine's
+own repeat runs.
+
 | | |
 |---|---|
-| loading a PVH kernel | **works** — segments by physical address, entry from the `XEN_ELFNOTE_PHYS32_ENTRY` note |
-| starting the processor | **works** — 32-bit protected mode, flat segments, `%ebx` at a `hvm_start_info` |
-| the memory map | **works** — the guest sizes its heaps from what it is told |
-| the serial port | **works** — COM1, including the line-status bit the guest spins on |
-| the exit door | **works** — 0xF4, and the guest's code becomes ours |
-| absent devices | **works** — reads answer zero, which is how a guest discovers nothing is there |
-| virtio-blk | **works** — the transport, one queue, and a disk image; judged against QEMU's own device |
-| virtio-net | **works** — two queues, and a peer at the other end of the wire |
-| TCP from the peer | **works** — it connects to the guest, fetches, and gets what curl gets |
+| loading a PVH kernel | **works** — segments by physical address, entry from the `XEN_ELFNOTE_PHYS32_ENTRY` note; marked `rdtsc` and deadline writes rewritten in guest memory |
+| starting the processor | **works** — 32-bit protected mode, flat segments, `%ebx` at a `hvm_start_info`, a CPUID without `RDRAND` |
+| the memory map, COM1, the exit door | **works** — 0xF4, and the guest's code becomes ours |
 | the clock | **works, and is ours** — the interval timer, the real-time clock and `rdtsc` all read one counter that only the guest's own questions advance |
-| a run that repeats | **works** — same guest, same words, same disk, same measured processor speed, every time |
-| entropy that repeats | **works** — a seeded virtio-rng, and a processor with no `RDRAND` to go behind its back |
-| a disk the run cannot spoil | **works** — mapped private, the changed sectors written back at the end and only then |
-| fault injection on the wire | **works** — lose the guest's nth frame, or one in n, and watch its own timers deal with it |
-| fault injection on the disk | **works** — refuse the guest's nth request, or one in n, and see what it says |
-| the real server as the guest | **works** — angry-gopher's own route table, serving its own site, page identical to curl's |
-| a PC-shaped machine | **works** (`TRANSPORT=pci`) — virtio on a PCI bus, MSI-X, a local APIC with a TSC-deadline timer; the server halts between frames and wakes on interrupts, the same page and the same run twice |
+| entropy | **works** — a seeded virtio-rng; the seed is the run's name |
+| virtio-blk | **works**, checked against QEMU — one queue and a disk image, mapped private, written back only at the end |
+| virtio-net and the peer | **works**, checked against QEMU — DHCP, and TCP clients that fetch what curl fetches; no tap device and no real network, deliberately |
+| the real server as the guest | **works**, checked against QEMU — angry-gopher's own route table, twelve routes, pages identical to curl's |
+| the PC-shaped machine | **works** (`TRANSPORT=pci`) — virtio-pci, MSI-X, a local APIC with a TSC-deadline timer; the server halts between frames, and `rest.sh` holds it to the microvm-shaped machine's pages. Only the paths gopher-metal walks are exercised by a guest |
+| a virtio-scsi volume | **works**, not compared with QEMU (`VOLUME`, `scsi.zig`) — the second disk a droplet has; unit-tested against gopher-metal's driver's sequence, and used by `sweep.sh`'s durability sweep |
+| faults on the wire | **works** — the guest's or the peer's nth frame lost or damaged, latency, lying frames (`mangle.zig`) |
+| a peer that misbehaves | **works** — resets, vanishing, SYN floods, shut windows, pipelining, slow clients, many clients |
+| faults on the disks | **works** — refused requests, bad sectors, rotten bytes, power cuts, torn writes, write caches that hold or lie (`cache.zig`), and the volume's own: failed synchronizes, latency, a volume that changes size, goes away or turns read-only |
+| seeds and sweeps | **works** — `FAULT_SEED` names a whole schedule; `sweep.sh` runs a range, judging exit, page, coverage and volume soundness, or durability of a post |
+| the guest's coverage | **works** — its zig-coverage-sdk lines read as printed, a table per run, JSONL for the SDK's report across runs |
+| fuzzing the models | **works** — `zig build fuzz`; nothing may panic and each seed repeats |
+| snapshots | **device side only** — every model's state saved and restored in place (`snapshot.zig`), tested; the vCPU half and branching runs from it are not built |
+| the explorer | **not built** |
 
 A boot costs about 100 ms, most of it spent zeroing the guest's `.bss`. QEMU's
 `microvm` boots the same kernel in about 130. **Speed is not the argument** —
@@ -96,7 +146,7 @@ the argument is that nothing in that 100 ms came from anywhere but here.
   processor setup.
 - **A CPUID.** A fresh vCPU has none, and a guest that cannot see long mode in
   CPUID cannot turn it on: `EFER.LME` faults, and with no interrupt table that
-  is a triple fault three instructions later. This was the first bug.
+  is a triple fault three instructions later.
 - **A memory map it can believe**, because it sizes every heap from it.
 - **COM1's line-status register**, or it spins forever waiting to print.
 - **An interval timer that advances**, because the guest measures its own
@@ -115,16 +165,13 @@ the argument is that nothing in that 100 ms came from anywhere but here.
 
 **Every exit advances one counter by a fixed amount, and nothing else advances
 it.** The host's clock is never read. So a run is a function of what the guest
-did, not of what this box was busy with — and the interval timer, the real-time
+did, not of what the box was busy with — and the interval timer, the real-time
 clock and the timestamp counter all report that one counter, which is why they
 cannot disagree.
 
-Three things fall out of that, and two of them are not about determinism at
-all.
-
 **The guest's calibration is exact.** It measures its own processor by counting
 `rdtsc` ticks across a known number of interval-timer ticks. Both sides of that
-division now come from the same counter, so the answer is the rate `clock.zig`
+division come from the same counter, so the answer is the rate `clock.zig`
 chose — 2.5 GHz, to within the tick the PIT's own integer arithmetic rounds
 away. It is not being lied to; it is being told.
 
@@ -135,9 +182,7 @@ seconds-edges — takes 1.3 s here against 9.7 s under QEMU.
 
 **And the wall clock is a decision.** The machine boots at noon on 2026-09-18,
 every time, so the dates a guest writes into a filesystem are the same dates on
-every run. `RTC_BOOTS_AT=unix` makes it another instant, as decided: the last
-second of 32-bit time (`2147483647`), the end of a century (`4102444799`), a
-leap day's eve (`1835395199`), anything from 1970 to 9999.
+every run. `RTC_BOOTS_AT=unix` makes it another instant ([KNOBS.md](KNOBS.md)).
 
 ### `rdtsc` does not exit, so the loader makes it one
 
@@ -157,24 +202,23 @@ EDX:EAX exactly as the instruction would have.
 guest memory, so QEMU still runs the same bytes and stays an honest oracle.
 
 **Only a marked `rdtsc` is rewritten.** Two bytes is too short a pattern:
-the first loader rewrote every `0F 31`, which held across nine probe kernels,
-until gopher.elf (2026-10-05) had 87 such pairs and 77 `rdtsc`s, and the
-other ten sat inside other instructions, which the rewrite corrupted: an
-invalid opcode just after "listening on port 80". gopher-metal's `tsc.read`
-now puts `mov $"mvmc", %ecx` (`B9 6D 76 6D 63`) before its `rdtsc`, and only
-the `rdtsc` after that mark becomes a question. Elsewhere the `mov` costs a
-register.
+gopher.elf has `0F 31` pairs inside other instructions, and rewriting those
+corrupts them (an invalid opcode just after "listening on port 80").
+gopher-metal's `tsc.read` puts `mov $"mvmc", %ecx` (`B9 6D 76 6D 63`) before
+its `rdtsc`, and only the `rdtsc` after that mark becomes a question.
+Elsewhere the `mov` costs a register. An unmarked `rdtsc` reads the host's
+counter.
 
 ## Interrupts, at a halt
 
 `TRANSPORT=pci` is the machine a droplet is, as far as gopher-metal can tell:
 
-- **a PCI bus** (`pci.zig`): a host bridge in slot 0, and the disk, the card
-  and the entropy as modern virtio-pci functions, one memory BAR each with
-  their four virtio windows and an MSI-X table. The devices behind them are
-  the mmio window's own; only the registers in front differ. The guest asks a
-  bus when there is one and never mixes the two, so on this machine the mmio
-  window is empty.
+- **a PCI bus** (`pci.zig`): a host bridge in slot 0, and the disk, the card,
+  the entropy and the volume as modern virtio-pci functions, one memory BAR
+  each with their four virtio windows and an MSI-X table. The devices behind
+  them are the mmio window's own; only the registers in front differ. The
+  guest asks a bus when there is one and never mixes the two, so on this
+  machine the mmio window is empty.
 - **a local APIC** (`apic.zig`): its registers, its timer in TSC-deadline,
   one-shot and periodic modes, and the vectors waiting and in service, taken
   by priority class as the task priority allows. KVM's own APIC would keep
@@ -190,7 +234,7 @@ register.
 
 **The deadline is a marked write too.** IA32_APIC_BASE comes here through an
 MSR filter (`KVM_X86_SET_MSR_FILTER`), but on a host with the VMX preemption
-timer, like this one, KVM's fast path takes IA32_TSC_DEADLINE before the
+timer, like the box, KVM's fast path takes IA32_TSC_DEADLINE before the
 filter sees it. So gopher-metal marks that one `wrmsr` with
 `mov $"mvmd", %esi`, and the loader makes it `out 0xE1, al`, answered from
 the registers.
@@ -198,60 +242,40 @@ the registers.
     ./rest.sh all     every route: the page the microvm-shaped machine
                       serves, the same run twice, and real rests
 
-**A halt is not a hang.** On the microvm-shaped machine a run that goes a
-million exits without printing or ringing a doorbell is stuck. On the
-PC-shaped one each halt starts that count again, and a guest that rests with
-nothing to do ends on a bound in its own time instead: `PATIENCE_S` seconds
-(600 by default) with nothing printed and no doorbell rung, reported as
-idle. An idle end is a server's normal end: the disk keeps what the run
-wrote and the client's lines are printed, as at any other end. A guest that
-is stuck or faults leaves the image as it was.
-
 With a 5 ms wire each route halts a few times and takes timer and MSI-X
 interrupts both. At 200 ms, `/` halts 361 times, 356 woken by the timer at
 its 1 ms slice, and pays one retransmission timeout, as it should when the
 round trip is longer than the table's least timeout.
 
-## Reading it
+## When a run ends
 
-- `src/kvm.zig` — Linux's side: the ioctl numbers and the structures,
-  transcribed from `/usr/include/linux/kvm.h`, with their sizes asserted at
-  compile time. An ioctl number carries its argument's size, so a structure a
-  byte too long does not mis-parse; it fails with `EINVAL` and says nothing.
-- `src/clock.zig` — the machine's time: one counter, and the three devices
-  that report it. **Read this one first if you read only one.**
-- `src/entropy.zig` — the seeded generator and the device that hands it out.
-  **The seed is the run's name.**
-- `src/disk.zig` — the image, mapped private, and the record of which sectors
-  the run changed. A run reads the image it started with; a run that crashes
-  leaves it alone.
-- `src/faults.zig` — what this machine is allowed to do to its guest.
-- `src/virtio.zig` — the transport the devices sit on, and the block device.
-- `src/net.zig` — the network card: two queues, and the asymmetry between them.
-- `src/peer.zig` — the machine at the other end of the wire: DHCP, its
-  clients, how many and how they misbehave. **There is no tap device and no
-  real network**, deliberately — a host's network is an input this program
-  does not control, which is the one thing a deterministic machine cannot
-  have. `src/client.zig` is one client as a TCP, `src/response.zig` where an
-  HTTP answer ends, `src/frames.zig` the frames on the wire.
-- `src/pci.zig` — the PC-shaped machine's bus; `src/virtio_pci.zig` a virtio
-  device as a function on it; `src/msix.zig` its MSI-X; `src/apic.zig` the
-  local APIC its messages and timer reach.
-- `src/main.zig` — the processor's starting state, the serial port, the exit
-  door, and the loop that serves them. Beside it: `src/loader.zig` (the ELF,
-  and the marked instructions rewritten), `src/processor.zig` (CPUID and the
-  MSRs this program answers), `src/halt.zig` (what wakes a halted guest),
-  `src/settings.zig` (the knobs, into the faults; `src/knobs.zig` for a
-  seed's), `src/reports.zig` (what a run says at its end) and `src/cost.zig`
-  (what it cost, in exits and guest time).
-- `src/coverage.zig` — the guest's coverage lines, one run's and many runs'.
-- `src/fuzz.zig` — every model above under seeded guest input;
-  `src/determinism.zig` — the first rule, checked; `src/snapshot.zig` —
-  every model's state, saved and restored in place.
+A run ends when the guest exits through the door, faults, is cut off by a
+power-cut knob, or stops making progress:
 
-`zig build test` checks the parts that need no processor: the ELF loader, the
-note parsing, the devices' answers, and a fake guest that drives the block
-device through the rings exactly as the real driver does.
+- **Stuck.** On the microvm-shaped machine, a million exits with nothing
+  printed and no doorbell rung stops the run and says where the guest is:
+
+  ```
+  metal-vmm: the guest has printed nothing and rung no doorbell for 1000000 exits
+             (101126 ms of its own time). It is here:
+           rip 00000000001c6f7e  rbx 000000000137de30  rsp 000000000137d4d0
+           possibly called from, innermost first:
+             00000000001c59a4     ← stream.pump
+             00000000001c6ef0     ← gopher.streamTurn
+  ```
+
+  There are no frame pointers, so the callers are a guess: any word on the
+  stack pointing into the kernel's own executable sections is probably a
+  return address. Feed them to `addr2line -f -C -e <kernel.elf>`.
+- **Idle.** On the PC-shaped machine each halt starts that count again, and a
+  guest that rests with nothing to do ends after `PATIENCE_S` seconds of its
+  own time (600 by default) with nothing printed and no doorbell rung. An idle
+  end is a server's normal end: the disk keeps what the run wrote and the
+  client's lines are printed. A guest that is stuck or faults leaves the image
+  as it was.
+
+The error stream then says what the run cost (exits and guest time), what
+each fault knob did, and the coverage line below.
 
 ## QEMU is the oracle
 
@@ -272,695 +296,34 @@ PASS vfat/fat32  same words, same verdict (126 ms here, 154 ms under QEMU, softw
 PASS append/fat32 same words, same verdict (6531 ms here, 4587 ms under QEMU, software CPU)
 ```
 
-**The last two are FAT32** (added 2026-10-03; prod's data is FAT32): a fresh
-volume made by `mkfs.vfat`, written by gopher-metal's own probes, and judged by
-`fsck.vfat` as well as by QEMU. `append` stamps its files with the wall clock,
-which differs between the two sides by design, so its clock line is left out
-and its two disks are each judged by `fsck.vfat` rather than compared;
-`vfat/fat32` is the byte-for-byte one.
-
-`rng` and `clock` are compared by verdict rather than by words, for opposite
-reasons: one is random on purpose, and the other is a measurement of the
-machine it ran on, which is a different machine on each side on purpose.
-
-The HTTP ones compare two clients: the peer written here, and curl through
-QEMU's forwarded port. Both fetch `/probe` and both have to come back with the
-same status and the same body — which, for `stdhttp`, means **zig's own
-`std.http.Server`, unmodified, answering a TCP client written here, on a
-machine with no operating system, under a hypervisor written here.**
-
-The network one is the strongest of them: the guest asks for a lease and prints
-the address, mask, router, DNS and server it was given, and every one of those
-numbers has to match what QEMU's own DHCP server hands out.
-
-It earned its keep immediately: our first output had an invisible `0x01` at the
-head of it. The guest's serial init sets the divisor latch and writes the baud
-rate to the data port, and a model that does not know that bit prints the baud
-rate as a character. Nothing else would have found it — the words all looked
-right.
-
-The block probe prints which slots hold devices, and that genuinely differs:
-QEMU fills its window from the top and has a random-number device too. Those
-lines are left out of the comparison and everything else is not.
-
-On the disk-heavy probes we are slower than QEMU (4.1 s against 1.9 on
-`vfat`), and that comparison is between two different kinds of machine:
-`check.sh` runs QEMU **without** `-accel kvm`, so QEMU emulates the processor in
-software. Every device access costs it a function call, where here it costs a
-full exit through KVM, and on this box KVM is itself running inside a virtual
-machine. `vfat` makes 44,193 disk requests and about 221,000 exits, 88,000 of
-them clock reads, so it is all device access. Measured on 2026-10-01, `vfat`
-takes 1.7-2.0 s under QEMU's software processor, 3.3-3.4 s under QEMU with
-`-accel kvm`, and 4.15 s here; `clock`, which is mostly computation, takes
-8.3 s, 4.6 s and 1.2 s. A `ReleaseFast` build of this program runs `vfat` in the
-same 4 s as the debug one, so `zig build`'s default stays debug.
-
-## Being unhelpful on purpose
-
-A hypervisor that owns every input can choose to withhold one, and a
-deterministic one can do it to a recipe. The wire will eat what the guest
-sends — a numbered frame (`WIRE_EAT=3`, or `3,9`, or a range, `8-40`; up to
-32 of these), or one frame in n
-(`WIRE_LOSS=4`) — and it will hold what comes back (`WIRE_LATENCY_US=250`).
-
-**Losing frame number n is a better knob than a loss rate.** A rate explores
-randomly; a number explores exhaustively, and the table is a map of which
-frames this guest can survive losing. `./lossy.sh` draws it, one run per frame:
-
-```
-eaten     sent   exit  guest ms  verdict, and what the client got
-nothing   7      0     177       PASS — 200 "hello from no Linux"
-#1        1      1     164       FAIL: no DHCP lease, so there is no address to listen on
-#2        2      1     165       FAIL: no DHCP lease, so there is no address to listen on
-#3        8      0     377       PASS — 200 "hello from no Linux" (+200 ms: a retransmission timeout)
-#4        7      0     177       PASS — 200 "hello from no Linux"
-#5        9      0     377       PASS — 200 "hello from no Linux" (+200 ms: a retransmission timeout)
-#6        8      0     377       PASS — 200 "hello from no Linux" (+200 ms: a retransmission timeout)
-#7        7      0     177       PASS — 200 "hello from no Linux"
-```
-
-Read the last column: it is **the guest's own clock**, and the 200 ms is the
-guest's own retransmission timeout — `min_rto_ns` in its `tcp.zig` — happening
-in front of you. The rows that cost nothing are frames whose loss the next one
-covers.
-
-The first two rows are a real defect in the guest, found by this table rather
-than argued for: **gopher-metal's `dhcp.acquire` sends its DISCOVER once and
-never retransmits.** One lost frame and the machine has no address. Its TCP
-handles loss; its DHCP does not.
-
-Running the same sweep against the `stdhttp` guest gives the same shape with a
-1,000 ms cost instead of 200 — the same stack with a different measured
-round-trip time, and so a different timer.
-
-**And the power can be cut.** `DISK_CUT_AFTER=n` lets the guest's nth write
-land, and then nothing: the request is never answered, the machine stops at
-the end of that exit, and the image keeps exactly what was written before
-the cut. `DISK_TEAR=n` (with `DISK_TEAR_KEEP=k`, 1 by default) tears the nth
-write of several sectors: only its first `k` land. Boot the image again and
-run `sound.sh` on it: that is how a FAT volume's crash consistency is
-measured, and `sweep.sh` does it for every seed that cuts the power.
-
-### And the peer can misbehave
-
-**And it can lie** (`PEER_MANGLE=n[,m]`, `PEER_MANGLE_RATE=k`, mangle.zig):
-the frame picked arrives after a copy of it that lies in one way, its sums
-made right so it meets the check meant for it: an IP version not 4, a
-header shorter than 20 bytes or with options, a bad header checksum, a total
-length past the frame or shorter than a TCP header, a fragment, an address
-or a port not the guest's, a TCP data offset too short or past the segment.
-Each kind in turn, or the one `PEER_MANGLE_KIND` names; the copy's data is
-`X`s. The guest must drop every one, so the run must end with the page the
-run without it gets: `sweep.sh` does not excuse a page that differs under
-it. `zero_window` alone is no lie (a window of 0 with the frame's own data,
-which must be taken). Only TCP frames get a copy; the schedule counts every
-frame. A seed draws it one time in four, last of all its knobs. The run
-ends saying which lies were sent and which of gopher-metal's checks
-(`proto.parseIpv4`, `tcp.Table.handle`) each meets.
-
-**The wire can lose and damage what the peer sends too**: `PEER_EAT=n` (or
-`n,m`) and `PEER_LOSS=k` as for the guest's frames, and `PEER_DAMAGE=n` and
-`PEER_DAMAGE_RATE=k`, which change a byte of the segment's checksum so the
-guest's own check throws it away. Frame 1 is the first the peer ever sends, a
-DHCP reply included. Either one winds the peer's own retransmission timer
-(RFC 6298: one second, doubling to a minute, eight sends and it gives up), on
-the machine's clock, so what is lost is sent again rather than hanging the
-run.
-
-**And the peer can be a worse client** (`peer.zig`, `Rough`), each by a knob;
-times are microseconds after it opens, sizes are bytes of the answer:
-
-| knob | the peer |
-|---|---|
-| `PEER_RESET_AT=us` | resets the connection then, if it is open, at its next sequence number; then answers anything with a reset |
-| `PEER_RESET_OFF=n` | puts that reset `n` past it instead, inside the guest's window, which must challenge it |
-| `PEER_VANISH_AFTER=n` | neither sends nor hears once it has `n` bytes of the answer |
-| `PEER_FLOOD=n`, `PEER_FLOOD_GAP_US=us`, `PEER_FLOOD_AT_US=us` | sends `n` SYNs that never finish (up to 25,536), each from its own address in 198.51.100.x and port, `us` apart (10 ms by default), starting `PEER_FLOOD_AT_US` after the opening (at once by default); a thousand fills gopher.zig's 256 slots four times over |
-| `PEER_SHUT_AFTER=n`, `PEER_SHUT_FOR_US=us` | shuts its receive window once it has `n` bytes, takes nothing while it is shut, then says it is open |
-| `PEER_PIPELINE=1` | sends its second request with the first, before any answer (it asks twice at least); the run ends saying how many answers came whole and whether the guest ended it with a FIN or a reset |
-| `PEER_DRIP_US=us` | sends each segment of its request `us` after the last (with `PEER_MSS` to make them small): a slow client, never silent and not done for a long while |
-| `PEER_RETRY=n` | asks again, on a new connection, what got no answer at all (closed or reset before a byte came), up to `n` times, as a browser does; the run ends saying how many times the request was sent |
-| `DHCP_LEASE_S=s` | offers and acknowledges a DHCP lease of `s` seconds (a day unset); the run ends saying how many requests renewed it, how many came after it ran out, and whether it was held to the end or ran out unrenewed, and when |
-| `PEER_IGNORE_WINDOW=1` | sends all its request at once, past the window the guest offered, and sends again what the guest threw away; a plain client keeps to the window |
-| `PEER_MSS=n` | sends its request `n` bytes a segment (never more than the guest's announced MSS, which it keeps to anyway: 536 if it announced none, 1460 at most) |
-
-**And more than one client** (`peer.zig`, `Plan`), for a guest that holds
-many connections:
-
-| knob | the peer |
-|---|---|
-| `PEER_CLIENTS=n` | is `n` clients (8 at most), each on its own port and sequence numbers |
-| `PEER_CLIENT_GAP_US=us` | opens each a gap after the last (1 ms by default) |
-| `PEER_REQUEST=a,b,...` | gives each client its own request file; one past the list asks the last |
-| `PEER_ASKS=k` | has each ask `k` times on one connection, the next when the last answer is whole (by its length or its chunks), then close it itself |
-
-A client whose answer has neither a length nor chunks, such as a stream,
-reads it until the server closes, and holds its connection open meanwhile.
-The `Rough` knobs above are the first client's alone; the others behave. A
-run with more than one conversation ends with a line for each client: its
-status, how many answers came whole, how many bytes, and how it ended.
-
-**The peer sends no faster than the wire has room.** The wire holds 64
-frames and drops the oldest when a 65th comes; what the peer has to say on
-its own (a flood, a timer) waits for room instead, so a flood with no gap
-arrives as fast as the guest takes it, not mostly lost.
-
-With none of these set the peer is the plain client it always was, frame for
-frame, and no run here changes. The guest's coverage properties these reach
-are gopher-metal's to measure (its `coverage/floor-metal.txt`).
-
-### One seed for all of it
-
-`FAULT_SEED=n` turns all of these knobs at once, each family by its own
-chance and from a documented range (the table in `knobs.zig`), so "seed 4711"
-names one exact run. A knob set by hand wins over the seed. A seeded run
-says first, on the error stream, what it chose, as the knobs that repeat it
-without the seed:
-
-    metal-vmm: FAULT_SEED=4711 is WIRE_EAT=12 WIRE_LATENCY_US=8143 PEER_FLOOD=3 PEER_FLOOD_GAP_US=212998
-
-**A sweep of seeds** is `./sweep.sh [first] [last]`: one kernel, one volume
-(`SITE`), a fresh copy per run, `FAULT_SEED` from first to last on the
-PC-shaped machine. A seed fails if its exit is not the unhurt run's, it
-broke a coverage property, the volume it wrote is not sound (`sound.sh`), or
-its page is not the unhurt run's when nothing it did excuses that (a reset,
-a vanished peer, a refused disk request and a peer that gave up do: the run
-says the last on stderr). It stops at nothing, merges
-every run's coverage (`FLOOR=<file>` to gate on one), and ends with the
-failing seeds as the knobs that repeat them. `./sweep_test.sh` checks its
-verdicts against a fake machine told in advance what each seed does.
-
-**A sweep that judges durability, not the page:** with `POST=<request
-file>`, `READ_BACK=<path>`, `MARK=<text>` and `VOLUME_SITE=<image>`, each
-seed sends a chat post (its session cookie in the request) with
-`VOLUME_CUT_AT_EXIT=1` and the volume's faults its seed draws, and then the
-same kernel boots again, unhurt, on a copy of that volume and asks for
-`READ_BACK`. **A 303 for a message the read-back does not hold fails**,
-whatever the seed did, but where the cache lied (`VOLUME_CACHE=lie`) or a
-SYNCHRONIZE CACHE failed (`VOLUME_SYNC_FAIL`), where losing it is the
-design's and the verdict says "lost (allowed: ...)". No 303 promised
-nothing. A read-back that gets no page fails. It is B14, swept: the unhurt
-post must be told 303 and keep `MARK`, and the pristine volume must not
-hold it, or the sweep stops with exit 2. `./sweep_durable_test.sh` checks
-its verdicts the same way.
-
-### What the guest says it reached
-
-A gopher-metal kernel built `-Dcoverage` prints zig-coverage-sdk's JSONL on
-COM1 behind `coverage: ` (its COVERAGE.md). The serial port here reads those
-lines as they are printed (`coverage.zig`) and keeps a table of every
-property: its kind, how often it was seen true and false, and the exit and
-virtual time of the first of each. `COVERAGE_OUT=<file>` keeps the lines out
-of stdout and appends them to that file as plain JSONL, for the SDK's
-`tools/report.py`; without it stdout is the guest's bytes exactly. A run
-that printed any ends with one line on the error stream:
-
-    metal-vmm: coverage: 7 of 23 properties reached (6 hold, 0 broken), from 412 lines over 1 boots
-
-**And across many runs.** Each run's lines in a `COVERAGE_OUT` file follow a
-line naming it (`{"metal_vmm_run":{"seed":4711,"knobs":"..."}}`). The SDK's
-`tools/report.py a.jsonl [b.jsonl ...] [--floor f]` reads any number of such
-files, or the judge's `sdk.jsonl` (a run per boot), as one table: every
-property's verdict, how many runs reached it and which first, each numeric
-comparison's edge and which run came nearest it, and the properties only one
-run ever reached. `sweep.sh` ends with it. (It was `zig build
-coverage-merge` here until item 62 folded it into the SDK.) A comparison's
-`antithesis_guidance` lines are kept in the JSONL like any other.
-
-### And nothing the guest does kills this program
-
-`zig build fuzz -Dseeds=n` drives every model a guest can reach (the PCI
-ports at any offset and width, every BAR, the mmio window, the APIC and its
-MSRs, virtqueues laid out any way at all, block requests with hostile
-fields, frames on the wire, COM1, the PIT and the RTC, and the peer's
-clients answered by any segment at all) from a seeded stream,
-without a processor. Nothing may panic, and each seed must be the same run
-twice. `zig build test` runs the first 64 seeds and every seed that ever
-found something (`fuzz.zig`, `regressions`). On its first day it found six
-ways a guest could kill or hang this program, two of them on the
-microvm-shaped machine check.sh runs.
-
-### And the disk can refuse
-
-Same idea one layer over: `DISK_REFUSE=3` answers the guest's third request
-with the I/O error a real disk gives when it cannot do the work, and the
-guest's own `fat16.zig` turns that into `ReadFailed`. `./flaky.sh` sweeps it,
-and because every run is reproducible the sweep can be **exhaustive** rather
-than a sample:
-
-```
-$ ./flaky.sh vfat all
-vfat makes 173 disk requests; an untouched run: exit 0 — PASS
-refusing each of the first 173, one run each:
-   144 runs  (#4..#147)  exit 1 — FAIL: a write failed
-    13 runs  (#148..#168)  exit 1 — FAIL: a path would not resolve
-    10 runs  (#151..#170)  exit 1 — FAIL: a file would not read
-     2 runs  (#2..#3)  exit 1 — FAIL: the volume would not mount
-     2 runs  (#171..#172)  exit 1 — FAIL: auth/damian would not resolve
-     1 runs  (#173..#173)  exit 1 — FAIL: the listing failed
-     1 runs  (#1..#1)  exit 0 — PASS
-```
-
-173 runs, 21 seconds, on a fresh FAT16 volume. **Every refusal past the first
-failed cleanly and named its layer** -- the volume for #2 and #3, a write for
-most of the rest, then the path, the read, the directory and the listing as the
-probe reaches them. No hang, no wrong answer, and no run that carried on as
-though nothing had happened. That is a statement about a guest's error paths
-that you can only make by trying all of them.
-
-**And a sector can be bad.** `DISK_BAD_SECTOR=2180` (or `2180,7`) refuses
-every request that touches that sector, for the whole run, read or write;
-`DISK_READS_ONLY=1` or `DISK_WRITES_ONLY=1` narrows it to one kind. A request
-number reaches a sector on one path; a sector is reached on every path that
-touches it, the way the FAT's mirror below turned up under three of them,
-and named again on the next boot it is still bad, as a real one is. The run
-ends saying which requests it refused, in this form (it has not yet been run
-against gopher.elf here):
-
-    metal-vmm: disk: bad sector 2180 refused N of M requests (#n, a write of sector 2180; ...)
-
-**And a byte can rot.** `DISK_ROT=2180,7` (with `,0x40` for another mask
-than one bit) serves every read of sector 2180 with its byte 7 changed, and
-an "ok": the image is untouched, and once the guest writes the sector again
-it holds what was written. fat16.zig checks nothing it reads, so this is how
-a FAT entry pointing somewhere else, or a directory entry gone wrong, is
-handed to it. A seed draws it one time in eight, last of all its knobs.
-
-**And the disk can hold its writes.** `DISK_CACHE=1` offers
-VIRTIO_BLK_F_FLUSH and keeps a write cache: if the guest negotiates FLUSH
-its writes are acknowledged before they are kept, a flush keeps them, and a
-power cut (`DISK_CUT_AFTER`, `DISK_TEAR`) loses every write since the last
-flush. A guest that does not negotiate FLUSH is promised write-through
-(virtio 1.1 §5.2.5.1) and loses nothing. `DISK_CACHE=lie` holds writes
-either way, as a disk that lies about its cache does. The run ends saying
-which, and how many writes a cut lost. Off unless asked: offering FLUSH
-changes what the guest negotiates.
-
-**And a volume, as prod has one.** `VOLUME=<file>` attaches a second disk,
-a SCSI disk at target 0, LUN 0 of a virtio-scsi controller (scsi.zig), which
-is how a DigitalOcean droplet reaches chat's data (gopher-metal `scsi.zig`).
-It answers INQUIRY, READ CAPACITY(10), MODE SENSE(10)'s caching page,
-READ(10), WRITE(10), SYNCHRONIZE CACHE(10) and TEST UNIT READY; anything
-else is ILLEGAL REQUEST, another target is BAD_TARGET, and the first command
-after power-on but INQUIRY is UNIT ATTENTION, as a real disk's is. Its file
-keeps the run's writes as the boot disk's does. `VOLUME_CACHE=1` holds its
-writes until SYNCHRONIZE CACHE and says so (WCE=1); `VOLUME_CACHE=lie` holds
-them and says it writes through (WCE=0), so a driver that believes it never
-synchronizes. `VOLUME_CUT_AFTER=n` cuts the power after the volume's nth
-write; either disk's cut empties both caches. The run ends with
-`metal-vmm: volume: ...`, its reads, writes, SYNCHRONIZE CACHEs and MODE
-SENSEs, and whether a cut lost anything. `VOLUME_SYNC_FAIL=n` (with
-`VOLUME_SYNC_FAIL_FOR=k`, 1 by default) answers the nth SYNCHRONIZE CACHE,
-and the k-1 after it, MEDIUM ERROR, keeping nothing: a cache that cannot
-reach its media. `VOLUME_LATENCY_US=us` makes every command cost the guest
-that long: it is answered at once and the machine's clock moves on by the
-latency before the guest runs again, which is what a driver spinning on the
-used ring (gopher-metal's) would have counted; a completion held back would
-never be seen, since that spin makes no exit. `VOLUME_SYNC_US=us` costs each
-SYNCHRONIZE CACHE that much more, the slow command on network storage. The
-volume's line says how long was waited, and how much of it on SYNCHRONIZE
-CACHE. `VOLUME_ATTENTION_AT=n` makes CAPACITY DATA HAS CHANGED pending
-from the nth command, as a volume resized under a droplet tells it: told on
-the next command but INQUIRY, which is not performed, so the driver must send
-it again. `VOLUME_GONE_AT=n` takes the volume away from the nth command on:
-the controller answers every command BAD_TARGET, as one whose DO volume was
-detached under a running droplet does. `VOLUME_READ_ONLY_AT=n` turns it
-read-only from the nth command: MODE SENSE says WP and every WRITE is DATA
-PROTECT, while reads and SYNCHRONIZE CACHE still answer, as a DO volume the
-host has made read-only after an I/O error. `VOLUME_CUT_AT_EXIT=1` fails
-the power when the guest stops, at any end: every write cache (the volume's
-`VOLUME_CACHE`, the disk's `DISK_CACHE`) loses what was never synchronized
-before anything is reported or written back, and a line says how many
-sectors each lost. That is the cut `VOLUME_CUT_AFTER` cannot place: after a
-response that came after the last write. `VOLUME_CACHE_KEEPS=k` makes the
-volume's cache drain in its own order: at any cut, each sector never
-synchronized has reached the media with chance 1/k (by a hash of
-`FAULT_SEED` and the sector, so a seed repeats it), and the rest are lost, so
-a directory entry can survive without its data or a chain without its entry.
-A seed draws it half the times it draws `VOLUME_CACHE`; `sound.sh` on the
-volume afterwards is FAT's crash consistency under reordering. With `FAULT_SEED` too, a seed draws the volume's faults (all but
-the latency) on dice of their own, and `sweep.sh` sweeps them with
-`VOLUME_SITE=<image>`. Nothing changes unless `VOLUME` is set.
-
-The one PASS under a refusal is #1, the GPT header: `vfat` reads any failure to
-find a partition table as "no table" and mounts sector 0, which on this bare
-volume is right. On a partitioned disk the same fallback fails the mount, so the
-refusal still surfaces, a layer later and under the volume's name.
-
-## The real server
-
-Probes were the right subject for building a machine. `gopher.elf` is the
-reason it exists: **angry-gopher's own route table**, compiled from its own
-source for a machine with no operating system — its data on a FAT16 volume, its
-clocks from its own hardware, `std.http.Server` over a TCP stack it brought
-with it. A 24 MB kernel that is, on Linux, a web application.
-
-```
-$ ./site.sh
-GET /
-  here        200 13668 bytes, exit 0  (1628 ms)
-  under QEMU  200 13668 bytes, exit 0  (7215 ms)
-  ours  tcp: 0 timeouts sent something again, 0 window probes, ...
-  qemu  tcp: 0 timeouts sent something again, 0 window probes, ...
-the same page, and the same connection, both ways
-```
-
-13,668 bytes of the site's index page, fetched by the TCP client in `peer.zig`,
-identical to what curl gets from the same kernel under QEMU. The guest's own
-closing counters are compared too, because **that is where a difference between
-the two hypervisors shows up before it shows up in the page** — and on the
-first run it did.
-
-And with the wire eating one frame per run:
-
-```
-  eat #none   exit=0   13668 bytes  same page  retransmits: 0   1220 ms
-  eat #1      exit=1       0 bytes  no lease   (dhcp does not retransmit)
-  eat #2      exit=1       0 bytes  no lease   (dhcp does not retransmit)
-  eat #3      exit=0   13668 bytes  same page  retransmits: 1   1420 ms   ← a 200 ms timeout
-  eat #4      exit=0   13668 bytes  same page  retransmits: 0   1220 ms
-  eat #5..#16 exit=0   13668 bytes  same page  retransmits: 1   ~1235 ms  ← dupacks, ~15 ms
-```
-
-The last rows are the guest's **fast retransmit** — `dupacks_before_resend = 3`
-in its own `tcp.zig`, a path that until now had never run. Three duplicate
-acknowledgements from the peer and it resends immediately instead of waiting
-out the timer, which is the difference between the 200 ms row and the 15 ms
-ones. (Its counter prints both kinds as "timeouts", which flatters the timer.)
-
-### Twelve routes, and 141 refused reads
-
-`./site.sh all` runs every cookie-free route in `judge_gopher.py`'s list
-through both machines. Twelve routes, twenty-four boots: same status, same
-bytes, same connection, every time — including a 26 KB PDF and the redirects.
-
-`./flaky.sh gopher all` is the one that pays for everything. The real server
-makes **141 disk requests** to boot, back-fill its chat sidecars and answer
-`GET /`. Refusing each in turn, one boot per request, takes seven minutes:
-
-```
-gopher makes 141 disk requests; an untouched run: exit 0 — PASS — client got: 200, 13668 bytes
-   129 runs  (#4..#132)    exit 1   FAIL: the FAT could not be held in memory
-     3 runs  (#135..#137)  exit 0   PASS — client got: 200, 13668 bytes
-     2 runs  (#140..#141)  exit 0   PASS — client got: 200, 7799 bytes
-     2 runs  (#138..#139)  exit 0   PASS — client got: 200, 7801 bytes
-     2 runs  (#133..#134)  exit 124  said nothing about it
-     2 runs  (#1..#2)      exit 1   FAIL: the disk has no GPT partition to serve from
-     1 runs  (#3..#3)      exit 1   FAIL: the first partition is not FAT16
-```
-
-The 129 loud failures are right: the FAT is read at boot, and a machine that
-cannot read it should say so and stop. Two rows are not right.
-
-**`exit 124` was a hang, and it turned out not to be a deadlock at all.**
-Refusing request #133 leaves the machine answering `GET /` correctly and then
-never exiting. The watchdog below names the loop, and the diff against a clean
-run names the cause in one line:
-
-```
--   serving until stopped
-+   serving 1 request(s), as gopher-metal.conf says
-```
-
-**Request #133 is the read of `gopher-metal.conf`.** `readConfig` says
-`readFileAlloc(...) catch return conf`, so a disk that refuses the read is
-indistinguishable from a volume with no config file on it — and the default
-for `requests` is *forever*. The machine served its one request and then waited
-for the next one, exactly as instructed. Every malformed *line* in that file is
-a loud `serial.fail`; the failed *read* is silent. Careful about content,
-careless about access.
-
-That is the same defect as the one below, one layer up: `io.zig` turns the I/O
-error into `FileNotFound`, and `catch return conf` then cannot tell "there is no
-config" from "I could not read the config".
-
-### A hang is a number
-
-A machine whose time is its guest's curiosity can count a hang exactly, so it
-does: so many exits with nothing printed and no doorbell rung and the run stops
-and says where the guest is.
-
-```
-metal-vmm: the guest has printed nothing and rung no doorbell for 1000000 exits
-           (101126 ms of its own time). It is here:
-         rip 00000000001c6f7e  rbx 000000000137de30  rsp 000000000137d4d0
-         possibly called from, innermost first:
-           00000000001c59a4     ← stream.pump
-           00000000001c6ef0     ← gopher.streamTurn
-           ...
-```
-
-There are no frame pointers, so that is a guess: any word on the stack pointing
-into the kernel's own **executable sections** is probably a return address. The
-sections matter — a guest's stack lives in its `.bss`, so a filter that takes
-the whole loaded image calls every stack word a caller. Feed the addresses to
-`addr2line -f -C -e <kernel.elf>`.
-
-**And the short pages are a 200.** Refusing #138 gets the client 7,801 bytes
-ending in:
-
-```html
-<h1>Home unavailable</h1>
-<p>pages/home.txt could not be rendered: <strong>FileNotFound</strong>.</p>
-```
-
-The file is there. The disk refused to read it. `io.zig` says
-`v.open(path) catch return Error.FileNotFound` in eight places, which collapses
-a read error, a corrupt FAT and a genuinely missing file into one answer — so a
-machine with a failing disk reports deleted files, and anything that reacts to a
-missing file by recreating or skipping it will do that to a file that is
-perfectly fine. The status stays 200, so a cache would store "Home unavailable"
-as the site's home page.
-
-Neither of those is a bug in this hypervisor. Both are what it was built to
-find.
-
-### The write path, which is the half that matters
-
-A `GET` only reads. `PEER_REQUEST=<file>` sends whole request bytes instead of
-a path, so the peer can post a chat message with a signed session cookie — and
-**one chat message is 82 disk writes**. `DISK_WRITES_ONLY=1` makes
-`DISK_REFUSE=n` mean the nth *write*, because a guest reads a hundred sectors
-for every one it saves and counting all of them is a blunt way to aim.
-
-Refusing each of those 82 writes in turn:
-
-| | |
-|---|---|
-| writes #1–#22 | the route answers **`WriteFailed`**, the host closes the connection, the client gets nothing at all, and the message is not on the volume |
-| writes #24–#82 | the client is told **303 See Other** and the message *is* on the volume |
-
-The second row is the one worth checking rather than believing, because "the
-client was told it worked" is exactly where silent loss hides. So each of those
-volumes was **booted a second time** and asked to read the conversation back,
-and asked for `/chat/recent`, which is rendered from the sidecar rather than
-the transcript:
-
-```
-clean: the transcript reads back as 116 bytes, message present: 1
-  write #24  told the client 303; reading back: 116 bytes, message: 1, same as clean: yes
-  ... #30 #40 #50 #60 #70 #82, all the same
-  Recent: 3373 bytes, same as clean, every time
-```
-
-**angry-gopher does not lie about a save.** When it says 303 the message is
-there and both views agree with a clean run; when it cannot save, it says
-`WriteFailed` and does not claim otherwise. That is a negative result, and it
-is the one worth having.
-
-The weak spot is what the *client* sees on that failure: the connection closes
-with no response at all, so a browser shows a network error rather than a page.
-The host contract says a failed request is logged and the connection closed —
-`server.zig` does the same on Linux — so this is a design decision to revisit
-rather than a defect, but it is a decision with no error page behind it.
-
-### The multi-file path, where the client was told the wrong thing
-
-Creating a chat topic writes several files. `./zig-out/bin/metal-vmm` with
-`DISK_WRITES_ONLY=1 DISK_REFUSE=n` refuses the nth of its **83 writes**, one
-run each, and every one of those volumes is then **booted again** and asked
-whether the topic is listed and whether it opens:
-
-```
-  56 runs  route:ok           client:200   listed:1  topic page:200    #24..#83
-  17 runs  route:WriteFailed  client:none  listed:0  topic page:200    #1..#19
-   4 runs  route:ok           client:200   listed:0  topic page:none   #50, #59, #67, #80
-   3 runs  route:WriteFailed  client:none  listed:1  topic page:200    #20, #22, #23
-```
-
-**The four-run row is a bad one, and all four refused the same thing: a write
-to sector 2180 — the FAT's second copy.** The client is told `200
-{"conv":"1_2","sid":"metal-talk"}`. The next boot says:
-
-```
-  fat cache: FatsDisagree
-FAIL: the FAT could not be held in memory
-```
-
-Not "that topic is missing" — **the volume will not mount at all.** The site is
-down. And the error was reported to nobody.
-
-The swallowing is one line of the application, `zig-server/src/chat.zig`:
-
-```zig
-// Announce the new topic where the partner already watches (best-effort).
-_ = store.appendMessage(io, alloc, bus, …, note, "") catch {};
-```
-
-The topic itself was created. The *announcement* of it into the general
-conversation is best-effort, so its failure is discarded — and on this machine
-that append is the one that touches the FAT. `catch {}` on a write is the same
-line on Linux, where it silently drops the announcement instead; the volume
-damage is this filesystem's mirroring, but **the ignored error is the
-application's, on both.**
-
-The three-run row is the mirror image: the write failed after the topic was
-durable, so the client got no response at all for something that did happen. A
-user who retries gets a duplicate.
-
-### One refused write to the mirror, and the volume never mounts again
-
-The same sector keeps turning up. Three more paths, swept the same way:
-
-| | writes | what happens |
-|---|---|---|
-| a reaction | 7 | every failure reported as `WriteFailed`, client gets nothing — **honest** |
-| an image upload | 22 | #1–#5 recover and answer 200 with a working image; #6–#22 answer the client a real **500** — the only path here that does |
-| a new topic | 83 | the four `catch {}` runs above |
-
-But underneath all three is one thing, and it is not the application's:
-
-```
-  new_topic  refuse write #2   (sector 2180): next boot WILL NOT MOUNT
-  new_topic  refuse write #50  (sector 2180): next boot WILL NOT MOUNT
-  react      refuse write #5   (sector 2180): next boot WILL NOT MOUNT
-  upload     refuse write #2   (sector 2180): next boot mounts
-```
-
-Sector 2180 is the FAT's second copy. `fatSet` writes the cached sector to
-every copy in turn; if the second write fails, the first has already landed and
-**nothing puts it back**. `cacheFat` then refuses to mount a volume whose
-copies disagree — deliberately, so that no tool silently "repairs" a volume
-someone else has an opinion about. Those two reasonable decisions meet here:
-
-**one failed write to the mirror leaves a volume that will never mount again,
-and there is no repair path.**
-
-The upload row is why the rule is exact rather than statistical. A refused
-mirror write is permanent **unless something flushes that sector again
-afterwards** — the upload does, later in the same request, and the volume
-survives. Which has an unpleasant corollary: propagating the error honestly
-*aborts* the request, so nothing flushes again, so **correct error handling
-makes the damage certain**. The reaction path does everything right and loses
-the volume; the upload path is saved by carrying on.
-
-### The bookmark that eats your bookmarks
-
-`chat_state.zig` is documented best-effort throughout — "a failed write just
-loses the bookmark for that visit" — and for a bookmark that is a fair trade.
-Four of its five swallowed errors are exactly that. The fifth is not:
-
-```zig
-pub fn setSessionPinned(…) void {
-    const existing = readPinnedFile(io, alloc, uid, conv_key) catch "";
-    const cur = parsePinned(alloc, existing) catch return;
-    …                       // rebuild the set with sid added or removed
-    Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = body.items }) catch {};
-```
-
-**A failed *read* of the pinned file becomes an empty pinned set, and then the
-file is overwritten from it.** Pin one session while that read fails and every
-other pin the user had is gone — silently, with the client told 204. It is the
-same shape as everything else in this list: an error treated as "there is
-nothing there".
-
-**The sweep did not corroborate this, and an earlier version of this section
-said it did.** Refusing each of the 218 requests a pin makes, 25 runs told the
-client 204 while the pinned file ended up without the new pin in it — but
-reading the file's sector out of both volumes afterwards shows the old pin
-intact (`general\n`, not `metal-talk\n`). Those runs failed to *add* a pin;
-they did not destroy one. The same case run against the pre-fix kernel gives
-byte-identical output, which is the test that should have been run first.
-
-So the finding is the code above and nothing else: `catch ""` on a read whose
-result is written back **will** destroy the set whenever that read fails for
-any reason other than the file being absent. Making a disk produce that
-particular failure at that particular call is a harder aim than this machine
-can currently take. The fix is one line either way: tell "no such file", which
-legitimately means no pins, apart from every other error, which does not.
-
-### "It answered" is a weaker question than "is it sound"
-
-Every sweep so far asked what the client was told and whether the next boot
-worked. `./sound.sh <image>` asks a third thing, by borrowing Linux's `fsck`
-for a filesystem this machine has no fsck of its own for. Refusing each of the
-upload's 22 writes and checking the volume afterwards:
-
-```
-before any upload: 48 files, 64/32167 clusters
-after a clean one:  51 files, 67/32167 clusters
-
-  #1..#4    client:200   Reclaimed 1 unused cluster (2048 bytes)
-  #5        client:200   Orphaned long file name part "upload-bytes"
-  #7, #17   client:500   FATs differ but appear to be intact
-  #8..#13   client:500   Reclaimed 1 unused cluster (2048 bytes)
-  #14, #15  client:500   Orphaned long file name part "ds" / "general.uploads"
-  #20..#22  client:500   Orphaned long file name part "…173edb.png"
-```
-
-Three kinds of litter, and **the client was told 200 for the first five of
-them**:
-
-- **a leaked cluster** — marked allocated in the FAT, referenced by nothing.
-  Every failed upload costs 2 KB that never comes back;
-- **an orphaned long file name** — a directory entry written across several
-  slots with no commit point, so a failure leaves the name without the entry
-  behind it;
-- **FATs that differ** — the mirror defect above, seen from outside.
-
-None of this is exotic: FAT16 has no journal, so an interrupted operation
-leaves work half done and an fsck is how it gets tidied. The point is the
-second half of that sentence. **A reported write failure is not a crash** —
-the code knows the write failed and could free the cluster it just allocated —
-and **this machine has no fsck**. On Linux the same application sits on a
-journalling filesystem that a boot will check. On bare metal it sits on this.
-
-### Why one chat message is eighty-two writes
-
-`DISK_TRACE=1` prints every request the guest makes. One message:
-
-```
-368 requests: 286 reads, 82 writes
-  writes:   58  directory + data
-            12  FAT, first copy
-            12  FAT, second copy
-  reads:   157  directory + data
-           125  FAT, second copy
-```
-
-**The FAT writes are two sectors, written twenty-four times.** Every cluster
-allocation flushes the whole cached FAT sector to *every copy* immediately
-(`fatSet`, "in every copy of the FAT"), so twelve allocations cost
-twenty-four writes, and a chat message allocates in several files at once — the
-transcript, its sidecars, the per-user cursor. The other 58 are those files'
-contents and their directory entries.
-
-The 125 reads of the FAT's second copy are the mount checking that the copies
-agree, sector by sector, before it caches the first — which is what makes the
-defect above fatal rather than invisible.
-
-### The pitfall that cost a retransmission
-
-The first run of the real server reported **1 timeout** where curl through QEMU
-reported 0, and the cause was ours: 30 of 51 frames on the way to the guest had
-nowhere to go. A guest emptying a whole HTTP response into one doorbell has not
-polled for a while, so its receive buffers are all in our hands, and the card
-was **dropping** frames that found no buffer free.
-
-There is no congestion on this wire. A frame that vanishes here is one this
-program invented, and the guest pays a retransmission timeout for it. A frame
-with nowhere to go now **waits on the wire** and goes in at the next exit, of
-which there are ten thousand a second.
+- **The last two are FAT32** (prod's data is FAT32): a fresh volume made by
+  `mkfs.vfat`, written by gopher-metal's own probes, and judged by `fsck.vfat`
+  as well as by QEMU. `append` stamps its files with the wall clock, which
+  differs between the two sides by design, so its clock line is left out and
+  its two disks are each judged by `fsck.vfat` rather than compared;
+  `vfat/fat32` is the byte-for-byte one.
+- **`rng` and `clock` are compared by verdict** rather than by words, for
+  opposite reasons: one is random on purpose, and the other is a measurement
+  of the machine it ran on, which is a different machine on each side on
+  purpose.
+- **The HTTP ones compare two clients**: the peer written here, and curl
+  through QEMU's forwarded port, both fetching `/probe`. For `stdhttp` that is
+  **zig's own `std.http.Server`, unmodified, answering a TCP client written
+  here, on a machine with no operating system, under a hypervisor written
+  here.**
+- **`net` is the strictest**: the address, mask, router, DNS and server the
+  guest's DHCP lease names must match what QEMU's own DHCP server hands out.
+- The block probe's list of device slots is left out: QEMU fills its window
+  from the top and has a random-number device too.
+
+**On timings.** `check.sh` runs QEMU without `-accel kvm`, so QEMU emulates
+the processor in software: a device access costs it a function call and costs
+this program a full exit through KVM, which on the box is itself nested in a
+virtual machine. Measured 2026-10-01, `vfat` (44,193 disk requests, about
+221,000 exits) takes 1.7-2.0 s under QEMU's software processor, 3.3-3.4 s
+under QEMU with `-accel kvm`, and 4.15 s here; `clock`, mostly computation,
+takes 8.3 s, 4.6 s and 1.2 s. A `ReleaseFast` build runs `vfat` in the same
+4 s as the debug one, so `zig build`'s default stays debug.
 
 ## The other oracle: yesterday's run
 
@@ -974,10 +337,7 @@ before.
 ```
 SAME    clock       10 lines, verdict 0 (726 ms, then 701 ms)
 SAME    rng         6 lines, verdict 0 (104 ms, then 106 ms)
-SAME    block       10 lines, verdict 0 (108 ms, then 106 ms)
-SAME    vfat        6 lines, verdict 0 (118 ms, then 118 ms)
-SAME    net         9 lines, verdict 0 (128 ms, then 133 ms)
-SAME    http        7 lines, verdict 0 (129 ms, then 131 ms)
+...
 SAME    stdhttp     8 lines, verdict 0 (135 ms, then 154 ms)
         tsc_hz 2500014511
         unix 1789732802
@@ -990,11 +350,115 @@ its own processor, `unix` and `civil` are what it read off the clock chip, the
 draw is sixteen bytes it will mint a session token out of — and all of them are
 the same on every run on every day.
 
-The `clock` probe is the one that makes this a real question, and it had never
-booted here before this step because it needs a real-time clock. It calibrates
-its timestamp counter against the interval timer, checks that its monotonic
-clock never goes backwards over a thousand readings, checks the calibrated rate
-against a **second, independent device** by timing the gap between two
-real-time-clock seconds-edges, reads the chip in all four of its register
-formats and requires them to decode to one moment, and anchors a wall clock to
-an edge rather than to the moment it was told.
+## The real server
+
+`gopher.elf` is **angry-gopher's own route table**, compiled from its own
+source for a machine with no operating system — its data on a FAT16 volume, its
+clocks from its own hardware, `std.http.Server` over a TCP stack it brought
+with it.
+
+```
+$ ./site.sh
+GET /
+  here        200 13668 bytes, exit 0  (1628 ms)
+  under QEMU  200 13668 bytes, exit 0  (7215 ms)
+  ours  tcp: 0 timeouts sent something again, 0 window probes, ...
+  qemu  tcp: 0 timeouts sent something again, 0 window probes, ...
+the same page, and the same connection, both ways
+```
+
+The guest's own closing counters are compared too, because **that is where a
+difference between the two hypervisors shows up before it shows up in the
+page**. `./site.sh all` runs the twelve cookie-free routes of
+`judge_gopher.py`'s list through both machines, a 26 KB PDF and the redirects
+among them.
+
+## Faults, seeds and coverage
+
+A hypervisor that owns every input can choose to withhold one, and a
+deterministic one can do it to a recipe. Every fault is an environment knob;
+**[KNOBS.md](KNOBS.md) lists them all**, grouped as the machine, the calendar,
+the wire, the peer, the boot disk, the volume and the seeds.
+
+- **Exhaustive maps.** `./lossy.sh` loses the guest's first frame, then its
+  second, one run per frame; `./flaky.sh` does the same with disk requests.
+  Because every run repeats, these are maps of every case, not samples.
+- **Seeds.** `FAULT_SEED=n` turns many knobs at once, so "seed 4711" names
+  one exact run, and the run prints the knobs that repeat it without the seed.
+  `./sweep.sh [first] [last]` runs a range on the PC-shaped machine, a fresh
+  copy of the volume each, and fails a seed whose exit is not the unhurt run's,
+  that broke a coverage property, that left a volume `sound.sh` rejects, or
+  whose page differs when nothing it did excuses that. With `POST`, it judges
+  instead whether a post the client was told succeeded (303) is on the volume
+  after a power cut. It ends with the failing seeds as the knobs that repeat
+  them.
+- **Nothing the guest does kills this program.** `zig build fuzz` drives every
+  model a guest can reach (the PCI ports at any offset and width, every BAR,
+  the mmio window, the APIC and its MSRs, virtqueues laid out any way at all,
+  hostile block and SCSI requests, frames, COM1, the PIT and the RTC, the
+  peer's clients) from a seeded stream, without a processor. Nothing may
+  panic, and each seed must be the same run twice. `zig build test` runs the
+  first 64 seeds and every seed that ever found something (`fuzz.zig`,
+  `regressions`).
+
+### What the guest says it reached
+
+A gopher-metal kernel built `-Dcoverage` prints zig-coverage-sdk's JSONL on
+COM1 behind `coverage: ` (gopher-metal's COVERAGE.md). The serial port here
+reads those lines as they are printed (`coverage.zig`) and keeps a table of
+every property: its kind, how often it was seen true and false, and the exit
+and virtual time of the first of each. `COVERAGE_OUT=<file>` keeps the lines
+out of stdout and appends them to that file as plain JSONL; without it stdout
+is the guest's bytes exactly. A run that printed any ends with:
+
+    metal-vmm: coverage: 7 of 23 properties reached (6 hold, 0 broken), from 412 lines over 1 boots
+
+Each run's lines in a `COVERAGE_OUT` file follow a line naming it
+(`{"metal_vmm_run":{"seed":4711,"knobs":"..."}}`). The SDK's
+`tools/report.py a.jsonl [b.jsonl ...] [--floor f]` reads any number of such
+files as one table: every property's verdict, how many runs reached it and
+which first, each numeric comparison's edge and which run came nearest it, and
+the properties only one run ever reached. `sweep.sh` ends with it.
+
+## What it found
+
+Sweeps of lost frames and refused disk writes found defects in gopher-metal and
+angry-gopher, among them a DHCP client that never retransmitted and one
+refused write that left a volume that could never mount again. Most are fixed
+since and one is open; [docs/findings.md](docs/findings.md) has each, found →
+fixed, with commits.
+
+## Reading it
+
+- `src/kvm.zig` — Linux's side: the ioctl numbers and the structures,
+  transcribed from `/usr/include/linux/kvm.h`, with their sizes asserted at
+  compile time. An ioctl number carries its argument's size, so a structure a
+  byte too long does not mis-parse; it fails with `EINVAL` and says nothing.
+- `src/clock.zig` — the machine's time: one counter, and the three devices
+  that report it. **Read this one first if you read only one.**
+- `src/entropy.zig` — the seeded generator and the device that hands it out.
+- `src/main.zig` — the processor's starting state, the serial port, the exit
+  door, and the loop that serves them. Beside it: `src/loader.zig` (the ELF,
+  and the marked instructions rewritten), `src/processor.zig` (CPUID and the
+  MSRs this program answers), `src/halt.zig` (what wakes a halted guest),
+  `src/reports.zig` (what a run says at its end) and `src/cost.zig` (what it
+  cost, in exits and guest time).
+- **Devices**: `src/virtio.zig` (the transport and the block device),
+  `src/disk.zig` (the image, mapped private, and the sectors the run changed),
+  `src/cache.zig` (a disk write cache, `DISK_CACHE`), `src/scsi.zig` (the
+  virtio-scsi volume), `src/net.zig` (the network card).
+- **The PC-shaped machine**: `src/pci.zig` (the bus), `src/virtio_pci.zig` (a
+  virtio device as a function on it), `src/msix.zig`, `src/apic.zig`.
+- **The other end of the wire**: `src/peer.zig` (DHCP, its clients, how many
+  and how they misbehave), `src/client.zig` (one client as a TCP),
+  `src/response.zig` (where an HTTP answer ends), `src/frames.zig` (the
+  frames), `src/mangle.zig` (frames that lie).
+- **Faults**: `src/faults.zig` (what this machine may do to its guest),
+  `src/settings.zig` (the knobs, into the faults), `src/knobs.zig` (every
+  knob, and what a seed draws).
+- **Watching**: `src/coverage.zig` (the guest's coverage lines, one run's and
+  many runs').
+- **Checks on this program**: `src/fuzz.zig` and `src/fuzz_main.zig` (the
+  models under seeded guest input), `src/determinism.zig` (no host time or
+  entropy anywhere in `src/`, checked), `src/snapshot.zig` (every model's
+  state, saved and restored in place).
