@@ -344,6 +344,35 @@ order without waiting; the box answers when he is back).
 48. **Done (CC): H1-H5 under Proposed; H1 built (`PEER_DRIP_US`), not yet run against gopher.elf: with `PEER_CLIENTS` and `PEER_MSS=1` it asks how many slow clients keep a good one out.** **Your proposals again** when 41-47 are done, as in item 32: the next
     five, one line each on why, then take the first.
 
+**Next, after 48** (2026-10-06 morning). Item 47 is merged (gopher-metal
+`4953f7e`): thank you, the review held up, and the crowd test runs green. Your
+H proposals are approved in the order below.
+
+49. **(metal-vmm) H5, pipelining** (`PEER_PIPELINE=1`), as you proposed it:
+    does the table send a FIN or a reset with the second request unread, and
+    does the client still get the whole first answer.
+50. **(metal-vmm) H3, frames that lie, from the peer** (`PEER_MANGLE=n`),
+    as proposed, in `FAULT_SEED`'s ranges. Every mangled frame must be
+    dropped or refused by the guest, never crash it or reach the
+    application; say which of gopher-metal's parsers (`proto.zig`,
+    `net.zig`, `tcp.zig`) each kind exercises.
+51. **(gopher-metal) H4, a simulator for `ready.zig`.** It imports only `std`
+    and `tcp.zig`, so it is the simulators' to drive: every split of a
+    request head's bytes, at the receive buffer's edge and past it (the
+    431 path), against a reference parse.
+52. **(metal-vmm) H2, a lease that ends** (`DHCP_LEASE_S=n`). The peer's
+    side only; whether gopher-metal renews is what the box runs it to see.
+53. **(metal-vmm) The SCSI half of item 44.** Prod keeps chat's data on a
+    DigitalOcean volume over virtio-scsi (gopher-metal `scsi.zig`), not
+    virtio-blk, and `scsi.zig` sends no SYNCHRONIZE CACHE either. If
+    metal-vmm has no virtio-scsi device, write down under Questions what
+    the smallest one gopher-metal's driver would accept needs (the commands
+    `scsi.zig` sends, and MODE SENSE's caching page, so a run can say "this
+    disk caches writes"), and build it if it is small. The box measures
+    what prod's volume reports (B11).
+54. **Your proposals again** when 49-53 are done: the next five, then take
+    the first.
+
 ## Proposed
 
 *(CC adds items here, one line each on why.)*
@@ -503,9 +532,6 @@ this machine survives.
   property of the request alone; or the judge compares only requests in
   the same position. The box's call.
 
-- **(CC, item 33) A crowd finds item 24's class without a flood.**
-  Answered by item 47: revival makes all 21 crowd seeds green, and
-  `properties` crowds every seed again by default.
 - **(CC, item 23) `sweep.sh` is new** (no existing script changed), with
   `sweep_test.sh` for its logic. Please run it on gopher.elf, e.g. `SITE=...
   ./sweep.sh 1 200`, and answer here: how long a seed takes, which seeds fail
@@ -544,6 +570,25 @@ this machine survives.
 ## Answers
 
 *(The box answers here, on `interrupts`.)*
+
+**2026-10-06 morning, the box: items 47 and 48 merged** (gopher-metal
+`4953f7e`, 829/830 with 1 skipped; metal-vmm `49f46ab`, 221/221, `check.sh`
+and `same.sh` clean). v17's gates are running (`gates.sh`, then the whole
+`long.sh`). Your item 33 crowd question is answered by item 47. Items 49-54
+are yours.
+
+Added to the box's list:
+
+- **B11.** Does prod's chat volume cache writes? Read MODE SENSE's caching
+  page (WCE) from the real volume on a droplet boot; if it caches,
+  SYNCHRONIZE CACHE at the end of each save in `scsi.zig` (and FLUSH for
+  virtio-blk, item 44), so "303 means saved" holds whatever the disk does.
+- **B12.** The real kernel reaches revival: a `long.sh` rough-peer run
+  losing the client's handshake ACK with a flood started inside the next
+  round trip (REVIEW-flood's recipe: `PEER_EAT=4 PEER_FLOOD=1024
+  PEER_FLOOD_AT_US=1000 PEER_FLOOD_GAP_US=100`), and the revival property
+  on the metal floor. Also H1 (`PEER_DRIP_US`) against gopher.elf: how many
+  slow clients keep a good one out.
 
 **2026-10-05 late, the box: B5 done** (gopher-metal `582510e` on
 `antithesis-sdk`). Your two fat16 findings from item 36: makePath now stops at
