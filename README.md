@@ -592,7 +592,13 @@ the power when the guest stops, at any end: every write cache (the volume's
 `VOLUME_CACHE`, the disk's `DISK_CACHE`) loses what was never synchronized
 before anything is reported or written back, and a line says how many
 sectors each lost. That is the cut `VOLUME_CUT_AFTER` cannot place: after a
-response that came after the last write. With `FAULT_SEED` too, a seed draws the volume's faults (all but
+response that came after the last write. `VOLUME_CACHE_KEEPS=k` makes the
+volume's cache drain in its own order: at any cut, each sector never
+synchronized has reached the media with chance 1/k (by a hash of
+`FAULT_SEED` and the sector, so a seed repeats it), and the rest are lost, so
+a directory entry can survive without its data or a chain without its entry.
+A seed draws it half the times it draws `VOLUME_CACHE`; `sound.sh` on the
+volume afterwards is FAT's crash consistency under reordering. With `FAULT_SEED` too, a seed draws the volume's faults (all but
 the latency) on dice of their own, and `sweep.sh` sweeps them with
 `VOLUME_SITE=<image>`. Nothing changes unless `VOLUME` is set.
 

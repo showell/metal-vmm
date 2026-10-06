@@ -580,7 +580,16 @@ your item 68 (v17 loses the message, v18 keeps it), and K1 is its next step.
     advance; `sweep_test.sh` unchanged and passing. Not run against
     gopher.elf here (no KVM): the box's B14 request and `/chat/recent` are
     the obvious `POST` and `READ_BACK`. **Was:** K1, a sweep that judges durability, not the page, as proposed.
-71. **K2, a write cache that writes back in its own order**, as proposed.
+71. **Done (CC, 2026-10-06).** `VOLUME_CACHE_KEEPS=k`: at any cut (a
+    `VOLUME_CUT_AFTER`, a disk cut, or `VOLUME_CUT_AT_EXIT`) each sector the
+    volume's cache never synchronized has reached the media with chance
+    1/k, decided by a hash of `FAULT_SEED` and the sector (so the walk's
+    order does not matter and a seed repeats it); the volume's line counts
+    them. `knobs.withVolume` draws it, last, half the times it draws
+    `VOLUME_CACHE`, so no earlier volume draw moves. Fuzzed. The sweep's
+    existing check is the property: the attached volume must stay sound.
+    Also fixed: item 68 had left `lose`'s doc comment on `loseAtExit`.
+    **Was:** K2, a write cache that writes back in its own order, as proposed.
 72. **K3, crowds the size of the kernel's table**, as proposed.
 73. **K4, an edge floor** (`report.py --edges`), as proposed.
 74. **K5, one report, two images** (`report.py --against`), as proposed.

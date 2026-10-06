@@ -184,6 +184,10 @@ pub fn run(seed: u64) u64 {
     w.volume_cache = .{ .gpa = std.heap.page_allocator, .image = &w.volume_image, .lies = vr.boolean() };
     defer w.volume_cache.deinit();
     if (vr.boolean()) w.volume.cache = &w.volume_cache;
+    if (vr.boolean()) {
+        w.volume_cache.keeps = vr.intRangeAtMost(u64, 1, 4);
+        w.volume_cache.keep_seed = vr.int(u64);
+    }
     if (vr.uintLessThan(u8, 4) == 0) w.volume.power.cut_after = vr.uintLessThan(u64, 40);
     if (vr.uintLessThan(u8, 4) == 0) w.volume.attention_at = vr.uintLessThan(u64, 60);
     if (vr.uintLessThan(u8, 8) == 0) w.volume.gone_at = vr.uintLessThan(u64, 300);

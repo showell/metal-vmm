@@ -398,6 +398,11 @@ pub const Scsi = struct {
             std.fmt.bufPrint(&told_buf, "; UNIT ATTENTION at command {d} {s}", .{ n, if (self.commands >= n and self.attention == null) "told" else "never told" }) catch ""
         else
             "";
+        var keeps_buf: [96]u8 = undefined;
+        const keeps = if (self.cache) |c| (if (c.keeps) |k|
+            std.fmt.bufPrint(&keeps_buf, "; {d} sectors had reached the media on their own (VOLUME_CACHE_KEEPS={d})", .{ c.kept, k }) catch ""
+        else
+            "") else "";
         var gone_buf: [96]u8 = undefined;
         const gone = if (self.gone_at) |n|
             std.fmt.bufPrint(&gone_buf, "; gone from command {d}, {d} commands answered BAD_TARGET", .{ n, self.gone_answered }) catch ""
@@ -418,8 +423,8 @@ pub const Scsi = struct {
             std.fmt.bufPrint(&failed_buf, " ({d} failed, VOLUME_SYNC_FAIL)", .{self.sync_failed}) catch ""
         else
             "";
-        return std.fmt.bufPrint(buf, "metal-vmm: volume: {s}; {d} reads, {d} writes, {d} SYNCHRONIZE CACHE{s}, {d} MODE SENSE{s}{s}{s}{s}{s}\n", .{
-            mode, self.reads, self.writes, self.synchronizes, failed, self.mode_senses, told, gone, ro, waited,
+        return std.fmt.bufPrint(buf, "metal-vmm: volume: {s}; {d} reads, {d} writes, {d} SYNCHRONIZE CACHE{s}, {d} MODE SENSE{s}{s}{s}{s}{s}{s}\n", .{
+            mode, self.reads, self.writes, self.synchronizes, failed, self.mode_senses, told, gone, ro, waited, keeps,
             if (self.power.cut != null)
                 (if (lost > 0) "; the power cut lost sectors never synchronized" else "; the power cut lost nothing")
             else if (self.cache) |c|

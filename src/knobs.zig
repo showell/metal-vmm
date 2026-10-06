@@ -74,7 +74,7 @@ pub const names = [_][]const u8{
     "VOLUME_CACHE",       "VOLUME_CUT_AFTER",  "VOLUME_SYNC_FAIL", "VOLUME_SYNC_FAIL_FOR",
     "PEER_MANGLE",        "PEER_MANGLE_RATE",  "PEER_MANGLE_KIND", "VOLUME_LATENCY_US",
     "VOLUME_ATTENTION_AT", "VOLUME_GONE_AT",   "VOLUME_READ_ONLY_AT", "VOLUME_SYNC_US",
-    "VOLUME_CUT_AT_EXIT",
+    "VOLUME_CUT_AT_EXIT", "VOLUME_CACHE_KEEPS",
 };
 
 fn index(comptime name: []const u8) usize {
@@ -171,6 +171,9 @@ pub const Knobs = struct {
             if (r.boolean()) self.number(index("VOLUME_SYNC_FAIL_FOR"), r.intRangeAtMost(u64, 2, 5));
         }
         if (chance(r, 4)) self.number(index("VOLUME_ATTENTION_AT"), r.intRangeAtMost(u64, 1, 200));
+        // Last, so every draw above is what it was: a cache that drains in
+        // its own order, only where there is a cache.
+        if (self.get("VOLUME_CACHE") != null and chance(r, 2)) self.number(index("VOLUME_CACHE_KEEPS"), r.intRangeAtMost(u64, 2, 4));
     }
 
     fn word(self: *Knobs, i: usize, text: []const u8) void {
@@ -270,7 +273,7 @@ test "different seeds turn different knobs, and every knob is turned by some see
         last_len = f.len;
     }
     for (turned, names) |t, n| {
-        // Twenty-four knobs only a person sets: a seed's runs keep to the flood
+        // Twenty-five knobs no plain seed sets: a seed's runs keep to the flood
         // and rates of the table above, and name no sector.
         if (!t and !std.mem.eql(u8, n, "PEER_DAMAGE_RATE") and !std.mem.eql(u8, n, "DISK_REFUSE_RATE") and
             !std.mem.eql(u8, n, "PEER_FLOOD_AT_US") and !std.mem.eql(u8, n, "DISK_BAD_SECTOR") and
@@ -283,7 +286,8 @@ test "different seeds turn different knobs, and every knob is turned by some see
             !std.mem.eql(u8, n, "PEER_MANGLE_RATE") and !std.mem.eql(u8, n, "PEER_MANGLE_KIND") and
             !std.mem.eql(u8, n, "VOLUME_LATENCY_US") and !std.mem.eql(u8, n, "VOLUME_ATTENTION_AT") and
             !std.mem.eql(u8, n, "VOLUME_GONE_AT") and !std.mem.eql(u8, n, "VOLUME_READ_ONLY_AT") and
-            !std.mem.eql(u8, n, "VOLUME_SYNC_US") and !std.mem.eql(u8, n, "VOLUME_CUT_AT_EXIT"))
+            !std.mem.eql(u8, n, "VOLUME_SYNC_US") and !std.mem.eql(u8, n, "VOLUME_CUT_AT_EXIT") and
+            !std.mem.eql(u8, n, "VOLUME_CACHE_KEEPS"))
         {
             std.debug.print("never turned: {s}\n", .{n});
             return error.TestUnexpectedResult;
@@ -391,8 +395,8 @@ test "no seed and no knobs: nothing is turned" {
 test "a volume's knobs are drawn only with a volume, on dice of their own" {
     var buf_a: [1024]u8 = undefined;
     var buf_b: [1024]u8 = undefined;
-    var turned = [_]bool{false} ** 5;
-    const vol = [_][]const u8{ "VOLUME_CACHE", "VOLUME_CUT_AFTER", "VOLUME_SYNC_FAIL", "VOLUME_SYNC_FAIL_FOR", "VOLUME_ATTENTION_AT" };
+    var turned = [_]bool{false} ** 6;
+    const vol = [_][]const u8{ "VOLUME_CACHE", "VOLUME_CUT_AFTER", "VOLUME_SYNC_FAIL", "VOLUME_SYNC_FAIL_FOR", "VOLUME_ATTENTION_AT", "VOLUME_CACHE_KEEPS" };
     for (0..500) |seed| {
         const plain = Knobs.fromSeed(seed);
         var with = Knobs.fromSeed(seed);

@@ -31,6 +31,16 @@ pub const Cache = struct {
     /// Writes held, and sectors put back by a power cut.
     held: u64 = 0,
     lost: u64 = 0,
+    /// **A CACHE THAT WRITES BACK IN ITS OWN ORDER** (`VOLUME_CACHE_KEEPS=k`,
+    /// QUEUE item 71): at a cut, each sector never synchronized has already
+    /// reached the media with chance 1/k, chosen by `keep_seed` (the run's
+    /// `FAULT_SEED`), and keeps its new contents; the rest are lost. A real
+    /// cache drains in an order of its own, so after a cut a directory entry
+    /// can be there without its data, or a chain without its entry.
+    /// `kept` counts the sectors that made it.
+    keeps: ?u64 = null,
+    keep_seed: u64 = 0,
+    kept: u64 = 0,
     /// The power failed at the run's end (`loseAtExit`), and what it lost.
     exit_cut: bool = false,
     exit_lost: u64 = 0,
@@ -70,8 +80,6 @@ pub const Cache = struct {
         self.durable.clearRetainingCapacity();
     }
 
-    /// **THE POWER IS CUT**: every sector written since the last flush is
-    /// what it was before.
     /// **THE POWER FAILS WHEN THE GUEST STOPS** (`VOLUME_CUT_AT_EXIT=1`):
     /// what was never synchronized is lost at the run's end, as at a cut,
     /// and the line says it was this. `exit_lost` is what it lost.
@@ -82,13 +90,31 @@ pub const Cache = struct {
         self.exit_lost = self.lost - before;
     }
 
+    /// **THE POWER IS CUT**: every sector written since the last flush is
+    /// what it was before, unless the cache had already written it back on
+    /// its own (`keeps`).
     pub fn lose(self: *Cache) void {
         var it = self.durable.iterator();
         while (it.next()) |e| {
+            if (self.wroteBack(e.key_ptr.*)) {
+                self.kept += 1;
+                continue;
+            }
             @memcpy(self.image[e.key_ptr.* * sector_bytes ..][0..sector_bytes], e.value_ptr);
             self.lost += 1;
         }
         self.durable.clearRetainingCapacity();
+    }
+
+    /// Whether sector `s` reached the media before the cut: one in `keeps`,
+    /// by a hash of the seed and the sector, so the choice does not hang on
+    /// the order the map is walked in, and a seed repeats it exactly.
+    fn wroteBack(self: *const Cache, s: u64) bool {
+        const k = self.keeps orelse return false;
+        if (k <= 1) return k == 1;
+        var h = std.hash.Wyhash.init(self.keep_seed);
+        h.update(std.mem.asBytes(&s));
+        return h.final() % k == 0;
     }
 
     /// One line for the run's end, in `buf`.
@@ -172,4 +198,33 @@ test "VOLUME_CUT_AT_EXIT: at the run's end what was never flushed is lost, and t
     try testing.expectEqual(@as(u64, 2), c.exit_lost);
     var buf: [256]u8 = undefined;
     try testing.expect(std.mem.indexOf(u8, c.line(&buf, false), "the power failed when the guest stopped and lost 2 sectors never flushed") != null);
+}
+
+test "VOLUME_CACHE_KEEPS: at a cut some unsynchronized sectors made it, by the seed and the sector, the same each time" {
+    var counts: [2]u64 = undefined;
+    for (0..2) |round| {
+        var image: [64 * sector_bytes]u8 = @splat('o');
+        var c = Cache{ .gpa = testing.allocator, .image = &image, .keeps = 3, .keep_seed = 4711 };
+        defer c.deinit();
+        try testing.expect(c.wrote(0, 64));
+        @memset(&image, 'n');
+        c.lose();
+        try testing.expectEqual(@as(u64, 64), c.kept + c.lost);
+        try testing.expect(c.kept > 0 and c.lost > 0);
+        var kept: u64 = 0;
+        for (0..64) |s| {
+            if (image[s * sector_bytes] == 'n') kept += 1 else try testing.expectEqual(@as(u8, 'o'), image[s * sector_bytes]);
+        }
+        try testing.expectEqual(c.kept, kept);
+        counts[round] = kept;
+    }
+    try testing.expectEqual(counts[0], counts[1]);
+    // One in one: everything made it, nothing is lost.
+    var image: [4 * sector_bytes]u8 = @splat('o');
+    var all = Cache{ .gpa = testing.allocator, .image = &image, .keeps = 1 };
+    defer all.deinit();
+    try testing.expect(all.wrote(0, 4));
+    @memset(&image, 'n');
+    all.lose();
+    try testing.expectEqual(@as(u64, 0), all.lost);
 }

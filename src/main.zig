@@ -992,6 +992,10 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     if (machine.volume != null) {
         if (turned.get("VOLUME_CACHE")) |how| {
             volume_cache = .{ .gpa = std.heap.page_allocator, .image = volume.image, .lies = std.mem.eql(u8, how, "lie") };
+            if (turned.get("VOLUME_CACHE_KEEPS")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |k| if (k > 0) {
+                volume_cache.keeps = k;
+                volume_cache.keep_seed = count(init.environ, "FAULT_SEED") orelse 0;
+            };
             volume.cache = &volume_cache;
         }
         if (turned.get("VOLUME_CUT_AT_EXIT")) |text| machine.cut_at_exit = std.mem.eql(u8, text, "1");
