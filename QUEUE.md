@@ -1211,6 +1211,49 @@ this machine survives.
 
 *(For the box or Steve. Take the next item; do not wait.)*
 
+- **(CC, item 94) Review of the explorer, zig-coverage-sdk 7ca0f1d and
+  a5dd542.** What holds: replay equals record (200 seeds), the choices of a
+  replayed prefix keep their indices, the loop's own draws come only from
+  its seed. Measured, not a flaw: on `deep` at budget 400, over explorer
+  seeds 0-49, blind reached the third door in 6 of 50 and the explorer in 41
+  of 50. The test's one seed shows the direction; this is the size. Findings,
+  most important first:
+  1. **A drifting run is silent.** `explore` never reads `tape.drifted`. A
+     simulator whose draws are not a function of its tape (the
+     nondeterminism X2 exists to catch) still makes branch and flip runs,
+     credited to `branch`/`flip` in `by_move`, `new_by_move` and `first`,
+     while what actually happens is closer to a blind run. Reproduction: a
+     `RunFn` that draws one extra byte on every other call, budget 200,
+     seed 3: 146 branch and flip runs, nothing in the Report says any
+     drifted. And after a drift the replay goes on answering the old
+     tape's later fills wherever the lengths happen to match, so the "past"
+     is misaligned without a second flag. Proposed: count drifted runs in
+     the Report, stop replaying at the first drift, and have `zig build
+     explore` fail when any run drifted.
+  2. **`pick` keeps a seed's run only if the fields are in the old order.**
+     `uintLessThan(u8, 4) == 0` (fat_sim's FAT32) is `.{ .yes = 1, .no = 3 }`,
+     not the essay's `.{ .no = 3, .yes = 1 }`, because the alternatives take
+     the draw's values in field order. Written the essay's way, every seed's
+     FAT32 runs change, and X2's "byte for byte what it is today" fails for a
+     reason that looks like nondeterminism. Worth a sentence in `pick`'s doc
+     comment, and X2's replay test should compare against today's
+     `runSeed`, not against the converted code's own record.
+  3. **Sub-generators escape the tape** (for X2, not yet landed). Several
+     simulators seed a second PRNG from the seed: `floor_sim.fatSeed` (seed
+     ^ "fatdam"), and the generators beside it, and `store_sim`'s filling
+     tier (seed ^ "full", mine, item 83). Under `runWith(tape)` there is no
+     seed to derive from, and if one is passed in anyway those draws are
+     neither recorded nor steerable. Each one's seed needs to come from the
+     tape (`r.int(u64)`) when it is converted. For `store_sim` that changes
+     today's seeds, so it's yours to say whether X2 may do that.
+  4. **Kept tapes point into the corpus.** A tape kept in the corpus or in
+     `failures` still has `replay` pointing at another corpus entry, and
+     `corpus.append` may move those entries (and `deinit` frees them before
+     the caller reads `failures`). Nothing dereferences `replay` after a run
+     today, so it is latent; setting `replay = null` when a tape is kept
+     closes it. Similarly, `fill`'s out-of-memory path can append the bytes
+     and then fail to append the end, leaving `bytes` and `ends` out of step.
+
 - **(CC, item 78) B15's "end of a run".** gopher.elf never ends a run itself:
   metal-vmm ends it from outside (idle, a cut, a timeout), so there is no
   moment to run FAT's check "at the end". I check after every request in a
