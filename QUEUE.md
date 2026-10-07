@@ -728,7 +728,7 @@ effect of adding a property.
       named.
 
     **Was:** **Phase B: the door** (gopher-metal). The Store, as [a web server in a
-    box](http://143.244.172.148:9100/notes/a-web-server-in-a-box.md) drafts it: **read whole, write whole,
+    box](https://github.com/showell/essay-repl-server/blob/master/notes/a-web-server-in-a-box.md) drafts it: **read whole, write whole,
     append, list, remove, replace**, and nothing else. Write:
     - the interface, as a zig type, with the errors it can answer, taken
       from phase A's list (each Store error says which refusals map to it);
@@ -840,7 +840,7 @@ effect of adding a property.
 81. **Done (CC, 2026-10-06).** N1-N5 under Proposed. **Was:** your proposals
     again when 76–80 and K4–K5 are done, or when everything left is parked.
 
-The same text, for reading: http://143.244.172.148:9100/notes/cc-the-floor-and-the-store.md
+The same text, for reading: https://github.com/showell/essay-repl-server/blob/master/notes/cc-the-floor-and-the-store.md
 
 **From item 81's proposals** (the box, 2026-10-07): N1, N2 and N5 are yours,
 in this order. N3 waits on Steve's call on `readAt`; N4 is the box's.
@@ -862,7 +862,7 @@ in this order. N3 waits on Steve's call on `readAt`; N4 is the box's.
     item 59 was built, saying so in the commit; the box merges it after
     `gates.sh` and `long.sh`, for v19. No change in what `Stream` does.
 **The seed explorer: a long assignment** (Steve, 2026-10-07; the design is
-http://143.244.172.148:9100/notes/the-seed-explorer.md, read it first). Take
+https://github.com/showell/essay-repl-server/blob/master/notes/the-seed-explorer.md, read it first). Take
 it after 86. The long-assignment rules in CLOUD_WORK.md apply: a command and
 a number per item, park after about three attempts, ask in writing and keep
 going, the debt ledger. Steve's calls: **a tool first, not a gate**; the
@@ -905,7 +905,7 @@ new), and **measure honestly whether it beats blind seeds**.
 92. **Superseded by 93-95.**
 
 **Today's change** (Steve, 2026-10-07; essay
-http://143.244.172.148:9100/notes/steering-by-design.md, read it first): the
+https://github.com/showell/essay-repl-server/blob/master/notes/steering-by-design.md, read it first): the
 box builds the explorer itself, with named choice points (SAGE's flip as
 well as Antithesis's re-roll). **You become the adversary.** Coverage says
 code ran; it never says a test would notice the code being wrong. Your job

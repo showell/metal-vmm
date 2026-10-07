@@ -187,6 +187,14 @@ about the module, not a gap in the simulator. So:
   failure it causes and how likely it is; fix shapes; and nothing fixed in
   the review commit itself.
 
+## Essays
+
+An essay the box points you to lives in github.com/showell/essay-repl-server
+under `notes/`: read it at
+`https://github.com/showell/essay-repl-server/blob/master/notes/<name>.md`.
+The box's own address for them (port 9100) isn't reachable from your
+environment.
+
 ## Long assignments
 
 A long assignment (the first: QUEUE items 76-81, 2026-10-06) is meant to run
