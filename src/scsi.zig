@@ -132,6 +132,14 @@ pub const Scsi = struct {
     /// Reads and SYNCHRONIZE CACHE still answer. `protected` counts the
     /// writes refused.
     read_only_at: ?u64 = null,
+    /// **WHAT READ CAPACITY SAYS A SECTOR IS** (`VOLUME_SECTOR=n`): 512
+    /// unless the run names another, such as 4096. Only the answer changes:
+    /// a driver that takes 512 only must refuse the disk at bring-up, before
+    /// any transfer, which is the refusal this reaches.
+    sector_said: u32 = sector_bytes,
+    /// **MODE SENSE WITH NO PAGES** (`VOLUME_MODE_PAGES=none`): the header
+    /// alone, as a disk with no caching page answers.
+    no_mode_pages: bool = false,
     protected: u64 = 0,
     commands: u64 = 0,
     attentions: u64 = 0,
@@ -331,11 +339,12 @@ pub const Scsi = struct {
     }
 
     fn capacity(self: *Scsi, in: ?[]u8) Answer {
-        const sectors = self.image.len / sector_bytes;
+        // `VOLUME_SECTOR`: the size said, counted in its own sectors.
+        const sectors = self.image.len / self.sector_said;
         var data: [8]u8 = undefined;
         const last: u32 = if (sectors == 0) 0 else @intCast(@min(sectors - 1, 0xFFFF_FFFF));
         std.mem.writeInt(u32, data[0..4], last, .big);
-        std.mem.writeInt(u32, data[4..8], sector_bytes, .big);
+        std.mem.writeInt(u32, data[4..8], self.sector_said, .big);
         return .{ .data = give(in, &data, data.len) };
     }
 
@@ -351,6 +360,12 @@ pub const Scsi = struct {
         std.mem.writeInt(u16, data[0..2], data.len - 2, .big); // mode data length
         // The device-specific parameter's WP bit (SBC-3 §6.4.1).
         if (self.readOnly()) data[3] = 0x80;
+        if (self.no_mode_pages) {
+            // `VOLUME_MODE_PAGES=none`: the header alone, no page after it.
+            std.mem.writeInt(u16, data[0..2], 6, .big);
+            const allocated_none = std.mem.readInt(u16, cdb[7..9], .big);
+            return .{ .data = give(in, data[0..8], allocated_none) };
+        }
         data[8] = page_caching;
         data[9] = 18; // page length
         // Current and default values say the cache; changeable says none.
@@ -812,4 +827,18 @@ test "VOLUME_SYNC_US: a SYNCHRONIZE CACHE costs that much more than another comm
     try testing.expectEqual(@as(u64, 12 * std.time.ns_per_ms), vol.owed_ns);
     var buf: [256]u8 = undefined;
     try testing.expect(std.mem.indexOf(u8, vol.line(&buf), "; 12 ms waited on it, 10 ms of it on SYNCHRONIZE CACHE") != null);
+}
+
+test "VOLUME_SECTOR and VOLUME_MODE_PAGES=none: READ CAPACITY says another sector size; MODE SENSE has no page" {
+    var image: [64 * 512]u8 = @splat(0);
+    var vol = Scsi{ .image = &image, .attention = null, .sector_said = 4096, .no_mode_pages = true };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    try testing.expect(FakeDriver.good(g.send(&d, 0, 0, &[10]u8{ op_read_capacity, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .from_disk, 8)));
+    try testing.expectEqual(@as(u32, 4096), std.mem.readInt(u32, g.ram[FakeDriver.data_at + 4 ..][0..4], .big));
+    try testing.expectEqual(@as(u32, 64 * 512 / 4096 - 1), std.mem.readInt(u32, g.ram[FakeDriver.data_at..][0..4], .big));
+    @memset(g.ram[FakeDriver.data_at..][0..28], 0xEE);
+    try testing.expect(FakeDriver.good(g.send(&d, 0, 0, &[10]u8{ 0x5A, 0, 0x08, 0, 0, 0, 0, 0, 28, 0 }, .from_disk, 28)));
+    try testing.expectEqual(@as(u16, 6), std.mem.readInt(u16, g.ram[FakeDriver.data_at..][0..2], .big));
 }

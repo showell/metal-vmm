@@ -192,6 +192,11 @@ pub fn run(seed: u64) u64 {
     if (vr.uintLessThan(u8, 4) == 0) w.volume.attention_at = vr.uintLessThan(u64, 60);
     if (vr.uintLessThan(u8, 8) == 0) w.volume.gone_at = vr.uintLessThan(u64, 300);
     if (vr.uintLessThan(u8, 8) == 0) w.volume.read_only_at = vr.uintLessThan(u64, 300);
+    if (vr.uintLessThan(u8, 8) == 0) w.volume.sector_said = ([_]u32{ 1, 4096, 520, 1 << 20 })[vr.uintLessThan(usize, 4)];
+    w.volume.no_mode_pages = vr.uintLessThan(u8, 8) == 0;
+    w.pit.frozen = vr.uintLessThan(u8, 8) == 0;
+    w.rtc.absent = vr.uintLessThan(u8, 8) == 0;
+    w.rtc.stuck = vr.uintLessThan(u8, 8) == 0;
     if (vr.uintLessThan(u8, 4) == 0) {
         w.volume.sync_fail_at = vr.uintLessThan(u64, 40);
         w.volume.sync_fail_for = vr.uintLessThan(u64, 4);

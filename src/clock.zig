@@ -88,9 +88,14 @@ pub const Pit = struct {
     high_next: bool = false,
     /// How many bytes of a reload value have been written.
     written: u2 = 0,
+    /// **A TIMER THAT NEVER COUNTS** (`PIT_FROZEN=1`): the count stays at
+    /// the reload value, as absent or broken hardware reads, so a guest that
+    /// waits for it to move must give up rather than hang.
+    frozen: bool = false,
 
     /// Where the count has got to, counting down from the reload value.
     pub fn count(self: *const Pit, ns: u64) u16 {
+        if (self.frozen) return self.reload;
         const elapsed = ns -| self.began_ns;
         const ticks: u64 = @intCast(@as(u128, elapsed) * hz / std.time.ns_per_s);
         return @truncate(@as(u64, self.reload) -% ticks);
@@ -216,6 +221,12 @@ pub const Rtc = struct {
     /// (`RTC_BOOTS_AT=unix`), from 1970 to the end of 9999.
     from: i64 = boots_at,
     index: u8 = 0,
+    /// **NO CHIP** (`RTC_ABSENT=1`): every register reads 0xFF, as a port
+    /// with nothing behind it does.
+    absent: bool = false,
+    /// **A CHIP FOREVER MID-UPDATE** (`RTC_STUCK=1`): status A always says an
+    /// update is in progress, so a guest that waits it out must give up.
+    stuck: bool = false,
 
     /// Port 0x70. Bit 7 is the NMI mask, which belongs to the chipset and not
     /// to the register number.
@@ -231,6 +242,8 @@ pub const Rtc = struct {
     }
 
     pub fn read(self: *const Rtc, ns: u64) u8 {
+        if (self.absent) return 0xFF;
+        if (self.stuck and self.index == reg_status_a) return status_a | 0x80;
         const binary = self.status_b & binary_mode != 0;
         const hour24 = self.status_b & hour24_mode != 0;
         const now = self.from + @as(i64, @intCast(ns / std.time.ns_per_s));
@@ -425,4 +438,21 @@ test "the calendar as a knob: the chip boots when it is told, and rolls over as 
     }
     // Left alone, it is the machine's own boot, as always.
     try testing.expectEqual(boots_at, (Rtc{}).from);
+}
+
+test "PIT_FROZEN: the count never moves; RTC_ABSENT: every register reads 0xFF; RTC_STUCK: always mid-update" {
+    var pit = Pit{ .frozen = true };
+    pit.command(0x34, 0);
+    const a = pit.count(0);
+    try testing.expectEqual(a, pit.count(10 * std.time.ns_per_s));
+    var rtc = Rtc{ .absent = true };
+    for ([_]u8{ 0x00, 0x0A, 0x0B, 0x32 }) |reg| {
+        rtc.select(reg);
+        try testing.expectEqual(@as(u8, 0xFF), rtc.read(0));
+    }
+    var stuck = Rtc{ .stuck = true };
+    stuck.select(0x0A);
+    try testing.expect(stuck.read(0) & 0x80 != 0);
+    stuck.select(0x00);
+    try testing.expect(stuck.read(0) != 0xFF);
 }

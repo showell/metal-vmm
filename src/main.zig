@@ -972,6 +972,12 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         }
         machine.rtc.from = at;
     }
+    // **CLOCKS THAT DO NOT ANSWER** (QUEUE item 82): no RTC, an RTC stuck
+    // mid-update, a PIT that never counts. Each reaches a refusal the guest
+    // names and no other run can.
+    if (turned.get("RTC_ABSENT")) |text| machine.rtc.absent = std.mem.eql(u8, text, "1");
+    if (turned.get("RTC_STUCK")) |text| machine.rtc.stuck = std.mem.eql(u8, text, "1");
+    if (turned.get("PIT_FROZEN")) |text| machine.pit.frozen = std.mem.eql(u8, text, "1");
     // **A WRITE CACHE, AND FLUSH OFFERED**, only when asked: offering the
     // feature changes what the guest negotiates, and check.sh holds the
     // default machine to QEMU's.
@@ -1005,6 +1011,10 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         if (turned.get("VOLUME_ATTENTION_AT")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
             volume.attention_at = n;
         };
+        if (turned.get("VOLUME_SECTOR")) |text| if (std.fmt.parseInt(u32, text, 10) catch null) |n| if (n > 0) {
+            volume.sector_said = n;
+        };
+        if (turned.get("VOLUME_MODE_PAGES")) |text| volume.no_mode_pages = std.mem.eql(u8, text, "none");
         if (turned.get("VOLUME_GONE_AT")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
             volume.gone_at = n;
         };
