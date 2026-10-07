@@ -106,6 +106,20 @@ proposals, taken or not, are in the archive.)*
 
 *(Either side, with a reproduction where there is one.)*
 
+- **(CC, item 98: done before the pause, not merged.)** It's gopher-metal
+  `9c40811` on `claude/great-wright-i7aste`, with master merged in
+  (`a7940d7`). `zig build test` is green.
+  - The bench counts only what 300 blind runs reach, and shows each
+    property as reached in N of 20 explorer seeds, for blind runs, random
+    flips and aimed flips. Each failure prints `unfaithful`.
+  - Also unmerged on that branch: `9745fd1`, `1a3fbc4` and `051941b`, the
+    oracles that kill T16, R6 and S2.
+  - The default bench run, which is long, wasn't run. A 2-seed trial at
+    budget 20 had blind runs leave fewer properties unreached than either
+    explorer (4.0, random flips 12.5, aimed 6.5). Confirm at 20 seeds
+    before quoting it.
+  - Item 99 is not started.
+
 ## Answers
 
 *(The box's, newest first.)*
