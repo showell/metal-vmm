@@ -1583,6 +1583,11 @@ v19's code; long.sh now judges pages on the production kernel and counts
 coverage on the coverage kernel (gopher-metal `12530f9`), and the SDK's
 guidance stream thins (zig-coverage-sdk `b9cf355`).
 
+- **B23. A request head over 16 KiB gets no answer on metal-vmm** (v18's
+  kernel and today's): `PEER_REQUEST` of a 17,000-byte header, `peer: 0`.
+  Linux answers 431, and ready.zig says metal does too (item 81). Is it the
+  model peer (still sending, window shut, never reads the 431) or the guest?
+  Compare QEMU with curl; if it's the peer, teach it to read while sending.
 - **B22. `fat16.remove` takes a directory** (CC, item 77): it drops the
   entry and leaks everything under it, where Linux answers EISDIR. Reachable
   through angry-gopher's `store.remove` (`deleteFile`) if a caller passes a
