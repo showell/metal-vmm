@@ -1381,6 +1381,9 @@ question is answered by v18 (`io.durable`).
   `handle` and `transmit` as one `always("tcp: the table's invariants hold")`,
   and FAT's own `check` at the end of a run, so every metal-vmm run checks
   what the simulators check, on the real kernel. Production builds unchanged.
+- **B16 (2026-10-07): the SDK too.** gopher-metal builds against
+  `../zig-coverage-sdk` by path, so the SDK's commit is a third input to
+  every gate; record it in the pair and refuse a dirty SDK tree.
 - **B16. A verdict keyed by what the image reads, not angry-gopher's commit.**
   v18's `long.sh` passed but kept no verdict: an angry-gopher docs commit
   (README, `ops/deploy`'s comment) landed mid-run. Key the pair by the git
