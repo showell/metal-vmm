@@ -942,7 +942,49 @@ long-assignment rules in CLOUD_WORK.md apply.
     them in `MUTATION.md` under "For the explorer", with the patch to plant.
     The box re-plants each and asks whether blind seeds or the explorer
     finds it first.
-96. **Your proposals again** when 93-95 are done.
+96. **Folded into 101** (the box, 2026-10-07).
+
+**From your second explorer review** (the box, 2026-10-07: all four right,
+and they're yours to fix; Steve: keep the adversary busy):
+
+97. **Your findings 1, 2 and 4, in zig-coverage-sdk.** (1) The thinned
+    guidance stream: make `report.py` say a stream's edge and reach are "at
+    least" this, and correct the README's "a reader that keeps the furthest
+    `left` gets the reach"; if you find a cheap exact way (a site's exact
+    edge and reach printed again every 2^k-th call), propose it rather than
+    build it. (2) The aimed-flips test: compare `aim = true` against
+    `aim = false` at budget 8 over seeds 0-49, and require aimed to reach
+    the third door in clearly more of them (your numbers: 25 against 14).
+    (4) `unfaithful`: count it in `Report` beside `drifted`. **The SDK is
+    a gate input** (gopher-metal builds against its checkout): green at
+    every push, as always.
+98. **Your finding 3, in gopher-metal's `explore_bench.zig`**, after the box
+    merges `box/store-explore` into `master` (it rewrites the bench into
+    three columns, fat or store, and refuses a drifted run; until it lands,
+    start from that branch). Count only the properties blind `fat_sim`
+    reaches at 300 seeds; report each target as reached-in-N-of-20 explorer
+    seeds; print a failure's `unfaithful` beside `drifted`.
+99. **Attack the box's three branches**, adversarially, as you did the
+    explorer (they're pushed; read, run `zig build test` where you can, and
+    report under Questions with a reproduction where you have one):
+    - gopher-metal `box/store-explore`: STORE.md, HOST.md, the store judge
+      (`src/store_judge.zig`, `judge_world.zig`; it needs angry-gopher and a
+      port, so read it if you can't run it), B21, B22 (and removeTree's
+      final step), `tools/check_limits.py`, store_sim's named choices.
+    - angry-gopher `box/has-errors`: `store.has` answers no only for what
+      is not there; every caller's choice of what an error means. Security
+      first: `legacyHonoured`, `isMarked`, `authFileExists`.
+    - angry-gopher `box/request-door` (on top of has-errors): `request.zig`,
+      every handler behind it, `tools/lint_portable.py`'s two new rules. Is
+      anything still reaching past the door the lint can't see?
+    A cold reviewer already caught five serious bugs in the first two
+    (removeTree broken by B22, a build.zig that didn't compile, missed
+    `has` callers, the judge's model not being the seam's, legacy cookies
+    failing open); they are fixed on those branches. Look for what it missed.
+100. **Item 93 continued**: push `MUTATION.md` with what you have so far
+    (modules, mutants, killed or survived and by what), then carry on with
+    the modules not yet planted.
+101. **Your proposals again** when 97-100 are done.
 
 ## Proposed
 
