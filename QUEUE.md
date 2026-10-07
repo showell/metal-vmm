@@ -95,7 +95,13 @@ Each line's full text, with its history, is in the archive under its name.
 - **B18.** Lies in the peer's DHCP replies.
 - **B19.** B14's power cut as a `long.sh` scenario; H5 and H2 against
   gopher.elf.
-- **B23.** A request head over 16 KiB gets no answer on metal-vmm.
+- **B23, narrowed (2026-10-07): the model peer, not the kernel.** Under
+  QEMU, curl's 17,000-byte head gets 431 (`HttpHeadersOversize`), as on
+  Linux. On metal-vmm the model peer stops sending partway through the head
+  (about 10, 12 and 13 KB at `PEER_MSS` 536, 1000 and 1460: never the
+  guest's 16 KiB, so not a window it shut), and the guest lets the silent
+  client go after its idle limit. Find why `peer.zig` stops (item 37's
+  segment cap?) and make it send the whole request.
 - **N4.** The cloud session's device knobs (item 82), run on gopher.elf and
   put on `floor-metal.txt`.
 - **B2, B3, B4, B6–B10, B12** (older: a seed sweep of gopher.elf, the bad
