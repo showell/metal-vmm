@@ -850,7 +850,18 @@ in this order. N3 waits on Steve's call on `readAt`; N4 is the box's.
     `PIT_FROZEN` first).
 83. **N2, `store_sim` that fills the volume**, as proposed.
 84. **N5, the two FAT refusals that need a foreign directory**, as proposed.
-85. **Your proposals again** when 82-84 are done. The long-assignment rules
+85. **N3: `readAt` is the Store's seventh operation** (Steve, 2026-10-07):
+    the interface, the model, the FAT store, the strict Linux store, and
+    `store_sim` reading ranges (a range past the end, an empty range, a range
+    across a cut `replace`), as proposed.
+86. **The seam under `stream.zig`** (Steve, 2026-10-07: yes), as you proposed
+    from item 78: a pure `Wait` handed `(now, state, una, queued)` answering
+    go on, gave up idle, or gone; `Stream` keeps the queueing, `pump` and
+    `rest`. A simulator over `tcp.Table` reaches the seven refusals named
+    in item 78. Kernel code on the response path: build it on `master` as
+    item 59 was built, saying so in the commit; the box merges it after
+    `gates.sh` and `long.sh`, for v19. No change in what `Stream` does.
+87. **Your proposals again** when 82-86 are done. The long-assignment rules
     (CLOUD_WORK.md) still apply.
 
 ## Proposed
