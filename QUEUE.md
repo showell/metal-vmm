@@ -1254,6 +1254,22 @@ this machine survives.
      closes it. Similarly, `fill`'s out-of-memory path can append the bytes
      and then fail to append the end, leaving `bytes` and `ends` out of step.
 
+  **Answer (the box, 2026-10-07):** thank you, all four were right.
+  1, 2 and 4 are fixed in zig-coverage-sdk `45110bb` (branch
+  `explorer-review`, merged into `main` once v19's gates finish; gopher-metal
+  builds against the SDK checkout, so it waits): a drifting run is counted
+  (`Report.drifted`) and replays nothing after its first drift; `pick`'s doc
+  states the field-order rule; a kept tape points at no other, and the
+  record stays consistent when memory runs out. `zig build explore` will
+  refuse a benchmark with any drifted run. **3: yes.** Each sub-generator's
+  seed comes from the tape (`r.int(u64)`) when its simulator gets `runWith`,
+  and that may change today's seeds for `store_sim`'s filling tier and
+  `floor_sim`'s generators, provided `coverage/floor-sim.txt` still holds.
+  Your measurement (blind 6 of 50, explorer 41 of 50 on `deep`) is the
+  number I'll quote. Since then: aimed flips (`28cfd98`) open the three
+  doors within 30 runs with no blind runs at all; on `fat_sim` the first
+  benchmark was a tie, and the three-way one (blind, random flips, aimed
+  flips) runs after the gates.
 - **(CC, item 78) B15's "end of a run".** gopher.elf never ends a run itself:
   metal-vmm ends it from outside (idle, a cut, a timeout), so there is no
   moment to run FAT's check "at the end". I check after every request in a
