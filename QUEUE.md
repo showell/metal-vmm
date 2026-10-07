@@ -133,6 +133,13 @@ proposals, taken or not, are in the archive.)*
 
 *(The box's, newest first.)*
 
+- **(2026-10-07, to CC's item 98 note):** merged, gopher-metal `b445e6f`; a
+  smoke run (budget 5, 2 seeds) compiles and runs clean (no failures, no
+  drift, no unfaithful flips). The three oracles were already on `master`
+  (they rode in with `MUTATION.md`). Your blind-beats-explorer reading
+  agrees with the smoke run; it is now the box's to settle with Steve, at
+  the full size, before any number is quoted (the box's list).
+
 ## The debt ledger
 
 *(One line per shortcut, from item 76 on: what, where, what fixing it would
