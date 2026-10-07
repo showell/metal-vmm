@@ -1211,6 +1211,55 @@ this machine survives.
 
 *(For the box or Steve. Take the next item; do not wait.)*
 
+- **(CC, item 94, second round) The explorer's next seven commits**:
+  zig-coverage-sdk `40b4e54`, `e8fc53f`, `28cfd98`, `45110bb`, `b9cf355`;
+  gopher-metal `1cb9002`, `06d296e`. What holds, checked rather than read:
+  `rewrite` against std's `uintLessThan` (Lemire with its rejection: the
+  smallest draw that maps to an alternative, then up to three after it,
+  gets past the rejection whenever the alternative has more than one
+  draw; u128 keeps `usize` from overflowing); `rewriteFlag` against
+  `boolean()` (one byte, its low bit); `45110bb`'s three fixes; and every
+  draw `06d296e` names is the call it replaced, field order included (the
+  operation's weights map 0-29, 30-54, ... as the roll did; the probe's 14
+  in the enum's order; "the last probe fails the disk" with `.yes` first).
+  `runWith`'s `tape.seed` only labels a run: every draw, probes included,
+  is the tape's. Findings:
+  1. **The guidance stream's edge and reach now lag the record by up to
+     2x, and report.py reads the stream** (`b9cf355`). After the 16 free
+     lines a reach prints only when it crosses a power of two. Probe: 40,000
+     calls of `alwaysLessThan(i, 65536)`: the record's reach is 39,999, and
+     the last line a reader sees says 32,769. report.py's "its reach" and
+     "its edge", the edge floor (`--edges`) and `--against`'s "reach: left
+     a -> b" all take the stream's numbers, so an edge floor of `>= 33000`
+     here would say "short" of a reach of 39,999. Nothing uses `--edges`
+     yet (long.sh doesn't pass it), so this is latent. Proposed, either: the
+     kernel prints a thinned site's exact edge and reach again at a moment
+     it has (the coverage dump, if there is one; or every 2^k-th call), or
+     report.py says "at least" and the README says an edge floor's number
+     should be a power of two. The README's "each line is the call's own
+     operands ... a reader that keeps the furthest `left` gets the reach"
+     is no longer true either way.
+  2. **The aimed-flip test does not show aiming** (`28cfd98`). On `deep`,
+     at budget 30 and no blind runs, explorer seeds 0-49: aimed 50 of 50,
+     random flips (`aim = false`) also 50 of 50, blind 0 of 50. Every
+     choice there has two alternatives, so an aimed flip's alternative is
+     the random one's; what aiming adds is which choice to flip, and it
+     shows at a smaller budget: at 8, aimed 25 of 50, random 14 of 50. The
+     test would show aiming if it compared against `aim = false` at budget 8
+     over a few seeds.
+  3. **The benchmark's verdict is one sample** (`1cb9002`). One explorer
+     seed per budget, and the denominator (78) is every FAT property,
+     including those only floor_sim or fat16_test reach, which neither side
+     can. Proposed: count only what blind fat_sim reaches at 300 seeds
+     (the long tier), and report reached-in-how-many of 20 explorer seeds,
+     as finding 2's numbers are.
+  4. **`unfaithful` is never reported.** A flip whose draw could not be
+     rewritten sets `Tape.unfaithful`, and nothing reads it: neither
+     `Report` nor `explore_bench`. A failing flipped tape that is
+     unfaithful does not reproduce, and the bench would print "replayed
+     whole: passes", which reads as a flake. Count it in `Report` beside
+     `drifted`, and print it with each failure.
+
 - **(CC, item 94) Review of the explorer, zig-coverage-sdk 7ca0f1d and
   a5dd542.** What holds: replay equals record (200 seeds), the choices of a
   replayed prefix keep their indices, the loop's own draws come only from
