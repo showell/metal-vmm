@@ -90,7 +90,7 @@ Each line's full text, with its history, is in the archive under its name.
   scenarios. Quote no number before the full run. Also: the bench step shows
   "failed" under `zig build` because its test writes to stderr (CC: make it an
   executable, not a test).
-- **B16.** The SDK's commit and what the image reads in the release verdict.
+- ~~**B16.** The SDK's commit and what the image reads in the release verdict~~ (done, gopher-metal `tools/verdicts.py`, 2026-10-07).
 - **B17.** A coverage property per refusal in the guest's parsers.
 - **B18.** Lies in the peer's DHCP replies.
 - **B19.** B14's power cut as a `long.sh` scenario; H5 and H2 against
