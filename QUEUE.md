@@ -1457,6 +1457,20 @@ question is answered by v18 (`io.durable`).
   gopher-metal.conf, not just a missing one, means "serve forever with the
   defaults". A missing file is the defaults; any other failure should say so
   and halt, as `files.zig`'s rule does. Kernel behavior, so the box's, with gates.
+**2026-10-07, the box (Store unification and fixes, on side branches, tested
+after v19's gates):** gopher-metal `store-explore` (worktree
+`gopher-metal-wt`): B21 and B22 written; `tools/check_limits.py` in
+`gates.sh` (angry-gopher's copied limits against fat16.zig and io.zig; all
+three agree); `zig build store-judge`, angry-gopher's own store.zig over
+Linux and over metal's io.zig, judged against the model; `STORE.md`, the
+unified contract (eleven operations, crash promises, four open questions).
+angry-gopher `has-errors` (worktree `angry-gopher-wt`): `store.has` answers
+no only for what is not there (it answered no for every error; Steve: fix
+it). v19's first long.sh failed on the coverage kernel's console time, not
+v19's code; long.sh now judges pages on the production kernel and counts
+coverage on the coverage kernel (gopher-metal `12530f9`), and the SDK's
+guidance stream thins (zig-coverage-sdk `b9cf355`).
+
 - **B22. `fat16.remove` takes a directory** (CC, item 77): it drops the
   entry and leaks everything under it, where Linux answers EISDIR. Reachable
   through angry-gopher's `store.remove` (`deleteFile`) if a caller passes a
