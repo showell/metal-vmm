@@ -312,7 +312,6 @@ pub fn runLine(buf: []u8, seed: ?u64, knobs: []const u8) ![]const u8 {
     return w.buffered();
 }
 
-
 // ── what can be checked without a guest ──────────────────────────────────────
 
 const testing = std.testing;
@@ -466,8 +465,3 @@ test "a run line names its seed, or its knobs" {
     try testing.expectEqualStrings("{\"metal_vmm_run\":{\"seed\":4711,\"knobs\":\"WIRE_EAT=3\"}}", try runLine(&buf, 4711, "WIRE_EAT=3"));
     try testing.expectEqualStrings("{\"metal_vmm_run\":{\"seed\":null,\"knobs\":\"none\"}}", try runLine(&buf, null, "none"));
 }
-
-
-
-
-

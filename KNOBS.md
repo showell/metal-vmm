@@ -32,7 +32,14 @@ table names.
 |---|---|---|
 | `RTC_BOOTS_AT=unix` | the instant the real-time clock boots at, 1970 to 9999: e.g. `2147483647` (the last second of 32-bit time), `4102444799` (the end of a century), `1835395199` (a leap day's eve) | noon on 2026-09-18, every run |
 
-Never drawn by a seed: a date is a thing a person picks for what it means.
+| `RTC_ABSENT=1` | no chip: every register reads 0xFF, as a port with nothing behind it does | a chip |
+| `RTC_STUCK=1` | status A always says an update is in progress, so a guest that waits it out must give up | never mid-update |
+| `PIT_FROZEN=1` | the interval timer's count never moves, as absent or broken hardware reads | it counts |
+
+Never drawn by a seed: a date is a thing a person picks for what it means,
+and a clock that does not answer stops a boot, which a sweep would count as
+a failure. The last three exist to reach gopher-metal's refusals of a clock
+(its COVERAGE.md, "For the box"; QUEUE item 82).
 
 ## The wire: what the guest sends
 
@@ -172,6 +179,8 @@ disk's does. Nothing below changes anything unless `VOLUME` is set.
 | `VOLUME_SYNC_US=us` | each SYNCHRONIZE CACHE costs that much more: the slow command on network storage | 0 |
 | `VOLUME_ATTENTION_AT=n` | CAPACITY DATA HAS CHANGED is pending from the nth command, as a volume resized under a droplet reports it: told on the next command but INQUIRY, which is not performed, so the driver must send it again | none |
 | `VOLUME_GONE_AT=n` | from the nth command on, every command is BAD_TARGET, as when a DO volume is detached under a running droplet | none |
+| `VOLUME_SECTOR=n` | READ CAPACITY says a sector is `n` bytes (4096, say) and counts the disk in them; transfers stay 512, since a driver that takes only 512 refuses the disk at bring-up, before any | 512 |
+| `VOLUME_MODE_PAGES=none` | MODE SENSE answers with its header alone, no caching page | the caching page |
 | `VOLUME_READ_ONLY_AT=n` | read-only from the nth command: MODE SENSE says WP and every WRITE is DATA PROTECT, while reads and SYNCHRONIZE CACHE still answer, as a DO volume the host has made read-only after an I/O error | none |
 
 The run ends with `metal-vmm: volume: ...`: its reads, writes, SYNCHRONIZE

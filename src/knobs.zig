@@ -54,8 +54,10 @@
 //! `withVolume` draws `VOLUME_CACHE`, `VOLUME_CACHE_KEEPS`,
 //! `VOLUME_CUT_AFTER`, `VOLUME_SYNC_FAIL`, `VOLUME_SYNC_FAIL_FOR` and
 //! `VOLUME_ATTENTION_AT`; it never draws `VOLUME_LATENCY_US`,
-//! `VOLUME_GONE_AT`, `VOLUME_READ_ONLY_AT`, `VOLUME_SYNC_US` or
-//! `VOLUME_CUT_AT_EXIT`. Set by hand, they print with the rest.
+//! `VOLUME_GONE_AT`, `VOLUME_READ_ONLY_AT`, `VOLUME_SYNC_US`,
+//! `VOLUME_CUT_AT_EXIT`, `VOLUME_SECTOR` or `VOLUME_MODE_PAGES`. Nor are
+//! `RTC_ABSENT`, `RTC_STUCK` or `PIT_FROZEN`: each stops a boot, which a
+//! sweep would count as a failure. Set by hand, they print with the rest.
 //!
 //! The peer's ranges are gopher-metal's `tcp_sim.zig` `Rough`'s and
 //! `Scenario`'s, where they have one.
@@ -64,18 +66,19 @@ const std = @import("std");
 
 /// Every fault knob, in the order a schedule is printed.
 pub const names = [_][]const u8{
-    "WIRE_EAT",           "WIRE_LOSS",         "WIRE_LATENCY_US",  "PEER_EAT",
-    "PEER_LOSS",          "PEER_DAMAGE",       "PEER_DAMAGE_RATE", "DISK_REFUSE",
-    "DISK_REFUSE_RATE",   "DISK_WRITES_ONLY",  "DISK_READS_ONLY",  "DISK_BAD_SECTOR",
-    "DISK_CUT_AFTER",     "DISK_TEAR",         "DISK_TEAR_KEEP",   "PEER_RESET_AT",
-    "PEER_RESET_OFF",     "PEER_VANISH_AFTER", "PEER_FLOOD",       "PEER_FLOOD_GAP_US",
-    "PEER_FLOOD_AT_US",   "PEER_SHUT_AFTER",   "PEER_SHUT_FOR_US", "PEER_MSS",
-    "PEER_IGNORE_WINDOW", "DISK_ROT",          "DISK_CACHE",       "PEER_RETRY",
-    "RTC_BOOTS_AT",       "PEER_DRIP_US",      "PEER_PIPELINE",    "DHCP_LEASE_S",
-    "VOLUME_CACHE",       "VOLUME_CUT_AFTER",  "VOLUME_SYNC_FAIL", "VOLUME_SYNC_FAIL_FOR",
-    "PEER_MANGLE",        "PEER_MANGLE_RATE",  "PEER_MANGLE_KIND", "VOLUME_LATENCY_US",
-    "VOLUME_ATTENTION_AT", "VOLUME_GONE_AT",   "VOLUME_READ_ONLY_AT", "VOLUME_SYNC_US",
-    "VOLUME_CUT_AT_EXIT", "VOLUME_CACHE_KEEPS",
+    "WIRE_EAT",            "WIRE_LOSS",          "WIRE_LATENCY_US",     "PEER_EAT",
+    "PEER_LOSS",           "PEER_DAMAGE",        "PEER_DAMAGE_RATE",    "DISK_REFUSE",
+    "DISK_REFUSE_RATE",    "DISK_WRITES_ONLY",   "DISK_READS_ONLY",     "DISK_BAD_SECTOR",
+    "DISK_CUT_AFTER",      "DISK_TEAR",          "DISK_TEAR_KEEP",      "PEER_RESET_AT",
+    "PEER_RESET_OFF",      "PEER_VANISH_AFTER",  "PEER_FLOOD",          "PEER_FLOOD_GAP_US",
+    "PEER_FLOOD_AT_US",    "PEER_SHUT_AFTER",    "PEER_SHUT_FOR_US",    "PEER_MSS",
+    "PEER_IGNORE_WINDOW",  "DISK_ROT",           "DISK_CACHE",          "PEER_RETRY",
+    "RTC_BOOTS_AT",        "PEER_DRIP_US",       "PEER_PIPELINE",       "DHCP_LEASE_S",
+    "VOLUME_CACHE",        "VOLUME_CUT_AFTER",   "VOLUME_SYNC_FAIL",    "VOLUME_SYNC_FAIL_FOR",
+    "PEER_MANGLE",         "PEER_MANGLE_RATE",   "PEER_MANGLE_KIND",    "VOLUME_LATENCY_US",
+    "VOLUME_ATTENTION_AT", "VOLUME_GONE_AT",     "VOLUME_READ_ONLY_AT", "VOLUME_SYNC_US",
+    "VOLUME_CUT_AT_EXIT",  "VOLUME_CACHE_KEEPS", "VOLUME_SECTOR",       "VOLUME_MODE_PAGES",
+    "RTC_ABSENT",          "RTC_STUCK",          "PIT_FROZEN",
 };
 
 fn index(comptime name: []const u8) usize {
@@ -274,7 +277,7 @@ test "different seeds turn different knobs, and every knob is turned by some see
         last_len = f.len;
     }
     for (turned, names) |t, n| {
-        // Twenty-five knobs no plain seed sets: a seed's runs keep to the flood
+        // Thirty knobs no plain seed sets: a seed's runs keep to the flood
         // and rates of the table above, and name no sector.
         if (!t and !std.mem.eql(u8, n, "PEER_DAMAGE_RATE") and !std.mem.eql(u8, n, "DISK_REFUSE_RATE") and
             !std.mem.eql(u8, n, "PEER_FLOOD_AT_US") and !std.mem.eql(u8, n, "DISK_BAD_SECTOR") and
@@ -288,7 +291,9 @@ test "different seeds turn different knobs, and every knob is turned by some see
             !std.mem.eql(u8, n, "VOLUME_LATENCY_US") and !std.mem.eql(u8, n, "VOLUME_ATTENTION_AT") and
             !std.mem.eql(u8, n, "VOLUME_GONE_AT") and !std.mem.eql(u8, n, "VOLUME_READ_ONLY_AT") and
             !std.mem.eql(u8, n, "VOLUME_SYNC_US") and !std.mem.eql(u8, n, "VOLUME_CUT_AT_EXIT") and
-            !std.mem.eql(u8, n, "VOLUME_CACHE_KEEPS"))
+            !std.mem.eql(u8, n, "VOLUME_CACHE_KEEPS") and !std.mem.eql(u8, n, "VOLUME_SECTOR") and
+            !std.mem.eql(u8, n, "VOLUME_MODE_PAGES") and !std.mem.eql(u8, n, "RTC_ABSENT") and
+            !std.mem.eql(u8, n, "RTC_STUCK") and !std.mem.eql(u8, n, "PIT_FROZEN"))
         {
             std.debug.print("never turned: {s}\n", .{n});
             return error.TestUnexpectedResult;
