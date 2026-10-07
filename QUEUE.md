@@ -944,6 +944,14 @@ long-assignment rules in CLOUD_WORK.md apply.
     finds it first.
 96. **Folded into 101** (the box, 2026-10-07).
 
+**PAUSED, 2026-10-07 evening (Steve):** no new work for the cloud session
+for a couple of hours, to reach a stable point; items 98, 99, 101 and 102
+wait, and the box says when they resume. Everything you finished is merged:
+zig-coverage-sdk `8444388`, gopher-metal `6015637` (`MUTATION.md`, the four
+oracles). Note for 99 when it resumes: `box/store-explore` and
+`box/has-errors` are merged into `master` and their branches deleted; read
+`master`.
+
 **From your second explorer review** (the box, 2026-10-07: all four right,
 and they're yours to fix; Steve: keep the adversary busy):
 
@@ -958,13 +966,13 @@ and they're yours to fix; Steve: keep the adversary busy):
     (4) `unfaithful`: count it in `Report` beside `drifted`. **The SDK is
     a gate input** (gopher-metal builds against its checkout): green at
     every push, as always.
-98. **Your finding 3, in gopher-metal's `explore_bench.zig`**, after the box
+98. **Paused (Steve, 2026-10-07 evening: a stable point first; the box will say when).** **Your finding 3, in gopher-metal's `explore_bench.zig`**, after the box
     merges `box/store-explore` into `master` (it rewrites the bench into
     three columns, fat or store, and refuses a drifted run; until it lands,
     start from that branch). Count only the properties blind `fat_sim`
     reaches at 300 seeds; report each target as reached-in-N-of-20 explorer
     seeds; print a failure's `unfaithful` beside `drifted`.
-99. **Attack the box's three branches**, adversarially, as you did the
+99. **Paused (Steve, 2026-10-07 evening: a stable point first; the box will say when).** **Attack the box's three branches**, adversarially, as you did the
     explorer (they're pushed; read, run `zig build test` where you can, and
     report under Questions with a reproduction where you have one):
     - gopher-metal `box/store-explore`: STORE.md, HOST.md, the store judge
@@ -984,7 +992,7 @@ and they're yours to fix; Steve: keep the adversary busy):
 100. **Item 93 continued**: push `MUTATION.md` with what you have so far
     (modules, mutants, killed or survived and by what), then carry on with
     the modules not yet planted.
-102. **The rough peers must reach their properties by design, on both
+102. **Paused (Steve, 2026-10-07 evening: a stable point first; the box will say when).** **The rough peers must reach their properties by design, on both
     kernels** (the box, 2026-10-07; before 101). v19's `long.sh` failed only
     its metal floor: four TCP properties ("an exact reset closes a
     connection", "an inexact reset in the window draws a challenge ACK", "a
@@ -1005,7 +1013,7 @@ and they're yours to fix; Steve: keep the adversary busy):
     first. You have no KVM: build what you can on the host (metal-vmm's
     unit tests drive `client.zig` without a guest), and write what needs a
     real run as a recipe under Questions for the box.
-101. **Your proposals again** when 97-100 and 102 are done.
+101. **Paused (Steve, 2026-10-07 evening: a stable point first; the box will say when).** **Your proposals again** when 97-100 and 102 are done.
 
 ## Proposed
 
