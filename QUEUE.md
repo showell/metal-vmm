@@ -848,13 +848,13 @@ in this order. N3 waits on Steve's call on `readAt`; N4 is the box's.
 82. **N1, knobs for the refusals only a device reaches**, as proposed
     (`VOLUME_SECTOR`, `VOLUME_MODE_PAGES=none`, `RTC_ABSENT`, `RTC_STUCK`,
     `PIT_FROZEN` first).
-83. **N2, `store_sim` that fills the volume**, as proposed.
-84. **N5, the two FAT refusals that need a foreign directory**, as proposed.
-85. **N3: `readAt` is the Store's seventh operation** (Steve, 2026-10-07):
+83. **Parked (Steve, 2026-10-07; the adversary role comes first).** **N2, `store_sim` that fills the volume**, as proposed.
+84. **Parked (Steve, 2026-10-07; the adversary role comes first).** **N5, the two FAT refusals that need a foreign directory**, as proposed.
+85. **Parked (Steve, 2026-10-07; the adversary role comes first).** **N3: `readAt` is the Store's seventh operation** (Steve, 2026-10-07):
     the interface, the model, the FAT store, the strict Linux store, and
     `store_sim` reading ranges (a range past the end, an empty range, a range
     across a cut `replace`), as proposed.
-86. **The seam under `stream.zig`** (Steve, 2026-10-07: yes), as you proposed
+86. **Parked (Steve, 2026-10-07; the adversary role comes first).** **The seam under `stream.zig`** (Steve, 2026-10-07: yes), as you proposed
     from item 78: a pure `Wait` handed `(now, state, una, queued)` answering
     go on, gave up idle, or gone; `Stream` keeps the queueing, `pump` and
     `rest`. A simulator over `tcp.Table` reaches the seven refusals named
@@ -871,19 +871,19 @@ later. The mission: steer the simulators the way Antithesis steers a system
 (keep a run's past, re-roll its future from a moment that did something
 new), and **measure honestly whether it beats blind seeds**.
 
-87. **X1, the tape** (zig-coverage-sdk). A `std.Random` that records each
+87. **The box builds this now (Steve, 2026-10-07).** **X1, the tape** (zig-coverage-sdk). A `std.Random` that records each
     `fill`'s bytes, and one that replays a tape's first *k* fills and then
     draws from a new seed. Position = fills so far. **First test: replaying
     a whole tape gives the same bytes, call for call.** Done when that test
     and a prefix-then-fresh test pass.
-88. **X2, `runWith` beside every `runSeed`** (gopher-metal: tcp, fat, page,
+88. **The box builds this now (Steve, 2026-10-07).** **X2, `runWith` beside every `runSeed`** (gopher-metal: tcp, fat, page,
     ready, store, durable, pure, floor). `runSeed(seed)` becomes
     `runWith(recording(seed))`, so a seed's run is byte for byte what it is
     today. **Each simulator's first test: replay equals record** over 100
     seeds: the same properties hit, the same counts, the same digest. A
     simulator that fails it has a nondeterminism to find first (uninitialised
     bytes did it once); that's the simulator's code, so yours to fix.
-89. **X3, moments and the loop** (zig-coverage-sdk). A hook that records the
+89. **The box builds this now (Steve, 2026-10-07).** **X3, moments and the loop** (zig-coverage-sdk). A hook that records the
     position when a property is first reached in a run, or a comparison sets
     a new edge or reach. `explore(run, budget, seed, blind)`: a corpus of
     runs and their moments; pick a moment weighted by rarity, then by edge;
@@ -891,19 +891,58 @@ new), and **measure honestly whether it beats blind seeds**.
     that did something new to the explorer; save the tape of any oracle
     failure. The explorer's own choices come from its seed, so an
     exploration repeats exactly; test that.
-90. **X4, `zig build explore`** (gopher-metal): `-Dsim=<name> -Dbudget=N
+90. **The box builds this now (Steve, 2026-10-07).** **X4, `zig build explore`** (gopher-metal): `-Dsim=<name> -Dbudget=N
     -Dseed=S -Dblind=0.2`, and `-Dtape=<file>` to replay one saved tape. Its
     report is `properties`' report plus, per property, whether a blind run
     or a branch reached it first, and at which run.
-91. **X5, the benchmark** (gopher-metal, `EXPLORER.md`). Per simulator, at
+91. **The box builds this now (Steve, 2026-10-07).** **X5, the benchmark** (gopher-metal, `EXPLORER.md`). Per simulator, at
     equal budgets, blind seeds against the explorer: MISSes left, and runs
     to first reach per property. Two named targets: the two FAT properties
     blind seeds reach only at 300 seeds ("a FAT32 entry's first cluster is
     past 65535", "a run of sectors fails to read"), within budget 20; and the
     FAT writer's re-checks that need a disk lying between two reads. Report
     the result as it is, win or lose; a loss is a finding.
-92. **Your proposals again** when 82-91 are done. The long-assignment rules
-    (CLOUD_WORK.md) still apply.
+92. **Superseded by 93-95.**
+
+**Today's change** (Steve, 2026-10-07; essay
+http://143.244.172.148:9100/notes/steering-by-design.md, read it first): the
+box builds the explorer itself, with named choice points (SAGE's flip as
+well as Antithesis's re-roll). **You become the adversary.** Coverage says
+code ran; it never says a test would notice the code being wrong. Your job
+today is to measure that, and to attack the box's work as it lands. The
+long-assignment rules in CLOUD_WORK.md apply.
+
+93. **Mutation testing of gopher-metal's pure layers.** Plant one small,
+    deliberate bug at a time (flip `<` and `<=`, drop a flush or a
+    `markDirty`, return early, swap two arguments, off-by-one a bound) in
+    `tcp`, `fat16`, `page_cache`, `durable`, `ready`, `log_ring` and the
+    Store, and run `zig build test` plus `zig build properties` at a size
+    you can afford against each. Rules:
+    - **A mutant never leaves your working tree**: restore the file after
+      each run; commit no mutant anywhere.
+    - **Record every mutant** in gopher-metal `MUTATION.md` (that file you
+      commit, on your branch, for the box to merge): file:line, the change,
+      killed or survived, and by which test or property.
+    - **A survivor gets a diagnosis**: *unreached* (no test runs the line)
+      or *unchecked* (a test runs it and nothing notices), and one line on
+      what oracle would catch it.
+    - **Strengthening a simulator's oracle is yours** (simulator code, its
+      own commit). A survivor that points at kernel code is the box's: say
+      so in `MUTATION.md`.
+    - Aim for breadth first: about 10 mutants per module before going deep
+      anywhere. Report the score per module (killed / planted).
+94. **Review the box's explorer as it lands** (zig-coverage-sdk `main`,
+    gopher-metal `master`; commits naming "explorer"). Adversarially:
+    determinism holes, a tape that drifts, a flip that changes what later
+    draws mean, a benchmark that flatters. Findings under Questions, each
+    with the commit and a reproduction if you have one. Interleave with 93;
+    look whenever you finish a module.
+95. **Hand the explorer targets**: from 93's survivors, the ones a planted
+    bug would make an oracle fail *if a run reached the right state*. List
+    them in `MUTATION.md` under "For the explorer", with the patch to plant.
+    The box re-plants each and asks whether blind seeds or the explorer
+    finds it first.
+96. **Your proposals again** when 93-95 are done.
 
 ## Proposed
 
