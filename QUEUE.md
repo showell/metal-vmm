@@ -861,7 +861,48 @@ in this order. N3 waits on Steve's call on `readAt`; N4 is the box's.
     in item 78. Kernel code on the response path: build it on `master` as
     item 59 was built, saying so in the commit; the box merges it after
     `gates.sh` and `long.sh`, for v19. No change in what `Stream` does.
-87. **Your proposals again** when 82-86 are done. The long-assignment rules
+**The seed explorer: a long assignment** (Steve, 2026-10-07; the design is
+http://143.244.172.148:9100/notes/the-seed-explorer.md, read it first). Take
+it after 86. The long-assignment rules in CLOUD_WORK.md apply: a command and
+a number per item, park after about three attempts, ask in writing and keep
+going, the debt ledger. Steve's calls: **a tool first, not a gate**; the
+blind fraction is a knob starting at 0.2; the metal-vmm phase is the box's,
+later. The mission: steer the simulators the way Antithesis steers a system
+(keep a run's past, re-roll its future from a moment that did something
+new), and **measure honestly whether it beats blind seeds**.
+
+87. **X1, the tape** (zig-coverage-sdk). A `std.Random` that records each
+    `fill`'s bytes, and one that replays a tape's first *k* fills and then
+    draws from a new seed. Position = fills so far. **First test: replaying
+    a whole tape gives the same bytes, call for call.** Done when that test
+    and a prefix-then-fresh test pass.
+88. **X2, `runWith` beside every `runSeed`** (gopher-metal: tcp, fat, page,
+    ready, store, durable, pure, floor). `runSeed(seed)` becomes
+    `runWith(recording(seed))`, so a seed's run is byte for byte what it is
+    today. **Each simulator's first test: replay equals record** over 100
+    seeds: the same properties hit, the same counts, the same digest. A
+    simulator that fails it has a nondeterminism to find first (uninitialised
+    bytes did it once); that's the simulator's code, so yours to fix.
+89. **X3, moments and the loop** (zig-coverage-sdk). A hook that records the
+    position when a property is first reached in a run, or a comparison sets
+    a new edge or reach. `explore(run, budget, seed, blind)`: a corpus of
+    runs and their moments; pick a moment weighted by rarity, then by edge;
+    replay up to it (or a little before) and re-roll the rest; keep a run
+    that did something new to the explorer; save the tape of any oracle
+    failure. The explorer's own choices come from its seed, so an
+    exploration repeats exactly; test that.
+90. **X4, `zig build explore`** (gopher-metal): `-Dsim=<name> -Dbudget=N
+    -Dseed=S -Dblind=0.2`, and `-Dtape=<file>` to replay one saved tape. Its
+    report is `properties`' report plus, per property, whether a blind run
+    or a branch reached it first, and at which run.
+91. **X5, the benchmark** (gopher-metal, `EXPLORER.md`). Per simulator, at
+    equal budgets, blind seeds against the explorer: MISSes left, and runs
+    to first reach per property. Two named targets: the two FAT properties
+    blind seeds reach only at 300 seeds ("a FAT32 entry's first cluster is
+    past 65535", "a run of sectors fails to read"), within budget 20; and the
+    FAT writer's re-checks that need a disk lying between two reads. Report
+    the result as it is, win or lose; a loss is a finding.
+92. **Your proposals again** when 82-91 are done. The long-assignment rules
     (CLOUD_WORK.md) still apply.
 
 ## Proposed
