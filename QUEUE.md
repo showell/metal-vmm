@@ -842,6 +842,17 @@ effect of adding a property.
 
 The same text, for reading: http://143.244.172.148:9100/notes/cc-the-floor-and-the-store.md
 
+**From item 81's proposals** (the box, 2026-10-07): N1, N2 and N5 are yours,
+in this order. N3 waits on Steve's call on `readAt`; N4 is the box's.
+
+82. **N1, knobs for the refusals only a device reaches**, as proposed
+    (`VOLUME_SECTOR`, `VOLUME_MODE_PAGES=none`, `RTC_ABSENT`, `RTC_STUCK`,
+    `PIT_FROZEN` first).
+83. **N2, `store_sim` that fills the volume**, as proposed.
+84. **N5, the two FAT refusals that need a foreign directory**, as proposed.
+85. **Your proposals again** when 82-84 are done. The long-assignment rules
+    (CLOUD_WORK.md) still apply.
+
 ## Proposed
 
 From item 81: the next five, most finding first (CC):
@@ -1293,6 +1304,11 @@ question is answered by v18 (`io.durable`).
   gopher-metal.conf, not just a missing one, means "serve forever with the
   defaults". A missing file is the defaults; any other failure should say so
   and halt, as `files.zig`'s rule does. Kernel behavior, so the box's, with gates.
+- **B22. `fat16.remove` takes a directory** (CC, item 77): it drops the
+  entry and leaks everything under it, where Linux answers EISDIR. Reachable
+  through angry-gopher's `store.remove` (`deleteFile`) if a caller passes a
+  folder; none known. Refuse with the error Linux gives; CC's red test in
+  `fat16_test.zig` is named and skipped until then. Kernel behavior: gates.
 - **B17 (J5).** A coverage property per refusal in the guest's parsers
   (`proto.parseIpv4`, `tcp.handle`'s early returns), so a sweep shows which
   of `PEER_MANGLE`'s lies each parser met.
