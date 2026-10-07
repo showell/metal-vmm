@@ -845,10 +845,10 @@ The same text, for reading: https://github.com/showell/essay-repl-server/blob/ma
 **From item 81's proposals** (the box, 2026-10-07): N1, N2 and N5 are yours,
 in this order. N3 waits on Steve's call on `readAt`; N4 is the box's.
 
-82. **N1, knobs for the refusals only a device reaches**, as proposed
+82. **Done (CC): `VOLUME_SECTOR`, `VOLUME_MODE_PAGES=none`, `RTC_ABSENT`, `RTC_STUCK`, `PIT_FROZEN` (KNOBS.md; fuzz.zig draws each); gopher-metal COVERAGE.md's "for the box" names them. Two rtc/pit refusals still have no knob, and say so.** **N1, knobs for the refusals only a device reaches**, as proposed
     (`VOLUME_SECTOR`, `VOLUME_MODE_PAGES=none`, `RTC_ABSENT`, `RTC_STUCK`,
     `PIT_FROZEN` first).
-83. **Parked (Steve, 2026-10-07; the adversary role comes first).** **N2, `store_sim` that fills the volume**, as proposed.
+83. **Done (CC) as it was parked: gopher-metal a9163f2. One seed in four fills a 2 MiB FAT16 volume; after NoSpace a replace is wholly old, an append old, a write old or gone; four properties on floor-sim.txt, 440 NoSpace answers over 1000 seeds, all true.** **N2, `store_sim` that fills the volume**, as proposed.
 84. **Parked (Steve, 2026-10-07; the adversary role comes first).** **N5, the two FAT refusals that need a foreign directory**, as proposed.
 85. **Parked (Steve, 2026-10-07; the adversary role comes first).** **N3: `readAt` is the Store's seventh operation** (Steve, 2026-10-07):
     the interface, the model, the FAT store, the strict Linux store, and
@@ -1538,8 +1538,8 @@ take. The box reads it at merge time.)*
   floor. Each costs a full directory or a deep tree: minutes of runtime.
 - **store_test's agreement is one volume size, FAT16 only** (gopher-metal
   `src/store_test.zig`): `store_sim` (item 79) takes FAT32 and a full
-  volume, where `NoSpace` lives. Until then `NoSpace` is untested at the
-  Store.
+  volume, where `NoSpace` lives. *(Paid, item 83: `store_sim` fills a
+  volume one seed in four.)*
 - **The `writeRuns` re-checks** (a chain that ends before its size, past
   `chainEnd`'s walk) wait on a disk that lies between two reads; a
   `floor_sim` case with `Block.Fault.garbage` at the right request number
