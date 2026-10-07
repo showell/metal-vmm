@@ -81,6 +81,15 @@ Each line's full text, with its history, is in the archive under its name.
 - **The request door, stage 1** (angry-gopher branch `request-door`): to
   `master` once v20 is ported; rebase onto `limits.zig` first. Stage 2 (our
   own response type; a small body read before the turn) after.
+- **The explorer against blind runs, properly** (with Steve, a design
+  session): the full bench (`zig build explore` at its defaults: 20 explorer
+  seeds, counted against what blind runs reach at 300; CC's item 98,
+  merged). A smoke run at budget 5 left about 4.5 of 40 counted properties
+  unreached by blind runs and about 20 by either explorer: at small budgets
+  the explorer branches from one or two early runs and sees far fewer
+  scenarios. Quote no number before the full run. Also: the bench step shows
+  "failed" under `zig build` because its test writes to stderr (CC: make it an
+  executable, not a test).
 - **B16.** The SDK's commit and what the image reads in the release verdict.
 - **B17.** A coverage property per refusal in the guest's parsers.
 - **B18.** Lies in the peer's DHCP replies.
