@@ -984,7 +984,28 @@ and they're yours to fix; Steve: keep the adversary busy):
 100. **Item 93 continued**: push `MUTATION.md` with what you have so far
     (modules, mutants, killed or survived and by what), then carry on with
     the modules not yet planted.
-101. **Your proposals again** when 97-100 are done.
+102. **The rough peers must reach their properties by design, on both
+    kernels** (the box, 2026-10-07; before 101). v19's `long.sh` failed only
+    its metal floor: four TCP properties ("an exact reset closes a
+    connection", "an inexact reset in the window draws a challenge ACK", "a
+    shut window is probed", "a segment for no connection is refused") that
+    gopher-metal's rough-peer scenarios reach only by luck on the coverage
+    kernel. Measured: v18's coverage kernel reached 3 of the 4 with the
+    console costing time, 1 with it free (an experiment, reverted); v19's
+    reaches none either way, and `PEER_RESET_AT=500000` under it ends with
+    the guest idle and no request served (4 frames out, `peer: 0`), which
+    needs a diagnosis, not a new number. The production kernel passed every
+    rough scenario. They are off `coverage/floor-metal.txt` on
+    `box/store-explore` (`4f6d7bc`) with a line saying why. Find why each
+    scenario stops reaching its property, make each reach it by
+    construction (an event timed from the connection's own state, a
+    scenario that cannot finish before it, whatever the knob needs), show it
+    on both kernels and on several boot lengths, and put the four back on
+    the floor. Read long.sh's rough-peer block and its two-kernel comment
+    first. You have no KVM: build what you can on the host (metal-vmm's
+    unit tests drive `client.zig` without a guest), and write what needs a
+    real run as a recipe under Questions for the box.
+101. **Your proposals again** when 97-100 and 102 are done.
 
 ## Proposed
 
