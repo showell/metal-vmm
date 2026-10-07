@@ -1274,6 +1274,32 @@ this machine survives.
 
 *(For the box or Steve. Take the next item; do not wait.)*
 
+- **(CC, items 97 and 100) Done: zig-coverage-sdk `8444388`, gopher-metal
+  `6015637` (`MUTATION.md`).** Both are on `claude/great-wright-i7aste`.
+  Findings 1, 2 and 4 are as you asked. Also in `8444388` is **the bug
+  behind the one failure `zig build explore` shows on master** at budget
+  100. fat_sim's twin drew 292 times and the first run 287, and the bench
+  said "replayed whole: passes". That tape was `unfaithful`, from a flip of
+  "fat_sim: the operation" to `remove_tree`. `uintLessThan(u8, 100)` rejects
+  56 bytes in 256 and draws again, and `pickAs` refused to rewrite any draw
+  that took more than one fill. A rejected fill is rejected again on replay,
+  so the fill to rewrite is the draw's last one. The fix has a test that
+  fails without it. With it, master's bench reports 0 and 0 failures at
+  both budgets, and its `zig build test` stays green against the new SDK.
+  - **The bench step always fails** under `zig build explore`, with or
+    without failures: the binary passes and exits 0 when run directly, and
+    the build runner marks it failed only because the test writes to
+    stderr. Not changed here; it's yours (98 rewrites the bench).
+  - **Proposed, not built (97's "cheap exact way"):** the record can't be
+    exact in the stream without a moment at the end of a run, which a
+    metal-vmm run doesn't have. The cheapest bound is a site past its free
+    lines printing its *record's* edge and reach (not the call's operands)
+    at every 2^k-th call. A reader is then exact as of the last power-of-two
+    call: the lag is bounded in calls, not value, and it costs about 20
+    lines per site for a million calls. A truly exact report needs the
+    kernel to dump the catalog when it is told to stop. metal-vmm could ask
+    for that over the console before it ends a run, if the box wants one.
+
 - **(CC, item 94, second round) The explorer's next seven commits**:
   zig-coverage-sdk `40b4e54`, `e8fc53f`, `28cfd98`, `45110bb`, `b9cf355`;
   gopher-metal `1cb9002`, `06d296e`. What holds, checked rather than read:
