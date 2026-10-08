@@ -82,16 +82,25 @@ COVERAGE="$WORK/coverage.jsonl"
 : > "$COVERAGE"
 
 # run <name> [VAR=value ...]: one boot on a fresh volume; its exit, log and page.
+#
+# Each run's coverage goes to a file of its own, joined in order at the end,
+# so runs side by side (`JOBS`) give the merged report the order alone does.
+# The images' modification times are noted after the copy: metal-vmm writes
+# an image back only when the guest changed it, so an image whose time has
+# not moved holds what it was copied from, and is not compared byte for byte
+# (64 MB of holes, 70 ms a compare).
 run() {
   local name="$1"; shift
   cp "$SITE" "$WORK/$name.img"
+  stat -c %y "$WORK/$name.img" > "$WORK/$name.img.copied"
   local volume=() post=()
   if [ -n "${VOLUME_SITE:-}" ]; then
     cp "$VOLUME_SITE" "$WORK/$name.vol"
+    stat -c %y "$WORK/$name.vol" > "$WORK/$name.vol.copied"
     volume=(VOLUME="$WORK/$name.vol")
   fi
   [ -z "$DURABLE" ] || post=(PEER_REQUEST="$POST" VOLUME_CUT_AT_EXIT=1)
-  env "$@" "${volume[@]}" "${post[@]}" COVERAGE_OUT="$COVERAGE" PEER_BODY="$WORK/$name.body" \
+  env "$@" "${volume[@]}" "${post[@]}" COVERAGE_OUT="$WORK/$name.cov" PEER_BODY="$WORK/$name.body" \
     timeout "$RUN_TIMEOUT" "$VMM" "$KERNEL" "$WORK/$name.img" "" "$PATH_WANTED" > "$WORK/$name.log" 2>&1
   echo $? > "$WORK/$name.exit"
   # No page stays no page: metal-vmm writes none for an answer it kept only
@@ -123,6 +132,9 @@ knobs_of() { sed -n 's/^metal-vmm: FAULT_SEED=[0-9]* is //p' "$WORK/$1.log" | he
 peer_end_of() { sed -n 's/^metal-vmm: the first client \(gave up\|vanished\).*/\1/p' "$WORK/$1.log" | head -1; }
 broken_of() { sed -n 's/^metal-vmm: coverage: .*, \([0-9]*\) broken).*/\1/p' "$WORK/$1.log" | tail -1; }
 
+# changed <image>: whether its modification time moved since it was copied.
+changed() { [ "$(stat -c %y "$1")" != "$(cat "$1.copied")" ]; }
+
 # verdict <name>: "ok", "differs (allowed: ...)", or "FAIL: ..." for one run
 # against the unhurt one.
 verdict() {
@@ -133,10 +145,10 @@ verdict() {
   broken=$(broken_of "$name")
   [ "$exit" = "$(cat "$WORK/unhurt.exit")" ] || why="$why, exit $exit (unhurt: $(cat "$WORK/unhurt.exit"))"
   [ "${broken:-0}" = 0 ] || why="$why, $broken coverage properties broken"
-  if ! cmp -s "$WORK/$name.img" "$SITE"; then
+  if changed "$WORK/$name.img" && ! cmp -s "$WORK/$name.img" "$SITE"; then
     "$SOUND" "$WORK/$name.img" > "$WORK/$name.sound" 2>&1 || why="$why, the volume is not sound"
   fi
-  if [ -n "${VOLUME_SITE:-}" ] && ! cmp -s "$WORK/$name.vol" "$VOLUME_SITE"; then
+  if [ -n "${VOLUME_SITE:-}" ] && changed "$WORK/$name.vol" && ! cmp -s "$WORK/$name.vol" "$VOLUME_SITE"; then
     "$SOUND" "$WORK/$name.vol" > "$WORK/$name.vsound" 2>&1 || why="$why, the attached volume is not sound"
   fi
   if [ -n "$DURABLE" ]; then
@@ -219,12 +231,22 @@ echo "unhurt: exit $(cat "$WORK/unhurt.exit"), status $unhurt_status, $(wc -c < 
 printf '%-6s %-4s %-6s %-8s %-40s %s\n' seed exit status bytes verdict knobs
 
 failing=""
+# **THE SEEDS, `JOBS` AT A TIME** (2 by default: this box's two cores),
+# then judged and printed in order. Each run is a function of its seed
+# alone, so running them side by side changes nothing but the wall time.
+JOBS="${JOBS:-2}"
+seed="$FIRST"
+while [ "$seed" -le "$LAST" ]; do
+  ( run "seed$seed" FAULT_SEED="$seed"; [ -z "$DURABLE" ] || read_back "seed$seed" ) &
+  while [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do wait -n; done
+  seed=$((seed + 1))
+done
+wait
+
 ok=0
 allowed=0
 seed="$FIRST"
 while [ "$seed" -le "$LAST" ]; do
-  run "seed$seed" FAULT_SEED="$seed"
-  [ -z "$DURABLE" ] || read_back "seed$seed"
   v=$(verdict "seed$seed")
   case "$v" in
     ok*) ok=$((ok + 1)) ;;
@@ -234,6 +256,10 @@ while [ "$seed" -le "$LAST" ]; do
   printf '%-6s %-4s %-6s %-8s %-40s %s\n' "$seed" "$(cat "$WORK/seed$seed.exit")" "$(status_of "seed$seed")" \
     "$([ -f "$WORK/seed$seed.body" ] && wc -c < "$WORK/seed$seed.body" || echo none)" "$v" "$(knobs_of "seed$seed")"
   seed=$((seed + 1))
+done
+
+for name in unhurt $(seq -f "seed%g" "$FIRST" "$LAST"); do
+  [ ! -f "$WORK/$name.cov" ] || cat "$WORK/$name.cov" >> "$COVERAGE"
 done
 
 echo

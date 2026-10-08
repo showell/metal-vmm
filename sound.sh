@@ -16,7 +16,7 @@ IMAGE="${1:?usage: sound.sh <image>}"
 FIRST_LBA="${FIRST_LBA:-2048}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-dd if="$IMAGE" of="$WORK/part.img" bs=512 skip="$FIRST_LBA" status=none
+dd if="$IMAGE" of="$WORK/part.img" bs=512 skip="$FIRST_LBA" status=none conv=sparse
 out=$(fsck.vfat -n "$WORK/part.img" 2>&1)
 echo "$out" | tail -1 | sed 's/.*img: /  /'
 # Anything that is not the version line, the tally or the headings is a
