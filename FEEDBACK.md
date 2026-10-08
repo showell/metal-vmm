@@ -72,10 +72,11 @@ gopher-metal `68d3fcb`:
   - The same with `-Ddev` took **9 s**.
   - Zig's cache works: with `--summary all` the test's compile step reads
     `cached 8ms`. The time goes into running, not compiling.
-  - One oddity for the box: the unit tests still compile as ReleaseSafe
-    under `-Ddev` (the summary says so), so the saving comes from other
-    steps `-Ddev` changes, not the tests' own build. Worth a look if the
-    tests are meant to be Debug under `-Ddev`.
+  - My mistake, not an oddity: `fat16_test` (the file I timed) is
+    ReleaseSafe on purpose, hard-coded in `build.zig`, because its image
+    tests run in a third of Debug's time. The other unit tests build as
+    Debug. I haven't explained the 41 s against 9 s, since both runs used
+    the same cached binary; take those two numbers as unverified.
   - The properties sweep and the explorer default to ReleaseSafe (sensible
     for long runs). For a quick check, `-Dsweep-optimize=Debug` and
     `-Dexplore-optimize=Debug` exist.
