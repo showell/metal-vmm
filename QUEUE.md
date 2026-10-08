@@ -130,6 +130,35 @@ request and is left as it is (games traffic is small; safe over clever: no
 recovery from the highest ID); an unreadable session secret failing every
 returning visitor's request is right (louder is better).
 
+112. **C1, a disk that loses what it wasn't told to flush** (your proposal;
+    first): the test disk keeps writes in a cache until a flush and a cut
+    drops the rest; the store's promise (a replaced file wholly old or wholly
+    new) is the oracle; kills S5, and count free clusters across a failed
+    rename (S6).
+
+113. **C2, the snapshot's premise held at compile time** (your proposal):
+    a comptime walk refusing any pointer field in a model not on a named
+    allow-list, and a census of what `main.zig`'s machine holds, before the
+    box builds `docs/SNAPSHOT.md` on it.
+
+114. **C3, the store lint follows the wrappers** (your proposal): the
+    transitive set of functions that read the store, computed on each run.
+
+115. **C4, the three cheap unreached survivors** (your proposal): S11, L7, P1.
+
+116. **C5, `zig fmt --check src` in angry-gopher's `ops/check_zig`** (your
+    proposal), starting with one formatting commit. Its other half (the "/"
+    test) is done (`446cbb7f`).
+
+117. **The store lint's two gaps** (a cold review of 109): a `switch` that
+    passes some errors on and makes another non-absence one a value; `else
+    |e|` with a named error, never checked. Both findings, with tests.
+
+118. **A backup folder that stats but cannot be listed** (a cold review of
+    110): it fails `try store.list` mid-stream and cuts the archive with no
+    skip line; make it a named skip. Also fold `principalAuthorizedOrError`
+    into `principalAuthorized` (they're the same since 108).
+
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
     the third bullet of the old 99 asked (`request.zig`, every handler behind
