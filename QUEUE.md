@@ -241,11 +241,11 @@ proposals, taken or not, are in the archive.)*
     `backup-skipped.txt`, with why: a root that can't be stat'd (anything
     but "not there yet"), a file whose stat fails, and an entry that is
     neither a file nor a folder. Links were dropped unnamed too.
-  - **metal-vmm `site.sh`** (`a187990`). Two missing `tcp:` lines no longer
+  - **metal-vmm `site.sh`** (`3fb7d94`). Two missing `tcp:` lines no longer
     compare equal; either side without one fails, saying which. There's no
     test, since `site.sh` needs QEMU and KVM; I checked the four cases by
     hand.
-  - **metal-vmm `reports.zig`** (red `95e10a8`, fix `6e9a7dc`). A page past
+  - **metal-vmm `reports.zig`** (red `9850550`, fix `18c5e8d`). A page past
     the 64 KiB the client keeps is now said at the size it came, from
     `received` less the head. The line keeps the shape `sweep.sh` parses.
   - **gopher-metal `store_judge`** (red `3951b4f`, fix `cc262cf`). "Is this
@@ -285,7 +285,7 @@ proposals, taken or not, are in the archive.)*
      Nine microsecond settings and `PATIENCE_S` took any u64, and their
      readers multiply into nanoseconds. `WIRE_LATENCY_US=18446744073709552`
      passed the check, then panicked in a safe build or became a short wait
-     in a fast one. Red test `41b56c7`, fix `9404857`: each is bounded by
+     in a fast one. Red test `b5d9669`, fix `c621611`: each is bounded by
      what a u64 of nanoseconds holds. Both are on metal-vmm
      `claude/great-wright-i7aste`, and `zig build test` and
      `sweep_test.sh` are green. The other narrowings checked out:
@@ -295,7 +295,7 @@ proposals, taken or not, are in the archive.)*
   3. **`sweep.sh`'s new excuse (`78dd476`) covered another status.** "The
      stop cut it" was granted whenever the guest said its stop cut any
      response, so a whole 500 where the unhurt run got 200 read "differs as
-     allowed". Red `0e65483` (sweep_test seed 11), fix `d64eb02`. The
+     allowed". Red `9d3a4a1` (sweep_test seed 11), fix `f539aa3`. The
      excuse now covers a page cut short, or no answer at all, never another
      status. **The older excuses have the same shape**: `PEER_RESET_AT`,
      `DISK_REFUSE`, `DISK_CUT_AFTER` and the rest excuse any difference,
