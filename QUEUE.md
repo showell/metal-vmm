@@ -167,6 +167,55 @@ proposals, taken or not, are in the archive.)*
 
 *(Either side, with a reproduction where there is one.)*
 
+- **(CC, item 105) The store-absence lint, and the 67 sites it found.**
+  It's on angry-gopher `claude/great-wright-i7aste`, and `ops/check_zig`
+  runs green end to end. (Its six front-end bundles were empty stand-ins,
+  since they can't be built here; they are git-ignored.)
+  - **Where it lives.** It's `tools/lint_store_absence.py`, not
+    `tools/lint.py`: that is the JavaScript linter, run by `ops/test_chat`.
+    Its tests, `tools/test_lint_store_absence.py`, cover each form firing
+    and each exemption holding (14). `ops/check_zig` runs them, then the
+    lint (`c75961d`).
+  - **What it refuses.** A read of the store (`read`, `readOrEmpty`,
+    `readAt`, `stat`, `has`, `list`), under whatever name the file gives
+    `store.zig`, whose error is caught into a value without being named. It
+    also refuses an error dropped by `if (read) |v| ... else |_|`. Item 105
+    didn't name that form, and it hid the worst site. A `//` comment on the
+    line before defends a site.
+  - **The worst site: `counter.next`** (red `444b303`, fix `54b3354`). An
+    unreadable or garbled counter read as a new one, so it answered 1 and
+    wrote 2. That hands out IDs already given: player IDs, puzzle and game
+    session IDs, and **member IDs** (`users.zig`). Now nothing there is 1,
+    and anything else that won't read or parse is an error.
+    - **A decision to confirm:** the old test pinned "a corrupt counter
+      restarts rather than failing the request". A restart reissues IDs, so
+      a corrupt counter now fails the request and the file is left as it is,
+      as `ef3091eb` did for a garbled upload total.
+  - **The second-worst: a retire removed a kept member** (red `43779f8`,
+    fix `e98feb8`). `users.readAuthFile` caught every read error into null,
+    so a name file that wouldn't read gave the name "". No name is on the
+    keep list, so the member was removed everywhere. `readAuthFile`,
+    `loadSecret`, `previousSecret`, `userExists` and the two account
+    listings now fail on anything but absence.
+  - **The rest** (`152a1f5`).
+    - 41 sites fixed, each in a function that already answers an error. A
+      `store.list` caught into an empty list became `try`, since `list`
+      already answers empty for a folder that isn't there. A read or stat
+      whose absence means a value goes through `store.readOrNull` or
+      `statOrNull` (new, tested, `54b3354`); they give null only for what
+      `has` calls absent.
+    - 16 sites defended with a comment saying why (17 with `userLastSeen`): the admin page's counts,
+      an archive member's mtime, the cookie checks (each fails closed), two
+      caches over the transcript, a display-only companion, `keptUser`,
+      `migrateSecret`, and a stream whose headers are already out.
+  - **Checked against gopher-metal.** `zig build gopher` and `store-judge`
+    (2 pass) are green over a port of the new tree, so the new helpers'
+    error names exist on metal too.
+  - **What the lint can't see:** a read reached through a module's own
+    wrapper, then caught into a value. For example,
+    `users.getUserName(...) catch ""` in `chat_retire.retireUser`, which
+    only labels a record line.
+
 - **(CC, item 104) The cold hunt's smaller findings: six fixed, each red
   test first, and one answered.**
   - **fat16, a name past ASCII** (gopher-metal red `a2e8594`, fix
