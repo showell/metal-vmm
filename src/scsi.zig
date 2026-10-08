@@ -204,6 +204,8 @@ pub const Scsi = struct {
         ascq: u8 = 0,
         /// Bytes of data written to the driver, after the response.
         data: u32 = 0,
+        /// Bytes of the driver's data taken: a WRITE's.
+        taken: u32 = 0,
         response: u8 = response_ok,
     };
 
@@ -249,7 +251,12 @@ pub const Scsi = struct {
         const sense_len: u32 = if (a.status == status_check_condition) 18 else 0;
         const expected: u32 = if (in) |b| @intCast(b.len) else if (out) |b| @intCast(b.len) else 0;
         std.mem.writeInt(u32, ram[at..][0..4], sense_len, .little);
-        std.mem.writeInt(u32, ram[at + 4 ..][0..4], expected - @min(expected, a.data), .little);
+        // **THE RESIDUAL IS WHAT WAS NOT MOVED** (virtio 1.2 §5.6.6.1): of
+        // a read, the bytes not written to the driver; of a write, those not
+        // taken from it. A write once reported all of its bytes as not
+        // taken, and a driver that read the residual failed every one.
+        const moved: u32 = if (in != null) a.data else a.taken;
+        std.mem.writeInt(u32, ram[at + 4 ..][0..4], expected - @min(expected, moved), .little);
         ram[at + 10] = a.status;
         ram[at + 11] = a.response;
         if (sense_len > 0) {
@@ -398,7 +405,7 @@ pub const Scsi = struct {
         @memcpy(self.image[at..][0..len], from[0..len]);
         if (self.dirty) |bits| disk.mark(bits, lba, landed);
         self.writes += 1;
-        return .{};
+        return .{ .taken = @intCast(bytes) };
     }
 
     /// One line for the run's end, in `buf`.
@@ -612,12 +619,15 @@ test "a sector written is the sector read back, and past the end is ILLEGAL REQU
     var g = FakeDriver{};
     g.open(&d);
     for (g.ram[FakeDriver.data_at..][0 .. 2 * 512], 0..) |*b, i| b.* = @truncate(i * 7);
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 5, 2)));
+    const wrote = g.rw(&d, true, 5, 2);
+    try testing.expect(FakeDriver.good(wrote));
+    try testing.expectEqual(@as(u32, 0), wrote.residual); // every byte taken
     try testing.expectEqualSlices(u8, g.ram[FakeDriver.data_at..][0 .. 2 * 512], image[5 * 512 ..][0 .. 2 * 512]);
     try testing.expectEqual(@as(u8, 0x60), bits[0]); // sectors 5 and 6
     @memset(g.ram[FakeDriver.data_at..][0 .. 2 * 512], 0);
     const back = g.rw(&d, false, 5, 2);
     try testing.expect(FakeDriver.good(back));
+    try testing.expectEqual(@as(u32, 0), back.residual);
     try testing.expectEqual(@as(u32, response_len + 1024), back.used);
     try testing.expectEqualSlices(u8, image[5 * 512 ..][0 .. 2 * 512], g.ram[FakeDriver.data_at..][0 .. 2 * 512]);
     const past = g.rw(&d, false, 15, 2);

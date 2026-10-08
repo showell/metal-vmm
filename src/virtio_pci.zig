@@ -52,6 +52,8 @@ pub const msix_entries = msix.entries;
 pub const msix_table_bytes = msix.table_bytes;
 pub const Entry = msix.Entry;
 
+const queues = @typeInfo(@FieldType(virtio.Device, "queues")).array.len;
+
 /// One virtio device in a slot.
 pub const Function = struct {
     device: *virtio.Device,
@@ -62,7 +64,9 @@ pub const Function = struct {
     /// Which entry each source signals (virtio §4.1.4.3): the configuration
     /// change, and each queue. NO_VECTOR is none.
     msix_config: u16 = no_vector,
-    queue_vector: [2]u16 = .{ no_vector, no_vector },
+    /// One for each queue a device may have (`virtio.Device.queues`): a
+    /// SCSI controller has three, and its requests are on the third.
+    queue_vector: [queues]u16 = @splat(no_vector),
     /// Where its messages go: this machine's one APIC.
     apic: ?*apic.Apic = null,
 
@@ -283,7 +287,7 @@ pub const Function = struct {
                     // longer owed (§6.8.2.10), and neither is the ISR's bit.
                     d.write(ram, 0x070, 0);
                     d.interrupt_status = 0;
-                    self.queue_vector = .{ no_vector, no_vector };
+                    self.queue_vector = @splat(no_vector);
                     self.msix_config = no_vector;
                     self.msix.pending = 0;
                 } else d.write(ram, 0x070, v32 & 0xFF);
@@ -865,4 +869,19 @@ test "a queue the device does not serve reads as absent, and takes no writes" {
     // Selecting queue 0 again, it is as it was.
     try g.store(u16, rng.common + 0x16, 0);
     try testing.expectEqual(@as(u16, virtio.queue_max), try g.load(u16, rng.common + 0x18));
+}
+
+test "a third queue (virtio-scsi's requests) has a vector of its own, and its completion is a message" {
+    var m = Machine{};
+    m.init();
+    var ctx: u8 = 0;
+    var scsi = virtio.Device{ .id = virtio.device_id_scsi, .context = &ctx, .notified = nothing, .queue_count = 3 };
+    _ = m.bus.plug(4, &scsi, &m.lapic);
+    var g = FakeGuest{ .bus = &m.bus };
+    const f = g.open(4).?;
+    try testing.expectEqual(@as(u16, 3), try g.load(u16, f.common + 0x12));
+    try g.store(u16, f.common + 0x16, 2);
+    try testing.expectEqual(no_vector, try g.load(u16, f.common + 0x1A));
+    try g.store(u16, f.common + 0x1A, 0);
+    try testing.expectEqual(@as(u16, 0), try g.load(u16, f.common + 0x1A));
 }
