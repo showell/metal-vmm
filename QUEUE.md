@@ -21,56 +21,86 @@ green.** v20 is planned for 2026-10-08: its contents are in gopher-metal's
 README, "Open". **The cloud session is paused** (Steve: a stable point
 first); its open items below wait until the box says they resume.
 
-## CC: open, paused
+## CC: open
 
-98. **Paused (Steve, 2026-10-07 evening: a stable point first; the box will say when).** **Your finding 3, in gopher-metal's `explore_bench.zig`**, after the box
-    merges `box/store-explore` into `master` (it rewrites the bench into
-    three columns, fat or store, and refuses a drifted run; until it lands,
-    start from that branch). Count only the properties blind `fat_sim`
-    reaches at 300 seeds; report each target as reached-in-N-of-20 explorer
-    seeds; print a failure's `unfaithful` beside `drifted`.
+**Your role (Steve, 2026-10-08): build what needs no emulator, and anything
+adversarial.** Every item here runs on the host: `zig build test
+-Dtest-file=<file>` runs one gopher-metal test file in seconds (the whole step
+takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
+guest. Where a claim needs a real boot, write the recipe under Questions for
+the box instead of guessing. Findings arrive as red tests where they can.
 
-99. **Paused (Steve, 2026-10-07 evening: a stable point first; the box will say when).** **Attack the box's three branches**, adversarially, as you did the
-    explorer (they're pushed; read, run `zig build test` where you can, and
-    report under Questions with a reproduction where you have one):
-    - gopher-metal `box/store-explore`: STORE.md, HOST.md, the store judge
-      (`src/store_judge.zig`, `judge_world.zig`; it needs angry-gopher and a
-      port, so read it if you can't run it), B21, B22 (and removeTree's
-      final step), `tools/check_limits.py`, store_sim's named choices.
-    - angry-gopher `box/has-errors`: `store.has` answers no only for what
-      is not there; every caller's choice of what an error means. Security
-      first: `legacyHonoured`, `isMarked`, `authFileExists`.
-    - angry-gopher `box/request-door` (on top of has-errors): `request.zig`,
-      every handler behind it, `tools/lint_portable.py`'s two new rules. Is
-      anything still reaching past the door the lint can't see?
-    A cold reviewer already caught five serious bugs in the first two
-    (removeTree broken by B22, a build.zig that didn't compile, missed
-    `has` callers, the judge's model not being the seam's, legacy cookies
-    failing open); they are fixed on those branches. Look for what it missed.
+103. **Attack what the box changed on 2026-10-07 and 10-08**, adversarially,
+    security and data loss first. Each was found by running production's
+    shape (PCI with a volume) on metal-vmm or by a cold read, and fixed in a
+    day; look for what the fix missed or broke. Report under Questions, a red
+    test with each finding you can make one for.
+    - gopher-metal: `d86ec98` (SCSI: a short transfer fails), `c7539eb` (boot
+      tries a read three times, `virtio.Block.read_tries`), `d7a5903` (FAT
+      copies apart: `cacheFatChecked` keeps the copy that checks cleaner, and
+      the check now counts leaks from the FAT held; the free count moves with
+      the second copy), `e07b363` (a response cut by the stop is said),
+      `d2e7480`, `83584da` (boot messages).
+    - angry-gopher: `9e8e615d` (`ustar.zig`, a topic's download), `ef3091eb`
+      (four store reads that served a failure as nothing), `8b617f3c` (the
+      head copied out of the read buffer before a small body is read in).
+    - metal-vmm: `766bffc` (virtio-pci vectors for a third queue; a write's
+      residual), `9f24e42` (`VOLUME_SHORT_AT`), `311731c` (`checked.zig`:
+      every setting parses or the run stops), `6ae4909`, `78dd476`
+      (`sweep.sh`'s status and its excuses).
 
-102. **Paused (Steve, 2026-10-07 evening: a stable point first; the box will say when).** **The rough peers must reach their properties by design, on both
-    kernels** (the box, 2026-10-07; before 101). v19's `long.sh` failed only
-    its metal floor: four TCP properties ("an exact reset closes a
-    connection", "an inexact reset in the window draws a challenge ACK", "a
-    shut window is probed", "a segment for no connection is refused") that
-    gopher-metal's rough-peer scenarios reach only by luck on the coverage
-    kernel. Measured: v18's coverage kernel reached 3 of the 4 with the
-    console costing time, 1 with it free (an experiment, reverted); v19's
-    reaches none either way, and `PEER_RESET_AT=500000` under it ends with
-    the guest idle and no request served (4 frames out, `peer: 0`), which
-    needs a diagnosis, not a new number. The production kernel passed every
-    rough scenario. They are off `coverage/floor-metal.txt` on
-    `box/store-explore` (`4f6d7bc`) with a line saying why. Find why each
-    scenario stops reaching its property, make each reach it by
-    construction (an event timed from the connection's own state, a
-    scenario that cannot finish before it, whatever the knob needs), show it
-    on both kernels and on several boot lengths, and put the four back on
-    the floor. Read long.sh's rough-peer block and its two-kernel comment
-    first. You have no KVM: build what you can on the host (metal-vmm's
-    unit tests drive `client.zig` without a guest), and write what needs a
-    real run as a recipe under Questions for the box.
+104. **The cold hunt's smaller findings** (silent truncation, 2026-10-08),
+    each fixed with a red test, or answered under Questions with why not:
+    - `fat16.zig` (~2765): a long-name character of 128 or more is written
+      as '?', so the name no longer reads back as itself; its comment says
+      such a name is refused. Refuse it (`BadName`).
+    - `io.zig` `Dir.iterate` (~857): a directory that cannot be read lists
+      as empty. Make it an error.
+    - angry-gopher `admin_backup.zig` (168, 180): a `stat` that fails drops
+      the item from the backup without listing it in `backup-skipped.txt`.
+    - metal-vmm `site.sh` (73): two empty `tcp:` lines compare equal, so the
+      connection check passes on nothing if the line ever goes.
+    - metal-vmm `reports.zig` (192): the status line's "N bytes" is what the
+      client kept (64 KiB at most), not what it received.
+    - gopher-metal `store_judge.zig` (242, 272): "is this a file" reads into
+      a 1 MiB buffer, so a larger file is a false mismatch.
+    - gopher-metal `log_ring` `Ring.read` returns the newest bytes from
+      mid-line with no flag; check the buffer at `probe/gopher.zig` ~1522
+      against the ring's size.
 
-101. **Paused (Steve, 2026-10-07 evening: a stable point first; the box will say when).** **Your proposals again** when 97-100 and 102 are done.
+105. **A lint for failure read as absence, in angry-gopher.** Four store reads
+    turned an error into "", 0 or null this week (`ef3091eb`), each a data
+    loss. Make `tools/lint.py` (run by `ops/check_zig`) refuse a store call
+    (`store.read`, `stat`, `has`, `list`, `readAt`, ...) whose error is caught
+    into a value (`catch ""`, `catch return 0`, `catch null`, `catch {}`,
+    `catch continue`) unless a comment on the line before says why that
+    failure may be read so, as gopher-metal presumes an omitted flush a bug
+    unless a comment defends it. Then fix or defend every site it finds,
+    each fix with a red test. Its own tests first (`test_lint_portable.py` is
+    the pattern).
+
+106. **The simulators as a library, the soak as a program.** `fat_sim`,
+    `store_sim` and `tcp_sim` reach for `std.testing.allocator` and
+    `std.testing.io`, so the explorer bench and the soak must be zig tests,
+    and `zig build` holds a test's output until it exits (the soak's log sat
+    empty seven hours). Give each simulator's run an allocator and an `Io`
+    as arguments, keep their tests as they are, make `explore_bench` and
+    `explore_soak` ordinary executables, and `tools/soak.sh` run the
+    installed binary as it does now. No behaviour changes: a seed's run is
+    the run it was (`same.sh`-style: the same tape, the same hash).
+
+107. **Kill fat16's surviving mutants** (your `MUTATION.md`: fat16's tests
+    caught 8 of 16). For each survivor, the test that kills it, in
+    `fat16_test.zig`; rerun those mutants and update `MUTATION.md`.
+
+99. **Held until the box rebases angry-gopher's `request-door` onto master
+    with `8b617f3c`** (it carries the same body pre-read): then attack it as
+    the third bullet of the old 99 asked (`request.zig`, every handler behind
+    it, `lint_portable.py`'s two rules, anything reaching past the door).
+
+101. **Your proposals** when 103-107 are done.
+
+(98 is done and merged. 102 needs KVM: it moves to the box's list.)
 
 ## The box: open
 
@@ -118,6 +148,9 @@ Each line's full text, with its history, is in the archive under its name.
   POSTs were routed by their bodies' bytes (404s, lost messages, a panic).
   **angry-gopher's `request-door` branch carries the same pre-read: take
   8b617f3c when it is rebased for v21.**
+- **102 (from CC's list: it needs KVM).** The rough peers must reach their
+  four TCP properties by design on both kernels, then back on
+  `floor-metal.txt` (QUEUE-ARCHIVE.md has the full item).
 - **N4.** The cloud session's device knobs (item 82), run on gopher.elf and
   put on `floor-metal.txt`.
 - **B2, B3, B4, B6–B10, B12** (older: a seed sweep of gopher.elf, the bad
