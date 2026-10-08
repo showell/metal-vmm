@@ -799,19 +799,45 @@ fn theClient(environ: std.process.Environ, peer: *const wire.Peer) void {
     // sentence and the line is compared against curl's; a guest serving an
     // actual site answers with kilobytes, so the body goes to a file when one
     // is asked for and the line says how much there was.
-    if (environ.getPosix("PEER_BODY")) |into| writeOut(into, peer.tcp.body());
-    if (environ.getPosix("PEER_RESPONSE")) |into| writeOut(into, peer.tcp.whole());
+    //
+    // **AN ANSWER KEPT IN PART IS NOT WRITTEN AS IF WHOLE.** The client keeps
+    // the first `reply.len` bytes of what came back. Past that, the files
+    // would hold a page's beginning and a comparison of two of them (rest.sh)
+    // would pass on half a page: they are not written, and the line says why,
+    // so whatever reads them fails for want of them.
+    const cut = peer.tcp.received > peer.tcp.reply_len;
+    if (cut and (environ.getPosix("PEER_BODY") != null or environ.getPosix("PEER_RESPONSE") != null)) {
+        var line: [200]u8 = undefined;
+        const text = std.fmt.bufPrint(&line, "metal-vmm: the answer was {d} bytes and the client keeps {d}; PEER_BODY and PEER_RESPONSE are not written\n", .{ peer.tcp.received, peer.tcp.reply.len }) catch "metal-vmm: the answer was cut; PEER_BODY and PEER_RESPONSE are not written\n";
+        _ = linux.write(2, text.ptr, text.len);
+    } else {
+        if (environ.getPosix("PEER_BODY")) |into| writeOut(into, peer.tcp.body());
+        if (environ.getPosix("PEER_RESPONSE")) |into| writeOut(into, peer.tcp.whole());
+    }
     var buf: [4096]u8 = undefined;
     const text = reports.client(peer, &buf);
     _ = linux.write(1, text.ptr, text.len);
 }
 
+/// Writes `bytes` to `path`, all of them, or says on stderr that it could
+/// not: a file left short or missing is never silent.
 fn writeOut(path: [:0]const u8, bytes: []const u8) void {
     const opened = linux.open(path.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
-    if (linux.errno(opened) != .SUCCESS) return;
+    if (linux.errno(opened) != .SUCCESS) return writeFailed(path);
     const fd: linux.fd_t = @intCast(opened);
     defer _ = linux.close(fd);
-    _ = linux.write(fd, bytes.ptr, bytes.len);
+    var done: usize = 0;
+    while (done < bytes.len) {
+        const n = linux.write(fd, bytes[done..].ptr, bytes.len - done);
+        if (linux.errno(n) != .SUCCESS or n == 0) return writeFailed(path);
+        done += n;
+    }
+}
+
+fn writeFailed(path: [:0]const u8) void {
+    var line: [4200]u8 = undefined;
+    const text = std.fmt.bufPrint(&line, "metal-vmm: could not write {s} whole\n", .{path}) catch "metal-vmm: could not write an answer's file whole\n";
+    _ = linux.write(2, text.ptr, text.len);
 }
 
 /// The file, mapped rather than read: it is only ever looked at, and the
