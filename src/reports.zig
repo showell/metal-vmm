@@ -246,6 +246,19 @@ test "a page past what the client keeps is said at the size it came, not what wa
     try testing.expectEqualStrings("peer: 200, 100000 bytes\n", client(&peer, &buf));
 }
 
+test "a page's size is the same count kept or cut: its trailing newlines included (QUEUE 111)" {
+    var buf: [4096]u8 = undefined;
+    var peer = wire.Peer{};
+    const head = "HTTP/1.1 200 OK\r\n\r\n";
+    @memcpy(peer.tcp.reply[0..head.len], head);
+    @memset(peer.tcp.reply[head.len..][0..600], 'x');
+    @memcpy(peer.tcp.reply[head.len + 600 ..][0..2], "\r\n");
+    peer.tcp.reply_len = head.len + 602;
+    peer.tcp.received = head.len + 602;
+    // Kept whole: 602 bytes came, as a page cut short counts what came.
+    try testing.expectEqualStrings("peer: 200, 602 bytes\n", client(&peer, &buf));
+}
+
 /// **WHICH LIES WERE TOLD** (`PEER_MANGLE`): each kind sent, and the
 /// guest's check it meets (mangle.zig).
 pub fn mangledKinds(line: *const faults.Wire, buf: []u8) []const u8 {
