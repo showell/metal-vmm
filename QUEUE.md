@@ -167,6 +167,65 @@ proposals, taken or not, are in the archive.)*
 
 *(Either side, with a reproduction where there is one.)*
 
+- **(CC, item 103) What the 10-07 and 10-08 fixes missed: three findings,
+  each with a red test.** Most important first.
+  1. **B26 (gopher-metal `d7a5903`) makes a folder that can't be read stop
+     the boot.** When the FAT copies differ, `cacheFatChecked` runs a whole
+     `check`, which reads every directory. One directory sector that fails
+     to read fails the mount (`ReadFailed`), and metal stops with "the FAT
+     could not be held in memory". Before B26 the copies were brought into
+     line from the first copy and the volume mounted. A rotted FAT sector
+     next to a bad sector in a folder is the disk B25 and B26 were for.
+     - Red test: gopher-metal `fccad06` (`fat16_test`, "copies apart and a
+       directory that cannot be read"). The check's first read is made to
+       fail, which I confirmed gives `ReadFailed`.
+     - It asks that a weighing that cannot run leaves the choice unmade:
+       mount with the first copy held, and write neither copy over, so the
+       second copy (the good one, in B26's case) is still there for a boot
+       that can weigh.
+     - The fix is fat16's, so it's yours. In `cacheFatChecked`, a failed
+       `check` restores the held sectors and returns `.{}` with nothing
+       written.
+     - **Merge the red test with the fix**, since it fails `zig build test`
+       until then.
+  2. **`checked.zig` (`311731c`) accepts times that overflow when read.**
+     Nine microsecond settings and `PATIENCE_S` took any u64, and their
+     readers multiply into nanoseconds. `WIRE_LATENCY_US=18446744073709552`
+     passed the check, then panicked in a safe build or became a short wait
+     in a fast one. Red test `5f0ab20`, fix `6e293fe`: each is bounded by
+     what a u64 of nanoseconds holds. Both are on metal-vmm
+     `claude/great-wright-i7aste`, and `zig build test` and
+     `sweep_test.sh` are green. The other narrowings checked out:
+     `PEER_MSS`, `PEER_RETRY` and `PEER_FLOOD` are clamped, and the fields
+     behind `@intCast` and `@truncate` are wide enough for what the table
+     allows.
+  3. **`sweep.sh`'s new excuse (`78dd476`) covered another status.** "The
+     stop cut it" was granted whenever the guest said its stop cut any
+     response, so a whole 500 where the unhurt run got 200 read "differs as
+     allowed". Red `e9f1c79` (sweep_test seed 11), fix `e767c31`. The
+     excuse now covers a page cut short, or no answer at all, never another
+     status. **The older excuses have the same shape**: `PEER_RESET_AT`,
+     `DISK_REFUSE`, `DISK_CUT_AFTER` and the rest excuse any difference,
+     status included. A disk refusal that turns into a wrong 200 or a 404
+     would pass. Narrowing them is a judgment about each fault, so it's
+     yours.
+
+  Read and found sound:
+  - angry-gopher `8b617f3c`. The head can't be read over any more: the copy
+    covers the pre-read case, and every later body read goes through
+    `http.zig`'s owned accessors, which `lint_head_access.py` enforces.
+  - angry-gopher `ef3091eb`. Each of the four reads passes on every error
+    but absence, and its callers propagate.
+  - angry-gopher `9e8e615d`. Topic IDs are validated before the download,
+    so no tar name can carry `..` or `/`. `split` refuses rather than cuts.
+    One limit: ustar's size field silently drops the high bits past 8 GiB,
+    which uploads (1 GiB lifetime) can't reach today.
+  - gopher-metal `d86ec98` (the INQUIRY guard needs only byte 0, so
+    `residual < 36` is right) and `c7539eb`.
+  - metal-vmm `766bffc`: the vector index is bounded by `queue_count`.
+  - The boot-message commits (`d2e7480`, `83584da`, `e07b363`) and
+    `9f24e42`.
+
 - **(CC, item 98: done before the pause, not merged.)** It's gopher-metal
   `9c40811` on `claude/great-wright-i7aste`, with master merged in
   (`a7940d7`). `zig build test` is green.
