@@ -186,10 +186,14 @@ pub fn client(peer: *const wire.Peer, buf: []u8) []const u8 {
     // Trailing newlines are trimmed because the shell trims them too, and
     // this line is compared against one built from curl's output.
     const body = std.mem.trimEnd(u8, got.body(), "\r\n");
+    // **THE SIZE IT CAME AT** (metal-vmm QUEUE 104): the client keeps the
+    // first 64 KiB, and `received` counts all of it, so a page past what was
+    // kept is said at its own size, the head's bytes taken off.
+    const came: u64 = if (got.received > got.reply_len) got.received - (got.reply_len - got.body().len) else body.len;
     var at: usize = 0;
     const first = buf[0..@min(buf.len, 512)];
     const text = std.fmt.bufPrint(first, "peer: {d} \"{s}\"\n", .{ got.status(), body }) catch
-        std.fmt.bufPrint(first, "peer: {d}, {d} bytes\n", .{ got.status(), body.len }) catch return "peer: ?\n";
+        std.fmt.bufPrint(first, "peer: {d}, {d} bytes\n", .{ got.status(), came }) catch return "peer: ?\n";
     at = text.len;
     if (peer.plan.clients > 1 or peer.plan.asks > 1) {
         for (0..peer.opened) |i| {
@@ -229,6 +233,17 @@ test "what the client got: one line, or its size, and a line a client when there
         \\peer 2: 0, 0 of 1 answers, 0 bytes, established
         \\
     , client(&peer, &buf));
+}
+
+test "a page past what the client keeps is said at the size it came, not what was kept (QUEUE 104)" {
+    var buf: [4096]u8 = undefined;
+    var peer = wire.Peer{};
+    const head = "HTTP/1.1 200 OK\r\n\r\n";
+    @memcpy(peer.tcp.reply[0..head.len], head);
+    @memset(peer.tcp.reply[head.len..], 'x');
+    peer.tcp.reply_len = peer.tcp.reply.len; // the first 64 KiB, kept
+    peer.tcp.received = head.len + 100_000; // a page of 100,000 bytes, all of it here
+    try testing.expectEqualStrings("peer: 200, 100000 bytes\n", client(&peer, &buf));
 }
 
 /// **WHICH LIES WERE TOLD** (`PEER_MANGLE`): each kind sent, and the

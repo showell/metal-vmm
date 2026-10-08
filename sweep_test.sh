@@ -29,6 +29,8 @@ printf 'pristine volume' > "$T/site.img"
 #   7       the guest writes a sound volume, and the page: ok
 #   8       a lossy wire, and the peer gives up: no page, allowed
 #   10      a page cut short, which the guest says its stop cut: allowed
+#   11      another status, whole, and the guest's stop cut a response too:
+#           FAIL (a stop cuts a page short; it does not change its status)
 #   9       a 200 whose page metal-vmm did not write (an answer kept only in
 #           part): FAIL, never a match of two empty pages
 # With FAKE_UNHURT_NO_PAGE set, the unhurt run's page is not written either.
@@ -55,6 +57,7 @@ case "$s" in
   7) printf 'sound, written' > "$img"; ev Sometimes "tcp: only seed 7" true true ;;
   8) page=""; status=0; echo "metal-vmm: the first client gave up: it sent the same thing too often, unanswered" >&2 ;;
   10) page="hel"; echo "  let go at the end: 1 response(s) cut by the stop, 2 bytes never acknowledged" ;;
+  11) page="oops"; status=500; echo "  let go at the end: 1 response(s) cut by the stop, 2 bytes never acknowledged" ;;
 esac
 if [ "$s" = 9 ] || { [ -z "$s" ] && [ -n "${FAKE_UNHURT_NO_PAGE:-}" ]; }; then
   echo "metal-vmm: the answer was 70000 bytes and the client keeps 65536; PEER_BODY and PEER_RESPONSE are not written" >&2
@@ -113,6 +116,9 @@ expect "seed 9" '^9 .*none .*FAIL: not the page (status 200)' "$nopage"
 # A page the guest says its stop cut differs as allowed.
 cut=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 10 10 2>&1)
 expect "seed 10" '^10 .*differs (allowed: the stop cut it)' "$cut"
+# The stop excuses a page cut short, not another status (QUEUE 103).
+other=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 11 11 2>&1)
+expect "seed 11" '^11 .*FAIL: not the page (status 500)' "$other"
 
 # An unhurt run with no page leaves nothing to judge: the sweep stops, 2.
 nothing=$(FAKE_UNHURT_NO_PAGE=1 VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 1 1 2>&1)

@@ -70,7 +70,13 @@ qemu_ms=$(( ($(date +%s%N) - began) / 1000000 ))
   # between the two hypervisors shows up before it shows up in the page.
   local a b
   a=$(grep -a '^  tcp:' "$WORK/ours.log"); b=$(grep -a '^  tcp:' "$WORK/qemu.log")
-  [ "$a" = "$b" ] || { failed=1; note="$note, A DIFFERENT CONNECTION"; }
+  # Two missing lines are not the same connection: either side without one
+  # is a failure of its own (metal-vmm QUEUE 104).
+  if [ -z "$a" ] || [ -z "$b" ]; then
+      failed=1; note="$note, NO CONNECTION LINE ($([ -z "$a" ] && echo here)$([ -z "$a" ] && [ -z "$b" ] && echo ' and ')$([ -z "$b" ] && echo 'under QEMU'))"
+  elif [ "$a" != "$b" ]; then
+      failed=1; note="$note, A DIFFERENT CONNECTION"
+  fi
   printf '  %-18s %-4s %7s bytes  %-22s %5s ms here, %5s under QEMU\n' \
       "$PATH_WANTED" "$status" "$bytes" "$note" "$ours_ms" "$qemu_ms"
 }
