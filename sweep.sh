@@ -114,7 +114,10 @@ read_back() {
 }
 kept() { grep -qF -- "$MARK" "$WORK/$1.read"; }
 
-status_of() { sed -n 's/^peer: \([0-9]*\).*/\1/p' "$WORK/$1.log" | head -1; }
+# The client's own line (`peer: 200 "..."` or `peer: 200, 13668 bytes`), not
+# the wire's account of the peer's frames (`peer: 51 frames sent, ...`),
+# which a run whose peer loses frames prints first.
+status_of() { sed -n -E 's/^peer: ([0-9]+)( "|, [0-9]+ bytes$).*/\1/p' "$WORK/$1.log" | head -1; }
 knobs_of() { sed -n 's/^metal-vmm: FAULT_SEED=[0-9]* is //p' "$WORK/$1.log" | head -1; }
 # The peer's own end, when it let the page go itself (REVIEW-peer.md S1).
 peer_end_of() { sed -n 's/^metal-vmm: the first client \(gave up\|vanished\).*/\1/p' "$WORK/$1.log" | head -1; }
