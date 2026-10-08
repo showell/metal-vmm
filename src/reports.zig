@@ -231,6 +231,17 @@ test "what the client got: one line, or its size, and a line a client when there
     , client(&peer, &buf));
 }
 
+test "a page past what the client keeps is said at the size it came, not what was kept (QUEUE 104)" {
+    var buf: [4096]u8 = undefined;
+    var peer = wire.Peer{};
+    const head = "HTTP/1.1 200 OK\r\n\r\n";
+    @memcpy(peer.tcp.reply[0..head.len], head);
+    @memset(peer.tcp.reply[head.len..], 'x');
+    peer.tcp.reply_len = peer.tcp.reply.len; // the first 64 KiB, kept
+    peer.tcp.received = head.len + 100_000; // a page of 100,000 bytes, all of it here
+    try testing.expectEqualStrings("peer: 200, 100000 bytes\n", client(&peer, &buf));
+}
+
 /// **WHICH LIES WERE TOLD** (`PEER_MANGLE`): each kind sent, and the
 /// guest's check it meets (mangle.zig).
 pub fn mangledKinds(line: *const faults.Wire, buf: []u8) []const u8 {
