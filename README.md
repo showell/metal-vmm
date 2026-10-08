@@ -277,6 +277,36 @@ power-cut knob, or stops making progress:
 The error stream then says what the run cost (exits and guest time), what
 each fault knob did, and the coverage line below.
 
+## What a run costs
+
+A run's wall time is about **its exits times 40 µs, plus what the guest
+computes**. The box this is developed on is itself a DigitalOcean VM, so every
+exit, and every page fault of the guest's, is a nested one. On 2026-10-08 one
+boot of gopher-metal's server (`TRANSPORT=pci`, a `VOLUME`, a 5 ms wire,
+`GET /`) went from 1.68 s to 0.22 s, its output byte-identical throughout:
+
+| change | exits | wall |
+|---|---|---|
+| before | 32,951 | 1.68 s |
+| the RTC's phase is chosen at the guest's first read (`clock.zig`, `lead_ns`) | 23,591 | 1.48 s |
+| gopher-metal's disk check reads the FAT 64 sectors a request | 7,975 | 1.20 s |
+| gopher-metal's serial sends 16-byte bursts (`rep outsb`) | 6,379 | ≈1.2 s |
+| **built ReleaseSafe by default** (it was Debug); the loader's scan is one pass | 6,379 | 0.61 s |
+| **the guest's memory asks for huge pages** (`madvise`): 26k faults to 900 | 6,379 | 0.22 s |
+
+**Find where the exits are before changing anything.** The cost line splits
+them by kind (port, clock, mmio, msr, halt). A clock exit carries the guest's
+`rip`, so counting them by address and feeding the busiest to
+`addr2line -i -f -C -e <kernel.elf>` names the loop that spends them; port
+exits counted by port name the device. That is how each row above was found.
+
+**Time is not fast-forwarded while the guest only waits.** It was weighed and
+refused: the guest's deadlines live in its registers, so a jump can carry it
+past one and change which branch it takes. A wait the guest spins through
+costs an exit a read, so the cure is in the guest: halt, as the PC-shaped
+machine's server does between frames, or do less waiting (the RTC's phase
+above made gopher-metal's one long boot wait 50 ms).
+
 ## QEMU is the oracle
 
 `./check.sh` runs the same guest on the same disk twice — once here, once under
