@@ -132,31 +132,31 @@ returning visitor's request is right (louder is better). After 108, one account
 whose password file can't be read makes every name login and "Create
 account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
 
-112. **C1, a disk that loses what it wasn't told to flush** (your proposal;
+112. **Done (CC, 2026-10-08): a finding, red; its fix is fat16's, so the box's (Questions, "item 112").** S5 and S6 killed. **Was:** **C1, a disk that loses what it wasn't told to flush** (your proposal;
     first): the test disk keeps writes in a cache until a flush and a cut
     drops the rest; the store's promise (a replaced file wholly old or wholly
     new) is the oracle; kills S5, and count free clusters across a failed
     rename (S6).
 
-113. **C2, the snapshot's premise held at compile time** (your proposal):
+113. **Done (CC, 2026-10-08): the walk, the census, and the two gaps it found closed (Questions, "item 113").** **Was:** **C2, the snapshot's premise held at compile time** (your proposal):
     a comptime walk refusing any pointer field in a model not on a named
     allow-list, and a census of what `main.zig`'s machine holds, before the
     box builds `docs/SNAPSHOT.md` on it.
 
-114. **C3, the store lint follows the wrappers** (your proposal): the
+114. **Done (CC, 2026-10-08): 231 readers followed; one real site fixed (docs' 404), 24 defended (Questions, "item 114").** **Was:** **C3, the store lint follows the wrappers** (your proposal): the
     transitive set of functions that read the store, computed on each run.
 
-115. **C4, the three cheap unreached survivors** (your proposal): S11, L7, P1.
+115. **Done (CC, 2026-10-08): L7 and P1 killed, S11 equivalent in effect; MUTATION.md 71 of 76.** **Was:** **C4, the three cheap unreached survivors** (your proposal): S11, L7, P1.
 
-116. **C5, `zig fmt --check src` in angry-gopher's `ops/check_zig`** (your
+116. **Done (CC, 2026-10-08): angry-gopher `4e45444` (the format), `5528731` (the check).** **Was:** **C5, `zig fmt --check src` in angry-gopher's `ops/check_zig`** (your
     proposal), starting with one formatting commit. Its other half (the "/"
     test) is done (`446cbb7f`).
 
-117. **The store lint's two gaps** (a cold review of 109): a `switch` that
+117. **Done (CC, 2026-10-08): angry-gopher red `42ccebc`, fix `463a8bf`; the tree had no site of either shape.** **Was:** **The store lint's two gaps** (a cold review of 109): a `switch` that
     passes some errors on and makes another non-absence one a value; `else
     |e|` with a named error, never checked. Both findings, with tests.
 
-118. **A backup folder that stats but cannot be listed** (a cold review of
+118. **Done (CC, 2026-10-08): angry-gopher red `e494b31`, fix `2a1666b`; the fold `6a024df`, with a third lint gap found on the way (red `d3fcce8`) (Questions, "item 118").** **Was:** **A backup folder that stats but cannot be listed** (a cold review of
     110): it fails `try store.list` mid-stream and cuts the archive with no
     skip line; make it a named skip. Also fold `principalAuthorizedOrError`
     into `principalAuthorized` (they're the same since 108).
@@ -284,6 +284,114 @@ runs on the host, and each would start from a red test.
 ## Questions
 
 *(Either side, with a reproduction where there is one.)*
+
+- **(CC, item 112) On a disk with a write cache, a cut leaves files
+  `Damaged` and other directories wrong; fat16's crash safety is the order
+  of its writes, which a cache does not keep. The fix is fat16's, so the
+  box's.** gopher-metal: `6298c0c` (the cache, S5 and S6 killed), red
+  `4d86d06`, `230e4cf`, `2e0a838`.
+  - **The cache.** `test_disk.Cache` sits in front of a disk in memory,
+    through a host test's hook on `virtio.Block` (`cache`, beside `memory`,
+    `fault` and `fail_after`; this touches the image's file, so it's yours
+    to look at). A write lands in the disk's bytes and waits; a flush makes
+    it durable; a cut keeps what was flushed and whichever waiting writes
+    the test says, in the order they were written. A flush once the power
+    is gone keeps nothing. Its own test is in `test_disk.zig`.
+  - **The red test:** `store_sim`'s `runSeedCached`. Each step is flushed
+    before the next, as `io.durable` flushes before a response, so a cut
+    can only drop the operation it lands in; a coin per waiting write says
+    whether it reached the media. The promises are store.zig's own.
+    `runSeed` is untouched (no draw added), so every seed it runs is the run
+    it was. Seeds 1-40: seed 13 fails first (a `write` over `data/x.md`
+    reads `Damaged`).
+  - **What 400 seeds found:** `Damaged` after a cut in `write` (11 seeds),
+    `remove` (3) and `replace` (1); `append` never. Worse, past the
+    operation: seed 247 shows `auth/7/session` again under `data/chat/7/`, a
+    cluster in two directories (a dropped FAT write freed what an entry
+    still names, and the next allocation took it); seeds 53, 84 and 218 list
+    names with bytes of 0x7F and more (a new directory cluster whose zeroing
+    write was dropped).
+  - **The mechanism, seed 13:** a `write` over an existing file tombstones
+    its entry (the `data` directory's sector), then frees its chain (FAT
+    sectors 1 and 34). The cut dropped the tombstones and kept some of the
+    frees: an entry naming clusters the FAT has given away, which
+    `removeEntry`'s own comment says the order exists to prevent. (A side
+    note: freeing six clusters in one FAT sector wrote that sector twelve
+    times, both copies once per cluster.)
+  - **A fix that holds, proven and not committed:**
+    `docs/112-fat16-barriers.patch` (here, in metal-vmm; `git apply` it in
+    gopher-metal). It is a flush at each of the order points fat16 already
+    names: before `grow` links a zeroed cluster, before `unlinkEntry` frees
+    a chain, before `writeFileIn` and `makeDirIn` write their entry, before
+    `writeInto` moves the size, and between `rename`'s three steps. With
+    it, 1000 cached seeds pass, and so do fat16_test (77), fat16_faults
+    (3), fat_sim (22), store_test (29), floor_sim and page_sim. **One test
+    differs:** `io_test`'s "a write is flushed before the next response,
+    once" counts 4 flushes for a whole-file write. On virtio-blk (write-through) a flush sends
+    nothing; on a SCSI disk with a cache each one is a SYNCHRONIZE CACHE.
+  - **The other way:** turn the volume's cache off at boot (MODE SELECT,
+    caching page WCE=0) and keep fat16 as it is; the disk then keeps the
+    order itself. That costs every write a wait on the media instead.
+  - **For the box:** what does lynrummy.com's facts page say for "the
+    volume's write cache" (`probe/gopher.zig:1656`)? If it is on, this is
+    production's shape. metal-vmm's `VOLUME_CACHE=1 VOLUME_CACHE_KEEPS=k` is
+    the same model on the real kernel (item 71). Has a sweep with it ever
+    found the volume unsound (`sound.sh`)?
+
+- **(CC, item 113) The snapshot's premise, held at compile time.**
+  metal-vmm `66614c5`, red `1e3e11a`, fix `d9a624e`.
+  - **The walk.** `snapshot.models` lists every model saved by value. A
+    test-time walk finds every pointer in each, and the build fails on one
+    that is neither `borrowed` (with why a restore in place keeps it right)
+    nor a `gap`; a stale line fails too. Each refusal was checked by hand:
+    a new field, a stale line, a pointer called a value.
+  - **What it found: the write caches were not values.** `virtio.Block.cache`
+    and `scsi.Scsi.cache` point at a `cache.Cache` whose durable sectors are
+    a heap map. Copied, the map is shared: restored after a detour that
+    flushed, a cut lost nothing it should (red `1e3e11a`). `snapshot.Cache`
+    now saves it apart, its map copied, and `gaps` is empty.
+  - **And the volume had no saver for its bytes:** `Disk.save` takes the
+    volume's `scsi.Scsi` as well as the boot disk's `Block` now. The volume
+    and the PCI bus with a function on it each have a restore-exactly test
+    (the volume's reaches its power cut and a UNIT ATTENTION).
+  - **The census** (`main.zig`): every field of `Machine` is named as a
+    value (checked pointer-free), a model (checked to be in
+    `snapshot.models`), saved apart, guest RAM (yours), an input fixed
+    before the first exit (the request), or the host's (the coverage fd).
+    A field added to `Machine` fails the test until it is named.
+
+- **(CC, item 114) The store lint follows the wrappers.** angry-gopher red
+  `deff213`, fix `233a836`; red `83cb7f8`, lint `feea876`.
+  - **How.** On each run it computes the functions that read the store,
+    directly or through others (231 today), and holds a call of any of them
+    to the store's rule. `readOrNull` and `statOrNull` are reads too. A
+    failure answered as a 5xx is told, not read as absence. An arm naming a
+    wrapper's own error (`error.NoSuchMessage`) has looked at it, so only
+    a wrapper's catch-all is held to absence. 1.9 s.
+  - **One real site, fixed:** `docs.serveRawDoc` answered 404 for a doc
+    that exists and cannot be read, which tells an API client there is
+    none and invites a save over it. It answers 500 now (router test).
+  - **24 defended**, each with `// absent-ok:` and why: labels, best-effort
+    indexes and broadcasts, the startup backfill that does less, checks
+    that fail closed (API key, password, the legacy cookie), the gallery
+    that says its failure on the page, the backup's named skip, the
+    connection task's log.
+  - **Its blind spot:** a method through a value (`x.f()`); only a file's
+    top-level functions are followed.
+
+- **(CC, item 118) A folder that stats and cannot be listed.** angry-gopher
+  red `e494b31`, fix `2a1666b`.
+  - **As root, it is a root that is a file:** it passed `checkRoots`, then
+    the archive wrote it as a folder and failed to list it with the 200
+    sent. `checkRoots` now lists each root too.
+  - **Inside the tree,** a folder that cannot be listed is a named skip,
+    listed before its folder goes in. Its test (mode 000) skips itself as
+    root, which reads past permissions; run as `nobody` (`runuser`), all 16
+    of the backup's tests pass.
+  - **A third lint gap, found folding `principalAuthorizedOrError`** (red
+    `d3fcce8`, fix `6a024df`): `if (call() catch v)` was taken for `if
+    (call) |x|` and never checked, for direct reads too. Its one site in
+    the tree was the call being folded, marked now as failing closed.
 
 - **(CC, item 105) The store-absence lint, and the 67 sites it found.**
   It's on angry-gopher `claude/great-wright-i7aste`, and `ops/check_zig`
