@@ -33,6 +33,8 @@ printf 'pristine volume' > "$T/site.img"
 #           FAIL (a stop cuts a page short; it does not change its status)
 #   12      a disk refusal answered with another status (404): FAIL
 #   13      a reset answered with another page under the same status: FAIL
+#   16      a reset before the request was whole, then an idle end (exit 1): allowed
+#   17      an idle end (exit 1) with no client that left: FAIL
 #   14      a disk refusal answered 500: allowed (the server says it failed)
 #   15      a peer's reset answered 500: FAIL (only a disk fault excuses a 5xx)
 #   9       a 200 whose page metal-vmm did not write (an answer kept only in
@@ -45,7 +47,7 @@ s="${FAULT_SEED:-}"
 L='"location":{"class":"tcp","function":"f","file":"tcp.zig","begin_line":1,"begin_column":1}'
 ev() { echo "{\"antithesis_assert\":{\"hit\":$3,\"must_hit\":true,\"assert_type\":\"x\",\"display_type\":\"$1\",\"message\":\"$2\",\"condition\":$4,\"id\":\"$2\",$L}}" >> "$COVERAGE_OUT"; }
 knobs="none"
-case "$s" in 3) knobs="PEER_RESET_AT=500" ;; 12) knobs="DISK_REFUSE=4" ;; 13) knobs="PEER_RESET_AT=500" ;; 14) knobs="DISK_REFUSE=4" ;; 15) knobs="PEER_RESET_AT=500" ;; 4) knobs="DISK_WRITES_ONLY=1" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
+case "$s" in 16) knobs="PEER_RESET_AT=500" ;; 17) knobs="WIRE_EAT=17" ;; 3) knobs="PEER_RESET_AT=500" ;; 12) knobs="DISK_REFUSE=4" ;; 13) knobs="PEER_RESET_AT=500" ;; 14) knobs="DISK_REFUSE=4" ;; 15) knobs="PEER_RESET_AT=500" ;; 4) knobs="DISK_WRITES_ONLY=1" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
 [ -n "$s" ] && echo "metal-vmm: FAULT_SEED=$s is $knobs" >&2
 echo "{\"metal_vmm_run\":{\"seed\":${s:-null},\"knobs\":\"$knobs\"}}" >> "$COVERAGE_OUT"
 echo '{"antithesis_sdk":{"language":{"name":"Zig","version":"0.16.0"},"sdk_version":"0.0.1","protocol_version":"1.1.0"}}' >> "$COVERAGE_OUT"
@@ -63,6 +65,7 @@ case "$s" in
   10) page="hel"; echo "  let go at the end: 1 response(s) cut by the stop, 2 bytes never acknowledged" ;;
   12) page="not found"; status=404 ;;
   13) page="jello" ;;
+  16 | 17) page=""; status=0; code=1; echo "error: GuestIdle" >&2 ;;
   14) page="Home unavailable"; status=500 ;;
   15) page="Home unavailable"; status=500 ;;
   11) page="oops"; status=500; echo "  let go at the end: 1 response(s) cut by the stop, 2 bytes never acknowledged" ;;
@@ -139,6 +142,9 @@ expect "seed 11" '^11 .*FAIL: not the page (status 500)' "$other"
 other=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 12 13 2>&1)
 expect "seed 12" '^12 .*FAIL: not the page (status 404)' "$other"
 expect "seed 13" '^13 .*FAIL: not the page (status 200)' "$other"
+idle=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 16 17 2>&1)
+expect "seed 16" '^16 .*differs (allowed: an idle end after the client left' "$idle"
+expect "seed 17" '^17 .*FAIL: exit 1 (unhurt: 0)' "$idle"
 five=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 14 15 2>&1)
 expect "seed 14" '^14 .*differs (allowed: DISK_REFUSE (a 500))' "$five"
 expect "seed 15" '^15 .*FAIL: not the page (status 500)' "$five"

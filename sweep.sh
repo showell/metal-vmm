@@ -149,7 +149,19 @@ verdict() {
   status=$(status_of "$name")
   knobs=$(knobs_of "$name")
   broken=$(broken_of "$name")
-  [ "$exit" = "$(cat "$WORK/unhurt.exit")" ] || why="$why, exit $exit (unhurt: $(cat "$WORK/unhurt.exit"))"
+  if [ "$exit" != "$(cat "$WORK/unhurt.exit")" ]; then
+    # **A CLIENT THAT LEFT BEFORE ITS REQUEST WAS WHOLE IS OWED NOTHING**, and
+    # a machine told to serve one request waits for it, idle, until metal-vmm
+    # ends the run (exit 1, GuestIdle): long.sh's rough peers allow the same.
+    # Only then, and only with no answer given; any other exit fails.
+    if [ "$exit" = 1 ] && grep -q '^error: GuestIdle$' "$WORK/$name.err" &&
+      { [ -z "$status" ] || [ "$status" = 0 ]; } &&
+      { case " $knobs" in *" PEER_RESET_AT="* | *" PEER_VANISH_AFTER="*) true ;; *) [ -n "$(peer_end_of "$name")" ] ;; esac; }; then
+      excuse="$excuse${excuse:+, }an idle end after the client left"
+    else
+      why="$why, exit $exit (unhurt: $(cat "$WORK/unhurt.exit"))"
+    fi
+  fi
   [ "${broken:-0}" = 0 ] || why="$why, $broken coverage properties broken"
   if changed "$WORK/$name.img" && ! cmp -s "$WORK/$name.img" "$SITE"; then
     "$SOUND" "$WORK/$name.img" > "$WORK/$name.sound" 2>&1 || why="$why, the volume is not sound"
