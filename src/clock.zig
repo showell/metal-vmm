@@ -227,6 +227,20 @@ pub const Rtc = struct {
     /// **A CHIP FOREVER MID-UPDATE** (`RTC_STUCK=1`): status A always says an
     /// update is in progress, so a guest that waits it out must give up.
     stuck: bool = false,
+    /// **WHERE IN ITS SECOND THE CHIP IS** is chosen at the guest's first
+    /// read, which is the first moment anything can see it: its next second
+    /// begins `lead_ns` later, and every one after a second apart. A real
+    /// chip's phase has nothing to do with when its machine booted, so this
+    /// is as faithful as any; and a guest that waits for the next edge to set
+    /// its clock (gopher-metal's `wallclock.start`) waits `lead_ns`, not
+    /// whatever was left of a second fixed at power-on, which cost a boot up
+    /// to ten thousand exits. Long enough that a whole read of the date (about
+    /// 40 exits, 4 ms) is over before the edge. Null: seconds begin at whole
+    /// seconds of the machine's time, from power-on.
+    lead_ns: ?u64 = 50 * std.time.ns_per_ms,
+    /// Added to the machine's time before it is turned into seconds; set at
+    /// the first read.
+    shift_ns: ?u64 = null,
 
     /// Port 0x70. Bit 7 is the NMI mask, which belongs to the chipset and not
     /// to the register number.
@@ -241,12 +255,16 @@ pub const Rtc = struct {
         if (self.index == reg_status_b) self.status_b = value;
     }
 
-    pub fn read(self: *const Rtc, ns: u64) u8 {
+    pub fn read(self: *Rtc, ns: u64) u8 {
         if (self.absent) return 0xFF;
         if (self.stuck and self.index == reg_status_a) return status_a | 0x80;
         const binary = self.status_b & binary_mode != 0;
         const hour24 = self.status_b & hour24_mode != 0;
-        const now = self.from + @as(i64, @intCast(ns / std.time.ns_per_s));
+        if (self.shift_ns == null) {
+            const s = std.time.ns_per_s;
+            self.shift_ns = if (self.lead_ns) |lead| (s - (ns + lead) % s) % s else 0;
+        }
+        const now = self.from + @as(i64, @intCast((ns + self.shift_ns.?) / std.time.ns_per_s));
         const c = civilFromUnix(now);
         return switch (self.index) {
             reg_seconds => encode(c.second, binary),
@@ -455,4 +473,25 @@ test "PIT_FROZEN: the count never moves; RTC_ABSENT: every register reads 0xFF; 
     try testing.expect(stuck.read(0) & 0x80 != 0);
     stuck.select(0x00);
     try testing.expect(stuck.read(0) != 0xFF);
+}
+
+test "the chip's phase is chosen at the first read: its next second begins lead_ns later, then every second" {
+    const s = std.time.ns_per_s;
+    const ms = std.time.ns_per_ms;
+    var rtc = Rtc{ .from = 0, .status_b = 0x02 | 0x04 }; // binary, 24-hour
+    rtc.select(0x00); // seconds
+    const first: u64 = 3 * s + 237 * ms; // anywhere in a second
+    const at_first = rtc.read(first);
+    try std.testing.expectEqual(at_first, rtc.read(first + 50 * ms - 1));
+    try std.testing.expectEqual((at_first + 1) % 60, rtc.read(first + 50 * ms));
+    try std.testing.expectEqual((at_first + 1) % 60, rtc.read(first + 50 * ms + s - 1));
+    try std.testing.expectEqual((at_first + 2) % 60, rtc.read(first + 50 * ms + s));
+}
+
+test "with no lead the seconds begin at whole seconds of the machine's time, as before" {
+    const s = std.time.ns_per_s;
+    var rtc = Rtc{ .from = 0, .status_b = 0x02 | 0x04, .lead_ns = null };
+    rtc.select(0x00);
+    try std.testing.expectEqual(@as(u8, 3), rtc.read(3 * s + 999_999_999));
+    try std.testing.expectEqual(@as(u8, 4), rtc.read(4 * s));
 }
