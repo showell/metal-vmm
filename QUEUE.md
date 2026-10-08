@@ -109,14 +109,9 @@ Each line's full text, with its history, is in the archive under its name.
   volume under long.sh's lossy sweep, or a seeded sweep with `VOLUME_SITE`,
   in the release gates. The durable sweep (item 70) has never run with the
   real kernel: it would have crashed here.
-- **B25 (Steve's call): one refused read at boot stops the machine**
-  (`FAULT_SEED=11`, `19`: a refused read of the partition or the FAT ends
-  the boot). Retry a failed read at boot a few times, or keep failing fast?
-- **B26 (Steve's call): a silently rotted FAT sector is copied over the
-  good mirror at mount** (`FAULT_SEED=33`, `DISK_ROT=2568,268`): the first
-  copy is taken as the truth, as fsck does, so the second FAT gets the bad
-  bit, and the disk check then counts problems. Choose the copy whose disk
-  check is clean, or keep the rule?
+- **B25, done (gopher-metal c7539eb):** boot tries a read three times;
+  serving, once. **B26, done (d7a5903):** FAT copies apart, the cleaner is
+  the FAT, the first on a tie. Seeds 1-50 with a volume: 0 failed.
 - **B27. A judge case for a topic's download** with a long topic name, on
   Linux and on metal (angry-gopher 9e8e615d fixed its names; nothing
   fetches that route today).
