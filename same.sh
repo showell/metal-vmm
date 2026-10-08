@@ -37,7 +37,9 @@ for one in $CASES; do
     probe="$one"
     image="$WORK/fat16.blank"
     elf="$GUESTS/$probe.elf"
-    [ -f "$elf" ] || { echo "SKIP $probe (no $elf)"; continue; }
+    # A probe that is not there is a failure, not a skip: a wrong GUESTS or
+    # a probe dropped from gopher-metal's build would otherwise pass unseen.
+    [ -f "$elf" ] || { echo "FAIL $probe: no $elf (in gopher-metal: zig build kernels)"; failed=1; continue; }
     fetch=""
     case "$probe" in http|stdhttp) fetch="/probe" ;; esac
 

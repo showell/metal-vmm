@@ -64,7 +64,9 @@ for one in $CASES; do
         name="$probe/fat32"
     fi
     elf="$GUESTS/$probe.elf"
-    [ -f "$elf" ] || { echo "SKIP $probe (no $elf)"; continue; }
+    # A probe that is not there is a failure, not a skip: a wrong GUESTS or
+    # a probe dropped from gopher-metal's build would otherwise pass unseen.
+    [ -f "$elf" ] || { echo "FAIL $probe: no $elf (in gopher-metal: zig build kernels)"; failed=1; continue; }
 
     # **THE HTTP PROBES NEED A CLIENT.** Ours is the peer inside the program;
     # QEMU's is curl through a forwarded port. Both fetch the same path, and
