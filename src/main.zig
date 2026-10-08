@@ -909,6 +909,11 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     };
 
     const ram = try posix.mmap(null, ram_bytes, .{ .READ = true, .WRITE = true }, .{ .TYPE = .PRIVATE, .ANONYMOUS = true }, -1, 0);
+    // **HUGE PAGES FOR THE GUEST'S MEMORY, IF THE HOST GIVES THEM** (its
+    // transparent huge pages are "madvise" here): the guest's first touch of
+    // each 4 KiB page was a fault of the host's, about 26,000 a boot. A
+    // speed-up only: refused, it is the run it was.
+    _ = linux.madvise(ram.ptr, ram.len, linux.MADV.HUGEPAGE);
     var region = kvm.MemoryRegion{
         .slot = 0,
         .guest_phys_addr = 0,
