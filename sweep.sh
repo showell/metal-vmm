@@ -157,19 +157,39 @@ verdict() {
     return
   fi
   if [ "$status" != "$(status_of unhurt)" ] || ! cmp -s "$WORK/$name.body" "$WORK/unhurt.body"; then
-    for k in PEER_RESET_AT PEER_VANISH_AFTER DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DISK_ROT VOLUME_CUT_AFTER; do
-      case " $knobs" in *" $k="*) excuse="$excuse${excuse:+, }$k" ;; esac
-    done
-    local gone
-    gone=$(peer_end_of "$name")
-    [ -z "$gone" ] || excuse="$excuse${excuse:+, }the peer $gone"
-    # The guest's own word that its stop cut a response: a run with a request
-    # limit (the site volume serves one) ends 2 s after it, wherever the
-    # client is; a machine with no limit never stops. It excuses a page cut
-    # short, or no answer at all, never another status.
-    if { [ -z "$status" ] || [ "$status" = "$(status_of unhurt)" ]; } &&
-      grep -q '^  let go at the end: .* cut by the stop' "$WORK/$name.log"; then
-      excuse="$excuse${excuse:+, }the stop cut it"
+    # **A FAULT EXCUSES LESS OF THE PAGE, NEVER ANOTHER ONE** (Steve,
+    # 2026-10-08): no answer at all, or the unhurt run's status with its
+    # page cut short. Another status (a 404, a 200 where it was a 303) or
+    # another page under the same status is a failure, whatever was turned;
+    # the one other status excused is a 5xx after a disk fault, below.
+    local less=no
+    if [ -z "$status" ] || [ "$status" = 0 ]; then less=yes
+    elif [ "$status" = "$(status_of unhurt)" ] && [ -f "$WORK/$name.body" ] && [ -f "$WORK/unhurt.body" ]; then
+      local got want
+      got=$(wc -c < "$WORK/$name.body")
+      want=$(wc -c < "$WORK/unhurt.body")
+      [ "$got" -lt "$want" ] && cmp -s -n "$got" "$WORK/$name.body" "$WORK/unhurt.body" && less=yes
+    fi
+    # **A SERVER THAT SAYS IT FAILED, WHEN ITS DISK DID**: a 5xx is excused
+    # by a fault on the disk or the volume, and by nothing else.
+    case "$status" in 5??)
+      for k in DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DISK_ROT DISK_BAD_SECTOR VOLUME_CUT_AFTER VOLUME_SHORT_AT VOLUME_GONE_AT VOLUME_READ_ONLY_AT; do
+        case " $knobs" in *" $k="*) excuse="$excuse${excuse:+, }$k (a $status)" ;; esac
+      done ;;
+    esac
+    if [ $less = yes ]; then
+      for k in PEER_RESET_AT PEER_VANISH_AFTER DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DISK_ROT VOLUME_CUT_AFTER; do
+        case " $knobs" in *" $k="*) excuse="$excuse${excuse:+, }$k" ;; esac
+      done
+      local gone
+      gone=$(peer_end_of "$name")
+      [ -z "$gone" ] || excuse="$excuse${excuse:+, }the peer $gone"
+      # The guest's own word that its stop cut a response: a run with a
+      # request limit (the site volume serves one) ends 2 s after it,
+      # wherever the client is; a machine with no limit never stops.
+      if grep -q '^  let go at the end: .* cut by the stop' "$WORK/$name.log"; then
+        excuse="$excuse${excuse:+, }the stop cut it"
+      fi
     fi
     [ -n "$excuse" ] || why="$why, not the page (status ${status:-none})"
   fi
