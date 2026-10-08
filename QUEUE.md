@@ -135,7 +135,8 @@ returning visitor's request is right (louder is better).
     the third bullet of the old 99 asked (`request.zig`, every handler behind
     it, `lint_portable.py`'s two rules, anything reaching past the door).
 
-101. **Your proposals** when 106 and 108-111 are done.
+101. **Done (CC, 2026-10-08): C1-C5 under Proposed.** **Was:** your
+     proposals when 106 and 108-111 are done.
 
 (98 is done and merged. 102 needs KVM: it moves to the box's list.)
 
@@ -199,6 +200,55 @@ Each line's full text, with its history, is in the archive under its name.
 
 *(The cloud session adds items here, one line each on why. Earlier
 proposals, taken or not, are in the archive.)*
+
+From item 101: the next five, most finding first (CC, 2026-10-08). Each one
+runs on the host, and each would start from a red test.
+
+- **C1. A disk that loses what it wasn't told to flush** (gopher-metal,
+  `store_sim`, mine). The test disk keeps writes in a cache until a flush,
+  and a cut drops what is still cached. The oracle is the store's promise:
+  after a cut, a replaced file is wholly old or wholly new. Today no disk
+  in any test loses an unflushed write, so `store_fat.replace` passes with
+  its flush deleted (mutant S5, reached by 18 runs and never checked). This
+  is the host half of HOST.md's owed "durability", and the likeliest of the
+  five to find a real bug. In the same tier, also count free clusters
+  before and after a `replace` whose rename fails; a leaked temp file is
+  mutant S6.
+- **C2. Hold the snapshot's premise, not only its examples** (metal-vmm
+  `snapshot.zig`, mine). "A model's snapshot is its value" holds only while
+  no model keeps a slice, a pointer to its own storage, or anything an
+  allocator owns. A comptime walk over every model type can refuse any
+  pointer field that isn't on a named allow-list (`Device`→device,
+  `Function`→APIC, `Block`'s image). Then a model added next month that
+  breaks the premise fails to compile, instead of a restored run quietly
+  diverging. Add a census too: every piece of state `main.zig`'s machine
+  holds is either in `snapshot.zig` or is named as the box's half.
+  Adversarial and cheap, before the box builds a sweep on it.
+- **C3. The store lint follows the wrappers** (angry-gopher, mine). Item
+  108's survey found 234 functions that read the store, directly or
+  through others, and 25 calls to them whose error is caught into a value.
+  `lint_store_absence.py` would apply its catch rule to calls of that
+  transitive set, computed from the source on each run, so a new wrapper
+  is covered without anyone listing it. I expect about 25 findings, most
+  of them needing an `// absent-ok:` line. The point is the next
+  `isMember`, which was a wrapper the lint couldn't see.
+- **C4. The three cheap unreached survivors** (gopher-metal, mine), each
+  one test, as `MUTATION.md` already says:
+  - S11: `store_test` writes `a/b` where `a` is a file, and expects
+    `BadName`.
+  - L7: `floor_sim`'s `redactSeed` is given a quoted value ended by
+    `\r\n`, and the `\r` must come out.
+  - P1: `page_sim` gets a single path part of exactly `max_key + 1` bytes.
+    The mutant writes out of bounds there.
+- **C5. angry-gopher's hygiene, two small ones** (mine to propose, yours to
+  take or not).
+  - `ops/check_zig` gains `zig fmt --check src`, as gopher-metal's tests
+    have. 8 files fail it on master today, so it starts with one
+    formatting commit.
+  - The router's "/" test reads `pages/home.txt`, which lives at the repo
+    root, outside `zig-server/`. Here, under `ops/check_zig`, it gets 500
+    and fails. A test that depends on the directory it runs from should
+    supply its own page.
 
 ## Questions
 

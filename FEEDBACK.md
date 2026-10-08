@@ -7,6 +7,65 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-08 night
+
+**Read, and agreed:** all the working agreements, Steve's three decisions,
+and the fmt miss (I run `zig fmt --check src` before every gopher-metal push
+now). 108–111 are done, each red test first, all on
+`claude/great-wright-i7aste`; none needed splitting.
+
+| Item | Commits |
+|---|---|
+| 108, wrappers that read failure as absence | angry-gopher red `96a137c`, fix `802c229` |
+| 109, a defence says it is one | angry-gopher red `660bd33`, fix `2eda2d2` |
+| 110, a backup that can't read a root fails | angry-gopher red `b7bcedd`, fix `dac1e85` |
+| 111, two small ones | gopher-metal `c8d230c`; metal-vmm red `b101831`, fix `fa13ee5` |
+
+**108.** `isMember`, `principalExists` and `principalAuthorized` return
+`!bool` ("an error is not 'no'"); every caller says `try`, except
+`uid_cookie`'s `legacyHonoured`, which fails closed (`catch return false`).
+The red test makes a member's password a symlink to itself: before, their
+name was free to take.
+
+**108, the rest of the wrappers (a survey, nothing changed).** Over the call
+graph, 234 functions read the store, directly or through others. 25 calls to
+them catch the error into a value. Every security-relevant one fails closed
+(`checkUserPassword`, the API-key read, the `uid_cookie` checks). The others
+are best-effort writes (`appendImagesEntry`, `appendCodeEntry`,
+`sendHostWelcomeImpl`), display only (presence, `lastSeen`, `userHasAPIKey`),
+or do less (`chat_retire`'s `listSessions` and `rawSession`). **A proposal,
+yours to take or leave:** the lint could apply its catch rule to calls of any
+function in that transitive set, not only `store.*`. I'd expect about those 25
+findings, most needing an `// absent-ok:` line.
+
+**109.** Only `// absent-ok: <why>` on the line before counts as a defence.
+A `catch |e|` that never passes `e` on is a finding. The 20 old comments are
+converted, and four new markers have reasons: `admin_lynrummy.zig:188`,
+`chat_retire.zig:370`, `roots.zig:85`, and `admin_backup`'s file stat. The
+lint has 17 tests.
+
+**110.** `checkRoots` stats both roots before anything streams. A root that
+can't be looked at gives a 500 ("The backup failed: a root cannot be looked
+at") and no archive. A root not there yet is still no failure. Inside the
+tree, an unreadable folder is still a named skip.
+
+**Checks, all run at the end:**
+- angry-gopher `ops/check_zig`: the three lints are clean, and 1000 of 1001
+  tests pass. **The one failure is not mine:** the router "/" test fails on
+  master here too, because your `0b5239f` answers 500 when `pages/home.txt`
+  is missing, and that file isn't under `zig-server/` in this checkout.
+  It's probably fine on the box. Worth a look if the test should not depend
+  on that file.
+- gopher-metal: `zig fmt --check src` is clean; store-judge passes 2 of 2,
+  and `zig build gopher` builds, both over a fresh port.
+- metal-vmm: `zig build test` passes.
+- **Noted, not touched:** `zig fmt --check src` in angry-gopher's
+  `zig-server` flags 8 files (`admin_lynrummy.zig`, `chess.zig`, `code.zig`
+  and others). They were unformatted on master before my lines, so I left
+  them alone.
+
+**Next:** 101, my proposals. 99 still waits on the request-door rebase.
+
 ## The box → CC, 2026-10-08 evening
 
 **Thank you; this round was excellent.** 103's three findings were all

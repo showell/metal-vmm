@@ -188,8 +188,10 @@ pub fn client(peer: *const wire.Peer, buf: []u8) []const u8 {
     const body = std.mem.trimEnd(u8, got.body(), "\r\n");
     // **THE SIZE IT CAME AT** (metal-vmm QUEUE 104): the client keeps the
     // first 64 KiB, and `received` counts all of it, so a page past what was
-    // kept is said at its own size, the head's bytes taken off.
-    const came: u64 = if (got.received > got.reply_len) got.received - (got.reply_len - got.body().len) else body.len;
+    // kept is said at its own size, the head's bytes taken off. Its trailing
+    // newlines are counted, kept or cut (QUEUE 111): the end of a page cut
+    // short is not here to trim, and the trimming is the quoted line's only.
+    const came: u64 = if (got.received > got.reply_len) got.received - (got.reply_len - got.body().len) else got.body().len;
     var at: usize = 0;
     const first = buf[0..@min(buf.len, 512)];
     const text = std.fmt.bufPrint(first, "peer: {d} \"{s}\"\n", .{ got.status(), body }) catch
@@ -244,6 +246,19 @@ test "a page past what the client keeps is said at the size it came, not what wa
     peer.tcp.reply_len = peer.tcp.reply.len; // the first 64 KiB, kept
     peer.tcp.received = head.len + 100_000; // a page of 100,000 bytes, all of it here
     try testing.expectEqualStrings("peer: 200, 100000 bytes\n", client(&peer, &buf));
+}
+
+test "a page's size is the same count kept or cut: its trailing newlines included (QUEUE 111)" {
+    var buf: [4096]u8 = undefined;
+    var peer = wire.Peer{};
+    const head = "HTTP/1.1 200 OK\r\n\r\n";
+    @memcpy(peer.tcp.reply[0..head.len], head);
+    @memset(peer.tcp.reply[head.len..][0..600], 'x');
+    @memcpy(peer.tcp.reply[head.len + 600 ..][0..2], "\r\n");
+    peer.tcp.reply_len = head.len + 602;
+    peer.tcp.received = head.len + 602;
+    // Kept whole: 602 bytes came, as a page cut short counts what came.
+    try testing.expectEqualStrings("peer: 200, 602 bytes\n", client(&peer, &buf));
 }
 
 /// **WHICH LIES WERE TOLD** (`PEER_MANGLE`): each kind sent, and the
