@@ -12,14 +12,17 @@ charter is [`CLOUD_WORK.md`](CLOUD_WORK.md).
 metal-vmm runs gopher-metal's real kernel deterministically (both machines:
 microvm-shaped and `TRANSPORT=pci`); the scenarios that cover what the site
 meets go here, not to QEMU, which stays on the happy path (Steve). The seed
-explorer (zig-coverage-sdk `explore.zig`) steers the simulators.
+explorer (zig-coverage-sdk `explore.zig`) steered the simulators, which proved wide and shallow; its next subject is
+the real kernel, through metal-vmm's fault decisions (`docs/SNAPSHOT.md`).
 
-## Now (2026-10-07, evening)
+## Now (2026-10-08, evening)
 
-**Everything finished is merged, on `master` (`main` for the SDK), and
-green.** v20 is planned for 2026-10-08: its contents are in gopher-metal's
-README, "Open". **The cloud session is paused** (Steve: a stable point
-first); its open items below wait until the box says they resume.
+**v20 serves** (gopher-metal `a26f85d`, angry-gopher `8b617f3c`). CC's
+103-107 are merged; 108-111 are done on CC's branch, waiting for the box's
+review and merge. The box is on metal-vmm's speed (done: a boot 7.6× faster,
+a 100-seed sweep 9×), the nightly sweep (`nightly.sh`), and next the
+whole-machine snapshot (`docs/SNAPSHOT.md`). The conversation between the two
+Claudes is `FEEDBACK.md`.
 
 ## CC: open
 

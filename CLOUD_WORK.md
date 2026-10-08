@@ -9,12 +9,12 @@ on until 2026-10-04 (its `CLOUD.md`, retired, is in gopher-metal's
 
 metal-vmm is our own deterministic hypervisor: gopher-metal's kernels run on
 it, and the same guest with the same seed gives the same run, byte for byte.
-Steve's long-term aim is an explorer like Antithesis's: a machine that keeps
-choosing faults and inputs, steered toward runs that reach properties no run
-has reached yet (zig-coverage-sdk's `sometimes`). That is not the work yet.
-The work now is making the machine more faithful, and better tested, without
-giving up determinism. The README's "Interrupts, at a halt" says where it
-stands; read it, and `src/pci.zig` and `src/apic.zig`, before anything else.
+Steve's aim is an explorer like Antithesis's steering the REAL kernel: metal-vmm
+taking its fault decisions from a tape, so the seed explorer can return to a
+run's interesting moment and change one decision ("convergence", 2026-10-08).
+Its first step, a whole-machine snapshot, is the box's (`docs/SNAPSHOT.md`:
+it needs KVM). Meanwhile every run must be cheap (README, "What a run
+costs") and judged exactly (essay notes/faults-and-excuses.md).
 
 ## Who does what
 
@@ -22,13 +22,18 @@ stands; read it, and `src/pci.zig` and `src/apic.zig`, before anything else.
   the default channel is git.
 - **The box Claude** works on Steve's development droplet, which has KVM and
   QEMU. It runs the guests: `check.sh`, `same.sh`, `site.sh`, `rest.sh`,
-  `lossy.sh` and the rest. It merges your branch into `master` once the
-  unit tests pass and runs the guests alongside: they catch edge cases, which
-  come back to you as new items. It owns gopher-metal, the guest side of
-  every contract here.
-- **You (CC)**: logic, tests that run on ordinary Linux, adversarial reading,
-  and design. You have no `/dev/kvm`, so no guest ever boots in your
-  container. Do not try to get one.
+  `sweep.sh`, `nightly.sh` and the rest. It merges your branch into `master`
+  after a cold review and the unit tests, and runs the guests alongside: they
+  catch edge cases, which come back to you as new items. It owns gopher-metal,
+  the guest side of every contract here, and the releases.
+- **You (CC)**: build what needs no emulator, and anything adversarial
+  (Steve, 2026-10-08): logic, tests that run on ordinary Linux, attacking
+  what the box changed, design. You have no `/dev/kvm`, so no guest ever
+  boots in your container. Do not try to get one.
+- **Talk in `FEEDBACK.md`** (this repo, newest entry first, signed). Say
+  there when a task should have been split, when a check is too slow to run,
+  when you disagree with an item, or when you are stuck (one line, then
+  stop: Steve wakes whichever of us is needed).
 
 **Run unattended for as long as the queue gives you work.** When something
 is the box Claude's or Steve's to do, write it under "Questions" in
@@ -87,8 +92,8 @@ box's scripts check, ask how to check it here:
 
 - **Push to the branch your session is given** (see "The branches"). Never
   to `master` or `main`, which are the box's.
-- **Rebase on `origin/master` before every push.** The box merges your
-  branch, so a stale base costs it a conflict.
+- **Merge `master` into your branch; never rebase** (agreed 2026-10-08): a
+  rebase rewrites hashes already cited in `QUEUE.md`.
 - **One topic per commit.** Its message says what changed and why, what you
   verified (`zig build test`, `zig fmt --check src`), and what you could not
   (anything needing a guest).
@@ -96,9 +101,9 @@ box's scripts check, ask how to check it here:
   - Mark an item yours in your branch when you start it.
   - Mark it done in the commit that finishes it.
   - Add items you discover under "Proposed", with a line each on why.
-- **The box answers on `master`:** in `QUEUE.md` under "Answers", in a
-  `docs/reviews/REVIEW-*.md` file, or in the merge itself. Fetch it to see
-  them.
+- **The box answers on `master`:** in `FEEDBACK.md`, in `QUEUE.md` under
+  "Answers", in a `docs/reviews/REVIEW-*.md` file, or in the merge itself.
+  Fetch it to see them.
 
 ## The branches, all of them
 
@@ -112,10 +117,11 @@ Questions before building on it.
 | metal-vmm | `master` | the box | the base: you branch from it, the box merges into it |
 | gopher-metal | `master` | the box | the base: you branch from it, the box merges into it |
 | zig-coverage-sdk | `main` | the box | the base: you branch from it, the box merges into it |
-| each of them | `claude/<your session's name>` | you | your work, rebased on that repo's base |
+| angry-gopher | `master` | the box | the base (and `box/request-door`, the box's, held for v21) |
+| each of them | `claude/<your session's name>` | you | your work, with that repo's base merged in |
 
 **What serves lynrummy.com is a tag, not a branch**: gopher-metal's `vN`
-(today `v18`), and its README's "Serving" line says which. `master` may be
+(today `v20`), and its README's "Serving" line says which. `master` may be
 ahead of it. `interrupts` and `antithesis-sdk` are retired: both are merged
 into `master`; don't branch from them.
 
