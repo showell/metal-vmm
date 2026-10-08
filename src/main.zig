@@ -470,6 +470,55 @@ pub const Machine = struct {
     }
 };
 
+/// **WHAT THE MACHINE HOLDS, FOR A SNAPSHOT** (metal-vmm QUEUE 113): every
+/// field of `Machine`, and how a whole-machine snapshot (docs/SNAPSHOT.md)
+/// gets it back. A field added to `Machine` fails the test below until it
+/// is named here, so the snapshot cannot quietly miss it.
+const Holds = enum {
+    /// Saved with the machine by copy: no pointer in it (the test checks).
+    value,
+    /// A pointer at a model `snapshot.zig` saves in place (the test checks
+    /// the model is in `snapshot.models`).
+    model,
+    /// A pointer at state no snapshot saves yet: `snapshot.gaps`.
+    gap,
+    /// Guest memory: the box's half (docs/SNAPSHOT.md, "Guest RAM").
+    box,
+    /// Fixed before the run's first exit, and never written after.
+    input,
+    /// The host's, not the machine's: the same across a restore.
+    host,
+};
+
+const census = .{
+    .{ "stopped", Holds.value },     .{ "devices", Holds.model },
+    .{ "ram", Holds.box },           .{ "line_control", Holds.value },
+    .{ "time", Holds.value },        .{ "pit", Holds.value },
+    .{ "rtc", Holds.value },         .{ "said", Holds.value },
+    .{ "said_len", Holds.value },    .{ "request", Holds.input },
+    .{ "asked", Holds.value },       .{ "card", Holds.model },
+    .{ "card_device", Holds.model }, .{ "bus", Holds.model },
+    .{ "lapic", Holds.value },       .{ "halts", Holds.value },
+    .{ "halted_ns", Holds.value },   .{ "msrs", Holds.value },
+    .{ "exits", Holds.value },       .{ "cost", Holds.value },
+    .{ "drive", Holds.model },       .{ "write_cache", Holds.gap },
+    .{ "cut_at_exit", Holds.value }, .{ "volume", Holds.model },
+    .{ "serial", Holds.value },      .{ "coverage_fd", Holds.host },
+    .{ "rewritten", Holds.value },   .{ "quiet", Holds.value },
+    .{ "progress_ns", Holds.value }, .{ "patience_ns", Holds.value },
+    .{ "absent", Holds.value },
+};
+
+/// The model a field points at: `*T`, `?*T`, `[n]?*T`, and `*const T` alike.
+fn pointee(comptime T: type) type {
+    return switch (@typeInfo(T)) {
+        .pointer => |p| p.child,
+        .optional => |o| pointee(o.child),
+        .array => |a| pointee(a.child),
+        else => @compileError(@typeName(T) ++ " is not a pointer at a model"),
+    };
+}
+
 /// Where the serial port's bytes go: stdout, and the coverage JSONL.
 const SerialOut = struct {
     jsonl_fd: ?linux.fd_t,
@@ -1337,4 +1386,38 @@ test "a guest that rests past its patience with nothing done is idle; anything d
     machine.progressed();
     machine.time.ns += 5 * std.time.ns_per_s;
     try testing.expect(!machine.rested());
+}
+
+test "the census: every field of the machine is named, and is what it says (metal-vmm QUEUE 113)" {
+    const snapshot = @import("snapshot.zig");
+    comptime {
+        @setEvalBranchQuota(2_000_000);
+        const fields = @typeInfo(Machine).@"struct".fields;
+        for (fields) |f| {
+            const holds: Holds = for (census) |c| {
+                if (std.mem.eql(u8, c[0], f.name)) break c[1];
+            } else @compileError("main.zig: Machine." ++ f.name ++ " is in no line of `census`: say how a snapshot gets it back");
+            switch (holds) {
+                .value => if (snapshot.pointersIn(f.type, "Machine." ++ f.name).len > 0)
+                    @compileError("main.zig: Machine." ++ f.name ++ " is called a value, and holds a pointer: " ++ snapshot.pointersIn(f.type, "Machine." ++ f.name)),
+                .model => {
+                    const M = pointee(f.type);
+                    for (snapshot.models) |known| {
+                        if (known == M) break;
+                    } else @compileError("main.zig: Machine." ++ f.name ++ " points at " ++ @typeName(M) ++ ", which is not in snapshot.models");
+                },
+                .gap => {
+                    const M = pointee(f.type);
+                    for (snapshot.models) |known| if (known == M)
+                        @compileError("main.zig: Machine." ++ f.name ++ " is called a gap, and snapshot.zig saves it");
+                },
+                .box, .input, .host => {},
+            }
+        }
+        for (census) |c| {
+            for (fields) |f| {
+                if (std.mem.eql(u8, c[0], f.name)) break;
+            } else @compileError("main.zig: `census` names Machine." ++ c[0] ++ ", which is not a field");
+        }
+    }
 }

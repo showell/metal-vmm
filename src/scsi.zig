@@ -489,7 +489,7 @@ const testing = std.testing;
 /// A guest's memory with the request queue in it, and the requests built as
 /// gopher-metal's `scsi.command` builds them: the header (51 bytes), then
 /// the data the disk reads or the response, then the data it writes.
-const FakeDriver = struct {
+pub const FakeDriver = struct {
     ram: [16384]u8 = @splat(0),
 
     const size: u16 = 8;
@@ -498,12 +498,12 @@ const FakeDriver = struct {
     const used_at: u64 = avail_at + 4 + size * 2 + 2;
     const request_at: u64 = 0x800;
     const response_at: u64 = 0x900;
-    const data_at: u64 = 0x1000;
+    pub const data_at: u64 = 0x1000;
 
     const Dir = enum { none, from_disk, to_disk };
-    const Outcome = struct { response: u8, status: u8, key: u8, asc: u8, residual: u32, used: u32 };
+    pub const Outcome = struct { response: u8, status: u8, key: u8, asc: u8, residual: u32, used: u32 };
 
-    fn open(self: *FakeDriver, d: *Device) void {
+    pub fn open(self: *FakeDriver, d: *Device) void {
         d.write(&self.ram, 0x030, request_queue); // queue_sel
         d.write(&self.ram, 0x038, size);
         d.write(&self.ram, 0x080, desc_at);
@@ -571,16 +571,16 @@ const FakeDriver = struct {
         }
     }
 
-    fn good(o: Outcome) bool {
+    pub fn good(o: Outcome) bool {
         return o.response == response_ok and o.status == status_good;
     }
 
-    fn rw(self: *FakeDriver, d: *Device, writing: bool, lba: u32, sectors: u16) Outcome {
+    pub fn rw(self: *FakeDriver, d: *Device, writing: bool, lba: u32, sectors: u16) Outcome {
         const cdb = [10]u8{ if (writing) op_write else op_read, 0, @truncate(lba >> 24), @truncate(lba >> 16), @truncate(lba >> 8), @truncate(lba), 0, @truncate(sectors >> 8), @truncate(sectors), 0 };
         return self.settled(d, &cdb, if (writing) .to_disk else .from_disk, @as(u32, sectors) * 512);
     }
 
-    fn synchronize(self: *FakeDriver, d: *Device) Outcome {
+    pub fn synchronize(self: *FakeDriver, d: *Device) Outcome {
         return self.settled(d, &[10]u8{ op_synchronize, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .none, 0);
     }
 
