@@ -185,6 +185,37 @@ pub fn rewriteClockReads(segment: []u8, vaddr: u64, into: *Rewritten) LoadError!
     return rewriteMarked(segment, vaddr, into, .{ 0xB9, 'm', 'v', 'm', 'c' }, .{ 0x0F, 0x31 }, tsc_port);
 }
 
+/// **BOTH MARKS IN ONE PASS** over the segment, where `rewriteClockReads`
+/// and `rewriteDeadlineWrites` each scan it whole (a 25 MB kernel, every
+/// boot). The marked patterns cannot overlap each other or an `out` already
+/// written over one (their first bytes differ), so one search for "mvm",
+/// checking the byte before and the two after, finds exactly what the two
+/// scans find, each list in address order. Answers the clock reads found.
+pub fn rewriteMarks(segment: []u8, vaddr: u64, clocks: *Rewritten, deadlines: *Rewritten) LoadError!usize {
+    var found: usize = 0;
+    var at: usize = 0;
+    while (std.mem.indexOfPos(u8, segment, at, "mvm")) |m| {
+        at = m + 1;
+        // The mark is the opcode byte before "mvm", "mvm" and its kind; the
+        // instruction follows it.
+        if (m < 1 or m + 6 > segment.len) continue;
+        const op = segment[m - 1];
+        const kind = segment[m + 3];
+        const instruction = segment[m + 4 ..][0..2];
+        if (op == 0xB9 and kind == 'c' and instruction[0] == 0x0F and instruction[1] == 0x31) {
+            instruction.* = .{ 0xE6, @as(u8, @intCast(tsc_port)) };
+            try clocks.add(vaddr + m + 4);
+            found += 1;
+            at = m + 6;
+        } else if (op == 0xBE and kind == 'd' and instruction[0] == 0x0F and instruction[1] == 0x30) {
+            instruction.* = .{ 0xE6, @as(u8, @intCast(msr_port)) };
+            try deadlines.add(vaddr + m + 4);
+            at = m + 6;
+        }
+    }
+    return found;
+}
+
 /// Every `instruction` right after `mark` in a segment that runs at `vaddr`
 /// becomes `out port, al`, and where it is goes `into` the record.
 pub fn rewriteMarked(segment: []u8, vaddr: u64, into: *Rewritten, mark: [5]u8, instruction: [2]u8, port: u16) LoadError!usize {
@@ -246,8 +277,7 @@ pub fn load(ram: []u8, image: []const u8) LoadError!Loaded {
                 // program is going to run guests over and over.
                 @memset(ram[to + in_file ..][0 .. in_memory - in_file], 0);
                 if (ph.flags & ProgramHeader.executable != 0) {
-                    clock_reads += try rewriteClockReads(ram[to..][0..in_file], ph.vaddr, &clocks);
-                    _ = try rewriteDeadlineWrites(ram[to..][0..in_file], ph.vaddr, &deadlines);
+                    clock_reads += try rewriteMarks(ram[to..][0..in_file], ph.vaddr, &clocks, &deadlines);
                 }
             },
             ProgramHeader.note => {
@@ -419,4 +449,33 @@ test "a marked deadline write becomes a port write, and its place is recorded" {
     try testing.expectEqualSlices(u8, "\x90" ++ d ++ "\xe6\xe1" ++ "\x0f\x30", ram[0x100000..][0..body.len]);
     try testing.expectEqualSlices(u64, &.{0x100000 + 6}, loaded.deadlines.at[0..loaded.deadlines.len]);
     try testing.expectEqual(@as(usize, 0), loaded.clocks.len);
+}
+
+test "one pass over both marks rewrites what the two passes rewrite, and records the same places" {
+    var rng = std.Random.DefaultPrng.init(7);
+    const r = rng.random();
+    var seg: [4096]u8 = undefined;
+    r.bytes(&seg);
+    const clock_mark = [_]u8{ 0xB9, 'm', 'v', 'm', 'c', 0x0F, 0x31 };
+    const deadline_mark = [_]u8{ 0xBE, 'm', 'v', 'm', 'd', 0x0F, 0x30 };
+    // Marks at random places, back to back, at the very start and end, and
+    // decoys: the right mark with the wrong instruction, "mvm" alone.
+    for ([_]usize{ 0, 7, 100, 107, 2000 }) |at| @memcpy(seg[at..][0..7], &clock_mark);
+    for ([_]usize{ 14, 300, 4089 }) |at| @memcpy(seg[at..][0..7], &deadline_mark);
+    @memcpy(seg[500..][0..7], &[_]u8{ 0xB9, 'm', 'v', 'm', 'c', 0x0F, 0x30 });
+    @memcpy(seg[600..][0..3], "mvm");
+    var one = seg;
+    var two = seg;
+    var c1: Rewritten = .{};
+    var d1: Rewritten = .{};
+    var c2: Rewritten = .{};
+    var d2: Rewritten = .{};
+    const n1 = try rewriteMarks(&one, 0x1000, &c1, &d1);
+    const n2 = try rewriteClockReads(&two, 0x1000, &c2);
+    _ = try rewriteDeadlineWrites(&two, 0x1000, &d2);
+    try std.testing.expectEqualSlices(u8, &two, &one);
+    try std.testing.expectEqual(n2, n1);
+    try std.testing.expectEqual(@as(usize, 5), n1);
+    try std.testing.expectEqualDeep(c2, c1);
+    try std.testing.expectEqualDeep(d2, d1);
 }

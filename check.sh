@@ -37,6 +37,13 @@ trap 'rm -rf "$WORK"' EXIT
 VMM="$HERE/zig-out/bin/metal-vmm"
 [ -x "$VMM" ] || { echo "no $VMM; run: zig build"; exit 1; }
 
+# **THE UNIT TESTS IN THE MODE THAT SHIPS.** metal-vmm is built ReleaseSafe
+# and its tests Debug (build.zig); a difference between the two (a read of
+# memory left undefined, say) shows here, once a check.
+(cd "$HERE" && zig build test -Dtest-optimize=ReleaseSafe > "$WORK/unit-releasesafe" 2>&1) \
+    || { echo "FAIL the unit tests built ReleaseSafe: $(tail -3 "$WORK/unit-releasesafe")"; exit 1; }
+echo "PASS the unit tests, built ReleaseSafe"
+
 # probe:volume. Both volumes are made below, fresh for the run.
 CASES="block:fat16 vfat:fat16 net:fat16 http:fat16 stdhttp:fat16 rng:fat16 clock:fat16 \
 vfat:fat32 append:fat32"
