@@ -19,9 +19,9 @@
 //! (disk.zig's mapping), so `Disk` here copies the image and the record of
 //! what was written.
 //!
-//! **THE OTHER HALF IS THE BOX'S**: the vCPU's state and guest memory. What
-//! it needs to save is under Questions in QUEUE.md. This file does not
-//! guess at it.
+//! **THE OTHER HALF IS THE BOX'S**: the vCPU's state and guest memory. The
+//! plan for it, and for a whole sweep from one boot, is docs/SNAPSHOT.md.
+//! This file does not guess at it.
 //!
 //! The proof is a test per model. Drive it k seeded steps, save it, take a
 //! detour of different steps, restore it, and go on: the trace must be the
