@@ -165,8 +165,10 @@ verdict() {
     [ -z "$gone" ] || excuse="$excuse${excuse:+, }the peer $gone"
     # The guest's own word that its stop cut a response: a run with a request
     # limit (the site volume serves one) ends 2 s after it, wherever the
-    # client is; a machine with no limit never stops.
-    if grep -q '^  let go at the end: .* cut by the stop' "$WORK/$name.log"; then
+    # client is; a machine with no limit never stops. It excuses a page cut
+    # short, or no answer at all, never another status.
+    if { [ -z "$status" ] || [ "$status" = "$(status_of unhurt)" ]; } &&
+      grep -q '^  let go at the end: .* cut by the stop' "$WORK/$name.log"; then
       excuse="$excuse${excuse:+, }the stop cut it"
     fi
     [ -n "$excuse" ] || why="$why, not the page (status ${status:-none})"
