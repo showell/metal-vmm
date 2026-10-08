@@ -132,6 +132,14 @@ pub const Scsi = struct {
     /// Reads and SYNCHRONIZE CACHE still answer. `protected` counts the
     /// writes refused.
     read_only_at: ?u64 = null,
+    /// **A TRANSFER THAT MOVES HALF** (`VOLUME_SHORT_AT=n`): the nth READ
+    /// or WRITE moves the first half of its bytes and answers GOOD with the
+    /// rest as its residual (virtio 1.2 §5.6.6.1), a legal underrun. A
+    /// driver that does not read the residual takes it as whole: a read's
+    /// buffer keeps its old bytes past the half, a write's are never written.
+    short_at: ?u64 = null,
+    transfers: u64 = 0,
+    shortened: u64 = 0,
     /// **WHAT READ CAPACITY SAYS A SECTOR IS** (`VOLUME_SECTOR=n`): 512
     /// unless the run names another, such as 4096. Only the answer changes:
     /// a driver that takes 512 only must refuse the disk at bring-up, before
@@ -386,17 +394,29 @@ pub const Scsi = struct {
         const n: u64 = std.mem.readInt(u16, cdb[7..9], .big);
         if (lba + n > self.image.len / sector_bytes) return self.check(key_illegal_request, asc_lba_out_of_range);
         if (n == 0) return .{};
-        const bytes = n * sector_bytes;
+        const whole_bytes = n * sector_bytes;
         const at: usize = @intCast(lba * sector_bytes);
+        self.transfers += 1;
+        const short = if (self.short_at) |k| self.transfers == k else false;
+        if (short) self.shortened += 1;
+        // A short one moves the first half, and says the rest as its residual.
+        const bytes = if (short) whole_bytes / 2 else whole_bytes;
         if (!writing) {
             const to = in orelse return self.check(key_illegal_request, asc_invalid_field);
-            if (to.len < bytes) return self.check(key_illegal_request, asc_invalid_field);
+            if (to.len < whole_bytes) return self.check(key_illegal_request, asc_invalid_field);
             @memcpy(to[0..@intCast(bytes)], self.image[at..][0..@intCast(bytes)]);
             self.reads += 1;
             return .{ .data = @intCast(bytes) };
         }
         const from = out orelse return self.check(key_illegal_request, asc_invalid_field);
-        if (from.len < bytes) return self.check(key_illegal_request, asc_invalid_field);
+        if (from.len < whole_bytes) return self.check(key_illegal_request, asc_invalid_field);
+        if (short) {
+            // Half of it, a byte copy: no sector of it is said to have landed
+            // whole, and the power and the cache are not asked.
+            @memcpy(self.image[at..][0..@intCast(bytes)], from[0..@intCast(bytes)]);
+            self.writes += 1;
+            return .{ .taken = @intCast(bytes) };
+        }
         // As much as lands before the power goes, which is all of it unless
         // this is the write it goes in.
         const landed = self.power.lands(lba, n);
@@ -435,6 +455,11 @@ pub const Scsi = struct {
             std.fmt.bufPrint(&ro_buf, "; read-only from command {d}, {d} writes refused", .{ n, self.protected }) catch ""
         else
             "";
+        var short_buf: [80]u8 = undefined;
+        const short = if (self.short_at) |n|
+            std.fmt.bufPrint(&short_buf, "; transfer {d} moved half ({d} shortened)", .{ n, self.shortened }) catch ""
+        else
+            "";
         var waited_buf: [64]u8 = undefined;
         const waited = if (self.latency_ns != 0 or self.sync_latency_ns != 0)
             std.fmt.bufPrint(&waited_buf, "; {d} ms waited on it, {d} ms of it on SYNCHRONIZE CACHE", .{ self.waited_ns / std.time.ns_per_ms, self.sync_waited_ns / std.time.ns_per_ms }) catch ""
@@ -445,8 +470,8 @@ pub const Scsi = struct {
             std.fmt.bufPrint(&failed_buf, " ({d} failed, VOLUME_SYNC_FAIL)", .{self.sync_failed}) catch ""
         else
             "";
-        return std.fmt.bufPrint(buf, "metal-vmm: volume: {s}; {d} reads, {d} writes, {d} SYNCHRONIZE CACHE{s}, {d} MODE SENSE{s}{s}{s}{s}{s}{s}\n", .{
-            mode, self.reads, self.writes, self.synchronizes, failed, self.mode_senses, told, gone, ro, waited, keeps,
+        return std.fmt.bufPrint(buf, "metal-vmm: volume: {s}; {d} reads, {d} writes, {d} SYNCHRONIZE CACHE{s}, {d} MODE SENSE{s}{s}{s}{s}{s}{s}{s}\n", .{
+            mode, self.reads, self.writes, self.synchronizes, failed, self.mode_senses, told, gone, ro, short, waited, keeps,
             if (self.power.cut != null)
                 (if (lost > 0) "; the power cut lost sectors never synchronized" else "; the power cut lost nothing")
             else if (self.cache) |c|
@@ -851,4 +876,25 @@ test "VOLUME_SECTOR and VOLUME_MODE_PAGES=none: READ CAPACITY says another secto
     @memset(g.ram[FakeDriver.data_at..][0..28], 0xEE);
     try testing.expect(FakeDriver.good(g.send(&d, 0, 0, &[10]u8{ 0x5A, 0, 0x08, 0, 0, 0, 0, 0, 28, 0 }, .from_disk, 28)));
     try testing.expectEqual(@as(u16, 6), std.mem.readInt(u16, g.ram[FakeDriver.data_at..][0..2], .big));
+}
+
+test "VOLUME_SHORT_AT: the nth transfer moves half, answers GOOD, and says the rest as its residual" {
+    var image: [16 * 512]u8 = @splat(0);
+    var vol = Scsi{ .image = &image, .attention = null, .short_at = 2 };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    @memset(g.ram[FakeDriver.data_at..][0 .. 2 * 512], 0xAB);
+    const first = g.rw(&d, true, 0, 2); // transfer 1: whole
+    try testing.expect(FakeDriver.good(first));
+    try testing.expectEqual(@as(u32, 0), first.residual);
+    const second = g.rw(&d, true, 4, 2); // transfer 2: half
+    try testing.expect(FakeDriver.good(second));
+    try testing.expectEqual(@as(u32, 512), second.residual);
+    try testing.expectEqual(@as(u8, 0xAB), image[4 * 512 + 511]);
+    try testing.expectEqual(@as(u8, 0), image[5 * 512]); // the half never written
+    @memset(g.ram[FakeDriver.data_at..][0 .. 2 * 512], 0x11);
+    const third = g.rw(&d, false, 4, 2); // transfer 3: whole again
+    try testing.expectEqual(@as(u32, 0), third.residual);
+    try testing.expectEqual(@as(u64, 1), vol.shortened);
 }

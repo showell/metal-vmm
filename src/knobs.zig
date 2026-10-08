@@ -55,7 +55,8 @@
 //! `VOLUME_CUT_AFTER`, `VOLUME_SYNC_FAIL`, `VOLUME_SYNC_FAIL_FOR` and
 //! `VOLUME_ATTENTION_AT`; it never draws `VOLUME_LATENCY_US`,
 //! `VOLUME_GONE_AT`, `VOLUME_READ_ONLY_AT`, `VOLUME_SYNC_US`,
-//! `VOLUME_CUT_AT_EXIT`, `VOLUME_SECTOR` or `VOLUME_MODE_PAGES`. Nor are
+//! `VOLUME_CUT_AT_EXIT`, `VOLUME_SECTOR`, `VOLUME_MODE_PAGES` or
+//! `VOLUME_SHORT_AT`. Nor are
 //! `RTC_ABSENT`, `RTC_STUCK` or `PIT_FROZEN`: each stops a boot, which a
 //! sweep would count as a failure. Set by hand, they print with the rest.
 //!
@@ -78,7 +79,7 @@ pub const names = [_][]const u8{
     "PEER_MANGLE",         "PEER_MANGLE_RATE",   "PEER_MANGLE_KIND",    "VOLUME_LATENCY_US",
     "VOLUME_ATTENTION_AT", "VOLUME_GONE_AT",     "VOLUME_READ_ONLY_AT", "VOLUME_SYNC_US",
     "VOLUME_CUT_AT_EXIT",  "VOLUME_CACHE_KEEPS", "VOLUME_SECTOR",       "VOLUME_MODE_PAGES",
-    "RTC_ABSENT",          "RTC_STUCK",          "PIT_FROZEN",
+    "RTC_ABSENT",          "RTC_STUCK",          "PIT_FROZEN",          "VOLUME_SHORT_AT",
 };
 
 fn index(comptime name: []const u8) usize {
@@ -293,7 +294,8 @@ test "different seeds turn different knobs, and every knob is turned by some see
             !std.mem.eql(u8, n, "VOLUME_SYNC_US") and !std.mem.eql(u8, n, "VOLUME_CUT_AT_EXIT") and
             !std.mem.eql(u8, n, "VOLUME_CACHE_KEEPS") and !std.mem.eql(u8, n, "VOLUME_SECTOR") and
             !std.mem.eql(u8, n, "VOLUME_MODE_PAGES") and !std.mem.eql(u8, n, "RTC_ABSENT") and
-            !std.mem.eql(u8, n, "RTC_STUCK") and !std.mem.eql(u8, n, "PIT_FROZEN"))
+            !std.mem.eql(u8, n, "RTC_STUCK") and !std.mem.eql(u8, n, "PIT_FROZEN") and
+            !std.mem.eql(u8, n, "VOLUME_SHORT_AT"))
         {
             std.debug.print("never turned: {s}\n", .{n});
             return error.TestUnexpectedResult;

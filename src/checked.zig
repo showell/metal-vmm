@@ -100,6 +100,7 @@ pub const table = [_]Setting{
     .{ .name = "RTC_ABSENT", .kind = .flag },
     .{ .name = "RTC_STUCK", .kind = .flag },
     .{ .name = "PIT_FROZEN", .kind = .flag },
+    .{ .name = "VOLUME_SHORT_AT", .kind = at_least_one, .needs_volume = true },
     // The rest metal-vmm reads.
     .{ .name = "FAULT_SEED", .kind = any_number },
     .{ .name = "PATIENCE_S", .kind = at_least_one },
