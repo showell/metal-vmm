@@ -46,6 +46,7 @@ const cache = @import("cache.zig");
 const scsi = @import("scsi.zig");
 const coverage = @import("coverage.zig");
 const knobs = @import("knobs.zig");
+const checked = @import("checked.zig");
 const pci = @import("pci.zig");
 const settings = @import("settings.zig");
 const reports = @import("reports.zig");
@@ -852,6 +853,10 @@ fn mapFile(path: [*:0]const u8) ![]align(std.heap.page_size_min) const u8 {
     return posix.mmap(null, size, .{ .READ = true }, .{ .TYPE = .PRIVATE }, fd, 0);
 }
 
+fn sayUnknown(name: []const u8) void {
+    std.debug.print("metal-vmm: {s} is not a setting metal-vmm reads; ignored (KNOBS.md)\n", .{name});
+}
+
 pub fn main(init: std.process.Init.Minimal) !u8 {
     const argv = init.args.vector;
     if (argv.len < 2) {
@@ -862,6 +867,15 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     const disk_path: ?[*:0]const u8 = if (argv.len > 2 and argv[2][0] != 0) argv[2] else null;
     const command_line = if (argv.len > 3) std.mem.span(argv[3]) else "";
     const fetch: ?[]const u8 = if (argv.len > 4 and argv[4][0] != 0) std.mem.span(argv[4]) else null;
+
+    // **EVERY SETTING SAYS WHAT IT MEANS, OR THE RUN DOES NOT START**
+    // (checked.zig): a value that is not one is refused here, before any of
+    // them is read, rather than read as no fault.
+    var complaint_buf: [512]u8 = undefined;
+    if (checked.complaint(init.environ.block.view().slice, &complaint_buf, sayUnknown)) |why| {
+        std.debug.print("metal-vmm: {s} (KNOBS.md)\n", .{why});
+        return 2;
+    }
 
     const image = mapFile(path) catch |e| {
         std.debug.print("metal-vmm: cannot read {s}: {s}\n", .{ path, @errorName(e) });
@@ -942,7 +956,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         block = .{ .image = drive.?.bytes, .dirty = drive.?.dirty };
         // `DISK_TRACE=1` prints every request the guest makes, which is how a
         // question like "why is one chat message eighty writes" gets answered.
-        if (init.environ.getPosix("DISK_TRACE")) |_| block.trace = true;
+        if (init.environ.getPosix("DISK_TRACE")) |v| block.trace = std.mem.eql(u8, v, "1");
         block_device = block.device();
         machine.drive = &block.refusals;
         if (!pc) machine.devices[0] = &block_device;
@@ -1235,6 +1249,7 @@ test {
     _ = @import("loader.zig");
     _ = @import("processor.zig");
     _ = @import("halt.zig");
+    _ = @import("checked.zig");
 }
 
 test "a request file is read whole, past one read's worth, and one too large is refused, not cut" {

@@ -13,6 +13,14 @@ knob than a rate**: a rate explores at random, a number explores exhaustively,
 and a sweep over numbers is a map (`lossy.sh` for frames, `flaky.sh` for disk
 requests). A run says on the error stream what each knob did.
 
+**A value that is not one stops the run** (exit 2, naming it): a word where
+a number goes (`PEER_RESET_AT=30ms`), a flag that is not `1` or `0`, a list
+past what it holds, a number past its most, a volume's knob with no
+`VOLUME`. Nothing is read as "no fault" or cut to fit. A name in these
+families that metal-vmm does not read (a misspelling, or a script's own
+`VOLUME_SITE`) is said on the error stream and ignored. `src/checked.zig`
+holds what each one must be.
+
 The source of truth is `src/settings.zig` (the knobs into the faults),
 `src/knobs.zig` (the full list, and what a seed draws), and the module each
 table names.

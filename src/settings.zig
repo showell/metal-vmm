@@ -82,7 +82,7 @@ pub fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, rough: *wire.Roug
     if (k.get("PEER_MANGLE_KIND")) |name| line.mangle_kind = std.meta.stringToEnum(mangle.Kind, name);
     // **A CLIENT THAT IGNORES THE WINDOW** sends what the guest must throw
     // away, so its timer runs to send it again.
-    if (k.get("PEER_IGNORE_WINDOW")) |_| rough.ignore_window = true;
+    if (k.get("PEER_IGNORE_WINDOW")) |v| rough.ignore_window = std.mem.eql(u8, v, "1");
     rough.retransmits = line.hurtsPeer() or rough.ignore_window;
     // **THE PEER'S OWN MISBEHAVIOUR** (peer.zig, `Rough`): times in
     // microseconds of the machine's clock from when it opened, sizes in
@@ -97,7 +97,7 @@ pub fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, rough: *wire.Roug
     if (knob(k, "PEER_SHUT_FOR_US")) |us| rough.shut_for_ns = us * std.time.ns_per_us;
     if (knob(k, "PEER_RETRY")) |n| rough.retry = @intCast(@min(n, 100));
     if (knob(k, "PEER_DRIP_US")) |us| rough.drip_ns = us * std.time.ns_per_us;
-    if (k.get("PEER_PIPELINE")) |_| rough.pipeline = true;
+    if (k.get("PEER_PIPELINE")) |v| rough.pipeline = std.mem.eql(u8, v, "1");
     if (knob(k, "PEER_MSS")) |n| if (n > 0) {
         rough.mss = @intCast(n);
     };
@@ -113,8 +113,8 @@ pub fn tellTheFaults(line: *faults.Wire, drive: *faults.Drive, rough: *wire.Roug
     };
     if (k.get("WIRE_LOSS")) |n| line.lost.rate = std.fmt.parseInt(u32, n, 10) catch 0;
     if (k.get("DISK_REFUSE_RATE")) |n| drive.refused.rate = std.fmt.parseInt(u32, n, 10) catch 0;
-    if (k.get("DISK_WRITES_ONLY")) |_| drive.writes_only = true;
-    if (k.get("DISK_READS_ONLY")) |_| drive.reads_only = true;
+    if (k.get("DISK_WRITES_ONLY")) |v| drive.writes_only = std.mem.eql(u8, v, "1");
+    if (k.get("DISK_READS_ONLY")) |v| drive.reads_only = std.mem.eql(u8, v, "1");
     if (k.get("DISK_ROT")) |text| {
         var parts = std.mem.splitScalar(u8, text, ',');
         const sector = std.fmt.parseInt(u64, parts.next() orelse "", 10) catch null;
