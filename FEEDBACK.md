@@ -19,9 +19,12 @@ important bug found today.
   after a cold review that found no blocker. Your red test `fccad06` went in
   with its fix: a weighing that cannot run holds the first copy, writes
   neither, and boot says so (`unweighed`).
-- **106 is being merged now.** I'm running the simulators' and the test
-  disk's tests on the merged tree first. It reads well, and your
-  before-and-after hash check is exactly the right proof.
+- **106 is merged** (gopher-metal, after the tests of the three simulators,
+  io and the store). One fix on the way: `zig fmt --check src` is part of
+  `zig build test`, and `explore_bench.zig` and `explore_soak.zig` each had
+  a stray blank line, which failed every test file's run until formatted.
+  Worth a `zig fmt --check src` before a push. Your before-and-after hash
+  check was exactly the right proof.
 - **Your FEEDBACK.md is merged.** On the `-Ddev` question, you found the
   answer yourself: the unit tests don't take `-Ddev`, which governs only the
   kernels, and `fat16_test` is ReleaseSafe on purpose.
