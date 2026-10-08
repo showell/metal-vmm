@@ -45,10 +45,14 @@ const bad_most = @typeInfo(@FieldType(faults.Drive, "bad")).array.len;
 const any_number: Kind = .{ .number = .{} };
 const at_least_one: Kind = .{ .number = .{ .lo = 1 } };
 const u32_number: Kind = .{ .number = .{ .hi = std.math.maxInt(u32) } };
-/// A time read in microseconds, or seconds, and kept in nanoseconds: no more
-/// than a u64 of nanoseconds holds.
-const micros: Kind = .{ .number = .{ .hi = std.math.maxInt(u64) / std.time.ns_per_us } };
-const whole_seconds: Kind = .{ .number = .{ .lo = 1, .hi = std.math.maxInt(u64) / std.time.ns_per_s } };
+/// **A TIME IS AT MOST AN HOUR, A PATIENCE A DAY.** Each is kept in
+/// nanoseconds and then added to the machine's clock (`now + latency_ns`, a
+/// gap times a client's number), so a bound of what a u64 of nanoseconds
+/// holds still overflowed the sum (a cold review, 2026-10-08). No run is
+/// near an hour of any one of these; a day of patience is far past the
+/// longest a guest is given.
+const micros: Kind = .{ .number = .{ .hi = std.time.us_per_hour } };
+const whole_seconds: Kind = .{ .number = .{ .lo = 1, .hi = std.time.s_per_day } };
 
 pub const table = [_]Setting{
     // The fault knobs (knobs.zig `names`; a test holds this list to it).
@@ -296,13 +300,13 @@ test "a time no clock here can hold is refused, not overflowed (metal-vmm QUEUE 
     const micro = [_][]const u8{ "WIRE_LATENCY_US", "PEER_RESET_AT", "PEER_FLOOD_AT_US", "PEER_FLOOD_GAP_US", "PEER_SHUT_FOR_US", "PEER_DRIP_US", "PEER_CLIENT_GAP_US", "VOLUME_SYNC_US", "VOLUME_LATENCY_US" };
     var text: [96]u8 = undefined;
     for (micro) |name| {
-        const line = std.fmt.bufPrintZ(&text, "{s}={d}", .{ name, std.math.maxInt(u64) / std.time.ns_per_us + 1 }) catch unreachable;
+        const line = std.fmt.bufPrintZ(&text, "{s}={d}", .{ name, std.time.us_per_hour + 1 }) catch unreachable;
         if (says(&.{ line, "VOLUME=/tmp/v.img" }) == null) {
             std.debug.print("{s} is taken, and overflows when read as nanoseconds\n", .{line});
             return error.Taken;
         }
     }
-    const seconds = std.fmt.bufPrintZ(&text, "PATIENCE_S={d}", .{std.math.maxInt(u64) / std.time.ns_per_s + 1}) catch unreachable;
+    const seconds = std.fmt.bufPrintZ(&text, "PATIENCE_S={d}", .{std.time.s_per_day + 1}) catch unreachable;
     if (says(&.{seconds}) == null) {
         std.debug.print("{s} is taken, and overflows when read as nanoseconds\n", .{seconds});
         return error.Taken;
