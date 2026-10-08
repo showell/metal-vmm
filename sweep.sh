@@ -94,7 +94,8 @@ run() {
   env "$@" "${volume[@]}" "${post[@]}" COVERAGE_OUT="$COVERAGE" PEER_BODY="$WORK/$name.body" \
     timeout "$RUN_TIMEOUT" "$VMM" "$KERNEL" "$WORK/$name.img" "" "$PATH_WANTED" > "$WORK/$name.log" 2>&1
   echo $? > "$WORK/$name.exit"
-  [ -f "$WORK/$name.body" ] || : > "$WORK/$name.body"
+  # No page stays no page: metal-vmm writes none for an answer it kept only
+  # in part, and an empty one would match another empty one.
 }
 
 # read_back <name> [volume]: an unhurt boot on a copy of that run's volume
@@ -178,8 +179,12 @@ if [ -n "$DURABLE" ]; then
   fi
   echo "durability: each seed posts $POST, then reads back $READ_BACK for \"$MARK\""
 fi
-echo "unhurt: exit $(cat "$WORK/unhurt.exit"), status ${unhurt_status:-none}, $(wc -c < "$WORK/unhurt.body") bytes of $PATH_WANTED"
-[ -n "$unhurt_status" ] || echo "  (the unhurt run got no page: every seed is judged against that)"
+if [ -z "$unhurt_status" ] || [ ! -f "$WORK/unhurt.body" ]; then
+  echo "the unhurt run got $([ -n "$unhurt_status" ] && echo "status $unhurt_status and no page" || echo "no answer") (exit $(cat "$WORK/unhurt.exit")): nothing can be judged; see its log:"
+  tail -5 "$WORK/unhurt.log"
+  exit 2
+fi
+echo "unhurt: exit $(cat "$WORK/unhurt.exit"), status $unhurt_status, $(wc -c < "$WORK/unhurt.body") bytes of $PATH_WANTED"
 printf '%-6s %-4s %-6s %-8s %-40s %s\n' seed exit status bytes verdict knobs
 
 failing=""
@@ -196,7 +201,7 @@ while [ "$seed" -le "$LAST" ]; do
     *) failing="$failing $seed" ;;
   esac
   printf '%-6s %-4s %-6s %-8s %-40s %s\n' "$seed" "$(cat "$WORK/seed$seed.exit")" "$(status_of "seed$seed")" \
-    "$(wc -c < "$WORK/seed$seed.body")" "$v" "$(knobs_of "seed$seed")"
+    "$([ -f "$WORK/seed$seed.body" ] && wc -c < "$WORK/seed$seed.body" || echo none)" "$v" "$(knobs_of "seed$seed")"
   seed=$((seed + 1))
 done
 

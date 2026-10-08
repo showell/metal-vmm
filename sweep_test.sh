@@ -28,6 +28,9 @@ printf 'pristine volume' > "$T/site.img"
 #   6       a coverage property broken: FAIL
 #   7       the guest writes a sound volume, and the page: ok
 #   8       a lossy wire, and the peer gives up: no page, allowed
+#   9       a 200 whose page metal-vmm did not write (an answer kept only in
+#           part): FAIL, never a match of two empty pages
+# With FAKE_UNHURT_NO_PAGE set, the unhurt run's page is not written either.
 cat > "$T/vmm" <<'EOF'
 #!/bin/bash
 img="$2"
@@ -51,7 +54,11 @@ case "$s" in
   7) printf 'sound, written' > "$img"; ev Sometimes "tcp: only seed 7" true true ;;
   8) page=""; status=0; echo "metal-vmm: the first client gave up: it sent the same thing too often, unanswered" >&2 ;;
 esac
-printf '%s' "$page" > "$PEER_BODY"
+if [ "$s" = 9 ] || { [ -z "$s" ] && [ -n "${FAKE_UNHURT_NO_PAGE:-}" ]; }; then
+  echo "metal-vmm: the answer was 70000 bytes and the client keeps 65536; PEER_BODY and PEER_RESPONSE are not written" >&2
+else
+  printf '%s' "$page" > "$PEER_BODY"
+fi
 echo "peer: $status \"$page\""
 echo "metal-vmm: coverage: 1 of 1 properties reached (1 hold, $broken broken), from 3 lines over 1 boots" >&2
 exit $code
@@ -91,6 +98,17 @@ good=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" F
 [ $? = 0 ] || { echo "FAIL: a clean sweep did not pass:"; echo "$good" | sed 's/^/    /'; fail=1; }
 expect "a clean sweep's floor" '^2 runs, 2 properties, 1 on the floor' "$good"
 if grep -q "under the floor" <<< "$good"; then echo "FAIL: a clean sweep is under its floor"; fail=1; fi
+
+# A seed whose page was not written fails; it is not an empty page that
+# matches.
+nopage=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 9 9 2>&1)
+[ $? = 1 ] || { echo "FAIL: a seed with no page written did not fail the sweep"; fail=1; }
+expect "seed 9" '^9 .*none .*FAIL: not the page (status 200)' "$nopage"
+
+# An unhurt run with no page leaves nothing to judge: the sweep stops, 2.
+nothing=$(FAKE_UNHURT_NO_PAGE=1 VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 1 1 2>&1)
+[ $? = 2 ] || { echo "FAIL: an unhurt run with no page did not stop the sweep with 2"; fail=1; }
+expect "the unhurt run with no page" 'status 200 and no page (exit 0): nothing can be judged' "$nothing"
 
 if [ $fail = 0 ]; then echo "sweep_test: every verdict and the summary as told"; fi
 exit $fail
