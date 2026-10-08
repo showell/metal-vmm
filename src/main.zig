@@ -707,14 +707,40 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
 
 // ── putting it together ──────────────────────────────────────────────────────
 
-fn readAll(path: [:0]const u8, into: []u8) ?[]const u8 {
+/// **THE MOST ONE CLIENT'S REQUEST MAY BE** (`PEER_REQUEST`): a whole
+/// document past angry-gopher's 1 MiB cap (limits.zig, `body.doc`), so a
+/// client can be refused with 413 as well as answered.
+const request_max = 2 << 20;
+/// Each client's request, read from its file. Not on the stack: eight of
+/// them are 16 MiB.
+var request_bufs: [wire.max_clients][request_max]u8 = undefined;
+
+/// **A FILE, WHOLE, OR AN ERROR**: read until its end, however many reads
+/// that takes, into `into`. A file larger than `into` is `error.TooLarge`,
+/// never its first `into.len` bytes: a request cut short is a different
+/// request (QUEUE B23, a 17,000-byte head sent as its first 8,192 bytes).
+fn readAll(path: [:0]const u8, into: []u8) error{ Unreadable, Empty, TooLarge }![]const u8 {
     const opened = linux.open(path.ptr, .{ .ACCMODE = .RDONLY }, 0);
-    if (linux.errno(opened) != .SUCCESS) return null;
+    if (linux.errno(opened) != .SUCCESS) return error.Unreadable;
     const fd: linux.fd_t = @intCast(opened);
     defer _ = linux.close(fd);
-    const n = linux.read(fd, into.ptr, into.len);
-    if (linux.errno(n) != .SUCCESS or n == 0) return null;
-    return into[0..n];
+    var len: usize = 0;
+    while (true) {
+        if (len == into.len) {
+            // Full: the file must end here.
+            var one: [1]u8 = undefined;
+            const more = linux.read(fd, &one, 1);
+            if (linux.errno(more) != .SUCCESS) return error.Unreadable;
+            if (more != 0) return error.TooLarge;
+            break;
+        }
+        const n = linux.read(fd, into[len..].ptr, into.len - len);
+        if (linux.errno(n) != .SUCCESS) return error.Unreadable;
+        if (n == 0) break;
+        len += n;
+    }
+    if (len == 0) return error.Empty;
+    return into[0..len];
 }
 
 /// What the volume was asked, if one was attached (`VOLUME`): a run without
@@ -1066,7 +1092,6 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     if (count(init.environ, "PEER_CLIENTS")) |n| plan.clients = @intCast(std.math.clamp(n, 1, wire.max_clients));
     if (count(init.environ, "PEER_ASKS")) |n| plan.asks = @intCast(std.math.clamp(n, 1, 1000));
     if (count(init.environ, "PEER_CLIENT_GAP_US")) |us| plan.gap_ns = us * std.time.ns_per_us;
-    var request_bufs: [wire.max_clients][8192]u8 = undefined;
     if (init.environ.getPosix("PEER_REQUEST")) |files| {
         var each = std.mem.tokenizeScalar(u8, files, ',');
         while (each.next()) |from| {
@@ -1078,8 +1103,12 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
             }
             @memcpy(name[0..from.len], from);
             name[from.len] = 0;
-            plan.requests[plan.named] = readAll(name[0..from.len :0], &request_bufs[plan.named]) orelse {
-                std.debug.print("metal-vmm: cannot read the request in {s}\n", .{from});
+            plan.requests[plan.named] = readAll(name[0..from.len :0], &request_bufs[plan.named]) catch |e| {
+                switch (e) {
+                    error.TooLarge => std.debug.print("metal-vmm: the request in {s} is larger than {d} bytes, the most a client sends\n", .{ from, request_max }),
+                    error.Empty => std.debug.print("metal-vmm: the request in {s} is empty\n", .{from}),
+                    error.Unreadable => std.debug.print("metal-vmm: cannot read the request in {s}\n", .{from}),
+                }
                 return 2;
             };
             plan.named += 1;
@@ -1180,6 +1209,25 @@ test {
     _ = @import("loader.zig");
     _ = @import("processor.zig");
     _ = @import("halt.zig");
+}
+
+test "a request file is read whole, past one read's worth, and one too large is refused, not cut" {
+    const path = "/tmp/metal-vmm-readall-test";
+    var bytes: [20_000]u8 = undefined;
+    for (&bytes, 0..) |*b, i| b.* = @truncate(i *% 31);
+    const fd = linux.open(path, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o600);
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(fd));
+    try std.testing.expectEqual(bytes.len, linux.write(@intCast(fd), &bytes, bytes.len));
+    _ = linux.close(@intCast(fd));
+    defer _ = linux.unlink(path);
+
+    var room: [32 * 1024]u8 = undefined;
+    try std.testing.expectEqualSlices(u8, &bytes, try readAll(path, &room));
+    var exact: [20_000]u8 = undefined;
+    try std.testing.expectEqualSlices(u8, &bytes, try readAll(path, &exact));
+    var small: [8192]u8 = undefined;
+    try std.testing.expectError(error.TooLarge, readAll(path, &small));
+    try std.testing.expectError(error.Unreadable, readAll("/tmp/metal-vmm-readall-no-such-file", &small));
 }
 
 test "an absent device reads as zero and swallows writes" {
