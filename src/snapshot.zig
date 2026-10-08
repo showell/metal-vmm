@@ -182,6 +182,32 @@ test "the premise: every pointer in a model is one a restore keeps right, or a g
     }
 }
 
+test "RED: a write cache is not its value: a restore keeps the detour's flush, and a cut after it loses nothing (metal-vmm QUEUE 113)" {
+    // The run: sector 1 durable as 'a', then written as 'b' and held. Saved
+    // there. A power cut now must put 'a' back. The detour flushes, which
+    // empties the cache's map in place; the restore copies back the map's
+    // header, whose entries live on the heap the detour emptied.
+    var image: [4 * 512]u8 = @splat('a');
+    var c = cache.Cache{ .gpa = testing.allocator, .image = &image, .lies = true };
+    defer c.deinit();
+    var block = virtio.Block{ .image = &image, .cache = &c };
+    try testing.expect(c.wrote(1, 1));
+    @memset(image[512..1024], 'b');
+
+    var bytes = try Disk.save(testing.allocator, &block);
+    defer bytes.deinit(testing.allocator);
+    const saved_block = save(&block);
+    const saved_cache = save(&c);
+
+    c.flush(); // the detour
+    bytes.restore(&block);
+    restore(&block, saved_block);
+    restore(&c, saved_cache);
+
+    c.lose(); // the power, as the run that never stopped would have lost it
+    try testing.expectEqual(@as(u8, 'a'), image[512]);
+}
+
 test "the volume: its commands, its faults, and the bytes it borrows, saved apart (metal-vmm QUEUE 113)" {
     const Volume = struct {
         image: [32 * 512]u8 = @splat(0),
