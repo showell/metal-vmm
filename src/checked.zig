@@ -281,3 +281,27 @@ test "a name in a family that is not a setting is said, and does not stop the ru
     try testing.expectEqual(@as(?[]const u8, null), complaint(&.{ "PEER_RESETAT=3", "VOLUME_SITE=/x", "PATH=/bin" }, &buf, countUnknown));
     try testing.expectEqual(@as(usize, 2), unknown_seen);
 }
+
+test "a time no clock here can hold is refused, not overflowed (metal-vmm QUEUE 103, RED)" {
+    // **RED until checked.zig bounds them** (CC, 2026-10-08). Each of these
+    // is read as a whole number and multiplied into nanoseconds
+    // (settings.zig, main.zig): `us * std.time.ns_per_us`, `seconds *
+    // std.time.ns_per_s`. The table takes any u64 for them, so a value that
+    // passes here overflows there: a panic in a safe build, a short wait
+    // in a fast one. The most each can be is the most a u64 of nanoseconds
+    // holds.
+    const micro = [_][]const u8{ "WIRE_LATENCY_US", "PEER_RESET_AT", "PEER_FLOOD_AT_US", "PEER_FLOOD_GAP_US", "PEER_SHUT_FOR_US", "PEER_DRIP_US", "PEER_CLIENT_GAP_US", "VOLUME_SYNC_US", "VOLUME_LATENCY_US" };
+    var text: [96]u8 = undefined;
+    for (micro) |name| {
+        const line = std.fmt.bufPrintZ(&text, "{s}={d}", .{ name, std.math.maxInt(u64) / std.time.ns_per_us + 1 }) catch unreachable;
+        if (says(&.{ line, "VOLUME=/tmp/v.img" }) == null) {
+            std.debug.print("{s} is taken, and overflows when read as nanoseconds\n", .{line});
+            return error.Taken;
+        }
+    }
+    const seconds = std.fmt.bufPrintZ(&text, "PATIENCE_S={d}", .{std.math.maxInt(u64) / std.time.ns_per_s + 1}) catch unreachable;
+    if (says(&.{seconds}) == null) {
+        std.debug.print("{s} is taken, and overflows when read as nanoseconds\n", .{seconds});
+        return error.Taken;
+    }
+}
