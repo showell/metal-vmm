@@ -72,9 +72,9 @@ if [ "$s" = 9 ] || { [ -z "$s" ] && [ -n "${FAKE_UNHURT_NO_PAGE:-}" ]; }; then
 else
   printf '%s' "$page" > "$PEER_BODY"
 fi
-# The wire's account of the peer's frames comes first, as metal-vmm prints
-# it whenever the peer can lose one: it is not the status.
-echo "peer: 51 frames sent, 1 lost (#3), 6309 ms of the guest's time"
+# The wire's account of the peer's frames, on stderr as metal-vmm prints it
+# whenever the peer can lose one: it is not the status.
+echo "peer: 51 frames sent, 1 lost (#3), 6309 ms of the guest's time" >&2
 echo "peer: $status \"$page\""
 echo "metal-vmm: coverage: 1 of 1 properties reached (1 hold, $broken broken), from 3 lines over 1 boots" >&2
 exit $code

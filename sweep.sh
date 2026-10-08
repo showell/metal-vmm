@@ -101,7 +101,7 @@ run() {
   fi
   [ -z "$DURABLE" ] || post=(PEER_REQUEST="$POST" VOLUME_CUT_AT_EXIT=1)
   env "$@" "${volume[@]}" "${post[@]}" COVERAGE_OUT="$WORK/$name.cov" PEER_BODY="$WORK/$name.body" \
-    timeout "$RUN_TIMEOUT" "$VMM" "$KERNEL" "$WORK/$name.img" "" "$PATH_WANTED" > "$WORK/$name.log" 2>&1
+    timeout "$RUN_TIMEOUT" "$VMM" "$KERNEL" "$WORK/$name.img" "" "$PATH_WANTED" > "$WORK/$name.out" 2> "$WORK/$name.err"
   echo $? > "$WORK/$name.exit"
   # No page stays no page: metal-vmm writes none for an answer it kept only
   # in part, and an empty one would match another empty one.
@@ -116,9 +116,9 @@ read_back() {
   cp "$SITE" "$WORK/$name.readimg"
   cp "$vol" "$WORK/$name.readvol"
   env VOLUME="$WORK/$name.readvol" PEER_BODY="$WORK/$name.read" \
-    timeout "$RUN_TIMEOUT" "$VMM" "$KERNEL" "$WORK/$name.readimg" "" "$READ_BACK" > "$WORK/$name.readlog" 2>&1
+    timeout "$RUN_TIMEOUT" "$VMM" "$KERNEL" "$WORK/$name.readimg" "" "$READ_BACK" > "$WORK/$name.readout" 2> "$WORK/$name.readerr"
   [ -f "$WORK/$name.read" ] || : > "$WORK/$name.read"
-  sed -n 's/^peer: \([0-9]*\).*/\1/p' "$WORK/$name.readlog" | head -1 > "$WORK/$name.readstatus"
+  sed -n -E 's/^peer: ([0-9]+)( "|, [0-9]+ bytes$).*/\1/p' "$WORK/$name.readout" | head -1 > "$WORK/$name.readstatus"
   rm -f "$WORK/$name.readimg" "$WORK/$name.readvol"
 }
 kept() { grep -qF -- "$MARK" "$WORK/$1.read"; }
@@ -126,11 +126,16 @@ kept() { grep -qF -- "$MARK" "$WORK/$1.read"; }
 # The client's own line (`peer: 200 "..."` or `peer: 200, 13668 bytes`), not
 # the wire's account of the peer's frames (`peer: 51 frames sent, ...`),
 # which a run whose peer loses frames prints first.
-status_of() { sed -n -E 's/^peer: ([0-9]+)( "|, [0-9]+ bytes$).*/\1/p' "$WORK/$1.log" | head -1; }
-knobs_of() { sed -n 's/^metal-vmm: FAULT_SEED=[0-9]* is //p' "$WORK/$1.log" | head -1; }
+# **EACH FACT FROM THE STREAM THAT CARRIES IT.** A run's stdout is the
+# guest's console and the client's line (`peer: 200, 13668 bytes`); its
+# stderr is what metal-vmm says itself (the knobs a seed drew, the wire's
+# account of the peer's frames, how the peer ended, the coverage line). Read
+# together, the wire's "peer: 51 frames sent" was once taken for a status.
+status_of() { sed -n -E 's/^peer: ([0-9]+)( "|, [0-9]+ bytes$).*/\1/p' "$WORK/$1.out" | head -1; }
+knobs_of() { sed -n 's/^metal-vmm: FAULT_SEED=[0-9]* is //p' "$WORK/$1.err" | head -1; }
 # The peer's own end, when it let the page go itself (REVIEW-peer.md S1).
-peer_end_of() { sed -n 's/^metal-vmm: the first client \(gave up\|vanished\).*/\1/p' "$WORK/$1.log" | head -1; }
-broken_of() { sed -n 's/^metal-vmm: coverage: .*, \([0-9]*\) broken).*/\1/p' "$WORK/$1.log" | tail -1; }
+peer_end_of() { sed -n 's/^metal-vmm: the first client \(gave up\|vanished\).*/\1/p' "$WORK/$1.err" | head -1; }
+broken_of() { sed -n 's/^metal-vmm: coverage: .*, \([0-9]*\) broken).*/\1/p' "$WORK/$1.err" | tail -1; }
 
 # changed <image>: whether its modification time moved since it was copied.
 changed() { [ "$(stat -c %y "$1")" != "$(cat "$1.copied")" ]; }
@@ -199,7 +204,7 @@ verdict() {
       # The guest's own word that its stop cut a response: a run with a
       # request limit (the site volume serves one) ends 2 s after it,
       # wherever the client is; a machine with no limit never stops.
-      if grep -q '^  let go at the end: .* cut by the stop' "$WORK/$name.log"; then
+      if grep -q '^  let go at the end: .* cut by the stop' "$WORK/$name.out"; then
         excuse="$excuse${excuse:+, }the stop cut it"
       fi
     fi
@@ -224,7 +229,7 @@ if [ -n "$DURABLE" ]; then
 fi
 if [ -z "$unhurt_status" ] || [ ! -f "$WORK/unhurt.body" ]; then
   echo "the unhurt run got $([ -n "$unhurt_status" ] && echo "status $unhurt_status and no page" || echo "no answer") (exit $(cat "$WORK/unhurt.exit")): nothing can be judged; see its log:"
-  tail -5 "$WORK/unhurt.log"
+  tail -5 "$WORK/unhurt.out" "$WORK/unhurt.err"
   exit 2
 fi
 echo "unhurt: exit $(cat "$WORK/unhurt.exit"), status $unhurt_status, $(wc -c < "$WORK/unhurt.body") bytes of $PATH_WANTED"

@@ -36,7 +36,7 @@ cat > "$T/vmm" <<'EOF'
 #!/bin/bash
 s="${FAULT_SEED:-}"
 if [ -z "${PEER_REQUEST:-}" ]; then
-  if grep -q UNREADABLE "$VOLUME"; then echo "peer: 500"; : > "$PEER_BODY"; exit 0; fi
+  if grep -q UNREADABLE "$VOLUME"; then echo "peer: 500 \"\""; : > "$PEER_BODY"; exit 0; fi
   echo "peer: 200 \"$(head -c 20 "$VOLUME")\""
   cp "$VOLUME" "$PEER_BODY"
   exit 0
