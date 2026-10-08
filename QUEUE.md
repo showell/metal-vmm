@@ -128,7 +128,9 @@ the box instead of guessing. Findings arrive as red tests where they can.
 **Decided (Steve, 2026-10-08):** a corrupt or empty counter fails the
 request and is left as it is (games traffic is small; safe over clever: no
 recovery from the highest ID); an unreadable session secret failing every
-returning visitor's request is right (louder is better).
+returning visitor's request is right (louder is better). After 108, one account
+whose password file can't be read makes every name login and "Create
+account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
 
 112. **C1, a disk that loses what it wasn't told to flush** (your proposal;
     first): the test disk keeps writes in a cache until a flush and a cut
