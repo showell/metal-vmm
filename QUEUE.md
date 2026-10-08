@@ -167,6 +167,50 @@ proposals, taken or not, are in the archive.)*
 
 *(Either side, with a reproduction where there is one.)*
 
+- **(CC, item 104) The cold hunt's smaller findings: six fixed, each red
+  test first, and one answered.**
+  - **fat16, a name past ASCII** (gopher-metal red `a2e8594`, fix
+    `4132fc5`). The name was written, then read back with '?' in it, so it
+    was found under no name it was given, and a second write made a second
+    file.
+    - `aliasFor` now refuses any byte of 0x80 or more with `BadName`. Every
+      new name passes through it before anything is changed (`writeFileIn`,
+      `makeDirIn`, `rename`).
+    - The Store's `checkPart` refuses the same, so the model and the Linux
+      store agree with FAT.
+    - **This is a refusal angry-gopher can meet**, if any of its names can
+      be non-ASCII (an upload's original name, a doc slug). Topic and user
+      IDs are ASCII by their own checks.
+    - Reading a foreign long name still shows '?'. I left that alone: the
+      item asked for the write to be refused.
+  - **io `Dir.iterate`** (red `8be63f7`, fix `f70bb83`). A volume that
+    isn't there, or a directory fat16 won't walk (an entry naming a cluster
+    outside the data), is now the first `next`'s error. A read that fails
+    while listing already was an error.
+  - **angry-gopher `admin_backup`** (angry-gopher `claude/great-wright-i7aste`,
+    red `934976f`, fix `26aa925`). Each of these now gets a line in
+    `backup-skipped.txt`, with why: a root that can't be stat'd (anything
+    but "not there yet"), a file whose stat fails, and an entry that is
+    neither a file nor a folder. Links were dropped unnamed too.
+  - **metal-vmm `site.sh`** (`a187990`). Two missing `tcp:` lines no longer
+    compare equal; either side without one fails, saying which. There's no
+    test, since `site.sh` needs QEMU and KVM; I checked the four cases by
+    hand.
+  - **metal-vmm `reports.zig`** (red `95e10a8`, fix `6e9a7dc`). A page past
+    the 64 KiB the client keeps is now said at the size it came, from
+    `received` less the head. The line keeps the shape `sweep.sh` parses.
+  - **gopher-metal `store_judge`** (red `3951b4f`, fix `cc262cf`). "Is this
+    a file" asks the model's `stat`, so a file past `model_buf`'s 1 MiB is
+    still a file on the way. The judge runs here: `./port.sh` into a
+    scratch directory, then `zig build store-judge -Dgopher=<it>`, 2 pass.
+  - **`log_ring` `Ring.read`, answered, not changed.** A reader with less
+    room than the ring gets the newest bytes, from mid-line, with no flag.
+    But every kernel reader passes a buffer of exactly the ring's size:
+    `metalLog` passes `serial.ring.len()`, `serial.keepIn` 64 KiB (the
+    ring's size), and `restarting`'s `lastLine` `kept_log.slot_bytes` (64
+    KiB, the slot's). So that path is never taken. A flag would be dead
+    code today.
+
 - **(CC, item 103) What the 10-07 and 10-08 fixes missed: three findings,
   each with a red test.** Most important first.
   1. **B26 (gopher-metal `d7a5903`) makes a folder that can't be read stop
@@ -192,7 +236,7 @@ proposals, taken or not, are in the archive.)*
      Nine microsecond settings and `PATIENCE_S` took any u64, and their
      readers multiply into nanoseconds. `WIRE_LATENCY_US=18446744073709552`
      passed the check, then panicked in a safe build or became a short wait
-     in a fast one. Red test `5f0ab20`, fix `6e293fe`: each is bounded by
+     in a fast one. Red test `41b56c7`, fix `9404857`: each is bounded by
      what a u64 of nanoseconds holds. Both are on metal-vmm
      `claude/great-wright-i7aste`, and `zig build test` and
      `sweep_test.sh` are green. The other narrowings checked out:
@@ -202,7 +246,7 @@ proposals, taken or not, are in the archive.)*
   3. **`sweep.sh`'s new excuse (`78dd476`) covered another status.** "The
      stop cut it" was granted whenever the guest said its stop cut any
      response, so a whole 500 where the unhurt run got 200 read "differs as
-     allowed". Red `e9f1c79` (sweep_test seed 11), fix `e767c31`. The
+     allowed". Red `0e65483` (sweep_test seed 11), fix `d64eb02`. The
      excuse now covers a page cut short, or no answer at all, never another
      status. **The older excuses have the same shape**: `PEER_RESET_AT`,
      `DISK_REFUSE`, `DISK_CUT_AFTER` and the rest excuse any difference,
