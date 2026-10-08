@@ -112,9 +112,12 @@ Each line's full text, with its history, is in the archive under its name.
 - **B25, done (gopher-metal c7539eb):** boot tries a read three times;
   serving, once. **B26, done (d7a5903):** FAT copies apart, the cleaner is
   the FAT, the first on a tie. Seeds 1-50 with a volume: 0 failed.
-- **B27. A judge case for a topic's download** with a long topic name, on
-  Linux and on metal (angry-gopher 9e8e615d fixed its names; nothing
-  fetches that route today).
+- **B27, done (gopher-metal 4ed59ba):** the member story downloads a topic
+  of the longest name on both hosts. With it came angry-gopher 8b617f3c: on
+  Linux a body sent after its head was read over the head (my c21d39c4), so
+  POSTs were routed by their bodies' bytes (404s, lost messages, a panic).
+  **angry-gopher's `request-door` branch carries the same pre-read: take
+  8b617f3c when it is rebased for v21.**
 - **N4.** The cloud session's device knobs (item 82), run on gopher.elf and
   put on `floor-metal.txt`.
 - **B2, B3, B4, B6–B10, B12** (older: a seed sweep of gopher.elf, the bad
