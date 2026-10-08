@@ -480,8 +480,9 @@ const Holds = enum {
     /// A pointer at a model `snapshot.zig` saves in place (the test checks
     /// the model is in `snapshot.models`).
     model,
-    /// A pointer at state no snapshot saves yet: `snapshot.gaps`.
-    gap,
+    /// A pointer at state `snapshot.zig` saves apart, not by its value:
+    /// a write cache's map (`snapshot.Cache`).
+    apart,
     /// Guest memory: the box's half (docs/SNAPSHOT.md, "Guest RAM").
     box,
     /// Fixed before the run's first exit, and never written after.
@@ -501,7 +502,7 @@ const census = .{
     .{ "lapic", Holds.value },       .{ "halts", Holds.value },
     .{ "halted_ns", Holds.value },   .{ "msrs", Holds.value },
     .{ "exits", Holds.value },       .{ "cost", Holds.value },
-    .{ "drive", Holds.model },       .{ "write_cache", Holds.gap },
+    .{ "drive", Holds.model },       .{ "write_cache", Holds.apart },
     .{ "cut_at_exit", Holds.value }, .{ "volume", Holds.model },
     .{ "serial", Holds.value },      .{ "coverage_fd", Holds.host },
     .{ "rewritten", Holds.value },   .{ "quiet", Holds.value },
@@ -1406,10 +1407,10 @@ test "the census: every field of the machine is named, and is what it says (meta
                         if (known == M) break;
                     } else @compileError("main.zig: Machine." ++ f.name ++ " points at " ++ @typeName(M) ++ ", which is not in snapshot.models");
                 },
-                .gap => {
+                .apart => {
                     const M = pointee(f.type);
                     for (snapshot.models) |known| if (known == M)
-                        @compileError("main.zig: Machine." ++ f.name ++ " is called a gap, and snapshot.zig saves it");
+                        @compileError("main.zig: Machine." ++ f.name ++ " is said to be saved apart, and snapshot.zig saves it by its value");
                 },
                 .box, .input, .host => {},
             }

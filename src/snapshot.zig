@@ -88,6 +88,31 @@ pub const Disk = struct {
     }
 };
 
+/// **A WRITE CACHE, SAVED APART** (metal-vmm QUEUE 113): the sectors it holds
+/// as they were durable live in a map on the heap, which a copy of the
+/// `cache.Cache` would share with the live one. So its map is copied, and
+/// put back as a copy; the rest of it is its value.
+pub const Cache = struct {
+    value: cache.Cache,
+
+    pub fn save(c: *const cache.Cache) !Cache {
+        var value = c.*;
+        value.durable = try c.durable.clone(c.gpa);
+        return .{ .value = value };
+    }
+
+    pub fn restore(self: *const Cache, c: *cache.Cache) !void {
+        const durable = try self.value.durable.clone(self.value.gpa);
+        c.durable.deinit(c.gpa);
+        c.* = self.value;
+        c.durable = durable;
+    }
+
+    pub fn deinit(self: *Cache) void {
+        self.value.durable.deinit(self.value.gpa);
+    }
+};
+
 // ── the premise, held: no model points anywhere a restore would not mend ────
 
 /// **EVERY MODEL THIS FILE SAVES BY ITS VALUE** (metal-vmm QUEUE 113): each
@@ -115,6 +140,8 @@ pub const borrowed = .{
     .{ "virtio.Block.dirty?", "which of them the run wrote: saved with them, by `Disk`" },
     .{ "scsi.Scsi.image", "the volume's bytes: saved apart, by `Disk`" },
     .{ "scsi.Scsi.dirty?", "which of them the run wrote: saved with them, by `Disk`" },
+    .{ "virtio.Block.cache?", "the boot disk's write cache (`DISK_CACHE`): saved apart, its map copied, by `Cache`" },
+    .{ "scsi.Scsi.cache?", "the volume's (`VOLUME_CACHE`): the same" },
     .{ "net.Net.peer.request", "a request read before the run's first exit (`main`'s `request_bufs`), never written again" },
     .{ "net.Net.peer.plan.requests[]", "the same" },
     .{ "net.Net.peer.others[].request", "the same" },
@@ -124,10 +151,7 @@ pub const borrowed = .{
 /// **THE POINTERS A RESTORE IN PLACE GETS WRONG TODAY**, each with its red
 /// test. Not a way to excuse a pointer: a line here is a gap in the
 /// snapshot, for the box to close before a sweep restores a run that has it.
-pub const gaps = .{
-    .{ "virtio.Block.cache?", "a write cache (`DISK_CACHE`) holds the sectors as they were durable in a hash map on the heap: copied, the map is shared, and a restore keeps the detour's (test \"RED: a write cache\")" },
-    .{ "scsi.Scsi.cache?", "the volume's (`VOLUME_CACHE`), the same" },
-};
+pub const gaps = .{};
 
 /// Every path in `Ty` that is a pointer to state, as one string of lines.
 pub fn pointersIn(comptime Ty: type, comptime path: []const u8) []const u8 {
@@ -182,11 +206,12 @@ test "the premise: every pointer in a model is one a restore keeps right, or a g
     }
 }
 
-test "RED: a write cache is not its value: a restore keeps the detour's flush, and a cut after it loses nothing (metal-vmm QUEUE 113)" {
+test "a write cache is not its value: saved apart, a restore after a detour that flushed still loses at a cut what it held (metal-vmm QUEUE 113)" {
     // The run: sector 1 durable as 'a', then written as 'b' and held. Saved
     // there. A power cut now must put 'a' back. The detour flushes, which
-    // empties the cache's map in place; the restore copies back the map's
-    // header, whose entries live on the heap the detour emptied.
+    // empties the cache's map in place. Copied by value, the map's entries
+    // were shared with the detour and the cut lost nothing; `Cache` copies
+    // them.
     var image: [4 * 512]u8 = @splat('a');
     var c = cache.Cache{ .gpa = testing.allocator, .image = &image, .lies = true };
     defer c.deinit();
@@ -197,12 +222,14 @@ test "RED: a write cache is not its value: a restore keeps the detour's flush, a
     var bytes = try Disk.save(testing.allocator, &block);
     defer bytes.deinit(testing.allocator);
     const saved_block = save(&block);
-    const saved_cache = save(&c);
+    var saved_cache = try Cache.save(&c);
+    defer saved_cache.deinit();
 
     c.flush(); // the detour
+    _ = c.wrote(2, 1);
     bytes.restore(&block);
     restore(&block, saved_block);
-    restore(&c, saved_cache);
+    try saved_cache.restore(&c);
 
     c.lose(); // the power, as the run that never stopped would have lost it
     try testing.expectEqual(@as(u8, 'a'), image[512]);
