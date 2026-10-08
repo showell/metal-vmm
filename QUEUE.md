@@ -93,12 +93,46 @@ the box instead of guessing. Findings arrive as red tests where they can.
     caught 8 of 16). For each survivor, the test that kills it, in
     `fat16_test.zig`; rerun those mutants and update `MUTATION.md`.
 
+108. **Wrappers that still read failure as absence** (a cold review of your
+    105, 2026-10-08; security first). The lint can't see a store read
+    reached through a module's own function and then caught into a value:
+    `users.findMemberByName` takes a stat error on a member's password file
+    as "not a member", so a stranger's "Create account" with that member's
+    name, while the read fails, makes a second account of the same name.
+    `isMember`, `principalExists` and `currentUser.member` swallow errors the
+    same way. Make each answer an error on anything but absence, with a red
+    test; then look for others of the shape (a wrapper whose `catch` makes a
+    value) and say how a lint could reach them.
+
+109. **The lint's defence must say it is one** (same review). Any `//` line
+    above a site passes today, including an older comment that defends
+    nothing (`admin_lynrummy.zig:188`, `store.list(...) catch &.{}`, passes on
+    "Total actions = nonempty lines…"), and `catch |e|` passes whatever its
+    handler does. Require a marker (`// absent-ok: <why>`), convert the 17
+    defended sites, and make a `catch |e|` that turns `e` into a value a
+    finding too. Tests first, as before.
+
+110. **A backup that cannot read a root fails** (Steve, 2026-10-08: louder is
+    better). `admin_backup` now names in `backup-skipped.txt` a root it
+    cannot stat (anything but "not there yet"), and still answers OK. Make
+    that a failed backup (an error answer, no archive), with a red test;
+    a file inside that cannot be read stays a named skip.
+
+111. **Small ones from the same review**: `store_judge.zig`'s new `isFile`
+    sits under `onModel`'s doc comment (move it); `reports.zig`'s `came`
+    counts the CR/LF that `body` trims (make the two agree).
+
+**Decided (Steve, 2026-10-08):** a corrupt or empty counter fails the
+request and is left as it is (games traffic is small; safe over clever: no
+recovery from the highest ID); an unreadable session secret failing every
+returning visitor's request is right (louder is better).
+
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
     the third bullet of the old 99 asked (`request.zig`, every handler behind
     it, `lint_portable.py`'s two rules, anything reaching past the door).
 
-101. **Your proposals** when 103-107 are done.
+101. **Your proposals** when 106 and 108-111 are done.
 
 (98 is done and merged. 102 needs KVM: it moves to the box's list.)
 
