@@ -132,13 +132,10 @@ Each line's full text, with its history, is in the archive under its name.
   file over 2 MiB by name. A 17,000-byte head gets 431 at every `PEER_MSS`,
   as under QEMU and on Linux. (Yesterday's "10 to 13 KB" was misread: the
   peer released 8,192 bytes, all of them acknowledged.)
-- **B24, the production shape on metal-vmm (2026-10-08).** No gate runs
-  `TRANSPORT=pci` with a `VOLUME`, which is production (chat's data on the
-  volume); its first run here crashed metal-vmm (virtio-scsi's third queue,
-  fixed 766bffc) and showed every write's residual wrong (fixed). Put a
-  volume under long.sh's lossy sweep, or a seeded sweep with `VOLUME_SITE`,
-  in the release gates. The durable sweep (item 70) has never run with the
-  real kernel: it would have crashed here.
+- **B24, done (gopher-metal, long.sh):** every judged boot of the lossy
+  sweep and the rough peers has a volume attached, and a 100-seed sweep with
+  `VOLUME_SITE` must end with none failed. The durable sweep (a post, then a
+  cut) still needs a session cookie to run with the real kernel.
 - **B25, done (gopher-metal c7539eb):** boot tries a read three times;
   serving, once. **B26, done (d7a5903):** FAT copies apart, the cleaner is
   the FAT, the first on a tie. Seeds 1-50 with a volume: 0 failed.
