@@ -45,12 +45,16 @@ const bad_most = @typeInfo(@FieldType(faults.Drive, "bad")).array.len;
 const any_number: Kind = .{ .number = .{} };
 const at_least_one: Kind = .{ .number = .{ .lo = 1 } };
 const u32_number: Kind = .{ .number = .{ .hi = std.math.maxInt(u32) } };
+/// A time read in microseconds, or seconds, and kept in nanoseconds: no more
+/// than a u64 of nanoseconds holds.
+const micros: Kind = .{ .number = .{ .hi = std.math.maxInt(u64) / std.time.ns_per_us } };
+const whole_seconds: Kind = .{ .number = .{ .lo = 1, .hi = std.math.maxInt(u64) / std.time.ns_per_s } };
 
 pub const table = [_]Setting{
     // The fault knobs (knobs.zig `names`; a test holds this list to it).
     .{ .name = "WIRE_EAT", .kind = .{ .schedule = schedule_most } },
     .{ .name = "WIRE_LOSS", .kind = u32_number },
-    .{ .name = "WIRE_LATENCY_US", .kind = any_number },
+    .{ .name = "WIRE_LATENCY_US", .kind = micros },
     .{ .name = "PEER_EAT", .kind = .{ .schedule = schedule_most } },
     .{ .name = "PEER_LOSS", .kind = u32_number },
     .{ .name = "PEER_DAMAGE", .kind = .{ .schedule = schedule_most } },
@@ -63,14 +67,14 @@ pub const table = [_]Setting{
     .{ .name = "DISK_CUT_AFTER", .kind = any_number },
     .{ .name = "DISK_TEAR", .kind = any_number },
     .{ .name = "DISK_TEAR_KEEP", .kind = any_number },
-    .{ .name = "PEER_RESET_AT", .kind = any_number },
+    .{ .name = "PEER_RESET_AT", .kind = micros },
     .{ .name = "PEER_RESET_OFF", .kind = u32_number },
     .{ .name = "PEER_VANISH_AFTER", .kind = any_number },
     .{ .name = "PEER_FLOOD", .kind = .{ .number = .{ .hi = wire.max_flood } } },
-    .{ .name = "PEER_FLOOD_GAP_US", .kind = any_number },
-    .{ .name = "PEER_FLOOD_AT_US", .kind = any_number },
+    .{ .name = "PEER_FLOOD_GAP_US", .kind = micros },
+    .{ .name = "PEER_FLOOD_AT_US", .kind = micros },
     .{ .name = "PEER_SHUT_AFTER", .kind = any_number },
-    .{ .name = "PEER_SHUT_FOR_US", .kind = any_number },
+    .{ .name = "PEER_SHUT_FOR_US", .kind = micros },
     .{ .name = "PEER_MSS", .kind = at_least_one },
     .{ .name = "PEER_IGNORE_WINDOW", .kind = .flag },
     .{ .name = "DISK_ROT", .kind = .rot },
@@ -78,7 +82,7 @@ pub const table = [_]Setting{
     .{ .name = "PEER_RETRY", .kind = .{ .number = .{ .hi = 100 } } },
     // main.zig checks its range against the calendar itself.
     .{ .name = "RTC_BOOTS_AT", .kind = .any },
-    .{ .name = "PEER_DRIP_US", .kind = any_number },
+    .{ .name = "PEER_DRIP_US", .kind = micros },
     .{ .name = "PEER_PIPELINE", .kind = .flag },
     .{ .name = "DHCP_LEASE_S", .kind = .{ .number = .{ .lo = 1, .hi = std.math.maxInt(u32) } } },
     .{ .name = "VOLUME_CACHE", .kind = .{ .choice = &.{ "1", "lie" } }, .needs_volume = true },
@@ -88,11 +92,11 @@ pub const table = [_]Setting{
     .{ .name = "PEER_MANGLE", .kind = .{ .schedule = schedule_most } },
     .{ .name = "PEER_MANGLE_RATE", .kind = u32_number },
     .{ .name = "PEER_MANGLE_KIND", .kind = .mangle_kind },
-    .{ .name = "VOLUME_LATENCY_US", .kind = any_number, .needs_volume = true },
+    .{ .name = "VOLUME_LATENCY_US", .kind = micros, .needs_volume = true },
     .{ .name = "VOLUME_ATTENTION_AT", .kind = any_number, .needs_volume = true },
     .{ .name = "VOLUME_GONE_AT", .kind = any_number, .needs_volume = true },
     .{ .name = "VOLUME_READ_ONLY_AT", .kind = any_number, .needs_volume = true },
-    .{ .name = "VOLUME_SYNC_US", .kind = any_number, .needs_volume = true },
+    .{ .name = "VOLUME_SYNC_US", .kind = micros, .needs_volume = true },
     .{ .name = "VOLUME_CUT_AT_EXIT", .kind = .flag, .needs_volume = true },
     .{ .name = "VOLUME_CACHE_KEEPS", .kind = any_number, .needs_volume = true },
     .{ .name = "VOLUME_SECTOR", .kind = .{ .number = .{ .lo = 1, .hi = std.math.maxInt(u32) } }, .needs_volume = true },
@@ -103,10 +107,10 @@ pub const table = [_]Setting{
     .{ .name = "VOLUME_SHORT_AT", .kind = at_least_one, .needs_volume = true },
     // The rest metal-vmm reads.
     .{ .name = "FAULT_SEED", .kind = any_number },
-    .{ .name = "PATIENCE_S", .kind = at_least_one },
+    .{ .name = "PATIENCE_S", .kind = whole_seconds },
     .{ .name = "PEER_CLIENTS", .kind = .{ .number = .{ .lo = 1, .hi = wire.max_clients } } },
     .{ .name = "PEER_ASKS", .kind = .{ .number = .{ .lo = 1, .hi = 1000 } } },
-    .{ .name = "PEER_CLIENT_GAP_US", .kind = any_number },
+    .{ .name = "PEER_CLIENT_GAP_US", .kind = micros },
     .{ .name = "PEER_REQUEST", .kind = .{ .files = wire.max_clients } },
     .{ .name = "PEER_BODY", .kind = .any },
     .{ .name = "PEER_RESPONSE", .kind = .any },
@@ -282,9 +286,8 @@ test "a name in a family that is not a setting is said, and does not stop the ru
     try testing.expectEqual(@as(usize, 2), unknown_seen);
 }
 
-test "a time no clock here can hold is refused, not overflowed (metal-vmm QUEUE 103, RED)" {
-    // **RED until checked.zig bounds them** (CC, 2026-10-08). Each of these
-    // is read as a whole number and multiplied into nanoseconds
+test "a time no clock here can hold is refused, not overflowed (metal-vmm QUEUE 103)" {
+    // Each of these is read as a whole number and multiplied into nanoseconds
     // (settings.zig, main.zig): `us * std.time.ns_per_us`, `seconds *
     // std.time.ns_per_s`. The table takes any u64 for them, so a value that
     // passes here overflows there: a panic in a safe build, a short wait
