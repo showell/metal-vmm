@@ -49,6 +49,7 @@ there by `zig build kernels`; `gopher.elf` by `./port.sh && zig build gopher`):
 | `./lossy.sh` | | which lost frames the guest survives |
 | `./flaky.sh` | `mkfs.vfat`; the site volume for `gopher` | which refused disk requests it survives |
 | `./sweep.sh` | the site volume, zig-coverage-sdk | a range of seeds, each a whole fault schedule |
+| `./nightly.sh` | the same | **overnight, detached:** `sweep.sh` with a volume, batch after batch of new seeds for `HOURS` (10), logging as it goes in `~/nightly/<date-time>/` (`progress.log`, `failures.log`, each failing seed's files) |
 
 "The site volume" is `SITE`, by default
 `~/build/gopher-metal/probe/gopher/pristine.img`, staged by gopher-metal's

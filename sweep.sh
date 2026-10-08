@@ -25,7 +25,8 @@
 # or the merge did.
 #
 # Environment: GUESTS, SITE and PATH_WANTED (default /) as rest.sh has them;
-# TRANSPORT (default pci, the machine that rests); FLOOR; RUN_TIMEOUT
+# TRANSPORT (default pci, the machine that rests); FLOOR; RUN_TIMEOUT;
+# JOBS (2: runs side by side); KEEP_FAILED=<dir>: a failing seed's files kept
 # (seconds, default 300); KEEP=<dir> keeps every run's log, page and the
 # coverage JSONL there. VMM, REPORT and SOUND name the programs, for a test;
 # REPORT is $COVERAGE_SDK/tools/report.py, the SDK a sibling checkout unless
@@ -256,7 +257,13 @@ while [ "$seed" -le "$LAST" ]; do
   case "$v" in
     ok*) ok=$((ok + 1)) ;;
     differs* | lost*) allowed=$((allowed + 1)) ;;
-    *) failing="$failing $seed" ;;
+    *) failing="$failing $seed"
+       # Kept for reading after the sweep (`KEEP_FAILED=<dir>`): the run's
+       # stdout, stderr, page and coverage; its images too, if it wrote them.
+       if [ -n "${KEEP_FAILED:-}" ]; then
+         mkdir -p "$KEEP_FAILED/seed$seed"
+         cp "$WORK/seed$seed".* "$KEEP_FAILED/seed$seed/" 2>/dev/null
+       fi ;;
   esac
   printf '%-6s %-4s %-6s %-8s %-40s %s\n' "$seed" "$(cat "$WORK/seed$seed.exit")" "$(status_of "seed$seed")" \
     "$([ -f "$WORK/seed$seed.body" ] && wc -c < "$WORK/seed$seed.body" || echo none)" "$v" "$(knobs_of "seed$seed")"

@@ -115,6 +115,12 @@ good=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" F
 expect "a clean sweep's floor" '^2 runs, 2 properties, 1 on the floor' "$good"
 if grep -q "under the floor" <<< "$good"; then echo "FAIL: a clean sweep is under its floor"; fail=1; fi
 
+# A failing seed's files are kept when asked (KEEP_FAILED), and only its.
+kept="$T/kept"
+KEEP_FAILED="$kept" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 1 2 > /dev/null 2>&1
+[ -f "$kept/seed2/seed2.out" ] && [ -f "$kept/seed2/seed2.err" ] || { echo "FAIL: seed 2's stdout and stderr were not kept"; fail=1; }
+[ ! -e "$kept/seed1" ] || { echo "FAIL: seed 1 passed and was kept"; fail=1; }
+
 # A seed whose page was not written fails; it is not an empty page that
 # matches.
 nopage=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 9 9 2>&1)
