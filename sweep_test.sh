@@ -87,13 +87,22 @@ printf 'pristine volume' > "$T/site.img"
 #           38 (p): client 2's page differs, nothing to excuse it: FAIL.
 #           39 (q): client 1 reset (PEER_RESET_AT) and no answer, client 2
 #           answered 404: allowed, client 2 asked after client 1 differed.
-#           40 (p): client 2 no answer, a reset fired: allowed.
+#           40 (p): client 2 no answer, client 1 vanished
+#           (PEER_VANISH_AFTER, fired): allowed, as a client that vanished
+#           holds the guest's one connection.
 #           41 (q): client 1's page as unhurt, client 2 404: FAIL (request 1
 #           damaged request 2).
 #           42 (p): client 1 reset, client 2 404: FAIL (not in turn: client
 #           2 depends on nothing).
 #           43 (q), 44 (p): both pages as unhurt: ok.
 #           45 (q): client 2 a 500, a disk refusal fired: allowed.
+#           50 (p): client 1 reset, client 2 no answer: FAIL (a reset frees
+#           the guest at once; QUEUE 127(e)).
+#           51 (q): client 1 reset and no answer, client 2 a 500, no disk
+#           fault: FAIL (after an earlier client differed, only what UNMADE
+#           names or the client's own excuses; QUEUE 127(d)).
+#           52: a cut, and a volume fsck calls sound (no leftovers) that lost
+#           a file the request does not touch: FAIL (QUEUE 127, lesser).
 # A run with PEER_REQUEST (a shape's) and no seed above has for its page the
 # request file's own bytes, so each shape's page is its own.
 # With FAKE_UNHURT_NO_PAGE set, the unhurt run's page is not written either.
@@ -104,7 +113,7 @@ s="${FAULT_SEED:-}"
 L='"location":{"class":"tcp","function":"f","file":"tcp.zig","begin_line":1,"begin_column":1}'
 ev() { echo "{\"antithesis_assert\":{\"hit\":$3,\"must_hit\":true,\"assert_type\":\"x\",\"display_type\":\"$1\",\"message\":\"$2\",\"condition\":$4,\"id\":\"$2\",$L}}" >> "$COVERAGE_OUT"; }
 knobs="none"
-case "$s" in 23 | 25 | 26) knobs="DISK_CACHE=lie DISK_CUT_AFTER=2" ;; 27) knobs="WIRE_EAT=3" ;; 28) knobs="PEER_RESET_AT=500" ;; 29) knobs="DISK_REFUSE=4" ;; 30) knobs="WIRE_EAT=3" ;; 31 | 32 | 33) knobs="DISK_CUT_AFTER=2" ;; 36 | 48) knobs="VOLUME_CACHE=lie" ;; 46) knobs="PEER_RESET_AT=500" ;; 39 | 40 | 42) knobs="PEER_RESET_AT=500" ;; 45) knobs="DISK_REFUSE=4" ;; 24) knobs="DISK_CACHE=lie" ;; 18 | 19) knobs="WIRE_EAT=3" ;; 16) knobs="PEER_RESET_AT=500" ;; 17) knobs="WIRE_EAT=17" ;; 3) knobs="PEER_RESET_AT=500" ;; 12) knobs="DISK_REFUSE=4" ;; 13) knobs="PEER_RESET_AT=500" ;; 14) knobs="DISK_REFUSE=4" ;; 15) knobs="PEER_RESET_AT=500" ;; 4) knobs="DISK_WRITES_ONLY=1" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
+case "$s" in 23 | 25 | 26) knobs="DISK_CACHE=lie DISK_CUT_AFTER=2" ;; 27) knobs="WIRE_EAT=3" ;; 28) knobs="PEER_RESET_AT=500" ;; 29) knobs="DISK_REFUSE=4" ;; 30) knobs="WIRE_EAT=3" ;; 31 | 32 | 33) knobs="DISK_CUT_AFTER=2" ;; 36 | 48) knobs="VOLUME_CACHE=lie" ;; 46) knobs="PEER_RESET_AT=500" ;; 39 | 42 | 50 | 51) knobs="PEER_RESET_AT=500" ;; 40) knobs="PEER_VANISH_AFTER=3" ;; 52) knobs="DISK_CUT_AFTER=2" ;; 45) knobs="DISK_REFUSE=4" ;; 24) knobs="DISK_CACHE=lie" ;; 18 | 19) knobs="WIRE_EAT=3" ;; 16) knobs="PEER_RESET_AT=500" ;; 17) knobs="WIRE_EAT=17" ;; 3) knobs="PEER_RESET_AT=500" ;; 12) knobs="DISK_REFUSE=4" ;; 13) knobs="PEER_RESET_AT=500" ;; 14) knobs="DISK_REFUSE=4" ;; 15) knobs="PEER_RESET_AT=500" ;; 4) knobs="DISK_WRITES_ONLY=1" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
 [ -n "$s" ] && echo "metal-vmm: FAULT_SEED=$s is $knobs" >&2
 # What fired, as metal-vmm says it (reports.zig `fired`): every fault the
 # seed drew, but for 28 and 29, whose faults never came.
@@ -140,13 +149,14 @@ case "$s" in
   28) page=""; status=0 ;;
   31) printf 'STOPLEFT LOSTFILE' > "$img"; echo "metal-vmm: the power was cut after the guest's write 2 (sector 9, 1 sectors)" >&2 ;;
   33) [ -z "${VOLUME:-}" ] || printf 'STOPLEFT' > "$VOLUME"; echo "metal-vmm: the power was cut after the guest's write 2 (sector 9, 1 sectors)" >&2 ;;
+  52) printf 'LOSTFILE' > "$img"; echo "metal-vmm: the power was cut after the guest's write 2 (sector 9, 1 sectors)" >&2 ;;
   32) printf 'STOPLEFT' > "$img"; echo "metal-vmm: the power was cut after the guest's write 2 (sector 9, 1 sectors)" >&2 ;;
   30) page=""; status=0; echo "  serving 2 request(s), as gopher-metal.conf says"; echo "request 1: (no request) -> the client stopped sending, and was let go"; echo "  served 2 request(s); base heap holds 52 live bytes"; echo "peer 2: 204, 1 of 1 answers, 65 bytes, done" ;;
   29) page="Home unavailable"; status=500 ;;
   27) page=""; status=0; echo "  serving 2 request(s), as gopher-metal.conf says"; echo "  served 2 request(s); base heap holds 52 live bytes"; echo "peer 2: 204, 1 of 1 answers, 65 bytes, done" ;;
   11) page="oops"; status=500; echo "  let go at the end: 1 response(s) cut by the stop, 2 bytes never acknowledged" ;;
 esac
-case "$s" in [2-9] | 1[0-9] | 2[3-9] | 30) ;; *) [ -z "${PEER_REQUEST:-}" ] || page="$(cat "${PEER_REQUEST%%,*}")" ;; esac
+case "$s" in [2-9] | 1[0-9] | 2[3-9] | 30 | 52) ;; *) [ -z "${PEER_REQUEST:-}" ] || page="$(cat "${PEER_REQUEST%%,*}")" ;; esac
 # A durable shape's write, and its read-back (QUEUE 125).
 if [ "$page" = "WRITE" ]; then
   case "$s" in 35 | 36 | 46 | 47) ;; 48) printf ' CORRUPT' >> "$VOLUME" ;; *) printf ' written' >> "$VOLUME" ;; esac
@@ -166,7 +176,7 @@ fi
 # last named, past the list), and says its line.
 others=""
 if [ "${PEER_CLIENTS:-1}" -gt 1 ]; then
-  case "$s" in 39 | 42) page=""; status=0 ;; esac
+  case "$s" in 39 | 42 | 51) page=""; status=0 ;; esac
   IFS=, read -ra reqs <<< "$PEER_REQUEST"
   for ((k = 2; k <= PEER_CLIENTS; k++)); do
     r="${reqs[$(( k - 1 < ${#reqs[@]} ? k - 1 : ${#reqs[@]} - 1 ))]}"
@@ -174,7 +184,8 @@ if [ "${PEER_CLIENTS:-1}" -gt 1 ]; then
     case "$s" in
       38) p2="another page" ;;
       39 | 41 | 42) p2="not found"; s2=404 ;;
-      40) p2=""; s2=0; a2=0 ;;
+      40 | 50) p2=""; s2=0; a2=0 ;;
+      51) p2="oops"; s2=500 ;;
       45) p2="Home unavailable"; s2=500 ;;
     esac
     grep -q "REQUESTS=" "$img" || { p2=""; s2=0; a2=0; }
@@ -296,6 +307,8 @@ expect "seed 29" '^29 .*FAIL: not the page (status 500)' "$unfired"
 letgo=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 30 30 2>&1)
 leftovers=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 31 32 2>&1)
 expect "seed 31" '^31 .*FAIL: the volume lost a file the request does not touch' "$leftovers"
+clean=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 52 52 2>&1)
+expect "seed 52" '^52 .*FAIL: the volume lost a file the request does not touch' "$clean"
 expect "seed 32" '^32 .* ok ' "$leftovers"
 machine=$(VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 33 33 2>&1)
 expect "seed 33" '^33 .* ok ' "$machine"
@@ -369,20 +382,23 @@ mkdir -p "$T/clients"
 printf 'page a' > "$T/clients/a.http"
 printf 'page b' > "$T/clients/b.http"
 printf 'PEER_CLIENTS=2\nPEER_REQUEST=a.http,b.http\nEXPECT=200,200\n' > "$T/clients/p.shape"
-printf 'PEER_CLIENTS=2\nPEER_IN_TURN=1\nPEER_REQUEST=a.http,b.http\nEXPECT=200,200\n' > "$T/clients/q.shape"
+printf 'PEER_CLIENTS=2\nPEER_IN_TURN=1\nPEER_REQUEST=a.http,b.http\nEXPECT=200,200\nUNMADE=404\n' > "$T/clients/q.shape"
 both=$(SHAPES="$T/clients" VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 38 45 2>&1)
 expect "shape p's unhurt clients" '^shape p: unhurt status 200,200, 6 bytes' "$both"
 expect "shape p's site, raised" '^shape p: the site raised to 2 requests' "$both"
 expect "a repeat on the raised site" 'repeat it: .*PEER_CLIENTS=2 .*VOLUME=<a copy of the volume, after the setup> .*<a copy of the site, its requests raised by tools/site_requests.py to 2> "" /' "$both"
 expect "seed 38" '^38 *p .*FAIL: client 2: not its page (status 200; unhurt: 200)' "$both"
-expect "seed 39" "^39 *q .*differs (allowed: PEER_RESET_AT, client 2: client 1's answer differed first)" "$both"
-expect "seed 40" '^40 *p .*differs (allowed: client 2: PEER_RESET_AT)' "$both"
+expect "seed 39" "^39 *q .*differs (allowed: PEER_RESET_AT, client 2: a 404 as UNMADE allows, after client 1's answer differed)" "$both"
+expect "seed 40" '^40 *p .*differs (allowed: client 2: PEER_VANISH_AFTER)' "$both"
 expect "seed 41" '^41 *q .*FAIL: client 2: not its page (status 404; unhurt: 200)' "$both"
 expect "seed 42" '^42 *p .*FAIL: client 2: not its page (status 404; unhurt: 200)' "$both"
 expect "seed 43" '^43 *q .* ok ' "$both"
 expect "seed 44" '^44 *p .* ok ' "$both"
 expect "seed 45" '^45 *q .*differs (allowed: client 2: DISK_REFUSE (a 500))' "$both"
 expect "the summary" '^8 seeds: 2 ok, 3 differ as their faults allow, 3 failed' "$both"
+more=$(SHAPES="$T/clients" VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 50 51 2>&1)
+expect "seed 50" '^50 *p .*FAIL: client 2: not its page (status 0; unhurt: 200)' "$more"
+expect "seed 51" '^51 *q .*FAIL: client 2: not its page (status 500; unhurt: 200)' "$more"
 # A shape of two clients that names one status holds client 2 to nothing.
 printf 'PEER_CLIENTS=2\nPEER_REQUEST=a.http,b.http\nEXPECT=200\n' > "$T/clients/p.shape"
 SHAPES="$T/clients" VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 44 44 > "$T/clients.out" 2>&1

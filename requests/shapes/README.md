@@ -39,8 +39,9 @@ unhurt.
 - `session-then-move`: client 1 makes session 2 (`200`), and client 2 moves
   in it (`204`, `game-action-2.http`), asking only once client 1 was
   answered (`PEER_IN_TURN=1`). A move in a session that is not there is a
-  404, so a request that damages the next one shows; one whose own answer a
-  fault cost excuses the next one's, as it asked of another state.
+  404, so a request that damages the next one shows. Once client 1's answer
+  differs (a fault cost it), client 2 may answer that 404 (`UNMADE=404`),
+  and nothing else its own faults do not excuse.
 
 The site's boot disk says `requests = 1`, which is what ends a run, so
 sweep.sh boots each of these from a copy raised to the clients' requests

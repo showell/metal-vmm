@@ -43,8 +43,9 @@
 # first is (client k's page is metal-vmm's `<PEER_BODY>.k`). With
 # `PEER_IN_TURN=1` each client asks after the one before was answered, so a
 # request may depend on the last one's write (a move in the session it
-# made): then a client's answer may differ in any way once an earlier
-# client's did ("client 1's answer differed first"), and never otherwise.
+# made): then, once an earlier client's answer differed, a later one may
+# also answer what the shape's `UNMADE=<status>[,...]` names (a 404: the
+# session was never made), and nothing its own faults do not excuse.
 # The site's own limit (`requests = 1`) ends a run, so a shape of n clients
 # asking k times each boots from a copy of SITE raised to n x k
 # (`tools/site_requests.py`, QUEUE 127(h); SITE_REQUESTS names another). **A WRITE SHAPE MAY CARRY ITS READ-BACK** (metal-vmm QUEUE 125):
@@ -136,7 +137,7 @@ COVERAGE="$WORK/coverage.jsonl"
 # The shapes: their names, and each one's settings as VAR=value words, the
 # request files made absolute. No SHAPES is one shape, named "", with none.
 SHAPE_NAMES=("")
-declare -A SHAPE_ENV=() SHAPE_EXPECT=() SHAPE_READ=() SHAPE_MARK=() SHAPE_TOLD=()
+declare -A SHAPE_ENV=() SHAPE_EXPECT=() SHAPE_READ=() SHAPE_MARK=() SHAPE_TOLD=() SHAPE_UNMADE=()
 # setting_of <shape> <VAR>: that setting's value in the shape (or, for no
 # shape, the environment's).
 setting_of() {
@@ -177,6 +178,9 @@ if [ -n "${SHAPES:-}" ]; then
           SHAPE_READ[$n]="$v" ;;
         MARK=*) SHAPE_MARK[$n]="${line#MARK=}" ;;
         TOLD=*) SHAPE_TOLD[$n]="${line#TOLD=}" ;;
+        # In turn, what a client answers when what an earlier one should
+        # have made is not there (QUEUE 127(d)): `UNMADE=404`.
+        UNMADE=*) SHAPE_UNMADE[$n]="${line#UNMADE=}" ;;
         PEER_REQUEST=*)
           files=""
           IFS=, read -ra parts <<< "${line#PEER_REQUEST=}"
@@ -339,10 +343,13 @@ answer_excuse() {
     done ;;
   esac
   if [ $less = yes ]; then
-    # The first client's own faults excuse the others' lesser answers too:
+    # The first client's vanishing excuses the others' lesser answers too:
     # the guest serves one connection at a time, so a client that vanished
-    # holds the rest behind it.
+    # holds the rest behind it. Its reset does not: a reset frees the guest
+    # at once, and excusing it would hide a reset that breaks another
+    # connection (QUEUE 127(e)).
     for f in PEER_RESET_AT PEER_VANISH_AFTER DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DISK_ROT VOLUME_CUT_AFTER; do
+      [ "$f" != PEER_RESET_AT ] || [ "$k" = 1 ] || continue
       case "$fired" in *" $f "*) excuse="$excuse${excuse:+, }$f" ;; esac
     done
     local gone
@@ -401,7 +408,9 @@ verdict() {
   # MACHINE** (metal-vmm QUEUE 124(c)): a cut on either disk stops the guest
   # mid-write on the other too, so either cut lets both hold a stop's
   # leftovers. What a stop leaves never covers a file the request does not
-  # touch: that must survive whole (`untouched`, QUEUE 124(b)).
+  # touch: that must survive whole (`untouched`, QUEUE 124(b)), checked
+  # after every cut, not only one fsck found leftovers after: a lost file's
+  # remains can be ones fsck says nothing of (QUEUE 127).
   local disk_cut="" volume_cut=""
   grep -qE "^metal-vmm: the power was cut (in the guest's write [0-9]+:|after the guest's write [0-9]+ \(sector)" "$WORK/$name.err" && disk_cut=1
   grep -qE "^metal-vmm: the power was cut after the guest's write [0-9]+ to the volume" "$WORK/$name.err" && volume_cut=1
@@ -419,7 +428,7 @@ verdict() {
   site=$(site_of "$sh")
   if changed "$WORK/$name.img" && ! cmp -s "$WORK/$name.img" "$site"; then
     if STOP_LEAVES="$disk_cut" "$SOUND" "$WORK/$name.img" > "$WORK/$name.sound" 2>&1; then
-      grep -q "sound but for what a stop leaves" "$WORK/$name.sound" && ! "$UNTOUCHED" "$site" "$WORK/$u.img" "$WORK/$name.img" > "$WORK/$name.untouched" 2>&1 &&
+      { grep -q "sound but for what a stop leaves" "$WORK/$name.sound" || [ -n "$disk_cut$exit_cut" ]; } && ! "$UNTOUCHED" "$site" "$WORK/$u.img" "$WORK/$name.img" > "$WORK/$name.untouched" 2>&1 &&
         why="$why, the volume lost a file the request does not touch ($(head -1 "$WORK/$name.untouched" | sed 's/^ *//'))"
     else
       case " $knobs" in
@@ -430,7 +439,7 @@ verdict() {
   fi
   if [ -n "${VOLUME_SITE:-}" ] && changed "$WORK/$name.vol" && ! cmp -s "$WORK/$name.vol" "$VOLUME_SITE"; then
     if STOP_LEAVES="$volume_cut" "$SOUND" "$WORK/$name.vol" > "$WORK/$name.vsound" 2>&1; then
-      grep -q "sound but for what a stop leaves" "$WORK/$name.vsound" && ! "$UNTOUCHED" "$VOLUME_SITE" "$WORK/$u.vol" "$WORK/$name.vol" > "$WORK/$name.vuntouched" 2>&1 &&
+      { grep -q "sound but for what a stop leaves" "$WORK/$name.vsound" || [ -n "$volume_cut$exit_cut" ]; } && ! "$UNTOUCHED" "$VOLUME_SITE" "$WORK/$u.vol" "$WORK/$name.vol" > "$WORK/$name.vuntouched" 2>&1 &&
         why="$why, the attached volume lost a file the request does not touch ($(head -1 "$WORK/$name.vuntouched" | sed 's/^ *//'))"
     else
       case " $knobs" in
@@ -496,14 +505,19 @@ verdict() {
   fi
   # **EVERY CLIENT, AGAINST THE SAME CLIENT UNHURT** (metal-vmm QUEUE 126).
   # In turn, a client asks after the one before was answered, and may ask
-  # what that one wrote: once one differs, the later ones may differ in any
-  # way. Not in turn, or before any differs, each is judged alone.
+  # for what that one should have made: once one differs, a later one may
+  # also answer what the shape's UNMADE names (a 404: no such session), and
+  # nothing else its own faults do not excuse (QUEUE 127(d)). Not in turn,
+  # or before any differs, each is judged alone.
   local k ks us cex differed=""
   for ((k = 1; k <= $(clients_of "$sh"); k++)); do
     if [ "$k" = 1 ]; then ks="$status"; us=$(status_of "$u"); else ks=$(client_status "$name" "$k"); us=$(client_status "$u" "$k"); fi
     [ "$ks" != "$us" ] || ! cmp -s "$(client_page "$name" "$k")" "$(client_page "$u" "$k")" || continue
-    if [ -n "$differed" ] && in_turn_of "$sh"; then cex="client $differed's answer differed first"
-    else cex=$(answer_excuse "$name" "$k" "$ks" "$us" "$(client_page "$name" "$k")" "$(client_page "$u" "$k")" "$fired"); fi
+    cex=""
+    if [ -n "$differed" ] && in_turn_of "$sh" && [ -n "$ks" ]; then
+      case ",${sh:+${SHAPE_UNMADE[$sh]:-}}," in *",$ks,"*) cex="a $ks as UNMADE allows, after client $differed's answer differed" ;; esac
+    fi
+    [ -n "$cex" ] || cex=$(answer_excuse "$name" "$k" "$ks" "$us" "$(client_page "$name" "$k")" "$(client_page "$u" "$k")" "$fired")
     [ -n "$differed" ] || differed="$k"
     if [ "$k" = 1 ]; then
       if [ -n "$cex" ]; then excuse="$excuse${excuse:+, }$cex"; else why="$why, not the page (status ${status:-none})"; fi

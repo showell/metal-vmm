@@ -7,3 +7,5 @@ PEER_CLIENTS=2
 PEER_IN_TURN=1
 PEER_REQUEST=new-session.http,game-action-2.http
 EXPECT=200,204
+# client 1's session never made (its answer cost by a fault): the move is a 404
+UNMADE=404
