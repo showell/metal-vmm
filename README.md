@@ -1,13 +1,26 @@
 # metal-vmm
 
-**Active on `master`, 2026-10-06.** A deterministic hypervisor of our own, on
+**Active on `master`, 2026-10-09.** A deterministic hypervisor of our own, on
 KVM, for one kind of guest: [gopher-metal](https://github.com/showell/gopher-metal)'s
 bare-metal kernels, the probes and the real server behind lynrummy.com. It is
 a test machine, never a production one. The same guest with the same seed
 gives the same run, byte for byte, and any input can be withheld or damaged to
-a recipe. The long-term aim is an explorer like Antithesis's, steered by
+a recipe.
+
+**It has two roles.** It is **the judge of one kernel**, and it is **a
+storage lab**: a place to find out whether code that keeps data on a disk
+(a filesystem, a log, a small store) keeps what it promised through refused
+requests, torn writes, power cuts and write caches that lie, every one of
+them chosen by a recipe and repeatable to the byte (see "A storage lab"
+below). Today the only code in the lab is gopher-metal's FAT and its store.
+
+Its work today is **judging**: a sweep of seeds, each a whole fault
+schedule, asks of every run whether anything the guest promises was broken,
+and a standing set of planted bugs checks that the judge still catches them.
+An explorer like Antithesis's, steered by
 [zig-coverage-sdk](https://github.com/showell/zig-coverage-sdk)'s properties
-toward runs no run has reached yet; that explorer is not built.
+toward runs no run has reached yet, is the long-term aim; it is not built,
+and its first step (`docs/SNAPSHOT.md`) is parked.
 
 - **Live work** is in [QUEUE.md](QUEUE.md), one queue for all four repos
   (zig-coverage-sdk, metal-vmm, gopher-metal, angry-gopher).
@@ -21,7 +34,32 @@ Every knob is in [KNOBS.md](KNOBS.md); what the machine has found in the guest
 and the application is in [docs/findings.md](docs/findings.md); reviews are in
 [docs/reviews/](docs/reviews/).
 
+## Words this repo uses
+
+- **the guest**: the kernel a run boots. Every guest so far is one of
+  gopher-metal's: its probes, and `gopher.elf`, a real web server.
+- **the peer**: the other end of the guest's wire, written here
+  (`peer.zig`): a DHCP server and TCP clients, well-behaved or not.
+- **a door**: a port the guest writes to talk to this program rather than
+  to a device: the exit door (0xF4, its exit code), the coverage door (0xE2).
+  "Rung a doorbell" is a virtio notification.
+- **a knob**: an environment variable that makes the machine unhelpful in
+  one exact way ([KNOBS.md](KNOBS.md)). **A seed** (`FAULT_SEED`) turns many
+  at once, so a seed names a whole fault schedule.
+- **properties**: the guest's own assertions, printed as zig-coverage-sdk's
+  JSONL (an Antithesis-style SDK): "always", "sometimes", "reachable".
+- **the unhurt run**: the same guest and request with no knob set; a sweep
+  judges each seed against it.
+- **the judge**: `sweep.sh`'s verdict on a run (its exit, its properties,
+  its volume's soundness, its page). **A plant**: a deliberate bug patched
+  into the guest, which the judge must catch (`plants.sh`).
+- **the box**: the development machine with `/dev/kvm`, where guests boot.
+  **CC** is a cloud session with no KVM ([CLOUD_WORK.md](CLOUD_WORK.md)).
+
 ## What runs where
+
+**You need** zig 0.16.0, Linux 5.10 or later with `/dev/kvm` (the MSR
+filter), and for `check.sh` and `site.sh`, `qemu-system-x86_64`.
 
 **Anywhere with zig** (no KVM, no guest):
 
@@ -45,16 +83,49 @@ there by `zig build kernels`; `gopher.elf` by `./port.sh && zig build gopher`):
 | `./check.sh` | QEMU, `mkfs.vfat`, `fsck.vfat` | is it right: the probes here and under QEMU, words and disks byte for byte |
 | `./same.sh` | `mkfs.vfat` | is it reproducible: each probe twice here |
 | `./site.sh` | QEMU, curl, the site volume | the real server, here and under QEMU |
-| `./rest.sh` | the site volume | the PC-shaped machine against the microvm-shaped one |
+| `./pc_vs_microvm.sh` | the site volume | the PC-shaped machine against the microvm-shaped one |
 | `./lossy.sh` | | which lost frames the guest survives |
-| `./flaky.sh` | `mkfs.vfat`; the site volume for `gopher` | which refused disk requests it survives |
-| `./sweep.sh` | the site volume, zig-coverage-sdk | a range of seeds, each a whole fault schedule |
+| `./refused.sh` | `mkfs.vfat`; the site volume for `gopher` | which refused disk requests it survives |
+| `./sweep.sh` | the site volume, zig-coverage-sdk, **a `-Dcoverage` gopher.elf** (`KERNEL=`; a release build reports no properties, and the sweep refuses it) | a range of seeds, each a whole fault schedule |
 | `./nightly.sh` | the same | **overnight, detached:** `sweep.sh` with a volume, batch after batch of new seeds for `HOURS` (10), logging as it goes in `~/nightly/<date-time>/` (`progress.log`, `failures.log`, each failing seed's files). `KERNEL_ELF=` a `-Dcoverage` build judges its properties too (through the coverage door, which costs the guest no time); `PEER_REQUEST=requests/post-play.http` sends a write instead of `GET /`, so the volume's faults meet one; `SHAPES=requests/shapes` gives each seed one of ten requests (reads, writes as a player the setup makes, two clients at once), each judged against its own unhurt run |
+| `./plants.sh` | the same, gopher-metal's port | **does the judge still judge**: the same seeds over a clean kernel, which must fail none, and over one kernel per `plants/<name>.patch` (a deliberate bug), each of which must fail a seed where its plant fired. Run after every change to the judge. **Written, not yet run**; one plant stands (`net-goback-byte`) |
+| `./check-cc.sh` | the same | the cloud session's branch, in worktrees: built, swept over every request shape for a few seeds, then `plants.sh` — run before its code is reviewed. **Written, not yet run** |
 
 "The site volume" is `SITE`, by default
 `~/build/gopher-metal/probe/gopher/pristine.img`, staged by gopher-metal's
 `probe/judge_gopher.py` (which needs a loop mount, and so sudo; the scripts
 here only read it).
+
+## A storage lab
+
+A storage author's questions, and what answers each here. Every answer is
+a map or a seed, never a sample: the same run repeats exactly, so a failure
+found once is a failure kept.
+
+| the question | what asks it |
+|---|---|
+| does each refused request leave something sane? | `./refused.sh`: one run per disk request, that one refused (`DISK_REFUSE`) |
+| is the volume still a filesystem afterwards? | `./sound.sh <image>`: `fsck.vfat -n`, reading only |
+| told it was saved, is it there after a power cut? | `sweep.sh`'s durability sweep (`POST`, `READ_BACK`, `MARK`): each seed cuts the power at its exit (`VOLUME_CUT_AT_EXIT`), then boots again, unhurt, and reads back |
+| what does a cut leave mid-write? | `DISK_CUT_AFTER`, `VOLUME_CUT_AFTER`; `DISK_TEAR` and `DISK_TEAR_KEEP` for a multi-sector write torn part-way |
+| what if the cache holds, or lies? | `DISK_CACHE`, `VOLUME_CACHE`, `VOLUME_CACHE_KEEPS` (which held writes survive a cut, seeded), `VOLUME_WCE_FIXED`, `VOLUME_SYNC_FAIL` |
+| what if the medium itself goes wrong? | `DISK_BAD_SECTOR`, `DISK_ROT`, `VOLUME_SHORT_AT`, `VOLUME_READ_ONLY_AT`, `VOLUME_GONE_AT`, `VOLUME_RESET_AT` |
+
+Two disks, two kinds of device: the boot disk is virtio-blk (`DISK_*`,
+`SITE` in a sweep), and the volume is virtio-scsi (`VOLUME_*`,
+`VOLUME_SITE`), as a droplet has them. [KNOBS.md](KNOBS.md) has each knob
+exactly.
+
+**What the lab assumes of its subject today**, which is the groundwork any
+other subject would need:
+
+- **a guest that boots here**: PVH entry, single-threaded, interrupts only at
+  a halt, its clock reads marked ("What a guest needs from us", and "`rdtsc`
+  does not exit");
+- **a FAT volume**, because `sound.sh` borrows `fsck.vfat`;
+- **an HTTP server**, because a sweep's request and read-back are HTTP, and
+  its page is part of the verdict. A subject with no network would need a
+  judge that reads the volume instead.
 
 ## A first run
 
@@ -89,12 +160,15 @@ interrupts have to be delivered at an exact instruction, which the performance
 counters get wrong about once in a trillion; concurrent cores interleave
 arbitrarily; and input has to enter only where the hypervisor says.
 
-This guest hands three of those over for nothing. Its clock is already a
-parameter rather than something it reads. It takes **interrupts only at a
+This guest hands three of those over for nothing, and makes the fourth
+cheap. **Interrupts, threads and input come free.** It takes **interrupts only at a
 halt** (`sti; hlt`, and off again at once): on the microvm-shaped machine it
 never halts at all, and on the PC-shaped one the instruction an interrupt is
 taken at is always the one after that `hlt`. It is single-threaded, and
-refuses to compile otherwise. Every byte it sees crosses one seam.
+refuses to compile otherwise. Every byte it sees crosses one seam. **Time
+took work**: its clock is a parameter in its own code, but the reads behind
+that parameter (`rdtsc`, a TSC-deadline write) don't exit, so the guest
+marks them and the loader rewrites them (below).
 
 So a monitor that owns every input is ordinary code rather than a research
 project, and once it owns every input, the same guest and the same
@@ -108,7 +182,7 @@ shortest way into a layer**, and the host half is the emulator.
 
 ## Where it stands
 
-As of 2026-10-06. Two machines: the **microvm-shaped** one (devices in an mmio
+As of 2026-10-09. Two machines: the **microvm-shaped** one (devices in an mmio
 window, no interrupts; the one QEMU's `microvm` is compared with) and the
 **PC-shaped** one (`TRANSPORT=pci`). "Checked against QEMU" means `check.sh`
 or `site.sh`; everything else is checked by unit tests and by this machine's
@@ -118,13 +192,13 @@ own repeat runs.
 |---|---|
 | loading a PVH kernel | **works** — segments by physical address, entry from the `XEN_ELFNOTE_PHYS32_ENTRY` note; marked `rdtsc` and deadline writes rewritten in guest memory |
 | starting the processor | **works** — 32-bit protected mode, flat segments, `%ebx` at a `hvm_start_info`, a CPUID without `RDRAND` |
-| the memory map, COM1, the exit door | **works** — 0xF4, and the guest's code becomes ours |
+| the memory map, COM1, the exit door | **works** — port 0xF4; the guest's exit code becomes this program's |
 | the clock | **works, and is ours** — the interval timer, the real-time clock and `rdtsc` all read one counter that only the guest's own questions advance |
 | entropy | **works** — a seeded virtio-rng; the seed is the run's name |
 | virtio-blk | **works**, checked against QEMU — one queue and a disk image, mapped private, written back only at the end |
 | virtio-net and the peer | **works**, checked against QEMU — DHCP, and TCP clients that fetch what curl fetches; no tap device and no real network, deliberately |
 | the real server as the guest | **works**, checked against QEMU — angry-gopher's own route table, twelve routes, pages identical to curl's |
-| the PC-shaped machine | **works** (`TRANSPORT=pci`) — virtio-pci, MSI-X, a local APIC with a TSC-deadline timer; the server halts between frames, and `rest.sh` holds it to the microvm-shaped machine's pages. Only the paths gopher-metal walks are exercised by a guest |
+| the PC-shaped machine | **works** (`TRANSPORT=pci`) — virtio-pci, MSI-X, a local APIC with a TSC-deadline timer; the server halts between frames, and `pc_vs_microvm.sh` holds it to the microvm-shaped machine's pages. Only the paths gopher-metal walks are exercised by a guest |
 | a virtio-scsi volume | **works**, not compared with QEMU (`VOLUME`, `scsi.zig`) — the second disk a droplet has; unit-tested against gopher-metal's driver's sequence, and used by `sweep.sh`'s durability sweep |
 | faults on the wire | **works** — the guest's or the peer's nth frame lost or damaged, latency, lying frames (`mangle.zig`) |
 | a peer that misbehaves | **works** — resets, vanishing, SYN floods, shut windows, pipelining, slow clients, many clients |
@@ -133,11 +207,14 @@ own repeat runs.
 | the guest's coverage | **works** — its zig-coverage-sdk lines read as printed, a table per run, JSONL for the SDK's report across runs |
 | fuzzing the models | **works** — `zig build fuzz`; nothing may panic and each seed repeats |
 | snapshots | **device side only** — every model's state saved and restored in place (`snapshot.zig`), tested; the vCPU half and branching runs from it are not built |
+| the judge's own check | **written, not yet run** — `plants.sh`: planted bugs the judge must catch, and a clean kernel it must pass |
 | the explorer | **not built** |
 
-A boot costs about 100 ms, most of it spent zeroing the guest's `.bss`. QEMU's
-`microvm` boots the same kernel in about 130. **Speed is not the argument** —
-the argument is that nothing in that 100 ms came from anywhere but here.
+A probe boots in about a tenth of a second, QEMU's `microvm` in about the
+same. **Speed is not the argument** — the argument is that nothing in that
+boot came from anywhere but here. (Timings in this README are samples from
+the day each section was written, most before the ReleaseSafe build and the
+huge pages of "What a run costs"; that table is the current measure.)
 
 ## What a guest needs from us, exactly
 
@@ -164,8 +241,8 @@ the argument is that nothing in that 100 ms came from anywhere but here.
 
 ## Time is measured in questions
 
-**Every exit advances one counter by a fixed amount, and nothing else advances
-it.** The host's clock is never read. So a run is a function of what the guest
+**Every exit advances one counter by a fixed amount (100 µs,
+`clock.zig`'s `per_question_ns`), and nothing else advances it.** The host's clock is never read. So a run is a function of what the guest
 did, not of what the box was busy with — and the interval timer, the real-time
 clock and the timestamp counter all report that one counter, which is why they
 cannot disagree.
@@ -240,8 +317,9 @@ filter sees it. So gopher-metal marks that one `wrmsr` with
 `mov $"mvmd", %esi`, and the loader makes it `out 0xE1, al`, answered from
 the registers.
 
-    ./rest.sh all     every route: the page the microvm-shaped machine
-                      serves, the same run twice, and real rests
+    ./pc_vs_microvm.sh all    every route: the page the microvm-shaped
+                              machine serves, the same run twice, and
+                              real rests
 
 With a 5 ms wire each route halts a few times and takes timer and MSI-X
 interrupts both. At 200 ms, `/` halts 361 times, 356 woken by the timer at
@@ -353,8 +431,9 @@ this program a full exit through KVM, which on the box is itself nested in a
 virtual machine. Measured 2026-10-01, `vfat` (44,193 disk requests, about
 221,000 exits) takes 1.7-2.0 s under QEMU's software processor, 3.3-3.4 s
 under QEMU with `-accel kvm`, and 4.15 s here; `clock`, mostly computation,
-takes 8.3 s, 4.6 s and 1.2 s. A `ReleaseFast` build runs `vfat` in the same
-4 s as the debug one, so `zig build`'s default stays debug.
+takes 8.3 s, 4.6 s and 1.2 s. Those were Debug builds; `zig build` builds
+ReleaseSafe since 2026-10-08 (`build.zig`), and see "What a run costs" for
+what that bought.
 
 ## The other oracle: yesterday's run
 
@@ -384,7 +463,7 @@ the same on every run on every day.
 ## The real server
 
 `gopher.elf` is **angry-gopher's own route table**, compiled from its own
-source for a machine with no operating system — its data on a FAT16 volume, its
+source for a machine with no operating system — its data on a FAT volume, its
 clocks from its own hardware, `std.http.Server` over a TCP stack it brought
 with it.
 
@@ -412,7 +491,7 @@ deterministic one can do it to a recipe. Every fault is an environment knob;
 the wire, the peer, the boot disk, the volume and the seeds.
 
 - **Exhaustive maps.** `./lossy.sh` loses the guest's first frame, then its
-  second, one run per frame; `./flaky.sh` does the same with disk requests.
+  second, one run per frame; `./refused.sh` does the same with disk requests.
   Because every run repeats, these are maps of every case, not samples.
 - **Seeds.** `FAULT_SEED=n` turns many knobs at once, so "seed 4711" names
   one exact run, and the run prints the knobs that repeat it without the seed.
@@ -434,9 +513,13 @@ the wire, the peer, the boot disk, the volume and the seeds.
 
 ### What the guest says it reached
 
-A gopher-metal kernel built `-Dcoverage` prints zig-coverage-sdk's JSONL on
-COM1 behind `coverage: ` (gopher-metal's COVERAGE.md). The serial port here
-reads those lines as they are printed (`coverage.zig`) and keeps a table of
+A gopher-metal kernel built `-Dcoverage` writes zig-coverage-sdk's JSONL
+lines to **the coverage door** (port 0xE2, `main.zig`): it finds the door at
+boot, then hands over each line as one 32-bit `out` of its address, one exit
+a line. No exit through the door ticks the clock or counts as progress, so a
+coverage kernel runs as its release build does, exit for exit. (A guest that
+finds no door prints the lines on COM1 behind `coverage: `, and the serial
+port reads them the same way.) `coverage.zig` keeps a table of
 every property: its kind, how often it was seen true and false, and the exit
 and virtual time of the first of each. `COVERAGE_OUT=<file>` keeps the lines
 out of stdout and appends them to that file as plain JSONL; without it stdout
@@ -455,9 +538,13 @@ the properties only one run ever reached. `sweep.sh` ends with it.
 
 Sweeps of lost frames and refused disk writes found defects in gopher-metal and
 angry-gopher, among them a DHCP client that never retransmitted and one
-refused write that left a volume that could never mount again. Most are fixed
-since and one is open; [docs/findings.md](docs/findings.md) has each, found →
-fixed, with commits.
+refused write that left a volume that could never mount again. All but two
+are fixed (one partly, one a design decision);
+[docs/findings.md](docs/findings.md) has each, found → fixed, with commits.
+findings.md is frozen at September's sweeps. Since then the guest's own
+simulators and the cloud session's class hunts (one kind of mistake, hunted
+through all the code) have found more than the sweeps; those live in
+gopher-metal's history and this repo's [QUEUE-ARCHIVE.md](QUEUE-ARCHIVE.md).
 
 ## Reading it
 
@@ -486,7 +573,8 @@ fixed, with commits.
   frames), `src/mangle.zig` (frames that lie).
 - **Faults**: `src/faults.zig` (what this machine may do to its guest),
   `src/settings.zig` (the knobs, into the faults), `src/knobs.zig` (every
-  knob, and what a seed draws).
+  knob, and what a seed draws), `src/checked.zig` (what each knob's value
+  must be: refused, never clamped).
 - **Watching**: `src/coverage.zig` (the guest's coverage lines, one run's and
   many runs').
 - **Checks on this program**: `src/fuzz.zig` and `src/fuzz_main.zig` (the

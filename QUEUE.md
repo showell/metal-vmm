@@ -11,21 +11,19 @@ charter is [`CLOUD_WORK.md`](CLOUD_WORK.md).
 
 metal-vmm runs gopher-metal's real kernel deterministically (both machines:
 microvm-shaped and `TRANSPORT=pci`); the scenarios that cover what the site
-meets go here, not to QEMU, which stays on the happy path (Steve). The seed
-explorer (zig-coverage-sdk `explore.zig`) steered the simulators, which proved wide and shallow; its next subject is
-the real kernel, through metal-vmm's fault decisions (`docs/SNAPSHOT.md`).
+meets go here, not to QEMU, which stays on the happy path (Steve). The goal
+is zero bugs in the lower levels; class hunts find more than seeds; the
+judge is becoming "did anything forbidden happen?", checked by `plants.sh`.
+The snapshot (`docs/SNAPSHOT.md`) is parked.
 
-## Now (2026-10-09, past midnight)
+## Now (2026-10-09, evening)
 
-**v20 serves** (gopher-metal `a26f85d`, angry-gopher `8b617f3c`). CC's
-112-118 are reviewed. angry-gopher and metal-vmm are merged. gopher-metal is
-merged too: Steve chose WCE=0 (b), so boot turns the volume's write cache
-off (gopher-metal `1619ff3`), and CC's red store_sim test now holds the
-reason. The second nightly
-(`~/nightly/2026-10-09-0028`) runs gopher-metal `aa4b30a`, which fixes the
-first night's two findings. Next for the box is the whole-machine snapshot
-(`docs/SNAPSHOT.md`). The conversation between the two Claudes is
-`FEEDBACK.md`.
+**v21 is tagged** (gopher-metal `81d7a35`, angry-gopher `a30a1542`; gates
+and long PASS), its image awaiting Steve; v20 serves until then. CC's
+123/127(b)/129/130/131 are merged into the box's `next` branches (not yet
+`master`); gopher-metal's `next` waits on 134(a)(b)(h) before it can
+release. CC's metal-vmm branch is merged after its first `check-cc.sh`.
+The conversation between the two Claudes is `FEEDBACK.md`.
 
 ## CC: open
 

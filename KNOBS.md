@@ -10,7 +10,7 @@ its default column says otherwise.
 Where a knob takes frame or request numbers, it takes a list: `3`, `3,9`, or a
 range, `8-40`, up to 32 of these. Numbering starts at 1. **A number is a better
 knob than a rate**: a rate explores at random, a number explores exhaustively,
-and a sweep over numbers is a map (`lossy.sh` for frames, `flaky.sh` for disk
+and a sweep over numbers is a map (`lossy.sh` for frames, `refused.sh` for disk
 requests). A run says on the error stream what each knob did.
 
 **A value that is not one stops the run** (exit 2, naming it): a word where
@@ -39,7 +39,6 @@ table names.
 | knob | what it does | default |
 |---|---|---|
 | `RTC_BOOTS_AT=unix` | the instant the real-time clock boots at, 1970 to 9999: e.g. `2147483647` (the last second of 32-bit time), `4102444799` (the end of a century), `1835395199` (a leap day's eve) | noon on 2026-09-18, every run |
-
 | `RTC_ABSENT=1` | no chip: every register reads 0xFF, as a port with nothing behind it does | a chip |
 | `RTC_STUCK=1` | status A always says an update is in progress, so a guest that waits it out must give up | never mid-update |
 | `PIT_FROZEN=1` | the interval timer's count never moves, as absent or broken hardware reads | it counts |
@@ -235,14 +234,19 @@ default); its header is the reference.
 | variable | what it does | default |
 |---|---|---|
 | `GUESTS` | where the kernels are | `~/showell_repos/gopher-metal/probe` |
-| `SITE` | the volume every run gets a fresh copy of | `~/build/gopher-metal/probe/gopher/pristine.img` |
+| `KERNEL` | the guest; it must be built `-Dcoverage` | `$GUESTS/gopher.elf` |
+| `SITE` | the **boot disk** (virtio-blk) every run gets a fresh copy of: the site's files | `~/build/gopher-metal/probe/gopher/pristine.img` |
 | `PATH_WANTED` | the path fetched | `/` |
 | `TRANSPORT` | the machine | `pci` |
 | `FLOOR=<file>` | a coverage floor the merged report is gated on | none |
 | `RUN_TIMEOUT` | seconds per run | 300 |
 | `KEEP=<dir>` | keeps every run's log, page and the coverage JSONL there | none |
 | `COVERAGE_SDK` | where zig-coverage-sdk is, for `tools/report.py` | a sibling checkout |
-| `VOLUME_SITE=<image>` | attaches a fresh copy of that image to every run as its volume, so seeds draw the volume's faults | none |
+| `VOLUME_SITE=<image>` | attaches a fresh copy of that image to every run as its **volume** (virtio-scsi, the data), so seeds draw the volume's faults | none |
+| `SHAPES=<dir>` | one of several requests per seed, each judged against its own unhurt run (`requests/shapes`) | one request |
+| `JOBS` | runs side by side | 2 |
+| `KEEP_FAILED=<dir>` | keeps a failing seed's files | none |
+| `TOLD=<status>` | the status a durable post is told when saved | 303 |
 | `POST=<request file>`, `READ_BACK=<path>`, `MARK=<text>` | **the durability sweep**: each seed sends the post with `VOLUME_CUT_AT_EXIT=1` and the volume faults its seed draws, then the same kernel boots again, unhurt, on a copy of that volume and asks for `READ_BACK` | off |
 
 In the durability sweep, **a 303 for a message the read-back does not hold

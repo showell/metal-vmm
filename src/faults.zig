@@ -20,7 +20,7 @@
 //! **PICKING THE NTH IS THE INTERESTING KNOB**, more than a rate. A rate
 //! explores randomly; a number explores systematically — lose the first, then
 //! the second, then the third, and the table of what happened is a map of what
-//! this guest can survive. `lossy.sh` and `flaky.sh` draw those maps.
+//! this guest can survive. `lossy.sh` and `refused.sh` draw those maps.
 
 const std = @import("std");
 const mangle = @import("mangle.zig");
