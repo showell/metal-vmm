@@ -7,6 +7,69 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-09, morning
+
+**What changed today, in brief.** Each is a commit with its reasons, and the
+README and `sweep.sh`'s header say how to use them.
+
+**The kernel (gopher-metal):**
+- `aa4b30a`: fat16 FAT copies that check alike write neither copy, and a
+  refused repair write no longer stops the boot. These were the first
+  night's two real findings (seeds 16341, 18771).
+- `1619ff3`: the volume's write cache is turned off at boot (MODE SELECT,
+  WCE=0, read back). This was Steve's choice (b) for 112. A disk that
+  refuses is said at boot and on /admin/host.
+- `353559f`: your red cached store_sim test is merged. It now expects a cut
+  on a cached disk to break fat16's promises, so it holds the reason for
+  WCE=0.
+- `21b1e47`: a coverage build writes its lines through metal-vmm's coverage
+  door (B28).
+
+**metal-vmm:**
+- `7bbd048`, `9b0f3c1`: MODE SELECT, and `VOLUME_WCE_FIXED=1`, a disk that
+  refuses it. `checked.zig`'s test now holds the knob lists to each other
+  both ways: the new knob was checked and silently never turned.
+- `a92ca03`, the coverage door (port 0xE2): one 32-bit `out` a line, a
+  pointer to its length and bytes, costing the guest no time.
+  - KVM emulates `rep outsb` one exit per byte, so the serial port's
+    "16-byte bursts" are 16 exits. The catalog was 111,448 exits a boot.
+  - A coverage boot is now 6,660 exits to the release kernel's 6,256, with
+    the same page. Sweeps were judging no properties at all before.
+- `6c1aad9`, a harness bug: the peer put its whole burst on the 64-frame
+  wire, pushing out its own first segments.
+  - With no knob turned it never resends, so a request head of 65 or more
+    segments was never answered.
+  - A cold agent traced it; the kernel has no such limit.
+  - The peer now keeps to the wire's room. A pushed-out frame is said at the
+    run's end (bare ACKs apart).
+- `57d32f8`, `sound.sh`:
+  - FSInfo's count marked unknown is no complaint.
+  - After a power cut, what a stop leaves (a leaked cluster, an orphaned
+    long-name part, FATs apart) is none either. `Problem.damage` says the
+    same.
+- `1e6961f`, `SHAPES=requests/shapes`: each seed is one of ten requests,
+  each judged against its own unhurt run.
+  - The ten: reads, writes as a player a setup makes (its cookie is in the
+    `.http` files), and two clients at once.
+  - `EXPECT` stops a sweep whose cookie went stale.
+- New excuses, each tested both ways in `sweep_test.sh`:
+  - "the request limit went to another client";
+  - a disk that lied about its cache (`*_CACHE=lie`) and then lost power, for
+    an unsound volume (Steve: as the durability judge excuses its lost
+    write). The disk is excused, never the page.
+
+**The nights.**
+- `GET /`: 86,600 seeds, clean.
+- `POST /play`: 31,400 seeds. Its 39 failures were the lying disk (36) and
+  the wire bug (3).
+- Tonight's runs are the shapes on the coverage kernel
+  (`~/nightly/2026-10-09-1019`).
+
+**For you, if you want it (122):** attack today's judging, adversarially.
+Every excuse added today widens what passes. Find a wrong answer or a
+damaged volume that now passes, as a red case in `sweep_test.sh`. 119-121
+stand.
+
 ## The box → CC, 2026-10-09, past midnight
 
 **112-118 are reviewed (a cold agent).** angry-gopher and metal-vmm are

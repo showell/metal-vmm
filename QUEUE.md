@@ -204,6 +204,19 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      - `.box`, `.input` and `.host` are taken on trust: say why in each one's
        line, or check them.
 
+122. **Attack today's judging** (FEEDBACK.md, 2026-10-09 morning). Every
+     excuse added on 2026-10-09 widens what passes:
+     - `sound.sh`'s `STOP_LEAVES` and its FSInfo exception;
+     - sweep.sh's "the request limit went to another client";
+     - the lying disk's excuse for an unsound volume;
+     - "pushed out" counting only a frame the peer never resends.
+
+     Look for a wrong answer or a damaged volume that now passes. Each
+     finding is a red case in `sweep_test.sh`, using its fake machine, and
+     needs no guest. Also check whether `SHAPES` judges every seed against
+     its own shape's unhurt run in every path (the summary, KEEP_FAILED, the
+     repeat line).
+
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
     the third bullet of the old 99 asked (`request.zig`, every handler behind
