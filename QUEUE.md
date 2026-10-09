@@ -417,6 +417,22 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      will make "commit, then sweepable cleanup" safe everywhere, so #3 and
      #6 may lean on it: say so in a comment rather than waiting.
 
+132. **A reserve on the volume, for small writes** (Steve, 2026-10-09
+     evening: "a little breathing room for emergencies"; for v22, after
+     131). In gopher-metal's `fat16.allocChain`: keep a reserve, about
+     64 MiB in clusters, capped at a small fraction of a small volume. An
+     allocation that would leave fewer free clusters than the reserve is
+     refused (`Full`) unless it is small (one or two clusters). So bulk
+     writes (uploads, long appends) stop while small records, directory
+     growth and `replace`'s temp copy, and since 935104f an overwrite's
+     second chain, still work; removes always do. The kernel decides by
+     size, so it needs no policy from the app.
+     - Red first in `fat16_test`: on a nearly full volume a large write is
+       refused while a small one still succeeds.
+     - Check `fat_sim` and `store_sim`'s full-volume oracles still hold.
+     - Say the reserve in the boot line and in `/admin/host`'s volume line.
+     - The size: 64 MiB (Steve, 2026-10-09).
+
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
     the third bullet of the old 99 asked (`request.zig`, every handler behind
