@@ -666,6 +666,14 @@ Each line's full text, with its history, is in the archive under its name.
 *(The cloud session adds items here, one line each on why. Earlier
 proposals, taken or not, are in the archive.)*
 
+- **P139(a), P139(b). State changes only by named events, checked in Debug
+  and counted by the coverage SDK** (Steve's idea; CC, 2026-10-09 night).
+  (a) a ledger in `disk_fat.zig`: every cluster an operation takes ends
+  committed, given back, or a counted leak (the class `ec77f28` and
+  `05b0cfb` fixed). (b) `tcp.zig`'s `Fin` as a declared machine, with one
+  `sometimes` per legal transition. CC votes (a) first. Written up in
+  [STATE_TRACKING.md](STATE_TRACKING.md).
+
 - **P128. The damage property says which disk** (gopher-metal
   `gopher.zig` ~1358 and ~1417, the box's). Its details carry
   `.damage = n` only, so sweep.sh excuses a break by a damaging fault on
