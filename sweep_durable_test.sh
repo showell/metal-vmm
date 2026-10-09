@@ -80,7 +80,7 @@ first="$out"
 
 expect "the mode is said" 'durability: each seed posts .*post.req, then reads back /chat/recent' "$out"
 expect "seed 1" '^1 .* ok, kept ' "$out"
-expect "seed 2" '^2 .*FAIL: told 303 and the message is not on the volume' "$out"
+expect "seed 2" '^2 .*FAIL: told 303 and the write is not on the volume' "$out"
 expect "seed 3" '^3 .*lost (allowed: VOLUME_CACHE=lie)' "$out"
 expect "seed 4" '^4 .*ok, not told, not kept' "$out"
 expect "seed 5" '^5 .*lost (allowed: VOLUME_SYNC_FAIL)' "$out"

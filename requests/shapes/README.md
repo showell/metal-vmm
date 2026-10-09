@@ -10,3 +10,14 @@ and the site volume answer that request with that cookie, since runs are
 deterministic. If either changes it, those shapes' unhurt runs answer 303,
 not their `EXPECT`, and the sweep stops saying so. To renew the cookie, take
 the `set-cookie` from a `POST /play` run with `PEER_RESPONSE=<file>`.
+
+`read-puzzles.http` is no shape (it has no `.shape`): it is the read-back of
+a durable sweep of puzzle moves. After the setup's two requests, on a copy
+of the volume they left (`VOLUME_SITE`):
+
+    TOLD=204 POST=requests/shapes/puzzle-action.http \
+      READ_BACK=requests/shapes/read-puzzles.http MARK="session_id: 2" \
+      VOLUME_SITE=<the setup's volume> KERNEL=<a -Dcoverage gopher.elf> ./sweep.sh 1 300
+
+A move told 204 must be on the volume after the power fails. This found the
+reset that turns the write cache back on (gopher-metal 7b2beb3).

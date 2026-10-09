@@ -526,6 +526,12 @@ pub const Scsi = struct {
     }
 
     /// One line for the run's end, in `buf`.
+    /// Room for the longest line `line` makes (a test holds it to that).
+    /// It was 256, and a run with a lying cache, a reset, kept sectors and
+    /// an exit cut ran past it, and the line fell back to two words: the
+    /// sweep's lie excuse, reading it for "lost", never found it.
+    pub const line_bytes = 1024;
+
     pub fn line(self: *const Scsi, buf: []u8) []const u8 {
         const mode = if (self.cache) |c|
             (if (c.lies) "a write cache that says it writes through (VOLUME_CACHE=lie)" else if (self.write_through) "a write cache, turned off by MODE SELECT" else if (self.ignored_selects > 0) "a write cache, said in MODE SENSE, that took a MODE SELECT turning it off and stayed on (VOLUME_WCE_FIXED=ignore)" else "a write cache, said in MODE SENSE")
@@ -580,7 +586,7 @@ pub const Scsi = struct {
                 (if (!c.exit_cut) "" else if (c.exit_lost > 0) "; the power failed when the guest stopped and lost sectors never synchronized" else "; the power failed when the guest stopped and lost nothing")
             else
                 "",
-        }) catch "metal-vmm: volume\n";
+        }) catch "metal-vmm: volume: (its line did not fit the buffer it was given; make it larger)\n";
     }
 };
 
@@ -1172,4 +1178,34 @@ test "VOLUME_RESET_AT: a reset says POWER ON, and a write cache turned off is on
     // Turned off again, it stays off.
     try testing.expect(FakeDriver.good(g.select(&d, false)));
     try testing.expectEqual(@as(?bool, false), g.wce(&d));
+}
+
+test "the volume's line fits its buffer with every clause said" {
+    var image: [16 * 512]u8 = @splat('o');
+    var c = cache_mod.Cache{ .gpa = testing.allocator, .image = &image, .lies = true, .keeps = 4, .kept = 99999 };
+    defer c.deinit();
+    c.exit_cut = true;
+    c.exit_lost = 99999;
+    var vol = Scsi{
+        .image = &image,
+        .cache = &c,
+        .reads = 9_999_999,
+        .writes = 9_999_999,
+        .synchronizes = 9_999_999,
+        .mode_senses = 9_999_999,
+        .sync_fail_at = 1,
+        .sync_failed = 9_999_999,
+        .attention_at = 9_999_999,
+        .gone_at = 9_999_999,
+        .gone_answered = 9_999_999,
+        .read_only_at = 9_999_999,
+        .protected = 9_999_999,
+        .short_at = 9_999_999,
+        .shortened = 9_999_999,
+        .waited_ns = 9_999_999_999_999,
+    };
+    var buf: [Scsi.line_bytes]u8 = undefined;
+    const got = vol.line(&buf);
+    try testing.expect(std.mem.indexOf(u8, got, "did not fit") == null);
+    try testing.expect(std.mem.indexOf(u8, got, "lost sectors never synchronized") != null);
 }

@@ -52,14 +52,15 @@
 //! enough to run out only means something to a run a person reads, nor
 //! the volume's knobs on a run without `VOLUME`. With a volume attached,
 //! `withVolume` draws `VOLUME_CACHE`, `VOLUME_CACHE_KEEPS`,
-//! `VOLUME_CUT_AFTER`, `VOLUME_SYNC_FAIL`, `VOLUME_SYNC_FAIL_FOR` and
-//! `VOLUME_ATTENTION_AT`; it never draws `VOLUME_LATENCY_US`,
+//! `VOLUME_CUT_AFTER`, `VOLUME_SYNC_FAIL`, `VOLUME_SYNC_FAIL_FOR`,
+//! `VOLUME_ATTENTION_AT` and, with a cache, `VOLUME_RESET_AT` (a reset that
+//! turns the cache on again, which gopher-metal turns off again since
+//! 2026-10-09, metal-vmm QUEUE 119); it never draws `VOLUME_LATENCY_US`,
 //! `VOLUME_GONE_AT`, `VOLUME_READ_ONLY_AT`, `VOLUME_SYNC_US`,
 //! `VOLUME_CUT_AT_EXIT`, `VOLUME_SECTOR`, `VOLUME_MODE_PAGES`,
 //! `VOLUME_SHORT_AT`, `VOLUME_WCE_FIXED` (a cache gopher-metal cannot turn
 //! off, which leaves FAT's order to the cache: the damage is known, and said
-//! at boot) or `VOLUME_RESET_AT` (a reset that turns the cache on again,
-//! which gopher-metal does not yet turn off again: metal-vmm QUEUE 119). Nor are
+//! at boot). Nor are
 //! `RTC_ABSENT`, `RTC_STUCK` or `PIT_FROZEN`: each stops a boot, which a
 //! sweep would count as a failure. Set by hand, they print with the rest.
 //!
@@ -183,6 +184,9 @@ pub const Knobs = struct {
         // Last, so every draw above is what it was: a cache that drains in
         // its own order, only where there is a cache.
         if (self.get("VOLUME_CACHE") != null and chance(r, 2)) self.number(index("VOLUME_CACHE_KEEPS"), r.intRangeAtMost(u64, 2, 4));
+        // After that, for the same reason: a reset that puts the cache back
+        // on, mid-run, only where there is a cache to put back.
+        if (self.get("VOLUME_CACHE") != null and chance(r, 4)) self.number(index("VOLUME_RESET_AT"), r.intRangeAtMost(u64, 1, 250));
     }
 
     fn word(self: *Knobs, i: usize, text: []const u8) void {

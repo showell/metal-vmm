@@ -892,7 +892,7 @@ fn cutAtExit(machine: *Machine) void {
 
 fn reportVolume(machine: *const Machine) void {
     const v = machine.volume orelse return;
-    var buf: [256]u8 = undefined;
+    var buf: [scsi.Scsi.line_bytes]u8 = undefined;
     std.debug.print("{s}", .{v.line(&buf)});
 }
 

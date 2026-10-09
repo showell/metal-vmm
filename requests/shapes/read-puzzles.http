@@ -1,0 +1,5 @@
+GET /puzzles HTTP/1.1
+Host: lynrummy.com
+Cookie: gopher_uid=p2.1789732801.JQe2xbtKNu4Ie7fkr4jBC50RH_RYdoQnr1S3tHAGoiw
+Connection: close
+

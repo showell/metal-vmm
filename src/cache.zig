@@ -131,7 +131,7 @@ pub const Cache = struct {
             std.fmt.bufPrint(buf[0..], "metal-vmm: disk: a write cache, {s}; {d} writes held, {d} flushes; the power cut lost {d} sectors never flushed\n", .{ mode, self.held, self.flushes, self.lost })
         else
             std.fmt.bufPrint(buf[0..], "metal-vmm: disk: a write cache, {s}; {d} writes held, {d} flushes\n", .{ mode, self.held, self.flushes });
-        return end catch "metal-vmm: disk: a write cache\n";
+        return end catch "metal-vmm: disk: a write cache (its line did not fit the buffer it was given; make it larger)\n";
     }
 };
 

@@ -128,7 +128,7 @@ pub fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void
         std.debug.print("{s}", .{card.peer.leaseLine(ns, &line)});
     }
     if (block.cache) |c| {
-        var line: [256]u8 = undefined;
+        var line: [1024]u8 = undefined;
         std.debug.print("{s}", .{c.line(&line, block.refusals.cut != null)});
     }
     const d = &block.refusals;

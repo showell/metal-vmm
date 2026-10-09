@@ -55,7 +55,8 @@
 # may cost the page as DISK_CUT_AFTER does. Unset, nothing here changes.
 #
 # **A SWEEP THAT JUDGES DURABILITY, NOT THE PAGE** (QUEUE item 70): with
-# POST=<request file>, READ_BACK=<path> and MARK=<text>, and VOLUME_SITE,
+# POST=<request file>, READ_BACK=<path, or a request file> and MARK=<text>,
+# and VOLUME_SITE,
 # every run sends POST's bytes (a chat post, with its session cookie) instead
 # of asking for a page, with VOLUME_CUT_AT_EXIT=1, so each write cache loses
 # what was never synchronized when the guest stops. Then the same kernel is
@@ -69,7 +70,9 @@
 #   - not told 303: nothing was promised, kept or not;
 #   - a read-back boot that gets no page: FAIL.
 #
-# The page is not compared. The unhurt run must be told 303 and keep MARK,
+# 303 is what a chat post is told when it is saved; `TOLD=<status>` names
+# another (a puzzle move's 204). The page is not compared. The unhurt run
+# must be told TOLD and keep MARK,
 # and the pristine volume must not hold it, or nothing can be judged.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -97,6 +100,7 @@ if [ -n "${POST:-}" ]; then
   [ -n "${VOLUME_SITE:-}" ] || { echo "POST needs VOLUME_SITE=<image>: the message is kept on the volume"; exit 1; }
   DURABLE=yes
 fi
+TOLD="${TOLD:-303}"
 COVERAGE="$WORK/coverage.jsonl"
 : > "$COVERAGE"
 
@@ -180,8 +184,11 @@ read_back() {
   local name="$1" vol="${2:-$WORK/$1.vol}"
   cp "$SITE" "$WORK/$name.readimg"
   cp "$vol" "$WORK/$name.readvol"
-  env VOLUME="$WORK/$name.readvol" PEER_BODY="$WORK/$name.read" \
-    timeout "$RUN_TIMEOUT" "$VMM" "$KERNEL" "$WORK/$name.readimg" "" "$READ_BACK" > "$WORK/$name.readout" 2> "$WORK/$name.readerr"
+  # READ_BACK is a path, or a request file (one that carries a cookie, say).
+  local ask=() path="$READ_BACK"
+  if [ -f "$READ_BACK" ]; then ask=(PEER_REQUEST="$READ_BACK"); path=/; fi
+  env "${ask[@]}" VOLUME="$WORK/$name.readvol" PEER_BODY="$WORK/$name.read" \
+    timeout "$RUN_TIMEOUT" "$VMM" "$KERNEL" "$WORK/$name.readimg" "" "$path" > "$WORK/$name.readout" 2> "$WORK/$name.readerr"
   [ -f "$WORK/$name.read" ] || : > "$WORK/$name.read"
   sed -n -E 's/^peer: ([0-9]+)( "|, [0-9]+ bytes$).*/\1/p' "$WORK/$name.readout" | head -1 > "$WORK/$name.readstatus"
   rm -f "$WORK/$name.readimg" "$WORK/$name.readvol"
@@ -274,15 +281,15 @@ verdict() {
     read_status=$(cat "$WORK/$name.readstatus")
     if [ "$read_status" != "200" ]; then
       why="$why, the read-back boot got no page (status ${read_status:-none})"
-    elif [ "$status" = 303 ] && ! kept "$name"; then
+    elif [ "$status" = "$TOLD" ] && ! kept "$name"; then
       case " $knobs" in *" VOLUME_CACHE=lie"*) excuse="VOLUME_CACHE=lie" ;; esac
       case " $knobs" in *" VOLUME_SYNC_FAIL="*) excuse="$excuse${excuse:+, }VOLUME_SYNC_FAIL" ;; esac
-      [ -n "$excuse" ] || why="$why, told 303 and the message is not on the volume"
+      [ -n "$excuse" ] || why="$why, told $TOLD and the write is not on the volume"
     fi
     if [ -n "$why" ]; then echo "FAIL: ${why#, }"
     elif [ -n "$excuse" ]; then echo "lost (allowed: $excuse${unsound:+, $unsound})"
     elif [ -n "$unsound" ]; then echo "allowed: unsound ($unsound)"
-    elif [ "$status" = 303 ]; then echo "ok, kept"
+    elif [ "$status" = "$TOLD" ]; then echo "ok, kept"
     elif kept "$name"; then echo "ok, not told, kept"
     else echo "ok, not told, not kept"; fi
     return
@@ -388,7 +395,7 @@ if [ -n "$DURABLE" ]; then
   read_back pristine "$VOLUME_SITE"
   read_back unhurt
   ! kept pristine || { echo "the pristine volume already holds MARK: nothing can be judged"; exit 2; }
-  if [ "$unhurt_status" != 303 ] || ! kept unhurt; then
+  if [ "$unhurt_status" != "$TOLD" ] || ! kept unhurt; then
     echo "the unhurt post was told ${unhurt_status:-nothing} and its read-back $(kept unhurt && echo holds || echo lacks) MARK: nothing can be judged"
     exit 2
   fi
