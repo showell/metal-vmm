@@ -1,0 +1,7 @@
+POST /login/full HTTP/1.1
+Host: lynrummy.com
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 47
+Connection: close
+
+name=Steve&password=wrong&action=login&next=%2F

@@ -1,0 +1,3 @@
+# a page read: GET /
+PEER_REQUEST=home.http
+EXPECT=200

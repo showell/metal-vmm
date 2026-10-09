@@ -1,0 +1,3 @@
+# a player made: POST /play
+PEER_REQUEST=play.http
+EXPECT=303

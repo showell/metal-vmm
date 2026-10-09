@@ -24,6 +24,17 @@
 # the knobs that repeat it without the seed. It exits 1 if any seed failed
 # or the merge did.
 #
+# **MANY SHAPES OF REQUEST** (`SHAPES=<dir>`): each `<name>.shape` there is
+# a request's setting, one VAR=value a line (`#` for comments), passed to
+# every run of it: `PEER_REQUEST=a[,b]` (files in the same folder),
+# `PEER_CLIENTS=2`, any knob, and `EXPECT=<status>`, which the
+# shape's unhurt run must answer or nothing can be judged. Seed s is the
+# shape (s mod n) of the n in name order, judged against that shape's
+# unhurt run. An optional `setup` file there names requests (one a line)
+# sent first, each an unhurt boot, to a copy of VOLUME_SITE that every run
+# then starts from: a player made, so a request with its cookie is answered
+# as that player.
+#
 # Environment: GUESTS, SITE and PATH_WANTED (default /) as rest.sh has them;
 # TRANSPORT (default pci, the machine that rests); FLOOR; RUN_TIMEOUT;
 # JOBS (2: runs side by side); KEEP_FAILED=<dir>: a failing seed's files kept
@@ -81,6 +92,48 @@ if [ -n "${POST:-}" ]; then
 fi
 COVERAGE="$WORK/coverage.jsonl"
 : > "$COVERAGE"
+
+# The shapes: their names, and each one's settings as VAR=value words, the
+# request files made absolute. No SHAPES is one shape, named "", with none.
+SHAPE_NAMES=("")
+declare -A SHAPE_ENV=() SHAPE_EXPECT=()
+if [ -n "${SHAPES:-}" ]; then
+  [ -d "$SHAPES" ] || { echo "no folder at SHAPES=$SHAPES"; exit 1; }
+  [ -z "$DURABLE" ] || { echo "SHAPES and POST are two sweeps; choose one"; exit 1; }
+  SHAPES="$(cd "$SHAPES" && pwd)"
+  SHAPE_NAMES=()
+  for f in "$SHAPES"/*.shape; do
+    [ -f "$f" ] || continue
+    n=$(basename "$f" .shape)
+    SHAPE_NAMES+=("$n")
+    words=""
+    while IFS= read -r line; do
+      line="${line%%#*}"; line="${line%"${line##*[![:space:]]}"}"
+      [ -n "$line" ] || continue
+      case "$line" in
+        EXPECT=*) SHAPE_EXPECT[$n]="${line#EXPECT=}" ;;
+        PEER_REQUEST=*)
+          files=""
+          IFS=, read -ra parts <<< "${line#PEER_REQUEST=}"
+          for part in "${parts[@]}"; do
+            [ -f "$SHAPES/$part" ] || { echo "shape $n: no request $SHAPES/$part"; exit 1; }
+            files="$files${files:+,}$SHAPES/$part"
+          done
+          words="$words PEER_REQUEST=$files" ;;
+        *=*) words="$words $line" ;;
+        *) echo "shape $n: not VAR=value: $line"; exit 1 ;;
+      esac
+    done < "$f"
+    SHAPE_ENV[$n]="${words# }"
+  done
+  [ ${#SHAPE_NAMES[@]} -gt 0 ] || { echo "no *.shape in $SHAPES"; exit 1; }
+fi
+# shape_env <shape>: its settings ("" for none).
+shape_env() { [ -z "$1" ] || echo "${SHAPE_ENV[$1]}"; }
+# shape_of <seed>: the name of the shape that seed sends.
+shape_of() { echo "${SHAPE_NAMES[$(( $1 % ${#SHAPE_NAMES[@]} ))]}"; }
+# unhurt_of <shape>: the name of that shape's unhurt run.
+unhurt_of() { if [ -z "$1" ]; then echo unhurt; else echo "unhurt-$1"; fi; }
 
 # run <name> [VAR=value ...]: one boot on a fresh volume; its exit, log and page.
 #
@@ -144,12 +197,12 @@ changed() { [ "$(stat -c %y "$1")" != "$(cat "$1.copied")" ]; }
 # verdict <name>: "ok", "differs (allowed: ...)", or "FAIL: ..." for one run
 # against the unhurt one.
 verdict() {
-  local name="$1" why="" exit status knobs broken excuse=""
+  local name="$1" u="${2:-unhurt}" why="" exit status knobs broken excuse=""
   exit=$(cat "$WORK/$name.exit")
   status=$(status_of "$name")
   knobs=$(knobs_of "$name")
   broken=$(broken_of "$name")
-  if [ "$exit" != "$(cat "$WORK/unhurt.exit")" ]; then
+  if [ "$exit" != "$(cat "$WORK/$u.exit")" ]; then
     # **A CLIENT THAT LEFT BEFORE ITS REQUEST WAS WHOLE IS OWED NOTHING**, and
     # a machine told to serve one request waits for it, idle, until metal-vmm
     # ends the run (exit 1, GuestIdle): long.sh's rough peers allow the same.
@@ -159,7 +212,7 @@ verdict() {
       { case " $knobs" in *" PEER_RESET_AT="* | *" PEER_VANISH_AFTER="*) true ;; *) [ -n "$(peer_end_of "$name")" ] ;; esac; }; then
       excuse="$excuse${excuse:+, }an idle end after the client left"
     else
-      why="$why, exit $exit (unhurt: $(cat "$WORK/unhurt.exit"))"
+      why="$why, exit $exit (unhurt: $(cat "$WORK/$u.exit"))"
     fi
   fi
   [ "${broken:-0}" = 0 ] || why="$why, $broken coverage properties broken"
@@ -191,7 +244,7 @@ verdict() {
     else echo "ok, not told, not kept"; fi
     return
   fi
-  if [ "$status" != "$(status_of unhurt)" ] || ! cmp -s "$WORK/$name.body" "$WORK/unhurt.body"; then
+  if [ "$status" != "$(status_of "$u")" ] || ! cmp -s "$WORK/$name.body" "$WORK/$u.body"; then
     # **A FAULT EXCUSES LESS OF THE PAGE, NEVER ANOTHER ONE** (Steve,
     # 2026-10-08): no answer at all, or the unhurt run's status with its
     # page cut short. Another status (a 404, a 200 where it was a 303) or
@@ -199,11 +252,11 @@ verdict() {
     # the one other status excused is a 5xx after a disk fault, below.
     local less=no
     if [ -z "$status" ] || [ "$status" = 0 ]; then less=yes
-    elif [ "$status" = "$(status_of unhurt)" ] && [ -f "$WORK/$name.body" ] && [ -f "$WORK/unhurt.body" ]; then
+    elif [ "$status" = "$(status_of "$u")" ] && [ -f "$WORK/$name.body" ] && [ -f "$WORK/$u.body" ]; then
       local got want
       got=$(wc -c < "$WORK/$name.body")
-      want=$(wc -c < "$WORK/unhurt.body")
-      [ "$got" -lt "$want" ] && cmp -s -n "$got" "$WORK/$name.body" "$WORK/unhurt.body" && less=yes
+      want=$(wc -c < "$WORK/$u.body")
+      [ "$got" -lt "$want" ] && cmp -s -n "$got" "$WORK/$name.body" "$WORK/$u.body" && less=yes
     fi
     # **A SERVER THAT SAYS IT FAILED, WHEN ITS DISK DID**: a 5xx is excused
     # by a fault on the disk or the volume, and by nothing else.
@@ -233,7 +286,38 @@ verdict() {
   else echo "ok"; fi
 }
 
-run unhurt
+# **THE SETUP** (SHAPES' `setup`): its requests sent in turn, unhurt, to one
+# copy of VOLUME_SITE, which every run below then starts from.
+if [ -n "${SHAPES:-}" ] && [ -f "$SHAPES/setup" ]; then
+  [ -n "${VOLUME_SITE:-}" ] || { echo "a setup needs VOLUME_SITE=<image>"; exit 1; }
+  cp "$VOLUME_SITE" "$WORK/setup.vol"
+  while IFS= read -r req; do
+    req="${req%%#*}"; req="${req%"${req##*[![:space:]]}"}"
+    [ -n "$req" ] || continue
+    cp "$SITE" "$WORK/setup.img"
+    env PEER_REQUEST="$SHAPES/$req" VOLUME="$WORK/setup.vol" \
+      timeout "$RUN_TIMEOUT" "$VMM" "$KERNEL" "$WORK/setup.img" "" / > "$WORK/setup.out" 2> "$WORK/setup.err"
+    echo "setup: $req, $(sed -n -E 's/^peer: ([0-9]+)( "|, [0-9]+ bytes$).*/status \1/p' "$WORK/setup.out" | head -1)"
+  done < "$SHAPES/setup"
+  rm -f "$WORK/setup.img"
+  VOLUME_SITE="$WORK/setup.vol"
+fi
+
+# Each shape's unhurt run; then the first's is "unhurt" for what follows.
+for n in "${SHAPE_NAMES[@]}"; do
+  u=$(unhurt_of "$n")
+  # shellcheck disable=SC2086
+  run "$u" $(shape_env "$n")
+  if [ -n "$n" ]; then
+    st=$(status_of "$u")
+    echo "shape $n: unhurt status ${st:-none}, $([ -f "$WORK/$u.body" ] && wc -c < "$WORK/$u.body" || echo no) bytes (${SHAPE_ENV[$n]})"
+    if [ -n "${SHAPE_EXPECT[$n]:-}" ] && [ "$st" != "${SHAPE_EXPECT[$n]}" ]; then
+      echo "shape $n: its unhurt run answered ${st:-nothing}, not ${SHAPE_EXPECT[$n]}: nothing can be judged; see $WORK/$u.out"
+      exit 2
+    fi
+    [ -f "$WORK/unhurt.exit" ] || for x in exit out err body cov; do [ ! -f "$WORK/$u.$x" ] || cp "$WORK/$u.$x" "$WORK/unhurt.$x"; done
+  fi
+done
 unhurt_status=$(status_of unhurt)
 if [ -n "$DURABLE" ]; then
   read_back pristine "$VOLUME_SITE"
@@ -251,7 +335,7 @@ if [ -z "$unhurt_status" ] || [ ! -f "$WORK/unhurt.body" ]; then
   exit 2
 fi
 echo "unhurt: exit $(cat "$WORK/unhurt.exit"), status $unhurt_status, $(wc -c < "$WORK/unhurt.body") bytes of $PATH_WANTED"
-printf '%-6s %-4s %-6s %-8s %-40s %s\n' seed exit status bytes verdict knobs
+printf '%-6s %-14s %-4s %-6s %-8s %-40s %s\n' seed shape exit status bytes verdict knobs
 
 failing=""
 # **THE SEEDS, `JOBS` AT A TIME** (2 by default: this box's two cores),
@@ -260,7 +344,8 @@ failing=""
 JOBS="${JOBS:-2}"
 seed="$FIRST"
 while [ "$seed" -le "$LAST" ]; do
-  ( run "seed$seed" FAULT_SEED="$seed"; [ -z "$DURABLE" ] || read_back "seed$seed" ) &
+  # shellcheck disable=SC2086
+  ( run "seed$seed" FAULT_SEED="$seed" $(shape_env "$(shape_of "$seed")"); [ -z "$DURABLE" ] || read_back "seed$seed" ) &
   while [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do wait -n; done
   seed=$((seed + 1))
 done
@@ -270,7 +355,7 @@ ok=0
 allowed=0
 seed="$FIRST"
 while [ "$seed" -le "$LAST" ]; do
-  v=$(verdict "seed$seed")
+  v=$(verdict "seed$seed" "$(unhurt_of "$(shape_of "$seed")")")
   case "$v" in
     ok*) ok=$((ok + 1)) ;;
     differs* | lost*) allowed=$((allowed + 1)) ;;
@@ -282,12 +367,12 @@ while [ "$seed" -le "$LAST" ]; do
          cp "$WORK/seed$seed".* "$KEEP_FAILED/seed$seed/" 2>/dev/null
        fi ;;
   esac
-  printf '%-6s %-4s %-6s %-8s %-40s %s\n' "$seed" "$(cat "$WORK/seed$seed.exit")" "$(status_of "seed$seed")" \
+  printf '%-6s %-14s %-4s %-6s %-8s %-40s %s\n' "$seed" "$(shape_of "$seed")" "$(cat "$WORK/seed$seed.exit")" "$(status_of "seed$seed")" \
     "$([ -f "$WORK/seed$seed.body" ] && wc -c < "$WORK/seed$seed.body" || echo none)" "$v" "$(knobs_of "seed$seed")"
   seed=$((seed + 1))
 done
 
-for name in unhurt $(seq -f "seed%g" "$FIRST" "$LAST"); do
+for name in $(for n in "${SHAPE_NAMES[@]}"; do unhurt_of "$n"; done) $(seq -f "seed%g" "$FIRST" "$LAST"); do
   [ ! -f "$WORK/$name.cov" ] || cat "$WORK/$name.cov" >> "$COVERAGE"
 done
 
@@ -305,11 +390,12 @@ else
   echo "$total seeds: $ok ok, $allowed differ as their faults allow, $(echo $failing | wc -w) failed"
 fi
 for s in $failing; do
-  echo "  FAULT_SEED=$s: $(verdict "seed$s")"
+  echo "  FAULT_SEED=$s: $(verdict "seed$s" "$(unhurt_of "$(shape_of "$s")")")"
   if [ -n "$DURABLE" ]; then
     echo "    repeat it: $(knobs_of "seed$s") PEER_REQUEST=$POST VOLUME=<a copy of $VOLUME_SITE> VOLUME_CUT_AT_EXIT=1 TRANSPORT=$TRANSPORT $VMM $KERNEL <disk> \"\" /; then read back $READ_BACK"
   else
-    echo "    repeat it: $(knobs_of "seed$s")${PEER_REQUEST:+ PEER_REQUEST=$PEER_REQUEST} TRANSPORT=$TRANSPORT $VMM $KERNEL <volume> \"\" $PATH_WANTED"
+    sh=$(shape_of "$s")
+    echo "    repeat it: $(knobs_of "seed$s")${PEER_REQUEST:+ PEER_REQUEST=$PEER_REQUEST}${sh:+ $(shape_env "$sh")} TRANSPORT=$TRANSPORT $VMM $KERNEL <volume${SHAPES:+, after the setup}> \"\" $PATH_WANTED"
   fi
 done
 [ -z "$failing" ] && [ $merged = 0 ]

@@ -13,6 +13,10 @@
 #                                   that request instead of GET / (a write,
 #                                   say: POST /play, so the volume's faults
 #                                   meet one)
+#   SHAPES=requests/shapes ./nightly.sh
+#                                   each seed one of many requests (sweep.sh,
+#                                   "many shapes"): reads, writes, two
+#                                   clients, after a setup that makes a player
 #
 # **WHAT IT WRITES** (in `~/nightly/<date-time>/`, or NIGHTLY_OUT), all of it
 # as it goes, so it can be read mid-run:
@@ -56,10 +60,15 @@ mkdir -p "$OUT/bin" "$OUT/batches" "$OUT/failed"
 [ -x "$HERE/zig-out/bin/metal-vmm" ] || { echo "no metal-vmm built" >&2; exit 2; }
 [ -f "$KERNEL_ELF" ] || { echo "no kernel at $KERNEL_ELF" >&2; exit 2; }
 [ -z "${PEER_REQUEST:-}" ] || [ -f "$PEER_REQUEST" ] || { echo "no request at PEER_REQUEST=$PEER_REQUEST" >&2; exit 2; }
+[ -z "${SHAPES:-}" ] || [ -d "$SHAPES" ] || { echo "no folder at SHAPES=$SHAPES" >&2; exit 2; }
 [ -f "$SITE" ] || { echo "no site volume at $SITE" >&2; exit 2; }
 cp "$HERE/zig-out/bin/metal-vmm" "$OUT/bin/metal-vmm"
 cp "$KERNEL_ELF" "$OUT/bin/gopher.elf"
 request=()
+if [ -n "${SHAPES:-}" ]; then
+    cp -r "$SHAPES" "$OUT/bin/shapes"
+    request=(SHAPES="$OUT/bin/shapes")
+fi
 if [ -n "${PEER_REQUEST:-}" ]; then
     cp "$PEER_REQUEST" "$OUT/bin/request"
     request=(PEER_REQUEST="$OUT/bin/request")
@@ -79,7 +88,11 @@ deadline=$((start + $(python3 -c "print(int(float('$HOURS') * 3600))")))
     echo "metal-vmm     $(git -C "$HERE" rev-parse --short HEAD)$( [ -n "$(git -C "$HERE" status --porcelain)" ] && echo ' (with uncommitted changes)')"
     echo "gopher-metal  $(git -C "$GOPHER" rev-parse --short HEAD)$( [ -n "$(git -C "$GOPHER" status --porcelain)" ] && echo ' (with uncommitted changes)')"
     echo "kernel        $(sha256sum "$OUT/bin/gopher.elf" | cut -c1-16) ($KERNEL_ELF as built$(grep -aq antithesis_sdk "$OUT/bin/gopher.elf" && echo ', with the coverage properties'))"
-    echo "request       $( [ -n "${PEER_REQUEST:-}" ] && echo "$PEER_REQUEST, its first line: $(head -1 "$PEER_REQUEST" | tr -d '\r')" || echo "GET /")"
+    if [ -n "${SHAPES:-}" ]; then
+        echo "request       the shapes in $SHAPES (seed s is shape s mod $(ls "$SHAPES"/*.shape | wc -l)): $(cd "$SHAPES" && ls *.shape | sed 's/\.shape$//' | tr '\n' ' ')"
+    else
+        echo "request       $( [ -n "${PEER_REQUEST:-}" ] && echo "$PEER_REQUEST, its first line: $(head -1 "$PEER_REQUEST" | tr -d '\r')" || echo "GET /")"
+    fi
     echo "volume        $SITE"
     echo "seeds from    $FIRST, $BATCH a batch, for $HOURS hours (no batch starts after $(date -d "@$deadline" '+%F %T %Z'))"
     echo "machine       TRANSPORT=pci, a volume (VOLUME_SITE), JOBS=${JOBS:-2}"

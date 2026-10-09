@@ -1,0 +1,7 @@
+POST /login/full HTTP/1.1
+Host: lynrummy.com
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 55
+Connection: close
+
+name=Bea&password=pw-for-bea-1&action=register&next=%2F

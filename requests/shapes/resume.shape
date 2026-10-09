@@ -1,0 +1,3 @@
+# a large read: 26 KB
+PEER_REQUEST=resume.http
+EXPECT=200

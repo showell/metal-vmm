@@ -1,0 +1,3 @@
+# a puzzle session made by its first move: the most writes
+PEER_REQUEST=puzzle-action.http
+EXPECT=204

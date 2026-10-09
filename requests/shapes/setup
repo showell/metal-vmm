@@ -1,0 +1,4 @@
+# Sent first, unhurt, to the volume every run starts from: player p2 (whose
+# cookie the *.http files with one carry), then its game session 1.
+play.http
+new-session.http

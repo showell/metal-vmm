@@ -1,0 +1,3 @@
+# the game page, as the setup's player
+PEER_REQUEST=game.http
+EXPECT=200

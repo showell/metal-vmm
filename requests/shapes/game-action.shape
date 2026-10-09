@@ -1,0 +1,3 @@
+# a move appended to the setup's game session
+PEER_REQUEST=game-action.http
+EXPECT=204

@@ -1,0 +1,3 @@
+# a login refused (the throttle counts it)
+PEER_REQUEST=wrong-login.http
+EXPECT=200

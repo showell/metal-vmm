@@ -1,0 +1,8 @@
+POST /puzzles/sessions/1/puzzles/0/actions HTTP/1.1
+Host: lynrummy.com
+Cookie: gopher_uid=p2.1789732801.JQe2xbtKNu4Ie7fkr4jBC50RH_RYdoQnr1S3tHAGoiw
+Content-Type: text/plain
+Content-Length: 4
+Connection: close
+
+1) x

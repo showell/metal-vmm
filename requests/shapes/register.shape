@@ -1,0 +1,3 @@
+# an account made: name, password hash, a session
+PEER_REQUEST=register.http
+EXPECT=303

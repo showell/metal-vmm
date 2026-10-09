@@ -39,6 +39,8 @@ printf 'pristine volume' > "$T/site.img"
 #   15      a peer's reset answered 500: FAIL (only a disk fault excuses a 5xx)
 #   9       a 200 whose page metal-vmm did not write (an answer kept only in
 #           part): FAIL, never a match of two empty pages
+# A run with PEER_REQUEST (a shape's) and no seed above has for its page the
+# request file's own bytes, so each shape's page is its own.
 # With FAKE_UNHURT_NO_PAGE set, the unhurt run's page is not written either.
 cat > "$T/vmm" <<'EOF'
 #!/bin/bash
@@ -70,6 +72,7 @@ case "$s" in
   15) page="Home unavailable"; status=500 ;;
   11) page="oops"; status=500; echo "  let go at the end: 1 response(s) cut by the stop, 2 bytes never acknowledged" ;;
 esac
+case "$s" in [2-9] | 1[0-7]) ;; *) [ -z "${PEER_REQUEST:-}" ] || page="$(cat "${PEER_REQUEST%%,*}")" ;; esac
 if [ "$s" = 9 ] || { [ -z "$s" ] && [ -n "${FAKE_UNHURT_NO_PAGE:-}" ]; }; then
   echo "metal-vmm: the answer was 70000 bytes and the client keeps 65536; PEER_BODY and PEER_RESPONSE are not written" >&2
 else
@@ -153,6 +156,27 @@ expect "seed 15" '^15 .*FAIL: not the page (status 500)' "$five"
 nothing=$(FAKE_UNHURT_NO_PAGE=1 VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 1 1 2>&1)
 [ $? = 2 ] || { echo "FAIL: an unhurt run with no page did not stop the sweep with 2"; fail=1; }
 expect "the unhurt run with no page" 'status 200 and no page (exit 0): nothing can be judged' "$nothing"
+
+# **SHAPES**: seed s sends shape (s mod n) and is judged against that
+# shape's own unhurt run (20 is "a", 21 is "b", each page its own); the
+# setup's requests go first; an unhurt answer not the shape's EXPECT stops
+# the sweep with 2.
+mkdir -p "$T/shapes"
+printf 'page a' > "$T/shapes/a.http"
+printf 'page b' > "$T/shapes/b.http"
+printf '# a\nPEER_REQUEST=a.http\nEXPECT=200\n' > "$T/shapes/a.shape"
+printf 'PEER_REQUEST=b.http  # b\n' > "$T/shapes/b.shape"
+printf 'a.http\n' > "$T/shapes/setup"
+shaped=$(SHAPES="$T/shapes" VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 20 21 2>&1)
+[ $? = 0 ] || { echo "FAIL: a sweep of two shapes did not pass:"; echo "$shaped" | sed 's/^/    /'; fail=1; }
+expect "the setup" '^setup: a.http, status 200' "$shaped"
+expect "shape a's unhurt run" '^shape a: unhurt status 200, 6 bytes' "$shaped"
+expect "seed 20, shape a" '^20 *a .* ok ' "$shaped"
+expect "seed 21, shape b" '^21 *b .* ok ' "$shaped"
+printf 'PEER_REQUEST=b.http\nEXPECT=404\n' > "$T/shapes/b.shape"
+SHAPES="$T/shapes" VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 20 21 > "$T/expect.out" 2>&1
+[ $? = 2 ] || { echo "FAIL: a shape whose unhurt run is not its EXPECT did not stop the sweep with 2"; fail=1; }
+expect "the shape not as expected" 'shape b: its unhurt run answered 200, not 404: nothing can be judged' "$(cat "$T/expect.out")"
 
 if [ $fail = 0 ]; then echo "sweep_test: every verdict and the summary as told"; fi
 exit $fail
