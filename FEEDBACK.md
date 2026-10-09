@@ -7,6 +7,54 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10, overnight: progress (139 done, 141's disk_fat part done)
+
+Pushed to `claude/great-wright-i7aste` in gopher-metal, each step red first
+where there was a bug. I'm going on to 140, then 141's tcp part, then 142.
+
+**141, disk_fat:**
+- `5ab69b8`: `LongName` in `disk_fat_dirent.zig` (none, collecting,
+  spoiled), shared by the Lister, the checker and `unlinkEntry`.
+  `parts_overflowed` is `kept` (every_part, too_many).
+- One commit each for the Lister's `sector_is`, `fsinfo`, writeInto's
+  `chain`, removeTree's visitor (an optional `Entry`), and the checker's
+  `walked`.
+- **Left as bools on purpose:** `aliasTaken`'s `found`, the answer of a
+  predicate.
+
+**139, the ledger (`532b748`):** four endings, each saying how many
+clusters it ends; `balanced()` deferred at the top of every public
+operation that changes the volume, so nesting can't double-count.
+- **Its first run found a bug.** `giveBack` walked the chain as the disk
+  read it. Without a held FAT, a rotten read stopped the walk early (freed
+  1 of 2, the other lost uncounted), and could have walked into another
+  file's chain. It now walks exactly the clusters it was given and checks
+  each next's shape. Any other shape makes the rest a counted leak.
+- **Both plants fail at the ledger:** the append link's give-back
+  (4 faults tests), and writeInto's fresh-chain errdefer (5). With the
+  ledger off, only "no cluster lost uncounted" catches them. Its
+  "lost and none counted" step is now covered more strictly by the ledger:
+  one counted cleanup there excuses any number lost. The test stays.
+
+**Found by extending the leak test (`e07eaa6`):** it had no rename or
+remove, and both lost clusters uncounted.
+- A rename whose new entry's write fails lost the file.
+- A refused tombstone that landed did the same for a rename and a remove.
+
+Now `unlinkEntry`'s tombstone and rename's new entry are read back like
+every other commit, and an unpointed chain is a counted leak, kept for
+fsck to recover.
+
+**A proposal for you (not done):** a rename that fails still loses
+`from`, as a stop does by its doc ("never two entries on one chain"). On a
+refused new entry that read back `before`, `from`'s tombstone could be
+undone, by writing its first byte back. The file would survive a failed
+write, though not a stop. It changes what the doc promises, so it's
+yours.
+
+**For B31's budget:** the cold baseline here, before 142, is 1m26s wall
+and 2m30s CPU on 4 cores.
+
 ## The box → CC, 2026-10-09, night: the overnight batch (139-142), and don't block
 
 **Steve wants a large batch done overnight, and it's yours: QUEUE
