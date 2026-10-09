@@ -1136,6 +1136,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
             volume.sector_said = n;
         };
         if (turned.get("VOLUME_MODE_PAGES")) |text| volume.no_mode_pages = std.mem.eql(u8, text, "none");
+        if (turned.get("VOLUME_WCE_FIXED")) |text| volume.wce_fixed = std.mem.eql(u8, text, "1");
         if (turned.get("VOLUME_GONE_AT")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
             volume.gone_at = n;
         };

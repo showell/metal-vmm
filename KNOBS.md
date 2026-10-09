@@ -189,6 +189,7 @@ disk's does. Nothing below changes anything unless `VOLUME` is set.
 | `VOLUME_GONE_AT=n` | from the nth command on, every command is BAD_TARGET, as when a DO volume is detached under a running droplet | none |
 | `VOLUME_SECTOR=n` | READ CAPACITY says a sector is `n` bytes (4096, say) and counts the disk in them; transfers stay 512, since a driver that takes only 512 refuses the disk at bring-up, before any | 512 |
 | `VOLUME_MODE_PAGES=none` | MODE SENSE answers with its header alone, no caching page | the caching page |
+| `VOLUME_WCE_FIXED=1` | a write cache (`VOLUME_CACHE=1`) that cannot be turned off: MODE SENSE's changeable values say WCE is not changeable, and a MODE SELECT setting WCE=0 is refused (INVALID FIELD IN PARAMETER LIST). Without it, MODE SELECT turns the cache off and later writes go through | the cache can be turned off |
 | `VOLUME_SHORT_AT=n` | the nth READ or WRITE moves the first half of its bytes and answers GOOD with the rest as its residual, a legal underrun: a driver that ignores the residual serves a read's stale half, or calls a half-written write done | none |
 | `VOLUME_READ_ONLY_AT=n` | read-only from the nth command: MODE SENSE says WP and every WRITE is DATA PROTECT, while reads and SYNCHRONIZE CACHE still answer, as a DO volume the host has made read-only after an I/O error | none |
 

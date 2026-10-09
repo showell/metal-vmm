@@ -105,6 +105,7 @@ pub const table = [_]Setting{
     .{ .name = "VOLUME_CACHE_KEEPS", .kind = any_number, .needs_volume = true },
     .{ .name = "VOLUME_SECTOR", .kind = .{ .number = .{ .lo = 1, .hi = std.math.maxInt(u32) } }, .needs_volume = true },
     .{ .name = "VOLUME_MODE_PAGES", .kind = .{ .choice = &.{"none"} }, .needs_volume = true },
+    .{ .name = "VOLUME_WCE_FIXED", .kind = .flag, .needs_volume = true },
     .{ .name = "RTC_ABSENT", .kind = .flag },
     .{ .name = "RTC_STUCK", .kind = .flag },
     .{ .name = "PIT_FROZEN", .kind = .flag },

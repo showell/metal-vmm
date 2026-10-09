@@ -24,7 +24,9 @@
 //! CACHE makes them durable. `VOLUME_CACHE=1` is that disk, saying so.
 //! `VOLUME_CACHE=lie` holds writes and says WCE=0, as a disk that lies
 //! about its cache does: a driver that believes it never synchronizes.
-//! Unset, the disk writes through and says so. Nothing here reads a clock.
+//! Unset, the disk writes through and says so. A driver may turn the cache
+//! off with MODE SELECT (WCE=0), unless `VOLUME_WCE_FIXED=1` makes it a
+//! disk that refuses. Nothing here reads a clock.
 
 const std = @import("std");
 const virtio = @import("virtio.zig");
@@ -66,6 +68,7 @@ const asc_invalid_opcode: u8 = 0x20;
 pub const asc_write_protected: u8 = 0x27;
 const asc_lba_out_of_range: u8 = 0x21;
 const asc_invalid_field: u8 = 0x24;
+const asc_invalid_parameter: u8 = 0x26;
 const asc_lun_not_supported: u8 = 0x25;
 const asc_power_on: u8 = 0x29;
 /// With ASCQ 09h: CAPACITY DATA HAS CHANGED.
@@ -79,6 +82,7 @@ pub const op_read: u8 = 0x28;
 pub const op_write: u8 = 0x2A;
 pub const op_synchronize: u8 = 0x35;
 pub const op_mode_sense: u8 = 0x5A;
+pub const op_mode_select: u8 = 0x55;
 
 const page_caching: u8 = 0x08;
 const page_all: u8 = 0x3F;
@@ -148,6 +152,18 @@ pub const Scsi = struct {
     /// **MODE SENSE WITH NO PAGES** (`VOLUME_MODE_PAGES=none`): the header
     /// alone, as a disk with no caching page answers.
     no_mode_pages: bool = false,
+    /// **TURNED OFF BY MODE SELECT**: the driver set the caching page's WCE
+    /// to 0, and writes from then on go through, unless the cache lies,
+    /// which holds them whatever it was told. What it held before stays held
+    /// until a SYNCHRONIZE: a disk may drain it then or not (SBC-3 leaves it
+    /// to the disk), so a driver that turns the cache off and needs what it
+    /// wrote before must still synchronize.
+    write_through: bool = false,
+    /// **A CACHE THAT CANNOT BE TURNED OFF** (`VOLUME_WCE_FIXED=1`): the
+    /// changeable values say WCE is not changeable, and a MODE SELECT that
+    /// changes it is refused, INVALID FIELD IN PARAMETER LIST.
+    wce_fixed: bool = false,
+    mode_selects: u64 = 0,
     protected: u64 = 0,
     commands: u64 = 0,
     attentions: u64 = 0,
@@ -183,7 +199,13 @@ pub const Scsi = struct {
     /// What the caching page's WCE bit says: a cache, unless it lies.
     pub fn saysWce(self: *const Scsi) bool {
         const c = self.cache orelse return false;
-        return !c.lies;
+        return !c.lies and !self.write_through;
+    }
+
+    /// Whether a write now is held in the cache: by one that lies, always.
+    fn holding(self: *const Scsi) ?*cache_mod.Cache {
+        const c = self.cache orelse return null;
+        return if (c.lies or !self.write_through) c else null;
     }
 
     fn notified(context: *anyopaque, d: *Device, ram: []u8, queue: u32) void {
@@ -308,6 +330,7 @@ pub const Scsi = struct {
             op_test_unit_ready => .{},
             op_read_capacity => self.capacity(in),
             op_mode_sense => self.modeSense(cdb, in),
+            op_mode_select => self.modeSelect(cdb, out),
             op_read, op_write => self.transfer(cdb, op == op_write, out, in),
             op_synchronize => self.synchronize(),
             else => self.check(key_illegal_request, asc_invalid_opcode),
@@ -383,10 +406,53 @@ pub const Scsi = struct {
         }
         data[8] = page_caching;
         data[9] = 18; // page length
-        // Current and default values say the cache; changeable says none.
-        if (control != 1 and self.saysWce()) data[10] = 0x04;
+        // Current values say the cache as it is now, default ones as it was
+        // at power-on, and changeable ones that WCE may be set, unless
+        // `VOLUME_WCE_FIXED`. A disk with no cache says WCE=0 in every one.
+        switch (control) {
+            0 => if (self.saysWce()) {
+                data[10] = 0x04;
+            },
+            1 => if (self.cache != null and !self.wce_fixed) {
+                data[10] = 0x04;
+            },
+            else => if (self.cache) |c| if (!c.lies) {
+                data[10] = 0x04;
+            },
+        }
         const allocated = std.mem.readInt(u16, cdb[7..9], .big);
         return .{ .data = give(in, &data, allocated) };
+    }
+
+    /// MODE SELECT(10) (SPC-4 §6.13): the caching page, PF set and SP
+    /// clear, with no block descriptors. Only WCE may change; every other
+    /// field must be what MODE SENSE says. Setting WCE=0 makes later writes
+    /// go through (`write_through`), WCE=1 puts the cache back.
+    fn modeSelect(self: *Scsi, cdb: *const [cdb_size]u8, out: ?[]u8) Answer {
+        self.mode_selects += 1;
+        if (cdb[1] & 0x10 == 0) return self.check(key_illegal_request, asc_invalid_field); // PF
+        if (cdb[1] & 0x01 != 0) return self.check(key_illegal_request, asc_saving_not_supported); // SP
+        const len = std.mem.readInt(u16, cdb[7..9], .big);
+        if (len == 0) return .{};
+        const from = out orelse return self.check(key_illegal_request, asc_invalid_field);
+        if (from.len < len or len < 8 + 20) return self.check(key_illegal_request, asc_invalid_parameter);
+        const list = from[0..len];
+        // The header: mode data length is reserved, no block descriptors.
+        if (list[0] != 0 or list[1] != 0 or std.mem.readInt(u16, list[6..8], .big) != 0)
+            return self.check(key_illegal_request, asc_invalid_parameter);
+        const page = list[8..][0..20];
+        if (page[0] & 0x3F != page_caching or page[1] != 18) return self.check(key_illegal_request, asc_invalid_parameter);
+        // Every field but WCE as MODE SENSE gives it: zero.
+        if (page[2] & ~@as(u8, 0x04) != 0) return self.check(key_illegal_request, asc_invalid_parameter);
+        for (page[3..]) |b| if (b != 0) return self.check(key_illegal_request, asc_invalid_parameter);
+        const wce = page[2] & 0x04 != 0;
+        if (self.cache) |c| {
+            if (wce != self.saysWce()) {
+                if (self.wce_fixed or c.lies) return self.check(key_illegal_request, asc_invalid_parameter);
+                self.write_through = !wce;
+            }
+        } else if (wce) return self.check(key_illegal_request, asc_invalid_parameter);
+        return .{ .taken = len };
     }
 
     fn transfer(self: *Scsi, cdb: *const [cdb_size]u8, writing: bool, out: ?[]u8, in: ?[]u8) Answer {
@@ -420,7 +486,7 @@ pub const Scsi = struct {
         // As much as lands before the power goes, which is all of it unless
         // this is the write it goes in.
         const landed = self.power.lands(lba, n);
-        if (self.cache) |c| _ = c.wrote(lba, landed);
+        if (self.holding()) |c| _ = c.wrote(lba, landed);
         const len: usize = @intCast(landed * sector_bytes);
         @memcpy(self.image[at..][0..len], from[0..len]);
         if (self.dirty) |bits| disk.mark(bits, lba, landed);
@@ -431,7 +497,7 @@ pub const Scsi = struct {
     /// One line for the run's end, in `buf`.
     pub fn line(self: *const Scsi, buf: []u8) []const u8 {
         const mode = if (self.cache) |c|
-            (if (c.lies) "a write cache that says it writes through (VOLUME_CACHE=lie)" else "a write cache, said in MODE SENSE")
+            (if (c.lies) "a write cache that says it writes through (VOLUME_CACHE=lie)" else if (self.write_through) "a write cache, turned off by MODE SELECT" else "a write cache, said in MODE SENSE")
         else
             "write-through";
         const lost: u64 = if (self.cache) |c| c.lost else 0;
@@ -582,6 +648,26 @@ pub const FakeDriver = struct {
 
     pub fn synchronize(self: *FakeDriver, d: *Device) Outcome {
         return self.settled(d, &[10]u8{ op_synchronize, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .none, 0);
+    }
+
+    /// MODE SELECT(10) of the caching page with WCE as given and every other
+    /// field zero, PF set, as gopher-metal sends it; `changeable` asks MODE
+    /// SENSE's changeable values first and gives WCE's bit there instead.
+    fn select(self: *FakeDriver, d: *Device, wce_on: bool) Outcome {
+        const len: u16 = 8 + 20;
+        const list = self.ram[data_at..][0..len];
+        @memset(list, 0);
+        list[8] = page_caching;
+        list[9] = 18;
+        if (wce_on) list[10] = 0x04;
+        return self.settled(d, &[10]u8{ op_mode_select, 0x10, 0, 0, 0, 0, 0, 0, len, 0 }, .to_disk, len);
+    }
+
+    fn changeable(self: *FakeDriver, d: *Device) ?bool {
+        const want: u16 = 8 + 20;
+        const o = self.settled(d, &[10]u8{ op_mode_sense, 0x08, 0x48, 0, 0, 0, 0, 0, want, 0 }, .from_disk, want);
+        if (!good(o)) return null;
+        return self.ram[data_at + 10] & 0x04 != 0;
     }
 
     /// `writeCache`: MODE SENSE(10), the caching page's WCE, or null.
@@ -897,4 +983,86 @@ test "VOLUME_SHORT_AT: the nth transfer moves half, answers GOOD, and says the r
     const third = g.rw(&d, false, 4, 2); // transfer 3: whole again
     try testing.expectEqual(@as(u32, 0), third.residual);
     try testing.expectEqual(@as(u64, 1), vol.shortened);
+}
+
+test "MODE SELECT turns a write cache off: later writes go through, and what was held before stays held until SYNCHRONIZE" {
+    var image: [16 * 512]u8 = @splat('o');
+    var c = cache_mod.Cache{ .gpa = testing.allocator, .image = &image };
+    defer c.deinit();
+    var vol = Scsi{ .image = &image, .cache = &c };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    try testing.expectEqual(@as(?bool, true), g.wce(&d));
+    try testing.expectEqual(@as(?bool, true), g.changeable(&d));
+    @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1))); // held
+    try testing.expect(FakeDriver.good(g.select(&d, false)));
+    try testing.expectEqual(@as(?bool, false), g.wce(&d));
+    @memset(g.ram[FakeDriver.data_at..][0..512], 'b');
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 2, 1))); // through
+    c.lose();
+    try testing.expectEqual(@as(u8, 'o'), image[1 * 512]);
+    try testing.expectEqual(@as(u8, 'b'), image[2 * 512]);
+    var buf: [256]u8 = undefined;
+    try testing.expect(std.mem.indexOf(u8, vol.line(&buf), "turned off by MODE SELECT") != null);
+    // And back on.
+    try testing.expect(FakeDriver.good(g.select(&d, true)));
+    try testing.expectEqual(@as(?bool, true), g.wce(&d));
+}
+
+test "VOLUME_WCE_FIXED: WCE is not changeable, and a MODE SELECT that turns it off is refused" {
+    var image: [16 * 512]u8 = @splat('o');
+    var c = cache_mod.Cache{ .gpa = testing.allocator, .image = &image };
+    defer c.deinit();
+    var vol = Scsi{ .image = &image, .cache = &c, .wce_fixed = true };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    try testing.expectEqual(@as(?bool, false), g.changeable(&d));
+    const o = g.select(&d, false);
+    try testing.expectEqual(key_illegal_request, o.key);
+    try testing.expectEqual(asc_invalid_parameter, o.asc);
+    try testing.expectEqual(@as(?bool, true), g.wce(&d));
+    // Setting it to what it is changes nothing, and is taken.
+    try testing.expect(FakeDriver.good(g.select(&d, true)));
+}
+
+test "MODE SELECT to a cache that lies: WCE=0 is what it says already, and it goes on holding" {
+    var image: [16 * 512]u8 = @splat('o');
+    var c = cache_mod.Cache{ .gpa = testing.allocator, .image = &image, .lies = true };
+    defer c.deinit();
+    var vol = Scsi{ .image = &image, .cache = &c };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    try testing.expect(FakeDriver.good(g.select(&d, false)));
+    @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 3, 1)));
+    c.lose();
+    try testing.expectEqual(@as(u8, 'o'), image[3 * 512]);
+}
+
+test "MODE SELECT: without PF, with SP, or changing a field but WCE, it is refused" {
+    var image: [16 * 512]u8 = @splat('o');
+    var c = cache_mod.Cache{ .gpa = testing.allocator, .image = &image };
+    defer c.deinit();
+    var vol = Scsi{ .image = &image, .cache = &c };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    _ = g.wce(&d); // past UNIT ATTENTION
+    const len: u16 = 8 + 20;
+    const list = g.ram[FakeDriver.data_at..][0..len];
+    @memset(list, 0);
+    list[8] = page_caching;
+    list[9] = 18;
+    const no_pf = g.send(&d, 0, 0, &[10]u8{ op_mode_select, 0, 0, 0, 0, 0, 0, 0, len, 0 }, .to_disk, len);
+    try testing.expectEqual(asc_invalid_field, no_pf.asc);
+    const sp = g.send(&d, 0, 0, &[10]u8{ op_mode_select, 0x11, 0, 0, 0, 0, 0, 0, len, 0 }, .to_disk, len);
+    try testing.expectEqual(asc_saving_not_supported, sp.asc);
+    list[10] = 0x01; // RCD, not WCE
+    const rcd = g.send(&d, 0, 0, &[10]u8{ op_mode_select, 0x10, 0, 0, 0, 0, 0, 0, len, 0 }, .to_disk, len);
+    try testing.expectEqual(asc_invalid_parameter, rcd.asc);
+    try testing.expect(vol.saysWce());
 }
