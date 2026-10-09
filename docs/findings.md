@@ -14,7 +14,7 @@ current kernel does. Commits are in the repo named.
 | found | where | now |
 |---|---|---|
 | DHCP sent DISCOVER once and never asked again | gopher-metal `src/dhcp.zig` | **fixed** (`f0f66a9`): RFC 2131 retransmission, 4 s doubling to 64 s |
-| a refused read of `gopher-metal.conf` reads as "no config", and `requests` defaults to forever | gopher-metal `probe/gopher.zig`, `readConfig` | **open**: `readFileAlloc(...) catch return conf` still takes any error for an absent file |
+| a refused read of `gopher-metal.conf` reads as "no config", and `requests` defaults to forever | gopher-metal `probe/gopher.zig`, `readConfig` | **fixed** (`6b5e00f`): a missing file is the defaults; any other failure stops the boot |
 | every open failure became `FileNotFound` | gopher-metal `src/io.zig` (the port of angry-gopher's) | **fixed** (`0b36067`): a failed read is `ReadFailed` |
 | a failed topic announcement discarded with `catch {}`, after which the volume would not mount | angry-gopher `zig-server/src/chat.zig` | **fixed** (`298c0871`): `try` |
 | one refused write to the FAT's second copy, and the volume never mounts again | gopher-metal `src/fat16.zig`, `cacheFat` | **fixed** (`5f08fc5`): copies that differ are brought into line with the first at mount |

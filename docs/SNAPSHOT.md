@@ -1,7 +1,7 @@
 # Whole-machine snapshot and restore: the plan
 
-*Drafted 2026-10-08 by a cold planning agent, reviewed by the box. Not yet
-built. `src/snapshot.zig` already holds the device half (each model a value
+*Drafted 2026-10-08 by a cold planning agent, reviewed by the box. **Parked
+2026-10-09** (Steve): the judge and the class hunts come first. Not built. `src/snapshot.zig` already holds the device half (each model a value
 copy restored in place, proven per model); this is the rest.*
 
 ## Why

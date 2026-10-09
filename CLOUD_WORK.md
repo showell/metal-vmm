@@ -9,12 +9,18 @@ on until 2026-10-04 (its `CLOUD.md`, retired, is in gopher-metal's
 
 metal-vmm is our own deterministic hypervisor: gopher-metal's kernels run on
 it, and the same guest with the same seed gives the same run, byte for byte.
-Steve's aim is an explorer like Antithesis's steering the REAL kernel: metal-vmm
-taking its fault decisions from a tape, so the seed explorer can return to a
-run's interesting moment and change one decision ("convergence", 2026-10-08).
-Its first step, a whole-machine snapshot, is the box's (`docs/SNAPSHOT.md`:
-it needs KVM). Meanwhile every run must be cheap (README, "What a run
-costs") and judged exactly (essay notes/faults-and-excuses.md).
+**The goal is zero bugs in the lower levels** (gopher-metal first, then this
+repo); angry-gopher is the reality check, not the only consumer. Judge the
+kernel by its own promises (gopher-metal's STORE.md and HOST.md).
+
+What works best, so far, is **a class hunt**: name one kind of mistake,
+walk every place in the code it could live, and end in red tests. Seed
+sweeps find less than they cost. The judge is moving from "does this run
+differ from the unhurt one, and is the difference excused?" to "did anything
+forbidden happen?", and `plants.sh` (a standing set of planted bugs) is run
+on every change to it. The whole-machine snapshot (`docs/SNAPSHOT.md`) is
+parked. Essays: `notes/the-plan-after-the-postmortem.md`,
+`notes/our-lexicon.md` (the shared vocabulary).
 
 ## Who does what
 
@@ -23,8 +29,9 @@ costs") and judged exactly (essay notes/faults-and-excuses.md).
 - **The box Claude** works on Steve's development droplet, which has KVM and
   QEMU. It runs the guests: `check.sh`, `same.sh`, `site.sh`, `rest.sh`,
   `sweep.sh`, `nightly.sh` and the rest. It merges your branch into `master`
-  after a cold review and the unit tests, and runs the guests alongside: they
-  catch edge cases, which come back to you as new items. It owns gopher-metal,
+  after `check-cc.sh` (your branch built and swept on a guest, then
+  `plants.sh`), a cold review and the unit tests; what the guests catch comes
+  back to you as new items. It owns gopher-metal,
   the guest side of every contract here, and the releases.
 - **You (CC)**: build what needs no emulator, and anything adversarial
   (Steve, 2026-10-08): logic, tests that run on ordinary Linux, attacking
@@ -48,18 +55,17 @@ an empty queue ends a session.
 Everything in `src/` except the ioctls in `kvm.zig` and the run loop in
 `main.zig` is a model: the PCI bus, MSI-X, the APIC, the clock, the virtio
 rings, the peer's TCP, the faults. A model is tested on Linux like any code.
-`zig build test` runs 48 of them today, and none needs KVM.
+`zig build test` runs them all, and none needs KVM.
 
 So treat "this needs a guest" as a smell. When you meet a behavior only the
 box's scripts check, ask how to check it here:
 
 - **Drive the device as the driver does.** `virtio.zig`'s `FakeGuest` lays out
   a queue the way gopher-metal's driver does and drives the mmio window
-  through it. The same over PCI (config space, capabilities, common config,
-  MSI-X) is item 2.
-- **Extract the decision from the I/O.** `main.zig`'s `rest` decides when a
-  halted guest wakes and on what. That decision is pure and can be tested
-  without a vCPU once it is pulled out (item 3).
+  through it; `virtio_pci.zig`'s does the same over PCI (config space,
+  capabilities, common config, MSI-X).
+- **Extract the decision from the I/O.** When a halted guest wakes, and on
+  what, is `halt.zig`'s `wakes`: pure, and tested without a vCPU.
 - **Read the guest's side.** gopher-metal's `src/pci.zig`, `src/virtio.zig`
   and `src/interrupts.zig` are what the guest does. They are public
   (github.com/showell/gopher-metal); clone it read-only. Do not push to it.
@@ -117,11 +123,12 @@ Questions before building on it.
 | metal-vmm | `master` | the box | the base: you branch from it, the box merges into it |
 | gopher-metal | `master` | the box | the base: you branch from it, the box merges into it |
 | zig-coverage-sdk | `main` | the box | the base: you branch from it, the box merges into it |
-| angry-gopher | `master` | the box | the base (and `box/request-door`, the box's, held for v21) |
+| angry-gopher | `master` | the box | the base: you branch from it, the box merges into it |
+| gopher-metal, angry-gopher | `next` | the box | integration while `master` is held for a release's gates; `master` fast-forwards to it after the tag. Never branch from it |
 | each of them | `claude/<your session's name>` | you | your work, with that repo's base merged in |
 
-**What serves lynrummy.com is a tag, not a branch**: gopher-metal's `vN`
-(today `v20`), and its README's "Serving" line says which. `master` may be
+**What serves lynrummy.com is a tag, not a branch**: gopher-metal's `vN`,
+and its README's "Serving" line says which. `master` may be
 ahead of it. `interrupts` and `antithesis-sdk` are retired: both are merged
 into `master`; don't branch from them.
 
@@ -189,6 +196,8 @@ about the module, not a gap in the simulator. So:
 - Do not change the scripts (`check.sh`, `same.sh`, `site.sh`, `rest.sh`,
   `lossy.sh`, `flaky.sh`, `sound.sh`) without saying so in `QUEUE.md`.
   gopher-metal's `gates.sh` runs three of them on a machine you cannot see.
+  A change to the judge (`sweep.sh`, `sound.sh`, an excuse) says so in its
+  commit, so the box runs `plants.sh` before merging it.
 - A review has this shape: what holds up; findings by severity, each with the
   failure it causes and how likely it is; fix shapes; and nothing fixed in
   the review commit itself.
@@ -203,7 +212,7 @@ environment.
 
 ## Long assignments
 
-A long assignment (the first: QUEUE items 76-81, 2026-10-06) is meant to run
+A long assignment is meant to run
 for hours with no one to ask, so it hands you more judgment than an ordinary
 item. These rules are what make that safe.
 

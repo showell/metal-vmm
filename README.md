@@ -1,13 +1,17 @@
 # metal-vmm
 
-**Active on `master`, 2026-10-06.** A deterministic hypervisor of our own, on
+**Active on `master`, 2026-10-09.** A deterministic hypervisor of our own, on
 KVM, for one kind of guest: [gopher-metal](https://github.com/showell/gopher-metal)'s
 bare-metal kernels, the probes and the real server behind lynrummy.com. It is
 a test machine, never a production one. The same guest with the same seed
 gives the same run, byte for byte, and any input can be withheld or damaged to
-a recipe. The long-term aim is an explorer like Antithesis's, steered by
+a recipe. Its work today is **judging**: a sweep of seeds, each a whole fault
+schedule, asks of every run whether anything the guest promises was broken,
+and a standing set of planted bugs checks that the judge still catches them.
+An explorer like Antithesis's, steered by
 [zig-coverage-sdk](https://github.com/showell/zig-coverage-sdk)'s properties
-toward runs no run has reached yet; that explorer is not built.
+toward runs no run has reached yet, is the long-term aim; it is not built,
+and its first step (`docs/SNAPSHOT.md`) is parked.
 
 - **Live work** is in [QUEUE.md](QUEUE.md), one queue for all four repos
   (zig-coverage-sdk, metal-vmm, gopher-metal, angry-gopher).
@@ -50,6 +54,8 @@ there by `zig build kernels`; `gopher.elf` by `./port.sh && zig build gopher`):
 | `./flaky.sh` | `mkfs.vfat`; the site volume for `gopher` | which refused disk requests it survives |
 | `./sweep.sh` | the site volume, zig-coverage-sdk | a range of seeds, each a whole fault schedule |
 | `./nightly.sh` | the same | **overnight, detached:** `sweep.sh` with a volume, batch after batch of new seeds for `HOURS` (10), logging as it goes in `~/nightly/<date-time>/` (`progress.log`, `failures.log`, each failing seed's files). `KERNEL_ELF=` a `-Dcoverage` build judges its properties too (through the coverage door, which costs the guest no time); `PEER_REQUEST=requests/post-play.http` sends a write instead of `GET /`, so the volume's faults meet one; `SHAPES=requests/shapes` gives each seed one of ten requests (reads, writes as a player the setup makes, two clients at once), each judged against its own unhurt run |
+| `./plants.sh` | the same, gopher-metal's port | **does the judge still judge**: the same seeds over a clean kernel, which must fail none, and over one kernel per `plants/<name>.patch` (a deliberate bug), each of which must fail a seed where its plant fired. Run after every change to the judge. **Written, not yet run**; one plant stands (`net-goback-byte`) |
+| `./check-cc.sh` | the same | the cloud session's branch, in worktrees: built, swept over every request shape for a few seeds, then `plants.sh` — run before its code is reviewed. **Written, not yet run** |
 
 "The site volume" is `SITE`, by default
 `~/build/gopher-metal/probe/gopher/pristine.img`, staged by gopher-metal's
@@ -108,7 +114,7 @@ shortest way into a layer**, and the host half is the emulator.
 
 ## Where it stands
 
-As of 2026-10-06. Two machines: the **microvm-shaped** one (devices in an mmio
+As of 2026-10-09. Two machines: the **microvm-shaped** one (devices in an mmio
 window, no interrupts; the one QEMU's `microvm` is compared with) and the
 **PC-shaped** one (`TRANSPORT=pci`). "Checked against QEMU" means `check.sh`
 or `site.sh`; everything else is checked by unit tests and by this machine's
@@ -133,6 +139,7 @@ own repeat runs.
 | the guest's coverage | **works** — its zig-coverage-sdk lines read as printed, a table per run, JSONL for the SDK's report across runs |
 | fuzzing the models | **works** — `zig build fuzz`; nothing may panic and each seed repeats |
 | snapshots | **device side only** — every model's state saved and restored in place (`snapshot.zig`), tested; the vCPU half and branching runs from it are not built |
+| the judge's own check | **written, not yet run** — `plants.sh`: planted bugs the judge must catch, and a clean kernel it must pass |
 | the explorer | **not built** |
 
 A boot costs about 100 ms, most of it spent zeroing the guest's `.bss`. QEMU's
@@ -353,8 +360,9 @@ this program a full exit through KVM, which on the box is itself nested in a
 virtual machine. Measured 2026-10-01, `vfat` (44,193 disk requests, about
 221,000 exits) takes 1.7-2.0 s under QEMU's software processor, 3.3-3.4 s
 under QEMU with `-accel kvm`, and 4.15 s here; `clock`, mostly computation,
-takes 8.3 s, 4.6 s and 1.2 s. A `ReleaseFast` build runs `vfat` in the same
-4 s as the debug one, so `zig build`'s default stays debug.
+takes 8.3 s, 4.6 s and 1.2 s. Those were Debug builds; `zig build` builds
+ReleaseSafe since 2026-10-08 (`build.zig`), and see "What a run costs" for
+what that bought.
 
 ## The other oracle: yesterday's run
 
@@ -384,7 +392,7 @@ the same on every run on every day.
 ## The real server
 
 `gopher.elf` is **angry-gopher's own route table**, compiled from its own
-source for a machine with no operating system — its data on a FAT16 volume, its
+source for a machine with no operating system — its data on a FAT volume, its
 clocks from its own hardware, `std.http.Server` over a TCP stack it brought
 with it.
 
@@ -455,9 +463,12 @@ the properties only one run ever reached. `sweep.sh` ends with it.
 
 Sweeps of lost frames and refused disk writes found defects in gopher-metal and
 angry-gopher, among them a DHCP client that never retransmitted and one
-refused write that left a volume that could never mount again. Most are fixed
-since and one is open; [docs/findings.md](docs/findings.md) has each, found →
-fixed, with commits.
+refused write that left a volume that could never mount again. All but two
+are fixed (one partly, one a design decision);
+[docs/findings.md](docs/findings.md) has each, found → fixed, with commits.
+Since then the guest's own simulators and the cloud session's class hunts
+have found more than the sweeps; those live in gopher-metal's history and
+this repo's [QUEUE-ARCHIVE.md](QUEUE-ARCHIVE.md).
 
 ## Reading it
 
