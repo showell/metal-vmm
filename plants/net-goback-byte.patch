@@ -7,11 +7,13 @@ index fdd0a2e..3aff71f 100644
              props.reachable(@src(), "tcp: the timer goes back to the oldest unacknowledged byte", .{ .conn = i, .retries = c.retries });
              probe = true;
 +            // PLANTED BUG (metal-vmm plants/net-goback-byte, never to merge):
-+            // every go-back with data flips a bit of the oldest unacknowledged
-+            // byte, so a copy the peer never had arrives wrong.
++            // every go-back with data overwrites the oldest unacknowledged
++            // byte, so a copy the peer never had arrives wrong. ('#' or '$',
++            // never back to what it was: a flip undoes itself on an even
++            // number of go-backs.)
 +            if (c.queued() > 0) {
-+                props.reachable(@src(), "PLANT: the bug fires", null);
-+                c.tx[c.tx_start] ^= 0x20;
++                props.reachable(@src(), "PLANT: net-goback-byte fires", null);
++                c.tx[c.tx_start] = if (c.tx[c.tx_start] == '#') '$' else '#';
 +            }
          }
  

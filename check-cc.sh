@@ -49,6 +49,20 @@ checkout() {
 echo "check-cc, $(date -u '+%F %T UTC'), in $OUT"
 for r in metal-vmm gopher-metal angry-gopher; do checkout "$r" "$OUT/$r" || exit 2; done
 
+# angry-gopher's generated assets (wasm, built js) are untracked, so a
+# worktree lacks them: copied from the main checkout, as built there.
+python3 - "$REPOS/angry-gopher" "$OUT/angry-gopher" <<'PY'
+import os, re, shutil, sys
+src, dst = sys.argv[1], sys.argv[2]
+build = open(os.path.join(dst, "zig-server", "build.zig")).read()
+for path in re.findall(r'\.path\s*=\s*"([^"]+)"', build):
+    rel = os.path.normpath(os.path.join("zig-server", path))
+    if not os.path.exists(os.path.join(dst, rel)) and os.path.exists(os.path.join(src, rel)):
+        os.makedirs(os.path.dirname(os.path.join(dst, rel)), exist_ok=True)
+        shutil.copy2(os.path.join(src, rel), os.path.join(dst, rel))
+        print("  copied", rel)
+PY
+
 echo "== building"
 GOPHER_SRC="$OUT/angry-gopher/zig-server/src" GOPHER_PORT="$OUT/port" "$OUT/gopher-metal/port.sh" > "$OUT/port.log" 2>&1 ||
   { echo "port.sh failed; see $OUT/port.log"; exit 2; }
@@ -62,7 +76,7 @@ echo "built"
 bad=0
 echo "== every shape, then seeds 1-$SEEDS"
 KERNEL="$OUT/gopher-coverage.elf" SHAPES="$OUT/metal-vmm/requests/shapes" VOLUME_SITE="$VOLUME_SITE" TRANSPORT=pci \
-  COVERAGE_SDK="$SDK" GUESTS="$OUT/gopher-metal/probe" FAT_READ="$OUT/gopher-metal/tools/fat16_read.py" \
+  COVERAGE_SDK="$SDK" GUESTS="$OUT/gopher-metal/probe" \
   KEEP_FAILED="$OUT/failed" "$OUT/metal-vmm/sweep.sh" 1 "$SEEDS" > "$OUT/sweep.log" 2>&1
 code=$?
 grep -E '^shape .*(unhurt|answered|cannot|not )' "$OUT/sweep.log" | cut -c1-200
@@ -70,15 +84,15 @@ grep -E '^[0-9]+ .* FAIL: ' "$OUT/sweep.log" | cut -c1-200
 tail -1 "$OUT/sweep.log"
 case $code in
   0) ;;
-  2) echo "sweep.sh could not judge (exit 2): the lines above name why"; bad=1 ;;
+  2) echo "sweep.sh could not judge (exit 2): the lines above name why"; bad=2 ;;
   *) echo "sweep.sh exit $code"; bad=1 ;;
 esac
 
 echo "== the plants"
 GOPHER="$OUT/gopher-metal" GOPHER_PORT="$OUT/port" COVERAGE_SDK="$SDK" GUESTS="$OUT/gopher-metal/probe" \
-  FAT_READ="$OUT/gopher-metal/tools/fat16_read.py" VOLUME_SITE="$VOLUME_SITE" LAST="$PLANT_SEEDS" \
+  ANGRY_GOPHER="$OUT/angry-gopher" VOLUME_SITE="$VOLUME_SITE" LAST="$PLANT_SEEDS" \
   KERNELS="$OUT/kernels" OUT="$OUT/plants" "$OUT/metal-vmm/plants.sh"
-case $? in 0) ;; 1) bad=1 ;; *) echo "plants.sh could not run"; bad=1 ;; esac
+case $? in 0) ;; 1) bad=1 ;; *) echo "plants.sh could not run"; bad=2 ;; esac
 
-echo "== $([ $bad = 0 ] && echo 'every check holds' || echo 'a check failed'); logs in $OUT"
+echo "== $(case $bad in 0) echo 'every check holds' ;; 1) echo 'a check failed' ;; *) echo 'a step could not run' ;; esac); logs in $OUT"
 exit $bad
