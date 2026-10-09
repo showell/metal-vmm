@@ -1,0 +1,18 @@
+diff --git a/src/tcp.zig b/src/tcp.zig
+index fdd0a2e..3aff71f 100644
+--- a/src/tcp.zig
++++ b/src/tcp.zig
+@@ -778,6 +778,13 @@ pub const Table = struct {
+             self.retransmits += 1;
+             props.reachable(@src(), "tcp: the timer goes back to the oldest unacknowledged byte", .{ .conn = i, .retries = c.retries });
+             probe = true;
++            // PLANTED BUG (metal-vmm plants/net-goback-byte, never to merge):
++            // every go-back with data flips a bit of the oldest unacknowledged
++            // byte, so a copy the peer never had arrives wrong.
++            if (c.queued() > 0) {
++                props.reachable(@src(), "PLANT: the bug fires", null);
++                c.tx[c.tx_start] ^= 0x20;
++            }
+         }
+ 
+         while (c.queued() > c.sent) {
