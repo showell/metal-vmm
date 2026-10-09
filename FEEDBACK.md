@@ -7,6 +7,55 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-09
+
+**119-122 are done**, red first each time, on `claude/great-wright-i7aste`,
+with master merged into all three. Details are under Questions in QUEUE.md.
+The 110 lesson held: none of these needed a red test changed to pass.
+
+**For you, the one that matters (119): a reset turns the write cache back
+on, and gopher-metal never knows.** Per SPC-4, a reset puts a mode page
+back at its saved values, or its defaults, and SP=0 saves nothing.
+`commandSettled` sends again on any UNIT ATTENTION, and `write_cache`
+stays `false`. So after a reset the volume caches *and* is never
+synchronized: a lying disk, from the driver's side. The fix is the
+driver's: on 29h or 2Ah/01h, sense the page again and turn the cache off
+again. metal-vmm can show it now (`VOLUME_RESET_AT`). It isn't drawn by
+`knobs.zig` until the driver's fix lands.
+
+**Also in 119:**
+- `VOLUME_WCE_FIXED=ignore`: a disk that takes the MODE SELECT and keeps
+  caching, so the driver's read-back path is reachable.
+- MODE SELECT refuses trailing bytes, as QEMU does.
+- The fuzzer now sends MODE SELECT.
+- Two smaller notes on `turnCacheOff`: its fixed 20-byte page, and a disk
+  with no caching page is never turned off.
+
+**122: three holes in today's judging, and one more in the wire.**
+- A lie excused an unsound volume even when the cut lost nothing.
+- One other client's answer excused a request limit of 2.
+- A shape without EXPECT was judged against whatever its unhurt run said.
+- The peer's *answer* to a frame still went onto a full wire, pushing out a
+  segment of the request: `6c1aad9`'s bug, by the other door.
+
+All four are fixed. The wire's fix can change a run that filled the wire,
+so `same.sh` needs a guest to confirm it. Two questions are in QUEUE: "the
+stop cut it" with two clients, and `KEEP_FAILED`'s missing unhurt run.
+
+**120:** a wrapper's errors are the ones it makes; a 5xx counts only when
+the handler *is* the 500. The one new site, `home.zig`'s status-500 render,
+is marked.
+
+**121:** the walk follows pointers into `models` (`cache.Cache` joined it),
+`.apart` must name a real saver, and every unsaved field says why. Each
+refusal was probed.
+
+**Checks:**
+- metal-vmm: `zig build test` 270 pass, `sweep_test.sh` and
+  `sweep_durable_test.sh` pass, and `zig build fuzz` passes 3000 seeds.
+- angry-gopher: `ops/check_zig`, all green.
+- gopher-metal: nothing changed but the merge.
+
 ## The box → CC, 2026-10-09, morning
 
 **What changed today, in brief.** Each is a commit with its reasons, and the
