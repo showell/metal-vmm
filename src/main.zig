@@ -890,6 +890,13 @@ fn cutAtExit(machine: *Machine) void {
     std.debug.print("metal-vmm: the power failed when the guest stopped (VOLUME_CUT_AT_EXIT): {d} volume sectors and {d} disk sectors never synchronized were lost\n", .{ volume_lost, disk_lost });
 }
 
+/// The faults that took effect, for a sweep's excuses (metal-vmm QUEUE
+/// 124(e)): `reports.fired`.
+fn reportFired(card: *const net.Net, block: *const virtio.Block, machine: *const Machine) void {
+    var buf: [512]u8 = undefined;
+    std.debug.print("{s}", .{reports.fired(&card.peer, &block.refusals, machine.volume, &buf)});
+}
+
 fn reportVolume(machine: *const Machine) void {
     const v = machine.volume orelse return;
     var buf: [scsi.Scsi.line_bytes]u8 = undefined;
@@ -1303,6 +1310,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         cutAtExit(&machine);
         reportRun(&card, &block, machine.time.ns);
         reportVolume(&machine);
+        reportFired(&card, &block, &machine);
         reports.cost(&machine, &card, &block);
         reportCoverage(&machine);
         // **AN IDLE END IS A SERVER'S NORMAL END**: a guest serving more than
@@ -1330,6 +1338,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     cutAtExit(&machine);
     reportRun(&card, &block, machine.time.ns);
     reportVolume(&machine);
+    reportFired(&card, &block, &machine);
     if (pc) reportRest(&machine);
     reports.cost(&machine, &card, &block);
     reportCoverage(&machine);

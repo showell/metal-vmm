@@ -12,6 +12,7 @@ const disk = @import("disk.zig");
 const mangle = @import("mangle.zig");
 const faults = @import("faults.zig");
 const wire = @import("peer.zig");
+const scsi = @import("scsi.zig");
 const apic = @import("apic.zig");
 const coverage = @import("coverage.zig");
 const knobs = @import("knobs.zig");
@@ -360,6 +361,76 @@ pub fn unspent(line: *const faults.Wire, peer: *const wire.Peer, drive: *const f
         w(buf, &at, "DISK_TEAR={d} never came: the guest made {d} writes of more than one sector", .{ n, drive.multi_writes });
     };
     return buf[0..at];
+}
+
+/// **THE FAULTS THAT FIRED** (metal-vmm QUEUE 124(e)), one line: each fault
+/// a sweep's verdict may excuse a page or an exit by, that was turned and
+/// took effect, judged from what the models counted, not from what the seed
+/// drew. A reset drawn for after the run ended, a cut past the last write, a
+/// refusal of a request never made: none is here, and none excuses anything.
+/// `metal-vmm: fired: none` when such a fault was turned and none took
+/// effect; empty when none was turned, so a run with no faults says nothing.
+pub fn fired(peer: *const wire.Peer, drive: *const faults.Drive, volume: ?*const scsi.Scsi, buf: []u8) []const u8 {
+    const c = &peer.tcp;
+    const r = &peer.rough;
+    const Fault = struct { name: []const u8, turned: bool, fired: bool };
+    const v = volume;
+    const all = [_]Fault{
+        .{ .name = "PEER_RESET_AT", .turned = r.reset_after_ns != null, .fired = c.state == .reset },
+        .{ .name = "PEER_VANISH_AFTER", .turned = r.vanish_after != null, .fired = c.state == .gone },
+        .{ .name = "DISK_REFUSE", .turned = drive.refused.configured(), .fired = drive.refused.picked_count > 0 },
+        .{ .name = "DISK_CUT_AFTER", .turned = drive.cut_after != null, .fired = drive.cut != null },
+        .{ .name = "DISK_TEAR", .turned = drive.tear != null, .fired = if (drive.cut) |cut| cut.landed < cut.of else false },
+        .{ .name = "DISK_ROT", .turned = drive.rot_sector != null, .fired = drive.rotted > 0 },
+        .{ .name = "DISK_BAD_SECTOR", .turned = drive.bad_len != 0, .fired = drive.bad_hits > 0 },
+        .{ .name = "VOLUME_CUT_AFTER", .turned = if (v) |x| x.power.cut_after != null else false, .fired = if (v) |x| x.power.cut != null else false },
+        .{ .name = "VOLUME_SHORT_AT", .turned = if (v) |x| x.short_at != null else false, .fired = if (v) |x| x.shortened > 0 else false },
+        .{ .name = "VOLUME_GONE_AT", .turned = if (v) |x| x.gone_at != null else false, .fired = if (v) |x| x.gone_answered > 0 else false },
+        .{ .name = "VOLUME_READ_ONLY_AT", .turned = if (v) |x| x.read_only_at != null else false, .fired = if (v) |x| x.protected > 0 else false },
+        .{ .name = "VOLUME_SYNC_FAIL", .turned = if (v) |x| x.sync_fail_at != null else false, .fired = if (v) |x| x.sync_failed > 0 else false },
+    };
+    var turned = false;
+    var at: usize = 0;
+    const head = "metal-vmm: fired:";
+    if (buf.len < head.len + 6) return "";
+    @memcpy(buf[0..head.len], head);
+    at = head.len;
+    for (all) |f| {
+        turned = turned or f.turned;
+        if (!(f.turned and f.fired)) continue;
+        if (at + 1 + f.name.len + 1 > buf.len) break;
+        buf[at] = ' ';
+        @memcpy(buf[at + 1 ..][0..f.name.len], f.name);
+        at += 1 + f.name.len;
+    }
+    if (!turned) return "";
+    if (at == head.len) {
+        @memcpy(buf[at..][0..5], " none");
+        at += 5;
+    }
+    buf[at] = '\n';
+    return buf[0 .. at + 1];
+}
+
+test "the faults that fired, and only those: a fault drawn and never come excuses nothing (metal-vmm QUEUE 124(e))" {
+    var peer = wire.Peer{};
+    var drive = faults.Drive{};
+    var buf: [512]u8 = undefined;
+    // Nothing turned: nothing said.
+    try testing.expectEqualStrings("", fired(&peer, &drive, null, &buf));
+    // A reset drawn, the client never reset; a cut drawn past the last write.
+    peer.rough.reset_after_ns = 900 * std.time.ns_per_ms;
+    drive.cut_after = 40;
+    try testing.expectEqualStrings("metal-vmm: fired: none\n", fired(&peer, &drive, null, &buf));
+    // The reset came; the cut did not.
+    peer.tcp.state = .reset;
+    try testing.expectEqualStrings("metal-vmm: fired: PEER_RESET_AT\n", fired(&peer, &drive, null, &buf));
+    // And a volume that went away when told to.
+    var image: [4 * 512]u8 = undefined;
+    var vol = scsi.Scsi{ .image = &image, .gone_at = 3 };
+    try testing.expectEqualStrings("metal-vmm: fired: PEER_RESET_AT\n", fired(&peer, &drive, &vol, &buf));
+    vol.gone_answered = 1;
+    try testing.expectEqualStrings("metal-vmm: fired: PEER_RESET_AT VOLUME_GONE_AT\n", fired(&peer, &drive, &vol, &buf));
 }
 
 test "a knob whose moment never came says so, and a spent one says nothing" {

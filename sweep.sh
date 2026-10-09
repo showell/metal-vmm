@@ -21,7 +21,9 @@
 #   - the page must be the unhurt run's, status and body, unless the seed
 #     reset the connection, made the peer vanish, refused a disk request or
 #     cut the power, which may rightly cost the page: then it is "differs
-#     (allowed: ...)". A cut volume must still be sound: that is FAT's crash
+#     (allowed: ...)". Each such fault must have fired, as metal-vmm's
+#     `fired:` line says: a knob drawn whose moment never came excuses
+#     nothing (metal-vmm QUEUE 124(e)). A cut volume must still be sound: that is FAT's crash
 #     consistency, measured.
 #
 # Every run's coverage goes to one JSONL, judged at the end by
@@ -207,6 +209,12 @@ status_of() { sed -n -E 's/^peer: ([0-9]+)( "|, [0-9]+ bytes$).*/\1/p' "$WORK/$1
 knobs_of() { sed -n 's/^metal-vmm: FAULT_SEED=[0-9]* is //p' "$WORK/$1.err" | head -1; }
 # The peer's own end, when it let the page go itself (REVIEW-peer.md S1).
 peer_end_of() { sed -n 's/^metal-vmm: the first client \(gave up\|vanished\).*/\1/p' "$WORK/$1.err" | head -1; }
+# **AN EXCUSE NEEDS ITS FAULT TO HAVE FIRED** (metal-vmm QUEUE 124(e)): the
+# faults metal-vmm says took effect (reports.zig `fired`), space-separated
+# with a space at each end. A knob the seed drew whose moment never came (a
+# reset after the run ended, a cut past the last write) excuses nothing; a
+# run that says no fired line had none turned.
+fired_of() { echo " $(sed -n 's/^metal-vmm: fired: //p' "$WORK/$1.err" | tail -1 | sed 's/^none$//') "; }
 broken_of() { sed -n 's/^metal-vmm: coverage: .*, \([0-9]*\) broken).*/\1/p' "$WORK/$1.err" | tail -1; }
 
 # lie_lost <disk|volume> <name>: whether that disk's cache lost what it
@@ -225,10 +233,11 @@ changed() { [ "$(stat -c %y "$1")" != "$(cat "$1.copied")" ]; }
 # verdict <name>: "ok", "differs (allowed: ...)", or "FAIL: ..." for one run
 # against the unhurt one.
 verdict() {
-  local name="$1" u="${2:-unhurt}" why="" exit status knobs broken excuse=""
+  local name="$1" u="${2:-unhurt}" why="" exit status knobs broken excuse="" fired
   exit=$(cat "$WORK/$name.exit")
   status=$(status_of "$name")
   knobs=$(knobs_of "$name")
+  fired=$(fired_of "$name")
   broken=$(broken_of "$name")
   if [ "$exit" != "$(cat "$WORK/$u.exit")" ]; then
     # **A CLIENT THAT LEFT BEFORE ITS REQUEST WAS WHOLE IS OWED NOTHING**, and
@@ -237,7 +246,7 @@ verdict() {
     # Only then, and only with no answer given; any other exit fails.
     if [ "$exit" = 1 ] && grep -q '^error: GuestIdle$' "$WORK/$name.err" &&
       { [ -z "$status" ] || [ "$status" = 0 ]; } &&
-      { case " $knobs" in *" PEER_RESET_AT="* | *" PEER_VANISH_AFTER="*) true ;; *) [ -n "$(peer_end_of "$name")" ] ;; esac; }; then
+      { case "$fired" in *" PEER_RESET_AT "* | *" PEER_VANISH_AFTER "*) true ;; *) [ -n "$(peer_end_of "$name")" ] ;; esac; }; then
       excuse="$excuse${excuse:+, }an idle end after the client left"
     else
       why="$why, exit $exit (unhurt: $(cat "$WORK/$u.exit"))"
@@ -282,8 +291,10 @@ verdict() {
     if [ "$read_status" != "200" ]; then
       why="$why, the read-back boot got no page (status ${read_status:-none})"
     elif [ "$status" = "$TOLD" ] && ! kept "$name"; then
-      case " $knobs" in *" VOLUME_CACHE=lie"*) excuse="VOLUME_CACHE=lie" ;; esac
-      case " $knobs" in *" VOLUME_SYNC_FAIL="*) excuse="$excuse${excuse:+, }VOLUME_SYNC_FAIL" ;; esac
+      # A lie excuses a lost write only when the power took what the cache
+      # held; a SYNCHRONIZE failure, only when one failed.
+      case " $knobs" in *" VOLUME_CACHE=lie"*) ! lie_lost volume "$name" || excuse="VOLUME_CACHE=lie" ;; esac
+      case "$fired" in *" VOLUME_SYNC_FAIL "*) excuse="$excuse${excuse:+, }VOLUME_SYNC_FAIL" ;; esac
       [ -n "$excuse" ] || why="$why, told $TOLD and the write is not on the volume"
     fi
     if [ -n "$why" ]; then echo "FAIL: ${why#, }"
@@ -312,12 +323,12 @@ verdict() {
     # by a fault on the disk or the volume, and by nothing else.
     case "$status" in 5??)
       for k in DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DISK_ROT DISK_BAD_SECTOR VOLUME_CUT_AFTER VOLUME_SHORT_AT VOLUME_GONE_AT VOLUME_READ_ONLY_AT; do
-        case " $knobs" in *" $k="*) excuse="$excuse${excuse:+, }$k (a $status)" ;; esac
+        case "$fired" in *" $k "*) excuse="$excuse${excuse:+, }$k (a $status)" ;; esac
       done ;;
     esac
     if [ $less = yes ]; then
       for k in PEER_RESET_AT PEER_VANISH_AFTER DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DISK_ROT VOLUME_CUT_AFTER; do
-        case " $knobs" in *" $k="*) excuse="$excuse${excuse:+, }$k" ;; esac
+        case "$fired" in *" $k "*) excuse="$excuse${excuse:+, }$k" ;; esac
       done
       local gone
       gone=$(peer_end_of "$name")
