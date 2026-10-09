@@ -534,6 +534,54 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      other test settings arrive), default unchanged, with a test that the
      setting governs. The box changes the judge to use it.
 
+138. **First: the cold review of 132-135, and check-cc.sh's first run**
+     (the box, 2026-10-09 evening). gopher-metal is **not merged**: H1 is
+     a data-loss path, and your branch no longer merges with master's
+     `16494c3`/`315386e` (the free count is `derive()`'s now; the hint is
+     apart): merge master in and re-express `keepCount`/`adoptSector`
+     against it. angry-gopher merges. metal-vmm merges after (d).
+     - **(a) H1, the blocker.** `adoptSector` (fat16.zig ~1404) copies the
+       whole disk sector into the held FAT after a failed write's
+       read-back, and the read-back is always copy 0. When the mount
+       trusted copy 1 (copy 0 rejected, its repair refused), or the
+       read-back is rot, every entry of the rejected bytes replaces the
+       held ones: a zeroed entry under a file reads free, `allocChain`
+       gives it to another file, and the next write of that sector
+       spreads it to every copy. The held FAT stays the authority for
+       every entry but the one in doubt: use the read-back for that one
+       entry only (given back or leaked), never the rest. Red first:
+       remount and check after the failure, not only the count
+       (`then_garbage` passes while accepting the garbage).
+     - **(b) H2.** Give a cluster back only when the read-back is exactly
+       the value written (fat16.zig ~1611, ~1622, ~1807); a rotted
+       nonzero read-back today sends `freeChain` into another file's
+       chain. Anything else is a counted leak.
+     - **(c) M4.** `fat_unknown_all` never clears: after nine double
+       failures every FAT get and set fails until reboot. A re-read of
+       the whole FAT that succeeds should clear it, or a per-sector map.
+     - **(d) M2, metal-vmm.** A 5xx is excused by a volume refusal that
+       fired anywhere in the run, a boot read included, so one seed in
+       eight excuses the very bug class 135 hunts (an earlier refusal
+       that breaks later writes). Excuse it only when the fault fired
+       during that client's request. Also: `tools/site_requests.py` is
+       mode 100644 and `sweep.sh` runs it directly, so check-cc.sh's
+       first run could not judge `session-then-move` (exit 2):
+       `git update-index --chmod=+x`.
+     - **(e) M1.** The reserve is per call (`count > 2` clusters): many
+       small appends spend it all, "small" is 1 KiB or 64 KiB by cluster
+       size, and an overwrite that frees as much as it takes is refused
+       near it. Threshold in bytes, and say (or count) what appends do.
+     - **(f) Lows.** The uncached-FAT read-back failure assumes the old
+       value (the comment says never); a first copy's failed write that
+       landed leaves copies 1..n unwritten and uncounted;
+       `tcp_test.zig:1321` `f.wire.count >= sent` should be `==`;
+       angry-gopher 134(e): the authority file inside `auth_root/<id>`
+       goes last too, and the test should not depend on how std's
+       `deleteTree` walks; the swallowed-write plant is caught only by
+       shapes with a read-back.
+     - The box will run M3 (the new knobs on a guest, one batch) after
+       (d), before any night.
+
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
     the third bullet of the old 99 asked (`request.zig`, every handler behind
