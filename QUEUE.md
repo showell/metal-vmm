@@ -354,7 +354,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
        line (`gopher.zig` 1358/1417), yours to propose.
      - Red first with a fake seed.
 
-129. **Class hunt 1: a revoke or delete that fails quietly** (the box,
+129. **Done (CC, 2026-10-09 night): three fixes, red first, angry-gopher `d97c282`, `8377b5f`, `04e3913`; every site's verdict under Questions, "item 129".** **Was:** **Class hunt 1: a revoke or delete that fails quietly** (the box,
      2026-10-09 evening, after 127-128). The first of CC's class hunts, the
      new main work (essay "the plan after the postmortem", section 4; the
      list is the essay "questions to ask"). Walk every `catch {}` and `catch
@@ -546,6 +546,77 @@ runs on the host, and each would start from a red test.
 ## Questions
 
 *(Either side, with a reproduction where there is one.)*
+
+- **(CC, item 129) Every `catch {}` and `catch continue`, asked "does this
+  remove authority or data?"** 78 sites in angry-gopher's served
+  `zig-server/src` (tests, stress, benches and probes left out; `else |_|
+  {}` counted too), 15 in gopher-metal. **Three fixes, each red first**
+  through a test Io whose file removals are refused (`AccessDenied`; std's
+  `failingDirDeleteFile` answers `FileNotFound`, which the store rightly
+  reads as "already gone").
+  - **Fixed, `d97c282`: `users.clearUserAPIKey`** (users.zig:330). It
+    returns its error, and both callers (settings.zig:44, admin.zig:60)
+    `try` it. A refused revoke is a 500, never `keyrevoked=1`; an absent key
+    is revoked already.
+  - **Fixed, `8377b5f`: logout's release** (login.zig:250), and under it
+    `storage.deleteUserData` (its `removeTree` was itself `catch {}`, so
+    admin_lynrummy's delete, which answers an error 500, never got one),
+    `users.deleteUserRecord` (both trees `catch {}`; auth_root is the
+    account's authority) and `player.deleteRecord`. All return their errors
+    (deleteTree takes a missing path as removed). The release goes data
+    first, then record, so a failure keeps the account and its name to be
+    released again.
+  - **Fixed, `04e3913`: the admin's retire** (chat_retire.zig:90, 95, 208,
+    211, 250, 265, 313): every topic, sidecar, user tree, DM and channel
+    line. A confirm on a refusing store reported them all removed while the
+    users went on logging in. Each error now ends the confirm (the admin's
+    page is the router's 500). **A removed user's `auth/<id>` now goes
+    last**, after everything else of theirs: the roster is read from
+    auth_root, so a failure before it leaves the user listed, and a second
+    confirm finishes the job. Before, auth went first, and a failure after
+    it orphaned the rest where no confirm could find it.
+  - **Harmless, removes nothing that holds authority or data:**
+    - chat_state.zig:121, an unpin. Its failure shows: the page renders
+      the pins from disk.
+    - roots.zig:89, the old copy of a migrated secret. It goes only after
+      the new copy reads back equal, and the next startup retries.
+    - store.zig:377, a temporary after a refused rename. The rename's
+      error is returned.
+  - **Harmless, writes or work that recomputes or retries:**
+    - chat_store.zig:184 (`.lastauthor`) and :725 (`.count`): sidecars,
+      recomputed next time.
+    - chat_state.zig:58, :61, :132: last-session and pin pointers.
+    - users.zig:248 `touchUser`, player.zig:109 `mirror` and :176 `touch`:
+      activity stamps and the player name mirror.
+    - login.zig:323: the welcome message.
+  - **Harmless, best-effort broadcasts** (each marked absent-ok, or
+    formatting an event): chat_store.zig:340-389, presence.zig:97-110 and
+    login.zig:298-303.
+  - **Harmless, other:**
+    - **Admin counts:** admin_lynrummy.zig:191, :212, :217.
+    - **Parses and joins that skip one entry:** chat.zig:458,
+      chat_retire.zig:227, storage.zig:226, chat_sse.zig:173, :176,
+      session_meta.zig:123, recent.zig:141, and roots.zig:75-86 (the
+      migration, absent-ok).
+    - **I/O on a reply already failing:** server.zig:170, :171, :194,
+      chat_upload.zig:196, router.zig:164, :206.
+    - **Plumbing:** bus.zig:123 (a futex wait), driving.zig:40 (a
+      deliberate leak build).
+  - **gopher-metal, all harmless:**
+    - **Request and check plumbing:** gopher.zig:812-813 (the 431),
+      :1349-1357 (the damage check's skip).
+    - **Cleanups after an error already returned:** fat16.zig:1394 and
+      :1905 (clusters given back), store_fat.zig:135 and
+      store_linux.zig:182 (a temporary), and scratch_dir.zig:33.
+    - **Not served:** pages.zig:513 (a test).
+    - Metal's own `deleteFile` (io.zig:787) and `removeTree`
+      (fat16.zig:2358) pass every error but absence up, so the fixes above
+      reach the image.
+  - **Two stale comments, yours to change:** io.zig ~784 and fat16.zig
+    ~2340 say "the application spells every call `catch {}`". Since these
+    fixes it no longer does: revoke, release and retire each `try` it.
+  - **No policy question for Steve**: every dangerous site had one right
+    answer, a failure is not done.
 
 - **(CC, item 128) The damage the disk was dealt excuses the kernel's
   "no damage" break, and nothing else does.** metal-vmm `9e6f952`.
