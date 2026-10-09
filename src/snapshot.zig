@@ -123,6 +123,7 @@ pub const models = .{
     msix.Msix,           entropy.Entropy, faults.Wire,   faults.Drive,
     net.Net,             coverage.Serial, virtio.Device, virtio.Block,
     virtio_pci.Function, pci.Bus,         scsi.Scsi,     cost.Cost,
+    cache.Cache,
 };
 
 /// **THE POINTERS A RESTORE IN PLACE KEEPS RIGHT**, each with why. A path is
@@ -146,6 +147,10 @@ pub const borrowed = .{
     .{ "net.Net.peer.plan.requests[]", "the same" },
     .{ "net.Net.peer.others[].request", "the same" },
     .{ "net.Net.peer.tcp.request", "the same: the first client's, from `Peer.ask`" },
+    .{ "cache.Cache.durable.metadata?", "the cache's map of sectors as they were durable, on the heap: saved apart, the map copied, by `Cache`" },
+    .{ "cache.Cache.gpa.ptr", "the allocator the map lives in: the machine's one, the same across a restore" },
+    .{ "cache.Cache.gpa.vtable", "the same allocator's code" },
+    .{ "cache.Cache.image", "the bytes of the disk it caches: its `Block`'s or `Scsi`'s image, saved by `Disk`" },
 };
 
 /// **THE POINTERS A RESTORE IN PLACE GETS WRONG TODAY**, each with its red
@@ -174,8 +179,54 @@ pub fn pointersIn(comptime Ty: type, comptime path: []const u8) []const u8 {
     };
 }
 
+/// Whether `T` is a table of code: every field a function pointer, as
+/// `std.mem.Allocator.VTable` is. A pointer at one points at no state.
+fn isCode(comptime T: type) bool {
+    const info = @typeInfo(T);
+    if (info != .@"struct") return false;
+    for (info.@"struct".fields) |f| {
+        const fi = @typeInfo(f.type);
+        if (fi != .pointer or @typeInfo(fi.pointer.child) != .@"fn") return false;
+    }
+    return true;
+}
+
+/// **WHERE A MODEL'S POINTERS LEAD** (metal-vmm QUEUE 121): the name of each
+/// struct or union a single-item pointer in `Ty` points at, one a line. The
+/// walk stops at a pointer, so what it points at must be walked on its own:
+/// in `models`. `cache.Cache` was reached only through `Block.cache`, and a
+/// pointer added to it would have gone unseen. A buffer (a slice, a
+/// many-item pointer), opaque memory and a table of code are not followed.
+pub fn pointeesIn(comptime Ty: type) []const u8 {
+    return switch (@typeInfo(Ty)) {
+        .pointer => |p| if (p.size == .one and (@typeInfo(p.child) == .@"struct" or @typeInfo(p.child) == .@"union") and !isCode(p.child)) nameOf(p.child) ++ "\n" else "",
+        .@"struct" => |st| blk: {
+            var all: []const u8 = "";
+            for (st.fields) |f| all = all ++ pointeesIn(f.type);
+            break :blk all;
+        },
+        .@"union" => |u| blk: {
+            var all: []const u8 = "";
+            for (u.fields) |f| all = all ++ pointeesIn(f.type);
+            break :blk all;
+        },
+        .optional => |o| pointeesIn(o.child),
+        .array => |a| pointeesIn(a.child),
+        .error_union => |e| pointeesIn(e.payload),
+        else => "",
+    };
+}
+
+/// **WHAT SAVES A MODEL APART**, for one whose state is not all its value
+/// (metal-vmm QUEUE 121): `main.zig`'s census holds a field it calls saved
+/// apart to having one here, whose `save` takes that very type.
+pub fn saverOf(comptime T: type) ?type {
+    if (T == cache.Cache) return Cache;
+    return null;
+}
+
 /// A model's name as the lists spell it: `clock.Clock`, from `clock.Clock`.
-fn nameOf(comptime Ty: type) []const u8 {
+pub fn nameOf(comptime Ty: type) []const u8 {
     const full = @typeName(Ty);
     const dot = std.mem.lastIndexOfScalar(u8, full, '.').?;
     const start = if (std.mem.lastIndexOfScalar(u8, full[0..dot], '.')) |d| d + 1 else 0;
@@ -203,6 +254,21 @@ test "the premise: every pointer in a model is one a restore keeps right, or a g
             if (std.mem.indexOf(u8, found, entry[0] ++ "\n") == null)
                 @compileError("snapshot.zig: " ++ entry[0] ++ " is listed, and no model has it");
         }
+        // Where a pointer leads is walked too (QUEUE 121).
+        var known: []const u8 = "";
+        for (models) |M| known = known ++ nameOf(M) ++ "\n";
+        var leads: []const u8 = "";
+        for (models) |M| leads = leads ++ pointeesIn(M);
+        var each = std.mem.tokenizeScalar(u8, leads, '\n');
+        while (each.next()) |name| {
+            if (std.mem.indexOf(u8, "\n" ++ known, "\n" ++ name ++ "\n") == null)
+                @compileError("snapshot.zig: a model points at " ++ name ++ ", which is not in `models`: list it, so its own pointers are walked");
+        }
+        // A saver saves the type it is the saver of.
+        for (models) |M| if (saverOf(M)) |S| {
+            if (@typeInfo(@TypeOf(S.save)).@"fn".params[0].type.? != *const M)
+                @compileError("snapshot.zig: the saver of " ++ nameOf(M) ++ " saves something else");
+        };
     }
 }
 

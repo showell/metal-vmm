@@ -494,34 +494,55 @@ const Holds = enum {
     /// A pointer at a model `snapshot.zig` saves in place (the test checks
     /// the model is in `snapshot.models`).
     model,
-    /// A pointer at state `snapshot.zig` saves apart, not by its value:
-    /// a write cache's map (`snapshot.Cache`).
+    /// A pointer at state `snapshot.zig` saves apart, not by its value: the
+    /// test checks `snapshot.saverOf` has a saver for it (a write cache's
+    /// map, `snapshot.Cache`).
     apart,
-    /// Guest memory: the box's half (docs/SNAPSHOT.md, "Guest RAM").
+    /// Guest memory: the box's half (docs/SNAPSHOT.md, "Guest RAM"). The
+    /// test checks it is bytes and nothing else.
     box,
-    /// Fixed before the run's first exit, and never written after.
+    /// Fixed before the run's first exit, and never written after. The test
+    /// checks it is read-only memory.
     input,
-    /// The host's, not the machine's: the same across a restore.
+    /// The host's, not the machine's: the same across a restore. The test
+    /// checks it holds no pointer.
     host,
 };
 
+/// Each field, how a snapshot gets it back, and, for what is not saved
+/// with the machine, why (metal-vmm QUEUE 121: those were taken on trust).
 const census = .{
-    .{ "stopped", Holds.value },     .{ "devices", Holds.model },
-    .{ "ram", Holds.box },           .{ "line_control", Holds.value },
-    .{ "time", Holds.value },        .{ "pit", Holds.value },
-    .{ "rtc", Holds.value },         .{ "said", Holds.value },
-    .{ "said_len", Holds.value },    .{ "request", Holds.input },
-    .{ "asked", Holds.value },       .{ "card", Holds.model },
-    .{ "card_device", Holds.model }, .{ "bus", Holds.model },
-    .{ "lapic", Holds.value },       .{ "halts", Holds.value },
-    .{ "halted_ns", Holds.value },   .{ "msrs", Holds.value },
-    .{ "exits", Holds.value },       .{ "cost", Holds.value },
-    .{ "drive", Holds.model },       .{ "write_cache", Holds.apart },
-    .{ "cut_at_exit", Holds.value }, .{ "volume", Holds.model },
-    .{ "serial", Holds.value },      .{ "coverage_fd", Holds.host },
-    .{ "rewritten", Holds.value },   .{ "quiet", Holds.value },
-    .{ "progress_ns", Holds.value }, .{ "patience_ns", Holds.value },
-    .{ "absent", Holds.value },
+    .{ "stopped", Holds.value, "" },
+    .{ "devices", Holds.model, "" },
+    .{ "ram", Holds.box, "guest memory: copied whole and restored in place by the box's half (docs/SNAPSHOT.md)" },
+    .{ "line_control", Holds.value, "" },
+    .{ "time", Holds.value, "" },
+    .{ "pit", Holds.value, "" },
+    .{ "rtc", Holds.value, "" },
+    .{ "said", Holds.value, "" },
+    .{ "said_len", Holds.value, "" },
+    .{ "request", Holds.input, "the first request, read into `request_bufs` before the run's first exit; `asked` is what a restore must put back, and it is a value" },
+    .{ "asked", Holds.value, "" },
+    .{ "card", Holds.model, "" },
+    .{ "card_device", Holds.model, "" },
+    .{ "bus", Holds.model, "" },
+    .{ "lapic", Holds.value, "" },
+    .{ "halts", Holds.value, "" },
+    .{ "halted_ns", Holds.value, "" },
+    .{ "msrs", Holds.value, "" },
+    .{ "exits", Holds.value, "" },
+    .{ "cost", Holds.value, "" },
+    .{ "drive", Holds.model, "" },
+    .{ "write_cache", Holds.apart, "" },
+    .{ "cut_at_exit", Holds.value, "" },
+    .{ "volume", Holds.model, "" },
+    .{ "serial", Holds.value, "" },
+    .{ "coverage_fd", Holds.host, "the file the coverage lines go to, opened before the run: lines written before a restore stay written, as `serial`'s table says what was reached" },
+    .{ "rewritten", Holds.value, "" },
+    .{ "quiet", Holds.value, "" },
+    .{ "progress_ns", Holds.value, "" },
+    .{ "patience_ns", Holds.value, "" },
+    .{ "absent", Holds.value, "" },
 };
 
 /// The model a field points at: `*T`, `?*T`, `[n]?*T`, and `*const T` alike.
@@ -1449,7 +1470,11 @@ test "the census: every field of the machine is named, and is what it says (meta
         const fields = @typeInfo(Machine).@"struct".fields;
         for (fields) |f| {
             const holds: Holds = for (census) |c| {
-                if (std.mem.eql(u8, c[0], f.name)) break c[1];
+                if (std.mem.eql(u8, c[0], f.name)) {
+                    if ((c[1] == .box or c[1] == .input or c[1] == .host) and c[2].len == 0)
+                        @compileError("main.zig: Machine." ++ f.name ++ " is not saved with the machine: say why in its census line");
+                    break c[1];
+                }
             } else @compileError("main.zig: Machine." ++ f.name ++ " is in no line of `census`: say how a snapshot gets it back");
             switch (holds) {
                 .value => if (snapshot.pointersIn(f.type, "Machine." ++ f.name).len > 0)
@@ -1460,12 +1485,21 @@ test "the census: every field of the machine is named, and is what it says (meta
                         if (known == M) break;
                     } else @compileError("main.zig: Machine." ++ f.name ++ " points at " ++ @typeName(M) ++ ", which is not in snapshot.models");
                 },
-                .apart => {
-                    const M = pointee(f.type);
-                    for (snapshot.models) |known| if (known == M)
-                        @compileError("main.zig: Machine." ++ f.name ++ " is said to be saved apart, and snapshot.zig saves it by its value");
+                .apart => if (snapshot.saverOf(pointee(f.type)) == null)
+                    @compileError("main.zig: Machine." ++ f.name ++ " is said to be saved apart, and snapshot.saverOf has no saver for " ++ @typeName(pointee(f.type))),
+                .box => if (f.type != []u8)
+                    @compileError("main.zig: Machine." ++ f.name ++ " is called guest memory, and is not bytes"),
+                .input => {
+                    const T = switch (@typeInfo(f.type)) {
+                        .optional => |o| o.child,
+                        else => f.type,
+                    };
+                    const info = @typeInfo(T);
+                    if (info != .pointer or !info.pointer.is_const)
+                        @compileError("main.zig: Machine." ++ f.name ++ " is called an input, and is not read-only memory");
                 },
-                .box, .input, .host => {},
+                .host => if (snapshot.pointersIn(f.type, "").len > 0)
+                    @compileError("main.zig: Machine." ++ f.name ++ " is called the host's, and holds a pointer"),
             }
         }
         for (census) |c| {
