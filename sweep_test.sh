@@ -62,6 +62,8 @@ printf 'pristine volume' > "$T/site.img"
 #           whose stop lost a file the request does not touch: FAIL
 #           (metal-vmm QUEUE 124(b))
 #   32      the same cut and leftovers, every untouched file there: ok
+#   33      the boot disk's power cut, and the attached volume holding what a
+#           stop leaves: ok (one power stops the whole machine; QUEUE 124(c))
 #   9       a 200 whose page metal-vmm did not write (an answer kept only in
 #           part): FAIL, never a match of two empty pages
 # A run with PEER_REQUEST (a shape's) and no seed above has for its page the
@@ -74,7 +76,7 @@ s="${FAULT_SEED:-}"
 L='"location":{"class":"tcp","function":"f","file":"tcp.zig","begin_line":1,"begin_column":1}'
 ev() { echo "{\"antithesis_assert\":{\"hit\":$3,\"must_hit\":true,\"assert_type\":\"x\",\"display_type\":\"$1\",\"message\":\"$2\",\"condition\":$4,\"id\":\"$2\",$L}}" >> "$COVERAGE_OUT"; }
 knobs="none"
-case "$s" in 23 | 25 | 26) knobs="DISK_CACHE=lie DISK_CUT_AFTER=2" ;; 27) knobs="WIRE_EAT=3" ;; 28) knobs="PEER_RESET_AT=500" ;; 29) knobs="DISK_REFUSE=4" ;; 30) knobs="WIRE_EAT=3" ;; 31 | 32) knobs="DISK_CUT_AFTER=2" ;; 24) knobs="DISK_CACHE=lie" ;; 18 | 19) knobs="WIRE_EAT=3" ;; 16) knobs="PEER_RESET_AT=500" ;; 17) knobs="WIRE_EAT=17" ;; 3) knobs="PEER_RESET_AT=500" ;; 12) knobs="DISK_REFUSE=4" ;; 13) knobs="PEER_RESET_AT=500" ;; 14) knobs="DISK_REFUSE=4" ;; 15) knobs="PEER_RESET_AT=500" ;; 4) knobs="DISK_WRITES_ONLY=1" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
+case "$s" in 23 | 25 | 26) knobs="DISK_CACHE=lie DISK_CUT_AFTER=2" ;; 27) knobs="WIRE_EAT=3" ;; 28) knobs="PEER_RESET_AT=500" ;; 29) knobs="DISK_REFUSE=4" ;; 30) knobs="WIRE_EAT=3" ;; 31 | 32 | 33) knobs="DISK_CUT_AFTER=2" ;; 24) knobs="DISK_CACHE=lie" ;; 18 | 19) knobs="WIRE_EAT=3" ;; 16) knobs="PEER_RESET_AT=500" ;; 17) knobs="WIRE_EAT=17" ;; 3) knobs="PEER_RESET_AT=500" ;; 12) knobs="DISK_REFUSE=4" ;; 13) knobs="PEER_RESET_AT=500" ;; 14) knobs="DISK_REFUSE=4" ;; 15) knobs="PEER_RESET_AT=500" ;; 4) knobs="DISK_WRITES_ONLY=1" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
 [ -n "$s" ] && echo "metal-vmm: FAULT_SEED=$s is $knobs" >&2
 # What fired, as metal-vmm says it (reports.zig `fired`): every fault the
 # seed drew, but for 28 and 29, whose faults never came.
@@ -109,6 +111,7 @@ case "$s" in
     [ "$s" = 24 ] || echo "metal-vmm: disk: a write cache, write-back, though the guest did not negotiate FLUSH (DISK_CACHE=lie); 4 writes held, 0 flushes; the power cut lost $lost sectors never flushed" >&2 ;;
   28) page=""; status=0 ;;
   31) printf 'STOPLEFT LOSTFILE' > "$img"; echo "metal-vmm: the power was cut after the guest's write 2 (sector 9, 1 sectors)" >&2 ;;
+  33) [ -z "${VOLUME:-}" ] || printf 'STOPLEFT' > "$VOLUME"; echo "metal-vmm: the power was cut after the guest's write 2 (sector 9, 1 sectors)" >&2 ;;
   32) printf 'STOPLEFT' > "$img"; echo "metal-vmm: the power was cut after the guest's write 2 (sector 9, 1 sectors)" >&2 ;;
   30) page=""; status=0; echo "  serving 2 request(s), as gopher-metal.conf says"; echo "request 1: (no request) -> the client stopped sending, and was let go"; echo "  served 2 request(s); base heap holds 52 live bytes"; echo "peer 2: 204, 1 of 1 answers, 65 bytes, done" ;;
   29) page="Home unavailable"; status=500 ;;
@@ -224,6 +227,8 @@ letgo=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" 
 leftovers=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 31 32 2>&1)
 expect "seed 31" '^31 .*FAIL: the volume lost a file the request does not touch' "$leftovers"
 expect "seed 32" '^32 .* ok ' "$leftovers"
+machine=$(VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 33 33 2>&1)
+expect "seed 33" '^33 .* ok ' "$machine"
 expect "seed 30" '^30 .*FAIL: not the page (status 0)' "$letgo"
 expect "seed 27" '^27 .*FAIL: not the page (status 0)' "$limit2"
 
