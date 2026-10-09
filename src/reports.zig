@@ -485,6 +485,121 @@ pub fn fired(peer: *const wire.Peer, drive: *const faults.Drive, volume: ?*const
     return buf[0 .. at + 1];
 }
 
+/// **WHICH FAULTS FIRED WHILE A CLIENT'S REQUEST WAS OPEN** (metal-vmm
+/// QUEUE 138(d)): a sweep excuses a 5xx only by a disk or volume fault that
+/// fired during that client's request, never by one at boot or during
+/// another's, which is the very bug a later 5xx would be (an earlier refusal
+/// that breaks later writes). `look` runs before every entry to the guest:
+/// a fault's count that moved since the last look fired in that exit, and
+/// every client then between its open and its last answer (or its end) is
+/// marked with it. A client opened and waiting behind another is marked too:
+/// the guest serves one at a time, so this errs toward excusing, never
+/// toward failing a run its fault did hurt.
+pub const During = struct {
+    pub const names = [_][]const u8{ "DISK_REFUSE", "DISK_CUT_AFTER", "DISK_TEAR", "DISK_ROT", "DISK_BAD_SECTOR", "VOLUME_CUT_AFTER", "VOLUME_SHORT_AT", "VOLUME_GONE_AT", "VOLUME_READ_ONLY_AT", "VOLUME_SYNC_FAIL" };
+    seen: [names.len]u64 = @splat(0),
+    /// Per client, one bit per name.
+    marked: [wire.max_clients]u16 = @splat(0),
+
+    fn counts(drive: ?*const faults.Drive, volume: ?*const scsi.Scsi) [names.len]u64 {
+        var n: [names.len]u64 = @splat(0);
+        if (drive) |d| {
+            n[0] = d.refused.picked_count;
+            n[1] = @intFromBool(d.cut != null);
+            n[2] = if (d.cut) |cut| @intFromBool(cut.landed < cut.of) else 0;
+            n[3] = d.rotted;
+            n[4] = d.bad_hits;
+        }
+        if (volume) |v| {
+            n[5] = @intFromBool(v.power.cut != null);
+            n[6] = v.shortened;
+            n[7] = v.gone_answered;
+            n[8] = v.protected;
+            n[9] = v.sync_failed;
+        }
+        return n;
+    }
+
+    fn inRequest(c: anytype) bool {
+        if (c.answers >= c.asks or c.guest_closed_at != null) return false;
+        return switch (c.state) {
+            .done, .refused, .reset, .gone, .gave_up => false,
+            else => true,
+        };
+    }
+
+    pub fn look(self: *During, peer: ?*const wire.Peer, drive: ?*const faults.Drive, volume: ?*const scsi.Scsi) void {
+        const now = counts(drive, volume);
+        var moved: u16 = 0;
+        for (now, self.seen, 0..) |a, b, i| {
+            if (a != b) moved |= @as(u16, 1) << @intCast(i);
+        }
+        self.seen = now;
+        if (moved == 0) return;
+        const p = peer orelse return;
+        for (0..@min(p.opened, wire.max_clients)) |i| {
+            if (inRequest(p.clientConst(i))) self.marked[i] |= moved;
+        }
+    }
+
+    /// `metal-vmm: fired during client k: ...`, one line for each client
+    /// with any, numbered as the `peer k:` lines are.
+    pub fn say(self: *const During, buf: []u8) []const u8 {
+        var at: usize = 0;
+        for (self.marked, 0..) |bits, k| {
+            if (bits == 0) continue;
+            const head = std.fmt.bufPrint(buf[at..], "metal-vmm: fired during client {d}:", .{k + 1}) catch break;
+            var end = at + head.len;
+            for (names, 0..) |name, i| {
+                if (bits & (@as(u16, 1) << @intCast(i)) == 0) continue;
+                if (end + 1 + name.len + 1 > buf.len) break;
+                buf[end] = ' ';
+                @memcpy(buf[end + 1 ..][0..name.len], name);
+                end += 1 + name.len;
+            }
+            if (end >= buf.len) break;
+            buf[end] = '\n';
+            at = end + 1;
+        }
+        return buf[0..at];
+    }
+};
+
+test "a fault is said during a client's request only if it fired while that request was open (metal-vmm QUEUE 138(d))" {
+    var peer = wire.Peer{};
+    var image: [4 * 512]u8 = undefined;
+    var vol = scsi.Scsi{ .image = &image, .read_only_at = 3 };
+    var during = During{};
+    var buf: [512]u8 = undefined;
+    // A write refused at boot, before any client opened: nobody's.
+    vol.protected = 1;
+    during.look(&peer, null, &vol);
+    try testing.expectEqualStrings("", during.say(&buf));
+    // Client 1 opens and asks; nothing new fires: still nobody's.
+    peer.opened = 1;
+    peer.tcp.state = .established;
+    peer.tcp.asks = 1;
+    during.look(&peer, null, &vol);
+    try testing.expectEqualStrings("", during.say(&buf));
+    // A second refusal while its request is open: client 1's.
+    vol.protected = 2;
+    during.look(&peer, null, &vol);
+    try testing.expectEqualStrings("metal-vmm: fired during client 1: VOLUME_READ_ONLY_AT\n", during.say(&buf));
+    // Answered; client 2 opens and asks, and a transfer is cut short:
+    // client 2's alone.
+    peer.tcp.answers = 1;
+    peer.opened = 2;
+    peer.others[0].state = .established;
+    peer.others[0].asks = 1;
+    vol.shortened = 1;
+    during.look(&peer, null, &vol);
+    try testing.expectEqualStrings(
+        \\metal-vmm: fired during client 1: VOLUME_READ_ONLY_AT
+        \\metal-vmm: fired during client 2: VOLUME_SHORT_AT
+        \\
+    , during.say(&buf));
+}
+
 test "the faults that fired, and only those: a fault drawn and never come excuses nothing (metal-vmm QUEUE 124(e))" {
     var peer = wire.Peer{};
     var drive = faults.Drive{};

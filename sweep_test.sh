@@ -37,6 +37,9 @@ printf 'pristine volume' > "$T/site.img"
 #   17      an idle end (exit 1) with no client that left: FAIL
 #   14      a disk refusal answered 500: allowed (the server says it failed)
 #   15      a peer's reset answered 500: FAIL (only a disk fault excuses a 5xx)
+#   58      a volume refusal that fired only at boot, before the client
+#           opened, answered 500: FAIL (a 5xx is excused only by a fault
+#           that fired during that client's request; metal-vmm QUEUE 138(d))
 #   18      no answer, another client answered and the guest served its
 #           limit of 1: allowed (the request limit went to another client)
 #   19      no answer, the limit served, no other client answered: FAIL
@@ -119,7 +122,7 @@ s="${FAULT_SEED:-}"
 L='"location":{"class":"tcp","function":"f","file":"tcp.zig","begin_line":1,"begin_column":1}'
 ev() { echo "{\"antithesis_assert\":{\"hit\":$3,\"must_hit\":true,\"assert_type\":\"x\",\"display_type\":\"$1\",\"message\":\"$2\",\"condition\":$4,\"id\":\"$2\",$L}}" >> "$COVERAGE_OUT"; }
 knobs="none"
-case "$s" in 23 | 25 | 26) knobs="DISK_CACHE=lie DISK_CUT_AFTER=2" ;; 27) knobs="WIRE_EAT=3" ;; 28) knobs="PEER_RESET_AT=500" ;; 29) knobs="DISK_REFUSE=4" ;; 30) knobs="WIRE_EAT=3" ;; 31 | 32 | 33) knobs="DISK_CUT_AFTER=2" ;; 36 | 48) knobs="VOLUME_CACHE=lie" ;; 46) knobs="PEER_RESET_AT=500" ;; 39 | 42 | 50 | 51) knobs="PEER_RESET_AT=500" ;; 40) knobs="PEER_VANISH_AFTER=3" ;; 53 | 54 | 55) knobs="DISK_ROT=4093,20" ;; 52) knobs="DISK_CUT_AFTER=2" ;; 45) knobs="DISK_REFUSE=4" ;; 24) knobs="DISK_CACHE=lie" ;; 18 | 19) knobs="WIRE_EAT=3" ;; 16) knobs="PEER_RESET_AT=500" ;; 17) knobs="WIRE_EAT=17" ;; 3) knobs="PEER_RESET_AT=500" ;; 12) knobs="DISK_REFUSE=4" ;; 13) knobs="PEER_RESET_AT=500" ;; 14) knobs="DISK_REFUSE=4" ;; 15) knobs="PEER_RESET_AT=500" ;; 4) knobs="DISK_WRITES_ONLY=1" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
+case "$s" in 23 | 25 | 26) knobs="DISK_CACHE=lie DISK_CUT_AFTER=2" ;; 27) knobs="WIRE_EAT=3" ;; 28) knobs="PEER_RESET_AT=500" ;; 29) knobs="DISK_REFUSE=4" ;; 30) knobs="WIRE_EAT=3" ;; 31 | 32 | 33) knobs="DISK_CUT_AFTER=2" ;; 36 | 48) knobs="VOLUME_CACHE=lie" ;; 46) knobs="PEER_RESET_AT=500" ;; 39 | 42 | 50 | 51) knobs="PEER_RESET_AT=500" ;; 40) knobs="PEER_VANISH_AFTER=3" ;; 53 | 54 | 55) knobs="DISK_ROT=4093,20" ;; 52) knobs="DISK_CUT_AFTER=2" ;; 45) knobs="DISK_REFUSE=4" ;; 58) knobs="VOLUME_READ_ONLY_AT=3" ;; 24) knobs="DISK_CACHE=lie" ;; 18 | 19) knobs="WIRE_EAT=3" ;; 16) knobs="PEER_RESET_AT=500" ;; 17) knobs="WIRE_EAT=17" ;; 3) knobs="PEER_RESET_AT=500" ;; 12) knobs="DISK_REFUSE=4" ;; 13) knobs="PEER_RESET_AT=500" ;; 14) knobs="DISK_REFUSE=4" ;; 15) knobs="PEER_RESET_AT=500" ;; 4) knobs="DISK_WRITES_ONLY=1" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
 [ -n "$s" ] && echo "metal-vmm: FAULT_SEED=$s is $knobs" >&2
 # What fired, as metal-vmm says it (reports.zig `fired`): every fault the
 # seed drew, but for 28 and 29, whose faults never came.
@@ -128,6 +131,10 @@ for k in PEER_RESET_AT PEER_VANISH_AFTER DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DI
   case " $knobs" in *" $k="*) turned=1; case "$s" in 28 | 29 | 55) ;; *) fired="$fired $k" ;; esac ;; esac
 done
 [ -z "$turned" ] || echo "metal-vmm: fired:${fired:- none}" >&2
+# And which fired while a client's request was open (reports.zig
+# `During`): 14's refusal during client 1's, 45's during client 2's; 58's
+# at boot, during nobody's.
+case "$s" in 14) echo "metal-vmm: fired during client 1: DISK_REFUSE" >&2 ;; 45) echo "metal-vmm: fired during client 2: DISK_REFUSE" >&2 ;; esac
 echo "{\"metal_vmm_run\":{\"seed\":${s:-null},\"knobs\":\"$knobs\"}}" >> "$COVERAGE_OUT"
 echo '{"antithesis_sdk":{"language":{"name":"Zig","version":"0.16.0"},"sdk_version":"0.0.1","protocol_version":"1.1.0"}}' >> "$COVERAGE_OUT"
 ev Sometimes "tcp: common" true true
@@ -148,7 +155,7 @@ case "$s" in
   13) page="jello" ;;
   16 | 17) page=""; status=0; code=1; echo "error: GuestIdle" >&2 ;;
   14) page="Home unavailable"; status=500 ;;
-  15) page="Home unavailable"; status=500 ;;
+  15 | 58) page="Home unavailable"; status=500 ;;
   18) page=""; status=0; echo "  serving 1 request(s), as gopher-metal.conf says"; echo "  served 1 request(s); base heap holds 52 live bytes"; echo "peer 2: 204, 1 of 1 answers, 65 bytes, done" ;;
   19) page=""; status=0; echo "  serving 1 request(s), as gopher-metal.conf says"; echo "  served 1 request(s); base heap holds 52 live bytes"; echo "peer 2: 0, 0 of 1 answers, 0 bytes, established" ;;
   23 | 24 | 25 | 26) printf 'UNSOUND' > "$img"; [ "$s" = 24 ] || echo "metal-vmm: the power was cut after the guest's write 2 (sector 9, 1 sectors)" >&2; [ "$s" != 25 ] || page="jello"
@@ -164,7 +171,7 @@ case "$s" in
   27) page=""; status=0; echo "  serving 2 request(s), as gopher-metal.conf says"; echo "  served 2 request(s); base heap holds 52 live bytes"; echo "peer 2: 204, 1 of 1 answers, 65 bytes, done" ;;
   11) page="oops"; status=500; echo "  let go at the end: 1 response(s) cut by the stop, 2 bytes never acknowledged" ;;
 esac
-case "$s" in [2-9] | 1[0-9] | 2[3-9] | 30 | 52 | 53 | 54 | 55) ;; *) [ -z "${PEER_REQUEST:-}" ] || page="$(cat "${PEER_REQUEST%%,*}")" ;; esac
+case "$s" in [2-9] | 1[0-9] | 2[3-9] | 30 | 52 | 53 | 54 | 55 | 58) ;; *) [ -z "${PEER_REQUEST:-}" ] || page="$(cat "${PEER_REQUEST%%,*}")" ;; esac
 # A durable shape's write, and its read-back (QUEUE 125).
 if [ "$page" = "WRITE" ]; then
   case "$s" in 35 | 36 | 46 | 47) ;; 48) printf ' CORRUPT' >> "$VOLUME" ;; *) printf ' written' >> "$VOLUME" ;; esac
@@ -304,6 +311,8 @@ expect "seed 17" '^17 .*FAIL: exit 1 (unhurt: 0)' "$idle"
 five=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 14 15 2>&1)
 expect "seed 14" '^14 .*differs (allowed: DISK_REFUSE (a 500))' "$five"
 expect "seed 15" '^15 .*FAIL: not the page (status 500)' "$five"
+boot=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 58 58 2>&1)
+expect "seed 58" '^58 .*FAIL: not the page (status 500)' "$boot"
 
 limit=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 18 19 2>&1)
 expect "seed 18" '^18 .*differs (allowed: the request limit went to another client)' "$limit"

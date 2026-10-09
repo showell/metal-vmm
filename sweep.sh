@@ -27,7 +27,9 @@
 #     cut the power, which may rightly cost the page: then it is "differs
 #     (allowed: ...)". Each such fault must have fired, as metal-vmm's
 #     `fired:` line says: a knob drawn whose moment never came excuses
-#     nothing (metal-vmm QUEUE 124(e)). A cut volume must still be sound: that is FAT's crash
+#     nothing (metal-vmm QUEUE 124(e)). A 5xx is excused only by a disk
+#     or volume fault that fired while that client's request was open, as
+#     the `fired during client k:` line says (QUEUE 138(d)). A cut volume must still be sound: that is FAT's crash
 #     consistency, measured.
 #
 # Every run's coverage goes to one JSONL, judged at the end by
@@ -313,6 +315,9 @@ peer_end_of() { sed -n 's/^metal-vmm: the first client \(gave up\|vanished\).*/\
 # reset after the run ended, a cut past the last write) excuses nothing; a
 # run that says no fired line had none turned.
 fired_of() { echo " $(sed -n 's/^metal-vmm: fired: //p' "$WORK/$1.err" | tail -1 | sed 's/^none$//') "; }
+# during_of <run> <k>: the faults that fired while client k's request was
+# open (reports.zig `During`), space-separated with a space at each end.
+during_of() { echo " $(sed -n "s/^metal-vmm: fired during client $2: //p" "$WORK/$1.err" | tail -1) "; }
 broken_of() { sed -n 's/^metal-vmm: coverage: .*, \([0-9]*\) broken).*/\1/p' "$WORK/$1.err" | tail -1; }
 # broken_props <run>: the id of each property the run broke, once each, from
 # its own coverage lines: a must-hold one (Always, AlwaysOrUnreachable,
@@ -369,10 +374,16 @@ answer_excuse() {
     [ "$got" -lt "$want" ] && cmp -s -n "$got" "$page" "$upage" && less=yes
   fi
   # **A SERVER THAT SAYS IT FAILED, WHEN ITS DISK DID**: a 5xx is excused
-  # by a fault on the disk or the volume, and by nothing else.
+  # by a fault on the disk or the volume, and by nothing else; and only by
+  # one that fired while this client's request was open (metal-vmm QUEUE
+  # 138(d)). A refusal at boot, or during another client's request, is the
+  # very bug class a later 5xx would be: an earlier refusal that breaks
+  # later writes.
   case "$status" in 5??)
+    local during
+    during=$(during_of "$name" "$k")
     for f in DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DISK_ROT DISK_BAD_SECTOR VOLUME_CUT_AFTER VOLUME_SHORT_AT VOLUME_GONE_AT VOLUME_READ_ONLY_AT; do
-      case "$fired" in *" $f "*) excuse="$excuse${excuse:+, }$f (a $status)" ;; esac
+      case "$during" in *" $f "*) excuse="$excuse${excuse:+, }$f (a $status)" ;; esac
     done ;;
   esac
   if [ $less = yes ]; then

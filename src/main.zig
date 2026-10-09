@@ -338,6 +338,9 @@ pub const Machine = struct {
     /// **THE VOLUME** (`VOLUME`, scsi.zig): its power is the machine's, so
     /// a cut in either disk empties both caches.
     volume: ?*scsi.Scsi = null,
+    /// Which disk and volume faults fired while each client's request was
+    /// open (`reports.During`, metal-vmm QUEUE 138(d)).
+    during: reports.During = .{},
     /// **THE SERIAL PORT READS THE GUEST'S COVERAGE LINES** (coverage.zig),
     /// and with `COVERAGE_OUT` sends them to this file instead of stdout.
     serial: coverage.Serial = .{},
@@ -536,6 +539,7 @@ const census = .{
     .{ "write_cache", Holds.apart, "" },
     .{ "cut_at_exit", Holds.value, "" },
     .{ "volume", Holds.model, "" },
+    .{ "during", Holds.value, "" },
     .{ "serial", Holds.value, "" },
     .{ "coverage_fd", Holds.host, "the file the coverage lines go to, opened before the run: lines written before a restore stay written, as `serial`'s table says what was reached" },
     .{ "rewritten", Holds.value, "" },
@@ -663,6 +667,9 @@ const patience: u64 = 1_000_000;
 fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *Machine, text: Text) !u8 {
     const run: *kvm.Run = @ptrCast(page.ptr);
     while (true) {
+        // What fired in the last exit, and whose request it fell in, before
+        // a cut below ends the run.
+        machine.during.look(if (machine.card) |c| &c.peer else null, machine.drive, machine.volume);
         // **THE POWER WENT OUT IN THE LAST EXIT** (faults.zig, `Drive.cut`):
         // the guest runs no further, and the image keeps what landed.
         if (machine.drive) |d| if (d.cut) |cut| {
@@ -895,6 +902,8 @@ fn cutAtExit(machine: *Machine) void {
 fn reportFired(card: *const net.Net, block: *const virtio.Block, machine: *const Machine) void {
     var buf: [512]u8 = undefined;
     std.debug.print("{s}", .{reports.fired(&card.peer, &block.refusals, machine.volume, &buf)});
+    var during_buf: [1024]u8 = undefined;
+    std.debug.print("{s}", .{machine.during.say(&during_buf)});
 }
 
 fn reportVolume(machine: *const Machine) void {
