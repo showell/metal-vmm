@@ -26,7 +26,8 @@
 //! about its cache does: a driver that believes it never synchronizes.
 //! Unset, the disk writes through and says so. A driver may turn the cache
 //! off with MODE SELECT (WCE=0), unless `VOLUME_WCE_FIXED=1` makes it a
-//! disk that refuses. Nothing here reads a clock.
+//! disk that refuses, or `VOLUME_WCE_FIXED=ignore` one that answers GOOD and
+//! goes on caching. Nothing here reads a clock.
 
 const std = @import("std");
 const virtio = @import("virtio.zig");
@@ -83,6 +84,9 @@ pub const op_write: u8 = 0x2A;
 pub const op_synchronize: u8 = 0x35;
 pub const op_mode_sense: u8 = 0x5A;
 pub const op_mode_select: u8 = 0x55;
+
+/// What a write cache does with a MODE SELECT that would turn it off.
+pub const WceFixed = enum { no, refuses, ignores };
 
 const page_caching: u8 = 0x08;
 const page_all: u8 = 0x3F;
@@ -159,11 +163,18 @@ pub const Scsi = struct {
     /// to the disk), so a driver that turns the cache off and needs what it
     /// wrote before must still synchronize.
     write_through: bool = false,
-    /// **A CACHE THAT CANNOT BE TURNED OFF** (`VOLUME_WCE_FIXED=1`): the
-    /// changeable values say WCE is not changeable, and a MODE SELECT that
-    /// changes it is refused, INVALID FIELD IN PARAMETER LIST.
-    wce_fixed: bool = false,
+    /// **A CACHE THAT CANNOT BE TURNED OFF.** `VOLUME_WCE_FIXED=1` refuses:
+    /// the changeable values say WCE is not changeable, and a MODE SELECT
+    /// that changes it is refused, INVALID FIELD IN PARAMETER LIST.
+    /// `VOLUME_WCE_FIXED=ignore` takes it and ignores it (metal-vmm QUEUE
+    /// 119): WCE is said to be changeable, the MODE SELECT answers GOOD, and
+    /// the cache stays on, as SPC-4 does not forbid of a disk whose page is
+    /// not saved and whose current values the device server may override.
+    /// Only reading the page back shows it.
+    wce_fixed: WceFixed = .no,
     mode_selects: u64 = 0,
+    /// MODE SELECTs a `VOLUME_WCE_FIXED=ignore` disk answered and ignored.
+    ignored_selects: u64 = 0,
     protected: u64 = 0,
     commands: u64 = 0,
     attentions: u64 = 0,
@@ -413,7 +424,7 @@ pub const Scsi = struct {
             0 => if (self.saysWce()) {
                 data[10] = 0x04;
             },
-            1 => if (self.cache != null and !self.wce_fixed) {
+            1 => if (self.cache != null and self.wce_fixed != .refuses) {
                 data[10] = 0x04;
             },
             else => if (self.cache) |c| if (!c.lies) {
@@ -450,7 +461,11 @@ pub const Scsi = struct {
         const wce = page[2] & 0x04 != 0;
         if (self.cache) |c| {
             if (wce != self.saysWce()) {
-                if (self.wce_fixed or c.lies) return self.check(key_illegal_request, asc_invalid_parameter);
+                if (self.wce_fixed == .refuses or c.lies) return self.check(key_illegal_request, asc_invalid_parameter);
+                if (self.wce_fixed == .ignores) {
+                    self.ignored_selects += 1;
+                    return .{ .taken = len };
+                }
                 self.write_through = !wce;
             }
         } else if (wce) return self.check(key_illegal_request, asc_invalid_parameter);
@@ -499,7 +514,7 @@ pub const Scsi = struct {
     /// One line for the run's end, in `buf`.
     pub fn line(self: *const Scsi, buf: []u8) []const u8 {
         const mode = if (self.cache) |c|
-            (if (c.lies) "a write cache that says it writes through (VOLUME_CACHE=lie)" else if (self.write_through) "a write cache, turned off by MODE SELECT" else "a write cache, said in MODE SENSE")
+            (if (c.lies) "a write cache that says it writes through (VOLUME_CACHE=lie)" else if (self.write_through) "a write cache, turned off by MODE SELECT" else if (self.ignored_selects > 0) "a write cache, said in MODE SENSE, that took a MODE SELECT turning it off and stayed on (VOLUME_WCE_FIXED=ignore)" else "a write cache, said in MODE SENSE")
         else
             "write-through";
         const lost: u64 = if (self.cache) |c| c.lost else 0;
@@ -1017,7 +1032,7 @@ test "VOLUME_WCE_FIXED: WCE is not changeable, and a MODE SELECT that turns it o
     var image: [16 * 512]u8 = @splat('o');
     var c = cache_mod.Cache{ .gpa = testing.allocator, .image = &image };
     defer c.deinit();
-    var vol = Scsi{ .image = &image, .cache = &c, .wce_fixed = true };
+    var vol = Scsi{ .image = &image, .cache = &c, .wce_fixed = .refuses };
     var d = vol.device();
     var g = FakeDriver{};
     g.open(&d);
@@ -1088,4 +1103,23 @@ test "MODE SELECT: a parameter list longer than its one page is refused, as QEMU
     const o = g.settled(&d, &[10]u8{ op_mode_select, 0x10, 0, 0, 0, 0, 0, 0, len, 0 }, .to_disk, len);
     try testing.expectEqual(key_illegal_request, o.key);
     try testing.expectEqual(@as(?bool, true), g.wce(&d));
+}
+
+test "VOLUME_WCE_FIXED=ignore: WCE is said to be changeable, a MODE SELECT turning it off answers GOOD, and the cache stays on (metal-vmm QUEUE 119)" {
+    var image: [16 * 512]u8 = @splat('o');
+    var c = cache_mod.Cache{ .gpa = testing.allocator, .image = &image };
+    defer c.deinit();
+    var vol = Scsi{ .image = &image, .cache = &c, .wce_fixed = .ignores };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    try testing.expectEqual(@as(?bool, true), g.changeable(&d));
+    try testing.expect(FakeDriver.good(g.select(&d, false)));
+    try testing.expectEqual(@as(u64, 1), vol.ignored_selects);
+    // Only reading the page back shows it: the cache is on, and holds.
+    try testing.expectEqual(@as(?bool, true), g.wce(&d));
+    @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 3, 1)));
+    c.lose();
+    try testing.expectEqual(@as(u8, 'o'), image[3 * 512]);
 }
