@@ -104,6 +104,9 @@ printf 'pristine volume' > "$T/site.img"
 #           51 (q): client 1 reset and no answer, client 2 a 500, no disk
 #           fault: FAIL (after an earlier client differed, only what UNMADE
 #           names or the client's own excuses; QUEUE 127(d)).
+#           57 (q): client 1's page cut short under its own status (the stop
+#           cut it), client 2 404: FAIL (a page cut short says client 1's
+#           write was made; UNMADE is no excuse; QUEUE 134(g)).
 #           52: a cut, and a volume fsck calls sound (no leftovers) that lost
 #           a file the request does not touch: FAIL (QUEUE 127, lesser).
 # A run with PEER_REQUEST (a shape's) and no seed above has for its page the
@@ -181,14 +184,14 @@ fi
 # last named, past the list), and says its line.
 others=""
 if [ "${PEER_CLIENTS:-1}" -gt 1 ]; then
-  case "$s" in 39 | 42 | 51) page=""; status=0 ;; esac
+  case "$s" in 39 | 42 | 51) page=""; status=0 ;; 57) page="pag"; echo "  let go at the end: 1 response(s) cut by the stop, 3 bytes never acknowledged" ;; esac
   IFS=, read -ra reqs <<< "$PEER_REQUEST"
   for ((k = 2; k <= PEER_CLIENTS; k++)); do
     r="${reqs[$(( k - 1 < ${#reqs[@]} ? k - 1 : ${#reqs[@]} - 1 ))]}"
     p2="$(cat "$r")"; s2=200; a2=1
     case "$s" in
       38) p2="another page" ;;
-      39 | 41 | 42) p2="not found"; s2=404 ;;
+      39 | 41 | 42 | 57) p2="not found"; s2=404 ;;
       40 | 50) p2=""; s2=0; a2=0 ;;
       51) p2="oops"; s2=500 ;;
       45) p2="Home unavailable"; s2=500 ;;
@@ -418,6 +421,8 @@ expect "the summary" '^8 seeds: 2 ok, 3 differ as their faults allow, 3 failed' 
 more=$(SHAPES="$T/clients" VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 50 51 2>&1)
 expect "seed 50" '^50 *p .*FAIL: client 2: not its page (status 0; unhurt: 200)' "$more"
 expect "seed 51" '^51 *q .*FAIL: client 2: not its page (status 500; unhurt: 200)' "$more"
+cutshort=$(SHAPES="$T/clients" VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 57 57 2>&1)
+expect "seed 57" '^57 *q .*FAIL: client 2: not its page (status 404; unhurt: 200)' "$cutshort"
 # A shape of two clients that names one status holds client 2 to nothing.
 printf 'PEER_CLIENTS=2\nPEER_REQUEST=a.http,b.http\nEXPECT=200\n' > "$T/clients/p.shape"
 SHAPES="$T/clients" VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 44 44 > "$T/clients.out" 2>&1

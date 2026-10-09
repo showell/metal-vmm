@@ -47,7 +47,8 @@
 # first is (client k's page is metal-vmm's `<PEER_BODY>.k`). With
 # `PEER_IN_TURN=1` each client asks after the one before was answered, so a
 # request may depend on the last one's write (a move in the session it
-# made): then, once an earlier client's answer differed, a later one may
+# made): then, once an earlier client's answer differed so that its write
+# is in doubt (no answer, a 5xx, another status), a later one may
 # also answer what the shape's `UNMADE=<status>[,...]` names (a 404: the
 # session was never made), and nothing its own faults do not excuse.
 # The site's own limit (`requests = 1`) ends a run, so a shape of n clients
@@ -561,9 +562,10 @@ verdict() {
   fi
   # **EVERY CLIENT, AGAINST THE SAME CLIENT UNHURT** (metal-vmm QUEUE 126).
   # In turn, a client asks after the one before was answered, and may ask
-  # for what that one should have made: once one differs, a later one may
-  # also answer what the shape's UNMADE names (a 404: no such session), and
-  # nothing else its own faults do not excuse (QUEUE 127(d)). Not in turn,
+  # for what that one should have made: once one differs so that its write
+  # is in doubt (no answer, a 5xx, another status; QUEUE 134(g)), a later
+  # one may also answer what the shape's UNMADE names (a 404: no such
+  # session), and nothing else its own faults do not excuse (QUEUE 127(d)). Not in turn,
   # or before any differs, each is judged alone.
   local k ks us cex differed=""
   for ((k = 1; k <= $(clients_of "$sh"); k++)); do
@@ -574,7 +576,13 @@ verdict() {
       case ",${sh:+${SHAPE_UNMADE[$sh]:-}}," in *",$ks,"*) cex="a $ks as UNMADE allows, after client $differed's answer differed" ;; esac
     fi
     [ -n "$cex" ] || cex=$(answer_excuse "$name" "$k" "$ks" "$us" "$(client_page "$name" "$k")" "$(client_page "$u" "$k")" "$fired")
-    [ -n "$differed" ] || differed="$k"
+    # **ONLY A DIFFERENCE THAT LEAVES ITS WRITE IN DOUBT** (QUEUE 134(g)):
+    # no answer, a 5xx, or a status not its unhurt one. A page cut short
+    # under its own status says the write was made: what came after may
+    # not answer as if it were not.
+    if [ -z "$differed" ]; then
+      case "$ks" in "" | 0 | 5??) differed="$k" ;; *) [ "$ks" = "$us" ] || differed="$k" ;; esac
+    fi
     if [ "$k" = 1 ]; then
       if [ -n "$cex" ]; then excuse="$excuse${excuse:+, }$cex"; else why="$why, not the page (status ${status:-none})"; fi
     elif [ -n "$cex" ]; then excuse="$excuse${excuse:+, }client $k: $cex"
