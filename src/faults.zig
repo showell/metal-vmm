@@ -93,6 +93,8 @@ const in_flight: usize = 64;
 const Held = struct {
     due_ns: u64 = 0,
     len: usize = 0,
+    /// A lying copy `PEER_MANGLE` put ahead of a frame: the knob's own.
+    lie: bool = false,
     bytes: [frame_bytes]u8 = undefined,
 };
 
@@ -139,6 +141,8 @@ pub const Wire = struct {
     /// the next ACK says all it said: `acks_pushed_out`.
     pushed_out: u64 = 0,
     acks_pushed_out: u64 = 0,
+    /// Lying copies pushed out: the knob's frames, owed to nobody.
+    lies_pushed_out: u64 = 0,
     /// The oldest frame in flight and the next free slot, as a ring.
     first: usize = 0,
     next: usize = 0,
@@ -174,6 +178,7 @@ pub const Wire = struct {
         if (self.next - self.first >= in_flight) self.pushOut();
         slot.due_ns = now + self.latency_ns;
         slot.len = bytes.len;
+        slot.lie = false;
         @memcpy(slot.bytes[0..bytes.len], bytes);
         if (damage) {
             const tcp = bytes.len >= 34 + 20 and bytes[23] == 6;
@@ -185,7 +190,9 @@ pub const Wire = struct {
     /// The oldest frame goes, to make room, counted by what it carried.
     fn pushOut(self: *Wire) void {
         const oldest = &self.held[self.first % in_flight];
-        if (bareAck(oldest.bytes[0..oldest.len])) self.acks_pushed_out += 1 else self.pushed_out += 1;
+        if (oldest.lie) {
+            self.lies_pushed_out += 1;
+        } else if (bareAck(oldest.bytes[0..oldest.len])) self.acks_pushed_out += 1 else self.pushed_out += 1;
         self.first += 1;
     }
 
@@ -216,6 +223,7 @@ pub const Wire = struct {
         if (self.next - self.first >= in_flight) self.pushOut();
         slot.due_ns = now + self.latency_ns;
         slot.len = copy.len;
+        slot.lie = true;
         @memcpy(slot.bytes[0..copy.len], copy);
         self.next += 1;
         self.mangled[@intFromEnum(kind)] += 1;
@@ -624,4 +632,16 @@ test "a full wire counts what it pushes out: a bare ACK apart from a segment the
     // The oldest now carries data: pushing it out is the loss that counts.
     w.hold(frames.fakeSegment(&buf, frames.flag_ack, 1, 1, "more"), 0);
     try std.testing.expectEqual(@as(u64, 1), w.pushed_out);
+}
+
+test "a lying copy pushed out is the knob's, counted apart" {
+    const frames = @import("frames.zig");
+    var w: Wire = .{};
+    var buf: [2048]u8 = undefined;
+    w.hold(frames.fakeSegment(&buf, frames.flag_ack, 1, 1, "data"), 0);
+    w.held[w.first % in_flight].lie = true; // as `lieFirst` marks its copy
+    for (1..in_flight) |_| w.hold(frames.fakeSegment(&buf, frames.flag_ack, 1, 1, "data"), 0);
+    w.hold(frames.fakeSegment(&buf, frames.flag_ack, 1, 1, "more"), 0);
+    try std.testing.expectEqual(@as(u64, 1), w.lies_pushed_out);
+    try std.testing.expectEqual(@as(u64, 0), w.pushed_out);
 }
