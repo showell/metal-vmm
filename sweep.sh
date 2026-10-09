@@ -163,11 +163,16 @@ verdict() {
     fi
   fi
   [ "${broken:-0}" = 0 ] || why="$why, $broken coverage properties broken"
+  # A disk whose power was cut mid-write may hold what a stop leaves
+  # (sound.sh, `STOP_LEAVES`), and nothing else.
+  local disk_cut="" volume_cut=""
+  grep -qE "^metal-vmm: the power was cut (in the guest's write [0-9]+:|after the guest's write [0-9]+ \(sector)" "$WORK/$name.err" && disk_cut=1
+  grep -qE "^metal-vmm: the power was cut after the guest's write [0-9]+ to the volume" "$WORK/$name.err" && volume_cut=1
   if changed "$WORK/$name.img" && ! cmp -s "$WORK/$name.img" "$SITE"; then
-    "$SOUND" "$WORK/$name.img" > "$WORK/$name.sound" 2>&1 || why="$why, the volume is not sound"
+    STOP_LEAVES="$disk_cut" "$SOUND" "$WORK/$name.img" > "$WORK/$name.sound" 2>&1 || why="$why, the volume is not sound"
   fi
   if [ -n "${VOLUME_SITE:-}" ] && changed "$WORK/$name.vol" && ! cmp -s "$WORK/$name.vol" "$VOLUME_SITE"; then
-    "$SOUND" "$WORK/$name.vol" > "$WORK/$name.vsound" 2>&1 || why="$why, the attached volume is not sound"
+    STOP_LEAVES="$volume_cut" "$SOUND" "$WORK/$name.vol" > "$WORK/$name.vsound" 2>&1 || why="$why, the attached volume is not sound"
   fi
   if [ -n "$DURABLE" ]; then
     local read_status
