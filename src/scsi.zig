@@ -129,6 +129,15 @@ pub const Scsi = struct {
     /// resized under a droplet tells it; the command it is told on is not
     /// performed. `commands` counts every command; `attentions` those told.
     attention_at: ?u64 = null,
+    /// **A DISK RESET IN THE MIDDLE OF A RUN** (`VOLUME_RESET_AT=n`, metal-vmm
+    /// QUEUE 119): from the nth command, POWER ON, RESET OR BUS DEVICE RESET
+    /// OCCURRED is pending, and every mode page is back at its default
+    /// (SPC-4: after a reset the current values are the saved ones, or the
+    /// defaults when none were saved, and MODE SELECT with SP clear saves
+    /// nothing). So a write cache turned off is on again. What it holds is
+    /// kept: a reset is not a power cut. `resets` counts them.
+    reset_at: ?u64 = null,
+    resets: u64 = 0,
     /// **A VOLUME THAT GOES AWAY** (`VOLUME_GONE_AT=n`): from the nth
     /// command the controller answers BAD_TARGET, as one whose DO volume
     /// was detached under it does. `gone_answered` counts them.
@@ -327,6 +336,11 @@ pub const Scsi = struct {
         if (self.attention_at) |n| if (self.commands == n) {
             self.attention = asc_capacity_changed;
         };
+        if (self.reset_at) |n| if (self.commands == n) {
+            self.attention = asc_power_on;
+            self.write_through = false;
+            self.resets += 1;
+        };
         const op = cdb[0];
         if (op == op_inquiry) return self.inquiry(cdb, in, lun_n == 0);
         if (lun_n != 0) return self.check(key_illegal_request, asc_lun_not_supported);
@@ -523,6 +537,11 @@ pub const Scsi = struct {
             std.fmt.bufPrint(&told_buf, "; UNIT ATTENTION at command {d} {s}", .{ n, if (self.commands >= n and self.attention == null) "told" else "never told" }) catch ""
         else
             "";
+        var reset_buf: [128]u8 = undefined;
+        const reset = if (self.reset_at) |n|
+            std.fmt.bufPrint(&reset_buf, "; reset at command {d}{s}", .{ n, if (self.resets == 0) ", never reached" else if (self.write_through) ", and the write cache turned off again after it" else if (self.cache != null) ", and the write cache on again after it" else "" }) catch ""
+        else
+            "";
         var keeps_buf: [96]u8 = undefined;
         const keeps = if (self.cache) |c| (if (c.keeps) |k|
             std.fmt.bufPrint(&keeps_buf, "; {d} sectors had reached the media on their own (VOLUME_CACHE_KEEPS={d})", .{ c.kept, k }) catch ""
@@ -553,8 +572,8 @@ pub const Scsi = struct {
             std.fmt.bufPrint(&failed_buf, " ({d} failed, VOLUME_SYNC_FAIL)", .{self.sync_failed}) catch ""
         else
             "";
-        return std.fmt.bufPrint(buf, "metal-vmm: volume: {s}; {d} reads, {d} writes, {d} SYNCHRONIZE CACHE{s}, {d} MODE SENSE{s}{s}{s}{s}{s}{s}{s}\n", .{
-            mode, self.reads, self.writes, self.synchronizes, failed, self.mode_senses, told, gone, ro, short, waited, keeps,
+        return std.fmt.bufPrint(buf, "metal-vmm: volume: {s}; {d} reads, {d} writes, {d} SYNCHRONIZE CACHE{s}, {d} MODE SENSE{s}{s}{s}{s}{s}{s}{s}{s}\n", .{
+            mode, self.reads, self.writes, self.synchronizes, failed, self.mode_senses, told, reset, gone, ro, short, waited, keeps,
             if (self.power.cut != null)
                 (if (lost > 0) "; the power cut lost sectors never synchronized" else "; the power cut lost nothing")
             else if (self.cache) |c|
@@ -1122,4 +1141,35 @@ test "VOLUME_WCE_FIXED=ignore: WCE is said to be changeable, a MODE SELECT turni
     try testing.expect(FakeDriver.good(g.rw(&d, true, 3, 1)));
     c.lose();
     try testing.expectEqual(@as(u8, 'o'), image[3 * 512]);
+}
+
+test "VOLUME_RESET_AT: a reset says POWER ON, and a write cache turned off is on again, holding (metal-vmm QUEUE 119)" {
+    // SPC-4: after a reset the current mode values are the saved ones, or
+    // the defaults; a MODE SELECT with SP clear saved nothing. So a driver
+    // that turns the cache off once, at boot, has it on again after a reset
+    // unless it turns it off again when told.
+    var image: [16 * 512]u8 = @splat('o');
+    var c = cache_mod.Cache{ .gpa = testing.allocator, .image = &image };
+    defer c.deinit();
+    var vol = Scsi{ .image = &image, .cache = &c, .attention = null };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    try testing.expect(FakeDriver.good(g.select(&d, false)));
+    try testing.expectEqual(@as(?bool, false), g.wce(&d));
+    vol.reset_at = vol.commands + 1;
+    // The next command is told, and is not performed.
+    const told = g.send(&d, 0, 0, &[6]u8{ op_test_unit_ready, 0, 0, 0, 0, 0 }, .none, 0);
+    try testing.expectEqual(key_unit_attention, told.key);
+    try testing.expectEqual(asc_power_on, told.asc);
+    try testing.expectEqual(@as(?bool, true), g.wce(&d));
+    @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 3, 1)));
+    c.lose();
+    try testing.expectEqual(@as(u8, 'o'), image[3 * 512]);
+    var buf: [512]u8 = undefined;
+    try testing.expect(std.mem.indexOf(u8, vol.line(&buf), "reset at command") != null);
+    // Turned off again, it stays off.
+    try testing.expect(FakeDriver.good(g.select(&d, false)));
+    try testing.expectEqual(@as(?bool, false), g.wce(&d));
 }

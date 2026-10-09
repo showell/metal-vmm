@@ -98,6 +98,7 @@ pub const table = [_]Setting{
     .{ .name = "PEER_MANGLE_KIND", .kind = .mangle_kind },
     .{ .name = "VOLUME_LATENCY_US", .kind = micros, .needs_volume = true },
     .{ .name = "VOLUME_ATTENTION_AT", .kind = any_number, .needs_volume = true },
+    .{ .name = "VOLUME_RESET_AT", .kind = any_number, .needs_volume = true },
     .{ .name = "VOLUME_GONE_AT", .kind = any_number, .needs_volume = true },
     .{ .name = "VOLUME_READ_ONLY_AT", .kind = any_number, .needs_volume = true },
     .{ .name = "VOLUME_SYNC_US", .kind = micros, .needs_volume = true },

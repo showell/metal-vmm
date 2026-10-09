@@ -1205,6 +1205,9 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         if (turned.get("VOLUME_ATTENTION_AT")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
             volume.attention_at = n;
         };
+        if (turned.get("VOLUME_RESET_AT")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
+            volume.reset_at = n;
+        };
         if (turned.get("VOLUME_SECTOR")) |text| if (std.fmt.parseInt(u32, text, 10) catch null) |n| if (n > 0) {
             volume.sector_said = n;
         };
