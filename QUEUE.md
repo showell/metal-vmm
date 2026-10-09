@@ -484,9 +484,36 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
        client 1, even a page cut short after the session was made. Allow it
        only when client 1 got no answer, a 5xx, or a status not its unhurt
        one.
+     - **(h), found since by a review of the box's `Derived` work:** in
+       `fatSet`'s held path, a failed write replaces the WHOLE held sector
+       with the disk's first copy, but `keepCount` moves the free count for
+       one entry only. Where the sector differed elsewhere (a weighing that
+       trusted the second copy and whose repair was refused; rot on the
+       re-read), the kept count is now wrong, and the re-read quietly undoes
+       that sector's weighing. Fix it with (a): move the count for every
+       entry the copied sector changes. The box's new coverage property
+       ("after a request, the kept free count is the FAT's", on `next`)
+       will report it.
      - Note: `Expect: 100-continue` sets the "an answer went out" flag, so
        a later error is still silence. No worse than before; say whether
        it is cheap to fix.
+
+135. **No seed refuses a write on the volume** (the box, 2026-10-09 night,
+     from a pre-run review of `plants.sh`). `knobs.zig`'s `withVolume`
+     draws none of `VOLUME_GONE_AT`, `VOLUME_READ_ONLY_AT`,
+     `VOLUME_SHORT_AT`. So every night so far has never refused a
+     production-shaped write, and a kernel that took a refused write as
+     written (the pending plant `plants/pending/disk-write-swallowed`) would
+     pass. Draw them (each in a fraction of seeds with a volume, aimed at
+     the write requests of the write shapes), with the excuses the
+     existing rules give: a 5xx after a disk fault that fired. With 125's
+     read-backs, that plant becomes seeable: when both are in, move it to
+     `plants/` and make `plants.sh` catch it.
+     - Also, the reviewer's suggestion, yours if you agree: every "could
+       not judge" in `sweep.sh` exits 2 through one function (today some
+       preconditions exit 1), and the sweep ends with a machine line,
+       `FAILED_SEEDS: 3 17 42`, which `plants.sh` and `nightly.sh` read
+       instead of the human table.
 
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
