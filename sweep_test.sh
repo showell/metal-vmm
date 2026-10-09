@@ -191,6 +191,7 @@ EOF
 # LOSTFILE lost one.
 cat > "$T/untouched" <<'EOF'
 #!/bin/bash
+[ "$1" != --ready ] || exit 0
 if grep -q LOSTFILE "$3"; then echo "  /DATA/KEPT.MD: gone"; exit 1; fi
 exit 0
 EOF

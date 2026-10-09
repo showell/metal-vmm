@@ -34,13 +34,22 @@ EOF
 chmod +x "$T/vmm"
 SDK="${COVERAGE_SDK:-$HERE/../zig-coverage-sdk}"
 [ -f "$SDK/tools/report.py" ] || { echo "no $SDK/tools/report.py: set COVERAGE_SDK"; exit 1; }
+# A FAT reader as gopher-metal's is found, under a checkout of its own
+# (GOPHER): the night must take it, and untouched.py, with it (QUEUE 127(a)).
+mkdir -p "$T/gopher/tools"
+printf 'class Problem(Exception):\n    pass\n' > "$T/gopher/tools/fat16_read.py"
 NIGHTLY_ATTACHED=1 NIGHTLY_OUT="$T/out" NIGHTLY_ROOT="$T/root" HOURS=0.001 FIRST=1 BATCH=3 \
-  VMM_BIN="$T/vmm" KERNEL_ELF="$T/kernel.elf" SITE="$T/site.img" COVERAGE_SDK="$SDK" GOPHER="$HERE" \
+  VMM_BIN="$T/vmm" KERNEL_ELF="$T/kernel.elf" SITE="$T/site.img" COVERAGE_SDK="$SDK" GOPHER="$T/gopher" \
   "$HERE/nightly.sh" > "$T/nightly.out" 2>&1
 failures=$(cat "$T/out/failures.log" 2>/dev/null)
 progress=$(cat "$T/out/progress.log" 2>/dev/null)
 expect "the SILENT line in failures.log" 'batch 1-3: SILENT FAULT_SEED=2' "$failures"
 expect "the batch's report failure in progress.log" '1-3 .* report failed' "$progress"
 expect "the night's report failures in DONE" 'report failed in 1 batch' "$(cat "$T/out/DONE" 2>/dev/null)"
-if [ $fail = 0 ]; then echo "nightly_test: a report-only failure is said where a night is read"; fi
+# The night's sweep can judge a cut's leftovers: untouched.py and its reader
+# are frozen with it, and ready (QUEUE 127(a)).
+[ -f "$T/out/bin/untouched.py" ] && [ -f "$T/out/bin/fat16_read.py" ] || { echo "FAIL: the night's bin lacks untouched.py or fat16_read.py"; fail=1; }
+FAT_READ="$T/out/bin/fat16_read.py" python3 "$T/out/bin/untouched.py" --ready || { echo "FAIL: the night's untouched.py is not ready"; fail=1; }
+expect "the batch was judged" '1-3  *3  *0  *0 |' "$progress"
+if [ $fail = 0 ]; then echo "nightly_test: a report-only failure is said where a night is read, and a cut's leftovers can be judged"; fi
 exit $fail

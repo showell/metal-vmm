@@ -3,6 +3,7 @@
 (metal-vmm QUEUE 124(b)).
 
     tools/untouched.py PRISTINE UNHURT RUN
+    tools/untouched.py --ready      # 0 if the FAT reader loads, else 1, saying where it looked
 
 Each is a FAT16 or FAT32 volume, bare or the first partition of a GPT disk.
 The files the request does not touch are those the unhurt run left as the
@@ -73,6 +74,11 @@ def lost(fat, pristine, unhurt, run):
 
 
 def main(argv):
+    # `--ready`: whether the FAT reader loads, asked before a sweep starts
+    # (QUEUE 127(a)): a reader missing mid-night would read as a lost file.
+    if argv[1:] == ["--ready"]:
+        reader()
+        return 0
     if len(argv) != 4:
         print(__doc__, file=sys.stderr)
         return 2

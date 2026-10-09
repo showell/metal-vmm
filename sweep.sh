@@ -112,6 +112,11 @@ if [ -n "${KEEP:-}" ]; then WORK="$KEEP"; mkdir -p "$WORK"; else WORK="$(mktemp 
 [ -f "$REPORT" ] || { echo "no $REPORT; set COVERAGE_SDK=<zig-coverage-sdk checkout>"; exit 1; }
 [ -f "$KERNEL" ] || { echo "no $KERNEL"; exit 1; }
 [ -f "$SITE" ] || { echo "no volume at $SITE; set SITE=<image>"; exit 1; }
+# **THE CHECK A CUT NEEDS, READY BEFORE ANY SEED** (QUEUE 127(a)): a missing
+# untouched.py or FAT reader would fail every cut seed with stop leftovers
+# as "lost a file", all night. Exit 2: nothing can be judged, and a night
+# stops.
+"$UNTOUCHED" --ready > "$WORK/untouched.ready" 2>&1 || { echo "$UNTOUCHED --ready failed: a cut's leftovers could not be judged:"; sed 's/^/  /' "$WORK/untouched.ready"; exit 2; }
 DURABLE=""
 if [ -n "${POST:-}" ]; then
   [ -f "$POST" ] || { echo "no request at POST=$POST"; exit 1; }

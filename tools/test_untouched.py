@@ -100,5 +100,23 @@ class Untouched(unittest.TestCase):
         self.assertEqual(self.lost(pristine, unhurt, pristine), [])
 
 
+class Ready(unittest.TestCase):
+    """`--ready`, which sweep.sh asks before any seed (QUEUE 127(a))."""
+
+    def run_ready(self, fat_read):
+        import subprocess
+        env = dict(os.environ, FAT_READ=fat_read)
+        return subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "untouched.py"), "--ready"],
+                              env=env, capture_output=True, text=True)
+
+    def test_a_reader_that_loads_is_ready(self):
+        self.assertEqual(self.run_ready(U.reader().__file__).returncode, 0)
+
+    def test_no_reader_is_not_ready_and_says_where_it_looked(self):
+        done = self.run_ready("/nowhere/fat16_read.py")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("/nowhere/fat16_read.py", done.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
