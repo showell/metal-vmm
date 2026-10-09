@@ -29,8 +29,9 @@
 #   nightly.out/.err  this script's own stdout and stderr
 #   DONE              written last, with the night's totals
 # The next night starts after the last seed this one ran (`~/nightly/next-seed`).
-# A property a run broke fails its seed; the report's FAIL lines go to
-# failures.log as well.
+# A property a run broke fails its seed; the report's FAIL, SILENT, STALE
+# and EDGE lines go to failures.log as well, and a batch failed by its report
+# alone says "report failed" on its progress line.
 #
 # **THE BINARIES ARE FROZEN AT THE START**: metal-vmm and the kernel are
 # copied into the night's folder and run from there, so a rebuild of either
@@ -104,7 +105,7 @@ deadline=$((start + $(python3 -c "print(int(float('$HOURS') * 3600))")))
 echo "time      elapsed  seeds              ok  differ  failed | night: seeds  ok  differ  failed  seeds/hour" > "$OUT/progress.log"
 
 seed=$FIRST
-tot=0; tok=0; tdiff=0; tfail=0
+tot=0; tok=0; tdiff=0; tfail=0; trep=0
 while [ "$(date +%s)" -lt "$deadline" ]; do
     last=$((seed + BATCH - 1))
     log="$OUT/batches/$seed-$last.log"
@@ -132,13 +133,24 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
         fail=$BATCH
     fi
     grep -E '^  FAULT_SEED=[0-9]+: FAIL|^    repeat it:' "$log" >> "$OUT/failures.log"
-    grep -E '^FAIL ' "$log" | sed "s/^/batch $seed-$last: /" >> "$OUT/failures.log"
+    # **THE REPORT'S OWN FAILURES ARE FAILURES TOO** (metal-vmm QUEUE
+    # 124(d)): a property broken (FAIL), a run that reported none (SILENT), a
+    # floor or an edge gone stale or short. A batch that exited 1 with no
+    # failing seed failed by its report alone, and says so here and in its
+    # progress line, not as a clean batch.
+    grep -E '^(FAIL|SILENT|STALE|EDGE) ' "$log" | sed "s/^/batch $seed-$last: /" >> "$OUT/failures.log"
+    report=""
+    if [ $code != 0 ] && [ "$fail" = 0 ]; then
+        report="  report failed"
+        trep=$((trep + 1))
+        echo "batch $seed-$last: sweep.sh exited $code with no failing seed: the coverage report failed (its lines above)" >> "$OUT/failures.log"
+    fi
     tot=$((tot + BATCH)); tok=$((tok + ok)); tdiff=$((tdiff + diff)); tfail=$((tfail + fail))
     elapsed=$(( $(date +%s) - start ))
     rate=$(( tot * 3600 / (elapsed > 0 ? elapsed : 1) ))
-    printf '%s %6ds  %-17s %4d  %6d  %6d | %12d %4d  %6d  %6d  %10d\n' \
-        "$(date +%H:%M:%S)" "$elapsed" "$seed-$last" "$ok" "$diff" "$fail" "$tot" "$tok" "$tdiff" "$tfail" "$rate" >> "$OUT/progress.log"
+    printf '%s %6ds  %-17s %4d  %6d  %6d | %12d %4d  %6d  %6d  %10d%s\n' \
+        "$(date +%H:%M:%S)" "$elapsed" "$seed-$last" "$ok" "$diff" "$fail" "$tot" "$tok" "$tdiff" "$tfail" "$rate" "$report" >> "$OUT/progress.log"
     seed=$((last + 1))
     echo "$seed" > "$ROOT/next-seed"
 done
-echo "done $(date '+%F %T %Z'): $tot seeds, $tok ok, $tdiff differ as their faults allow, $tfail failed" | tee "$OUT/DONE" >> "$OUT/progress.log"
+echo "done $(date '+%F %T %Z'): $tot seeds, $tok ok, $tdiff differ as their faults allow, $tfail failed$([ $trep = 0 ] || echo "; the coverage report failed in $trep batch(es)")" | tee "$OUT/DONE" >> "$OUT/progress.log"
