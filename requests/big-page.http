@@ -1,0 +1,4 @@
+GET /driving/safari.wasm HTTP/1.1
+Host: lynrummy.com
+Connection: close
+
