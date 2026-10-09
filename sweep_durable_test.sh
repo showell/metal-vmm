@@ -36,6 +36,8 @@ printf 'POST /chat HTTP/1.1\r\n\r\nhello from the sweep' > "$T/post.req"
 #           held: FAIL (the lie cost nothing; metal-vmm QUEUE 124(e))
 #   9       303, lost, VOLUME_SYNC_FAIL drawn and no SYNCHRONIZE ever
 #           failed: FAIL (an excuse needs its fault to have fired)
+#   10      303, VOLUME_CACHE=lie lost what it held and left the volume
+#           unreadable: the read-back's 500 allowed (QUEUE 127(f))
 cat > "$T/vmm" <<'EOF'
 #!/bin/bash
 s="${FAULT_SEED:-}"
@@ -47,11 +49,11 @@ if [ -z "${PEER_REQUEST:-}" ]; then
 fi
 [ "$VOLUME_CUT_AT_EXIT" = 1 ] || { echo "no VOLUME_CUT_AT_EXIT" >&2; exit 3; }
 knobs="none"
-case "$s" in 3 | 8) knobs="VOLUME_CACHE=lie" ;; 5 | 9) knobs="VOLUME_CACHE=1 VOLUME_SYNC_FAIL=2" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
+case "$s" in 3 | 8 | 10) knobs="VOLUME_CACHE=lie" ;; 5 | 9) knobs="VOLUME_CACHE=1 VOLUME_SYNC_FAIL=2" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
 [ -n "$s" ] && echo "metal-vmm: FAULT_SEED=$s is $knobs" >&2
 # The volume's line and what fired, as metal-vmm says them.
 case "$s" in
-  3) echo "metal-vmm: volume: a write cache that says it writes through (VOLUME_CACHE=lie); 1 reads, 2 writes, 0 SYNCHRONIZE CACHE, 1 MODE SENSE; the power failed when the guest stopped and lost sectors never synchronized" >&2 ;;
+  3 | 10) echo "metal-vmm: volume: a write cache that says it writes through (VOLUME_CACHE=lie); 1 reads, 2 writes, 0 SYNCHRONIZE CACHE, 1 MODE SENSE; the power failed when the guest stopped and lost sectors never synchronized" >&2 ;;
   8) echo "metal-vmm: volume: a write cache that says it writes through (VOLUME_CACHE=lie); 1 reads, 2 writes, 0 SYNCHRONIZE CACHE, 1 MODE SENSE; the power failed when the guest stopped and lost nothing" >&2 ;;
   5) echo "metal-vmm: fired: VOLUME_SYNC_FAIL" >&2 ;;
   9) echo "metal-vmm: fired: none" >&2 ;;
@@ -65,7 +67,7 @@ status=303
 case "$s" in
   2 | 3 | 5 | 8 | 9) ;;
   4) status=0 ;;
-  6) echo UNREADABLE >> "$VOLUME" ;;
+  6 | 10) echo UNREADABLE >> "$VOLUME" ;;
   7) status=0; tail -c 20 "$PEER_REQUEST" >> "$VOLUME" ;;
   *) tail -c 20 "$PEER_REQUEST" >> "$VOLUME" ;;
 esac
@@ -106,6 +108,10 @@ expect "how to repeat it" 'repeat it: WIRE_EAT=2 PEER_REQUEST=.*post.req VOLUME=
 out=$(run_sweep 8 9)
 expect "seed 8" '^8 .*FAIL: told 303 and the write is not on the volume' "$out"
 expect "seed 9" '^9 .*FAIL: told 303 and the write is not on the volume' "$out"
+
+# A read-back's 500 a lie's loss caused is the lie's (QUEUE 127(f)).
+out=$(run_sweep 10 10)
+expect "seed 10" '^10 .*lost (allowed: VOLUME_CACHE=lie (the read-back failed, 500))' "$out"
 
 # Nothing can be judged when the pristine volume already holds the message.
 printf 'conversation:\nhello from the sweep\n' > "$T/volume.img"

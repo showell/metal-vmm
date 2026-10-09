@@ -69,6 +69,13 @@ printf 'pristine volume' > "$T/site.img"
 #           ("READBACK") pages out the volume. 34 keeps it: ok. 35 is told
 #           200 and keeps nothing: FAIL. 36 keeps nothing behind a lying
 #           cache whose power failed with writes held: allowed.
+#   46-48   a durable shape whose read-back ("READBACK404") is a 404 when
+#           nothing was written, as `GET /game/sessions/2/actions` is
+#           (QUEUE 127(c)), and a 500 when the volume holds "CORRUPT".
+#           46: a reset and no answer, nothing written, the read-back a
+#           404 as the pristine volume's: allowed, not told. 47: told 200, nothing written,
+#           a 404: FAIL. 48: told 200, a lying cache lost what it held and
+#           left the volume so the read-back is a 500: allowed (127(f)).
 #   9       a 200 whose page metal-vmm did not write (an answer kept only in
 #           part): FAIL, never a match of two empty pages
 #   38-45   two clients (QUEUE 126), each paged its own request file, client
@@ -94,7 +101,7 @@ s="${FAULT_SEED:-}"
 L='"location":{"class":"tcp","function":"f","file":"tcp.zig","begin_line":1,"begin_column":1}'
 ev() { echo "{\"antithesis_assert\":{\"hit\":$3,\"must_hit\":true,\"assert_type\":\"x\",\"display_type\":\"$1\",\"message\":\"$2\",\"condition\":$4,\"id\":\"$2\",$L}}" >> "$COVERAGE_OUT"; }
 knobs="none"
-case "$s" in 23 | 25 | 26) knobs="DISK_CACHE=lie DISK_CUT_AFTER=2" ;; 27) knobs="WIRE_EAT=3" ;; 28) knobs="PEER_RESET_AT=500" ;; 29) knobs="DISK_REFUSE=4" ;; 30) knobs="WIRE_EAT=3" ;; 31 | 32 | 33) knobs="DISK_CUT_AFTER=2" ;; 36) knobs="VOLUME_CACHE=lie" ;; 39 | 40 | 42) knobs="PEER_RESET_AT=500" ;; 45) knobs="DISK_REFUSE=4" ;; 24) knobs="DISK_CACHE=lie" ;; 18 | 19) knobs="WIRE_EAT=3" ;; 16) knobs="PEER_RESET_AT=500" ;; 17) knobs="WIRE_EAT=17" ;; 3) knobs="PEER_RESET_AT=500" ;; 12) knobs="DISK_REFUSE=4" ;; 13) knobs="PEER_RESET_AT=500" ;; 14) knobs="DISK_REFUSE=4" ;; 15) knobs="PEER_RESET_AT=500" ;; 4) knobs="DISK_WRITES_ONLY=1" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
+case "$s" in 23 | 25 | 26) knobs="DISK_CACHE=lie DISK_CUT_AFTER=2" ;; 27) knobs="WIRE_EAT=3" ;; 28) knobs="PEER_RESET_AT=500" ;; 29) knobs="DISK_REFUSE=4" ;; 30) knobs="WIRE_EAT=3" ;; 31 | 32 | 33) knobs="DISK_CUT_AFTER=2" ;; 36 | 48) knobs="VOLUME_CACHE=lie" ;; 46) knobs="PEER_RESET_AT=500" ;; 39 | 40 | 42) knobs="PEER_RESET_AT=500" ;; 45) knobs="DISK_REFUSE=4" ;; 24) knobs="DISK_CACHE=lie" ;; 18 | 19) knobs="WIRE_EAT=3" ;; 16) knobs="PEER_RESET_AT=500" ;; 17) knobs="WIRE_EAT=17" ;; 3) knobs="PEER_RESET_AT=500" ;; 12) knobs="DISK_REFUSE=4" ;; 13) knobs="PEER_RESET_AT=500" ;; 14) knobs="DISK_REFUSE=4" ;; 15) knobs="PEER_RESET_AT=500" ;; 4) knobs="DISK_WRITES_ONLY=1" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
 [ -n "$s" ] && echo "metal-vmm: FAULT_SEED=$s is $knobs" >&2
 # What fired, as metal-vmm says it (reports.zig `fired`): every fault the
 # seed drew, but for 28 and 29, whose faults never came.
@@ -139,11 +146,16 @@ esac
 case "$s" in [2-9] | 1[0-9] | 2[3-9] | 30) ;; *) [ -z "${PEER_REQUEST:-}" ] || page="$(cat "${PEER_REQUEST%%,*}")" ;; esac
 # A durable shape's write, and its read-back (QUEUE 125).
 if [ "$page" = "WRITE" ]; then
-  case "$s" in 35 | 36) ;; *) printf ' written' >> "$VOLUME" ;; esac
-  [ "$s" != 36 ] || echo "metal-vmm: volume: a write cache that says it writes through (VOLUME_CACHE=lie); 1 reads, 2 writes, 0 SYNCHRONIZE CACHE, 1 MODE SENSE; the power failed when the guest stopped and lost sectors never synchronized" >&2
+  case "$s" in 35 | 36 | 46 | 47) ;; 48) printf ' CORRUPT' >> "$VOLUME" ;; *) printf ' written' >> "$VOLUME" ;; esac
+  [ "$s" != 46 ] || { page=""; status=0; }
+  case "$s" in 36 | 48) ;; *) false ;; esac && echo "metal-vmm: volume: a write cache that says it writes through (VOLUME_CACHE=lie); 1 reads, 2 writes, 0 SYNCHRONIZE CACHE, 1 MODE SENSE; the power failed when the guest stopped and lost sectors never synchronized" >&2
   [ "${VOLUME_CUT_AT_EXIT:-}" = 1 ] || { echo "a durable shape's run without VOLUME_CUT_AT_EXIT" >&2; exit 3; }
 elif [ "$page" = "READBACK" ]; then
   page="$(cat "$VOLUME")"
+elif [ "$page" = "READBACK404" ]; then
+  page="$(cat "$VOLUME")"
+  if grep -q CORRUPT "$VOLUME"; then page="failed"; status=500
+  elif ! grep -q written "$VOLUME"; then page="no session"; status=404; fi
 fi
 # A request that is only "fail500" is answered 500: a shape gone stale.
 [ "$page" != "fail500" ] || status=500
@@ -369,6 +381,17 @@ printf 'PEER_CLIENTS=2\nPEER_REQUEST=a.http,b.http\nEXPECT=200,204\n' > "$T/clie
 SHAPES="$T/clients" VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 44 44 > "$T/clients.out" 2>&1
 [ $? = 2 ] || { echo "FAIL: a client 2 whose unhurt answer is not its EXPECT did not stop the sweep with 2"; fail=1; }
 expect "client 2 not as expected" 'shape p: its unhurt run answered 200,200, not 200,204' "$(cat "$T/clients.out")"
+
+# **A READ-BACK THAT IS NOT 200** (QUEUE 127(c), (f)): as the pristine
+# volume's when the run was not told; a 500 a lying cache's loss caused.
+mkdir -p "$T/durable404"
+printf 'WRITE' > "$T/durable404/w.http"
+printf 'READBACK404' > "$T/durable404/r.http"
+printf 'PEER_REQUEST=w.http\nEXPECT=200\nREAD_BACK=r.http\nMARK=written\n' > "$T/durable404/w.shape"
+notfound=$(SHAPES="$T/durable404" VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 46 48 2>&1)
+expect "seed 46" '^46 *w .*differs (allowed: PEER_RESET_AT)  ' "$notfound"
+expect "seed 47" '^47 *w .*FAIL: the read-back boot got no page (status 404)' "$notfound"
+expect "seed 48" '^48 *w .*allowed: VOLUME_CACHE=lie (the read-back failed, 500)' "$notfound"
 
 if [ $fail = 0 ]; then echo "sweep_test: every verdict and the summary as told"; fi
 exit $fail
