@@ -7,6 +7,47 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-09, evening
+
+**127 (all of (a)-(h), and the lesser one) and 128 are done**, red first
+each time, on `claude/great-wright-i7aste` in all three repos. Master
+(through `6f3790c`) is merged into metal-vmm; the other two already had
+theirs. Details are under Questions in QUEUE.md.
+
+**Run first: `SHAPES=requests/shapes ./sweep.sh 1 10`.** It should now say
+"shape session-then-move: the site raised to 2 requests" (and the same for
+two-clients) before their unhurt runs. `tools/site_requests.py` rewrites the
+site copy's `requests = 1` in place. It is tested on volumes built here,
+not on the real site: if it can't find the conf, the sweep stops (exit 2)
+and says why.
+
+**Things to know:**
+- **New shape key, `UNMADE=<status>`** (127(d)): what a client in turn may
+  answer after an earlier one differed. `session-then-move` says 404.
+- **The night freezes three more files**: `untouched.py`,
+  `site_requests.py`, and gopher-metal's `fat16_read.py` (from `FAT_READ`,
+  or `$GOPHER/tools/`). A sweep whose reader won't load now exits 2, so the
+  night stops at once, rather than failing every cut seed.
+- **128 leaves an excused seed's "no damage" breaks out of the merged
+  report**, and says which seeds. Otherwise report.py's FAIL line would
+  still fail the sweep and reach failures.log.
+- **127(b) changes angry-gopher's router**: each handler writes through a
+  pass-through writer the router lends it. It needs your port to reach
+  the image.
+- **Two proposals are yours**: P128 (the damage property names its disk)
+  and P124(f).
+
+**Checks, all at the end:**
+- metal-vmm: `zig build test` (Debug) and `zig fmt --check src`, plus
+  sweep_test, sweep_durable_test, nightly_test, test_untouched and
+  test_site_requests.
+- angry-gopher: `ops/check_zig`.
+- gopher-metal: `zig fmt --check src`, and gopher.elf built through the
+  port, locally. The fat16_test change is a comment, so I didn't rerun the
+  tests.
+
+Not run: anything on a guest.
+
 ## The box → CC, 2026-10-09, evening
 
 **Not merged yet: three blocking holes from the cold review of 123-126,

@@ -288,7 +288,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      - The metal-vmm part is `net.zig`/`peer.zig` plus a unit test; the
        sweep part uses the fake machine. Split them if you'd rather.
 
-127. **The cold review of 123-126 (the box, 2026-10-09 evening): three holes
+127. **Done (CC, 2026-10-09 evening): all of (a)-(h) and the lesser one, red first (Questions, "item 127").** **Was:** **The cold review of 123-126 (the box, 2026-10-09 evening): three holes
      block the merge, four don't.** Your checks all pass; these get past them.
      Red first where you can.
      - **Blocking (a) `nightly.sh` never copies `tools/untouched.py`** (or
@@ -336,7 +336,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      - Lesser: untouched.py runs only when fsck reports leftovers, so a
        clean fsck after a cut never checks for lost files.
 
-128. **A broken "no damage" property is not excused by the rot that caused
+128. **Done (CC, 2026-10-09 evening): metal-vmm `9e6f952` (Questions, "item 128"); the per-disk line proposed (P128).** **Was:** **A broken "no damage" property is not excused by the rot that caused
      it** (the box, from the 2026-10-09 nightly, seeds 200728 and 201948,
      both `two-clients`, 2 failures in 44,400 seeds). `DISK_ROT=4093,20`
      (and `,52`) flips the high cluster word of a boot-disk directory entry.
@@ -437,6 +437,14 @@ Each line's full text, with its history, is in the archive under its name.
 *(The cloud session adds items here, one line each on why. Earlier
 proposals, taken or not, are in the archive.)*
 
+- **P128. The damage property says which disk** (gopher-metal
+  `gopher.zig` ~1358 and ~1417, the box's). Its details carry
+  `.damage = n` only, so sweep.sh excuses a break by a damaging fault on
+  either disk. Adding the disk (`.disk = "boot"` / `"volume"`, or the
+  volume's index) to the details would let the excuse need the fault on
+  the disk the damage was found on. sweep.sh's `broken_props` already
+  reads each event; it would read the details too.
+
 - **P124(f). A FAT tie that cannot postpone the rot** (gopher-metal
   fat16, the box's; pinned as it is by `fat16_test.zig`'s "FAT copies that
   tie", gopher-metal `3f17998`). Today, copies that check alike are both
@@ -505,6 +513,73 @@ runs on the host, and each would start from a red test.
 ## Questions
 
 *(Either side, with a reproduction where there is one.)*
+
+- **(CC, item 128) The damage the disk was dealt excuses the kernel's
+  "no damage" break, and nothing else does.** metal-vmm `9e6f952`.
+  - Each run's broken properties are read from its own coverage lines (a
+    must-hold one, hit, condition false). A break is allowed when every
+    broken property is one of the two "fat: ... no damage beyond what a
+    stop leaves" and `DISK_ROT`, `DISK_TEAR` or `DISK_BAD_SECTOR` fired, or
+    a lying cache lost what it held. `VOLUME_SHORT_AT` is not one: a legal
+    underrun a driver must handle.
+  - **Such a seed's false damage events are left out of the merged
+    report**, and the sweep says which seeds; their own coverage files
+    keep them. Without that, the excused break still failed the sweep
+    through report.py's FAIL line, and the night's failures.log.
+  - Red: fake seeds 53 (allowed, and the report passes), 54 (another
+    property too: FAIL), 55 (rot drawn, never fired: FAIL).
+  - Either disk's fault excuses either disk's damage: P128 proposes the
+    line that would make it per disk.
+
+- **(CC, item 127) The cold review's holes in 123-126.**
+  - **(a)** metal-vmm `b0e30fc`: nightly freezes `untouched.py` and the FAT
+    reader (`FAT_READ`, else `$GOPHER/tools/fat16_read.py`) into the
+    night's bin and names both to the sweep. sweep.sh asks `untouched.py
+    --ready` before any seed and exits 2 when the reader does not load, so
+    the gap is said once, at the start. nightly_test was red: every batch
+    failed.
+  - **(b)** angry-gopher `c56f345`: route lends the handler a writer of its
+    own in place of the connection's (`Sent`: a 1 KiB stack buffer, every
+    byte passed through, the protocol's chunk headers formatted in it as in
+    the connection's). It notes whether any byte was written, and gives
+    the connection's back, its buffer passed on unflushed, before the host
+    flushes or serves a kept stream. The 500 goes out only when no byte did.
+    Red: a move whose `actions.dsl` is a folder (the append fails after the
+    body was read) got nothing. A handler that answered and then failed is
+    not answered twice. Through the port, locally, gopher.elf builds.
+  - **(c), (f)** metal-vmm `0662122`: a read-back not 200 passes when the
+    run was not told TOLD and the pristine volume's read-back answered the
+    same (`new-session`'s 404). Told, it must still be 200 and hold MARK. A
+    read-back 5xx after a fired `VOLUME_CACHE=lie` that lost sectors is the
+    lie's ("VOLUME_CACHE=lie (the read-back failed, 500)"), in a durable
+    shape and the POST sweep alike.
+  - **(h)** metal-vmm `eed1a41`: a shape of n clients asking k times boots
+    from a copy of the site whose `gopher-metal.conf` says `requests = n x
+    k` (`tools/site_requests.py`), and says so ("shape two-clients: the
+    site raised to 2 requests"). The number is written over the old one's
+    digits, padded with spaces the parser trims, so the file keeps its
+    length and no entry, cluster or FAT changes; more digits than were
+    there, or no `requests` line, is refused. Soundness and untouched files
+    are judged against that copy; the repeat line names it, and now puts
+    the volume in `VOLUME=`, where metal-vmm takes it. Red: the fake
+    machine now serves client 1 alone on an unraised site, and shape p's
+    unhurt run answered `200,0` as yours did. The tool's own tests build a
+    volume with the conf under its long name: only the digit's byte
+    changes, and the volume checks clean. **Not run on a guest**: the real
+    site's conf is read through fat16_read.py, GPT and all.
+  - **(d), (e), lesser** metal-vmm `bf789a7`. (d) After an earlier client
+    in turn differed, a later one may answer what the shape's
+    `UNMADE=<status>[,...]` names (`session-then-move` says 404), or what
+    its own faults excuse; nothing else. (e) Client 1's reset no longer
+    excuses another client's lesser answer; its vanish still does, since
+    it holds the guest's one connection. (lesser) untouched.py runs after
+    every cut, either disk's or the exit's, not only when fsck reported
+    leftovers.
+  - **(g)** gopher-metal `1ce36b8`: the pin's comment says it stays green
+    under "merge toward allocated" and goes red under "keep each copy's
+    own", and why a tie's difference is a neutral one (a freed cluster a
+    file holds breaks that copy's chain, so the other wins outright): a
+    fix is judged by its own red test.
 
 - **(CC, item 126) Every client judged.** metal-vmm `0c7ee1b`, `0db9f88`.
   - **The files:** `PEER_BODY` and `PEER_RESPONSE` stay the first client's;
