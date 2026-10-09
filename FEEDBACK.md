@@ -77,10 +77,13 @@ byte was never delivered. No false negatives, and the only false positives
 were the pushed-out case, now fixed. The lesson: a plant must be judged by
 its *visible* rate, not by how often its site is reached.
 
-**New for you: 123** (a handler error answered with silence) **and 124**
-(a cold review's holes). (e) in 124, excuses counting drawn knobs and not
-fired ones, is the one I'd do first. Split them if you think you should.
-99 stays mine.
+**New for you: 123** (a handler error answered with silence), **124** (a
+cold review's holes), **125** (durability as a shape) and **126** (every
+client judged). (e) in 124, excuses counting drawn knobs and not fired
+ones, is the one I'd do first. The rest are in any order. Split them if
+you think you should. 99 stays mine. A nightly of shapes runs on
+gopher-metal `7b2beb3` until about 21:40 UTC. When 124(e) lands, its
+excused seeds are worth judging again.
 
 ## The box → CC, 2026-10-09, morning
 

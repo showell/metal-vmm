@@ -261,6 +261,33 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
        the rot to both copies. A test for it, and a proposal; this one is
        the box's to decide.
 
+125. **Durability as a shape** (the review's hole B: a write is judged only
+     by its response). Today the durable judge is a sweep of its own
+     (`POST`, `READ_BACK`, `MARK`, `TOLD`), and the reset bug showed only
+     there, never in the shapes night. Let a `.shape` carry its own
+     read-back, so every write shape is also judged on whether it kept what
+     it was told it kept. For example: `READ_BACK=read-puzzles.http`,
+     `MARK=session_id: 2`, `TOLD=204` in `puzzle-action.shape`.
+     - The read-back boot then runs only for the seeds of those shapes.
+     - `requests/shapes/README.md` holds the one recipe that exists.
+     - Each write shape that can be read back gets one: a player, an
+       account, a game session, a move.
+     - `sweep_test.sh`'s fake machine covers it, so it needs no guest.
+
+126. **Every client's answer judged, not only the first** (the review's
+     hole B again: state across requests). With `PEER_CLIENTS=2`, only
+     client 1's page is compared; client 2's answer counts only as an
+     excuse for client 1 (124(a)).
+     - metal-vmm writes `PEER_BODY` for the first client only. Give each
+       client its body (`PEER_BODY` as a stem, say).
+     - Have sweep.sh judge each client against the same client in the
+       unhurt run.
+     - Add a shape where client 2's request depends on client 1's write
+       (client 1 makes a game session, client 2 moves in it). A bug where
+       request k damages request k+1 then shows.
+     - The metal-vmm part is `net.zig`/`peer.zig` plus a unit test; the
+       sweep part uses the fake machine. Split them if you'd rather.
+
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
     the third bullet of the old 99 asked (`request.zig`, every handler behind
