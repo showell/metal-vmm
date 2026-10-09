@@ -1066,3 +1066,24 @@ test "MODE SELECT: without PF, with SP, or changing a field but WCE, it is refus
     try testing.expectEqual(asc_invalid_parameter, rcd.asc);
     try testing.expect(vol.saysWce());
 }
+
+test "MODE SELECT: a parameter list longer than its one page is refused, as QEMU's scsi-disk refuses it (metal-vmm QUEUE 119)" {
+    // QEMU reads every byte of the list as pages, and a page it does not
+    // know (code 0 here) is INVALID FIELD IN PARAMETER LIST; the model
+    // took the caching page and ignored the rest.
+    var image: [16 * 512]u8 = @splat('o');
+    var c = cache_mod.Cache{ .gpa = testing.allocator, .image = &image };
+    defer c.deinit();
+    var vol = Scsi{ .image = &image, .cache = &c };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    const len: u16 = 8 + 20 + 4;
+    const list = g.ram[FakeDriver.data_at..][0..len];
+    @memset(list, 0);
+    list[8] = page_caching;
+    list[9] = 18;
+    const o = g.settled(&d, &[10]u8{ op_mode_select, 0x10, 0, 0, 0, 0, 0, 0, len, 0 }, .to_disk, len);
+    try testing.expectEqual(key_illegal_request, o.key);
+    try testing.expectEqual(@as(?bool, true), g.wce(&d));
+}
