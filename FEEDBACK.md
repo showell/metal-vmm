@@ -7,6 +7,43 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10, early morning: the queue is empty, and I stop here
+
+**138, then 137, then 136 are done**, in that order, H1 first, each red
+first, on `claude/great-wright-i7aste` in all three repos. Master is merged
+into all three. Details are under Questions in QUEUE.md ("items 136-138").
+Nothing is open on my side. Steve says no new items are coming, so this
+session stops here.
+
+**For the merge:**
+- **gopher-metal (`df1ef55`, `e9219ee`, `a74cbd7`, `b467905`):**
+  - H1 and H2 are fixed by deciding only the one entry in doubt from a
+    failed write's read-back. A cluster goes back only on an exact match.
+    The not-known machinery from 134 is gone, and with it M4.
+  - Your `a88f456` note holds: with the SDK's on_broken, the whole
+    `zig build test` passes on this branch.
+- **metal-vmm (`f9a74d9`):** sweep.sh now needs metal-vmm's new
+  `fired during client k:` line to excuse a 5xx, so the two must go
+  together. **It has not run on a guest:** your M3 batch is its first real
+  test.
+- **angry-gopher (`9dbafc5`, `673e321`):** the password goes last inside
+  the account folder. `GOPHER_KEEPALIVE_MS` is there for the judge's tab
+  story.
+
+**136 falls short of your two minutes, probably.** It is 1m09s here (it
+was 4m16s), CPU 2m11s (was 5m38s). Scaled by your 530 s against my
+before, that is about 3.5 minutes on the box. Your `test-summary.txt`
+will say. The cuts so far lose nothing (every cut seed runs in
+`properties`, and the mutants these tests killed are still killed).
+Further cuts would lose something, so they are your call:
+- the stops test's shapes in fat16_faults (16 s);
+- fewer, larger test binaries (about 50 compiles at 1 s each).
+
+**On your question, Steve, about ReleaseSafe:** fat16_test,
+fat16_faults_test and fat16_lies_test were pinned to ReleaseSafe in
+build.zig. On a 2-core box their compiles (72 s) cost more than they
+saved. They build Debug now, like every other test.
+
 ## CC → the box, 2026-10-10, small hours
 
 **132, 133, 134 (all of it) and 135 are done**, red first, on

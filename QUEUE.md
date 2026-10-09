@@ -513,7 +513,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
        `FAILED_SEEDS: 3 17 42`, which `plants.sh` and `nightly.sh` read
        instead of the human table.
 
-136. **`zig build test` in gopher-metal costs the box 530 s** (the box,
+136. **Done (CC, 2026-10-10): gopher-metal `a74cbd7`, `b467905`; 4m16s to 1m09s here, CPU 5m38s to 2m11s (Questions, "items 136-138").** **Was:** **`zig build test` in gopher-metal costs the box 530 s** (the box,
      2026-10-09, evening; Steve wants it fast before the next release
      run). It was 77 s at v18, then 162, 326, 446, 530; your container
      reports 3m07s, and the box has 2 cores. No test sleeps on wall time,
@@ -526,7 +526,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      say in the commit what moved where, and the before/after numbers.
      The box's goal: under two minutes there.
 
-137. **A keepalive setting for angry-gopher's Linux server, for tests**
+137. **Done (CC, 2026-10-10): angry-gopher `673e321`, `GOPHER_KEEPALIVE_MS` (Questions, "items 136-138").** **Was:** **A keepalive setting for angry-gopher's Linux server, for tests**
      (the box, 2026-10-09; Steve: "configure for tests"). The chat tab's
      keepalive is fixed at 25 s on Linux, so the judge's tab story waits
      27 s on each host. gopher-metal's kernel already takes `keepalive_ms`
@@ -534,7 +534,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      other test settings arrive), default unchanged, with a test that the
      setting governs. The box changes the judge to use it.
 
-138. **First: the cold review of 132-135, and check-cc.sh's first run**
+138. **Done (CC, 2026-10-10): (a)-(c) and (f)'s fat16 part gopher-metal `df1ef55`; (d) metal-vmm `be28b97`, `f9a74d9`; (e) and `tcp_test` gopher-metal `e9219ee`; (f)'s angry-gopher part `9dbafc5`; each red first (Questions, "items 136-138").** **Was:** **First: the cold review of 132-135, and check-cc.sh's first run**
      (the box, 2026-10-09 evening). gopher-metal is **not merged**: H1 is
      a data-loss path, and your branch no longer merges with master's
      `16494c3`/`315386e` (the free count is `derive()`'s now; the hint is
@@ -742,6 +742,79 @@ runs on the host, and each would start from a red test.
 ## Questions
 
 *(Either side, with a reproduction where there is one.)*
+
+- **(CC, items 136-138)** Master is merged into all three branches
+  (gopher-metal through `a88f456`). Every gopher-metal check below ran
+  against zig-coverage-sdk `c7baca9` (on_broken).
+  - **138(a) H1 (`df1ef55`):** whole-sector adoption is gone (adoptSector,
+    knowSector, `fat_unknown`). After a failed write of the first copy,
+    `landed()` reads the sector back into scratch and looks at the **one
+    entry in doubt** only. Exactly the old value: not landed, and the held
+    entry is put back. Anything else (the new value, rot, or a failed
+    read-back): taken as written. The held FAT stays the authority for
+    every other entry. Red: a rotten read-back (`then_garbage`), then
+    write on, remount and check. Copies 1..n are then written from the
+    held sector (`writeCopies`), so (f)'s "left unwritten and uncounted"
+    is gone too.
+  - **(b) H2:** a cluster goes back only when the read-back is exactly
+    the value written (`isEnd` for an end mark). Anything else is a counted
+    leak (`leftLeaked`, `cleanups_failed`). Red: the FAT on the disk, two
+    rotten read-backs, a neighbour's file checked whole.
+  - **(c) M4:** gone with the not-known machinery: nothing is left
+    "unknown" to clear.
+  - **(d) M2 (`f9a74d9`):** metal-vmm's `reports.During` marks, before each
+    entry to the guest, the disk and volume faults whose counts moved,
+    against every client then between its open and its last answer. It
+    prints `metal-vmm: fired during client k: ...`, and sweep.sh excuses a
+    5xx only by a fault on that line. A client opened and waiting behind
+    another is marked too, so it errs toward excusing. Red: fake seed 58
+    (a volume refusal at boot, then a 500). **Not run on a guest** (no
+    KVM here): your M3 batch is the first to print the line. Older
+    metal-vmm builds print no such line, so against one every 5xx now
+    fails.
+  - **(e) M1 (`e9219ee`):** the reserve is judged in bytes by the file an
+    allocation makes. Small is 64 KiB (`small_bytes`) whatever the cluster
+    size. An append counts its file's size after, so a log grown a cluster
+    at a time is refused at the reserve like one write of it. An overwrite
+    counts what it leaves once its old chain is freed (counted from the
+    old size, a lower bound), so one that frees as much as it takes goes.
+    A directory's growth is always small. Red: all three, on both shapes.
+    The 132 test now says its sizes in bytes.
+  - **(f):**
+    - `tcp_test`: `==`, and it holds.
+    - **angry-gopher (`9dbafc5`):** `users.removeAccount` removes every
+      other file in `auth_root/<id>`, then the password, then the folder.
+      The release and the retire both use it. The test refuses each of 30
+      files in turn by name (std's deleteTree asks by name alone). The
+      old walk was red here, as `password` is last in this disk's order
+      only one time in 31.
+    - **The swallowed-write plant** is caught only by shapes with a
+      read-back: noted, nothing changed.
+  - **137 (`673e321`):** `GOPHER_KEEPALIVE_MS=<ms>` in the server's
+    environment, as its other settings arrive. Unset keeps 25 s; 0 or not
+    a number refuses to start. The test times an empty subscriber at
+    200 ms. gopher.elf still builds through port.sh (bus.zig gains a
+    `pub var`; the kernel still reads `keepalive_s` for its default).
+  - **136 (`a74cbd7`):**
+    - **Before:** 4m16s here (CPU 5m38s). fat_sim's run was 150 s, of which
+      135 s was its 40-seed tape replay. store_sim's was 55 s. The three
+      fat16 binaries' ReleaseSafe compiles were 72 s.
+    - **After:** 1m09s (CPU 2m11s). The replays are `replaysExactly`: test
+      runs one seed, properties 40 (fat) and 20 (store) as named alwayses.
+      fat_sim's plain and probe seeds go from 1..8 to 1..2 (properties:
+      1..20). store_sim's go from 1..20 to 1, 2 and 5 (5 kills mutant S4;
+      properties: 1..1000). The cached-disk test stops at its first break.
+      fat16_test, fat16_faults_test and fat16_lies_test build Debug.
+    - **Mutants:** S4, S10, F5 and F9 are each re-checked killed.
+    - **Estimate for the box:** your 530 s was about 1.6 × my CPU time, so
+      expect about 3.5 minutes. That is short of your two. What is left:
+      about 50 binaries at 1 s of compiling each, and runs of fat16_faults
+      16 s, fat16_test 11, fat16_lies 11, store_sim 12 and tcp_sim 10 (its
+      named regression seeds). The next cut would be the stops test's
+      shapes or merging test binaries; neither is done, as each loses
+      something or moves more than 136 asked.
+    - **properties now costs about 2 more minutes in Debug** for the 60
+      replays (long.sh builds it ReleaseSafe).
 
 - **(CC, items 132-135)**
   - **132 (`9e7d8e9`):** `Volume.reserve_clusters` is 64 MiB of clusters
