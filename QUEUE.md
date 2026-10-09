@@ -21,7 +21,10 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
 **v21 serves** (deployed 20:11 UTC; gopher-metal `81d7a35`, angry-gopher
 `a30a1542`); master is `next` in both repos, and `next` is gone. On master
 for v22: tcp's duplicate-ACK cap, Karn on a resent SYN-ACK, and the
-disk_fat fixes since. **Overnight, CC has 139-142** (below), and owns the
+disk_fat fixes since. **The v22 candidate is being judged overnight**
+(gopher-metal `b4463a9`, angry-gopher `51713cd6`: gates, long, then the
+image if both pass; `~/release-v22/status` on the box). None of CC's
+overnight work is in it. **Overnight, CC has 139-142** (below), and owns the
 files they touch until it stops. The conversation between the two Claudes
 is `FEEDBACK.md`.
 
@@ -661,6 +664,8 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
 
 Each line's full text, with its history, is in the archive under its name.
 
+- **B30 (2026-10-09): `tools/mutate_guards.py`'s 21 FAT mutants are stale.** Their anchors predate the guard rewrite and the rename to `disk_fat.zig`, so they no longer apply. Make them again against today's code, or delete the ones the faults tests now cover by name.
+- **B31 (2026-10-09, Steve's open question): a `gates.sh` line that fails when `zig build test` exceeds a time budget**, so the suite's cost can't creep back up (530 s at v21; 194 s after 136; 3m19s on the box tonight). Wait for 142's number, then decide the budget with Steve.
 - **B29 (2026-10-09, found moving the slow-reader gate): stray resets after a reader that paused.** A client that shuts its window for 2.5 s mid-page (`PEER_SHUT_AFTER=4096 PEER_SHUT_FOR_US=2500000`, the 231 KB `requests/big-page.http`) gets the whole page, but the guest's tcp line then counts 8 strays reset (none unhurt), with 4 timeouts resent. Something reaches the guest for a connection it no longer holds: either the peer keeps talking after it is done, or the guest forgets a connection the peer is still owed (TIME-WAIT's ACK, say). Find which, from a frame trace; a peer fault is fixed here, a guest one becomes a red test in gopher-metal.
 - **B28, done (2026-10-09, metal-vmm `a92ca03`, gopher-metal `21b1e47`): the coverage door.** A coverage boot is now 6,660 exits to the release kernel's 6,256, with the same page. `nightly.sh` takes `KERNEL_ELF` and `PEER_REQUEST`. **Was:** the sweeps judged no coverage property (found 2026-10-09).
   `sweep.sh` and `nightly.sh` run gopher.elf as a release builds it. Its
