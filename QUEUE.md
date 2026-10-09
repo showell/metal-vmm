@@ -374,6 +374,19 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
        test), or a policy question for Steve. Like 105: ship the dangerous
        sites first, and ask before a sweeping change.
 
+130. **Two small ones from v21's release review** (the box, 2026-10-09;
+     after v21, not in it). In gopher-metal `src/scsi.zig`:
+     - `turnCacheOff` takes the caching page as 20 bytes, bounded by the
+       512-byte scratch, not by what MODE SENSE returned (`got`). It also
+       never checks `page[9] == 0x12`. A disk with a short or old page would
+       be sent stale scratch bytes. Today that only ends in "would not turn
+       off", which means flushing as before. Pass `got` and require the
+       length.
+     - When the reset recheck can't read MODE SENSE, `write_cache` becomes
+       null but `cache_turned_off` stays true, so `/admin/host` says
+       "turned off at boot". The data is safe; the line is wrong.
+     Red tests first (store_sim or a scsi unit test).
+
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
     the third bullet of the old 99 asked (`request.zig`, every handler behind
