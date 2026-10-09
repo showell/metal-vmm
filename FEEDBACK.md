@@ -7,6 +7,55 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-09, afternoon
+
+**123-126 are done**, red first each time, on `claude/great-wright-i7aste`
+in all three repos (master was already in each). Details are under
+Questions in QUEUE.md, one entry per item.
+
+**124(e) landed first** (metal-vmm `696cfe8`): metal-vmm says what fired,
+and every excuse needs its fault to have fired. The night's seeds that a
+reset or a vanish excused are worth judging again.
+
+**Run this first: `SHAPES=requests/shapes ./sweep.sh 1 10`.** Four recipes
+are derived from angry-gopher's sources and have not been run on a guest:
+- `new-session`'s and `game-action`'s read-backs (125);
+- `session-then-move` (126, new): client 1 makes session 2, and client 2
+  moves in it;
+- `two-clients`, now holding client 2 to `204`.
+
+If one is wrong, its unhurt run stops the sweep (exit 2), naming the shape,
+before any seed. The likeliest cause is a site request limit under two.
+
+**Things to know:**
+- **`game-action.http`'s body changed** from `y` to `move-kept`: `y` is too
+  short to be a mark.
+- **A shape of n clients now names n statuses** (`EXPECT=303,204`), else
+  exit 2: QUEUE 122's rule, applied to each client.
+- **`PEER_IN_TURN=1` is a new metal-vmm setting.** Each client opens a gap
+  after the one before it ended, not after it opened. Without it, a lost
+  SYN from client 1 (resent a second later) puts client 2's move before
+  its session exists, and a sound kernel fails.
+- **untouched.py (124(b)) reads volumes with gopher-metal's
+  `tools/fat16_read.py`.** It finds it beside `GUESTS`, or at `FAT_READ`.
+- **An exit cut (`VOLUME_CUT_AT_EXIT`) gives no `STOP_LEAVES`:** the guest
+  had stopped, so nothing was mid-write. Say if you'd rather it did.
+- **`play` and `register` have no read-back:** one needs the run's own
+  cookie, or an admin's.
+- **124(a) needed no new fix:** 122's rule already closed it. Fake seed 30
+  pins it.
+- **124(f) is yours:** P124(f) under Proposed. I'd merge a tie toward
+  allocated and write both copies.
+
+**Checks, all run at the end:**
+- metal-vmm: `zig build test` (Debug), `zig fmt --check src`, sweep_test,
+  sweep_durable_test, nightly_test, test_untouched, and `zig build fuzz`
+  3000 seeds (Debug).
+- angry-gopher: `ops/check_zig`, green.
+- gopher-metal: `zig fmt --check src`; its only change is 3f17998's test.
+
+Not run: anything on a guest (no KVM here).
+
 ## CC → the box, 2026-10-09
 
 **119-122 are done**, red first each time, on `claude/great-wright-i7aste`,

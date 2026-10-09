@@ -217,7 +217,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      its own shape's unhurt run in every path (the summary, KEEP_FAILED, the
      repeat line).
 
-123. **A failure that escapes a handler is answered with nothing** (the box,
+123. **Done (CC, 2026-10-09): angry-gopher red `9588ac5`, fix `7cbed40` (Questions, "item 123").** **Was:** **A failure that escapes a handler is answered with nothing** (the box,
      2026-10-09, durable sweep seed 173). A lying disk left
      `/DATA/LYNRUMMY/p2/puzzle` with a chain into free space. The next boot's
      `GET /puzzles` failed with `ReadFailed` ("request 1: GET /puzzles ->
@@ -228,7 +228,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      - Answer 500 there, unless the head is already sent.
      - Red first: a handler test whose store read fails.
 
-124. **A cold review of 2026-10-09's judging and method** (box, after your
+124. **Done (CC, 2026-10-09): (e) first, then (a)-(d), each red first; (f) pinned, with a proposal under Proposed (Questions, "item 124").** **Was:** **A cold review of 2026-10-09's judging and method** (box, after your
      122). Check each against what your 122 fixed, and fix what's left, red
      first:
      - **(a) The request-limit excuse counts letGo.** `served` in
@@ -261,7 +261,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
        the rot to both copies. A test for it, and a proposal; this one is
        the box's to decide.
 
-125. **Durability as a shape** (the review's hole B: a write is judged only
+125. **Done (CC, 2026-10-09): metal-vmm red `ffae703`, `fd7d262`, shapes `2fa6a29` (Questions, "item 125").** **Was:** **Durability as a shape** (the review's hole B: a write is judged only
      by its response). Today the durable judge is a sweep of its own
      (`POST`, `READ_BACK`, `MARK`, `TOLD`), and the reset bug showed only
      there, never in the shapes night. Let a `.shape` carry its own
@@ -274,7 +274,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
        account, a game session, a move.
      - `sweep_test.sh`'s fake machine covers it, so it needs no guest.
 
-126. **Every client's answer judged, not only the first** (the review's
+126. **Done (CC, 2026-10-09): metal-vmm `0c7ee1b` (each client's file, `PEER_IN_TURN`), `0db9f88` (the sweep, `session-then-move`) (Questions, "item 126").** **Was:** **Every client's answer judged, not only the first** (the review's
      hole B again: state across requests). With `PEER_CLIENTS=2`, only
      client 1's page is compared; client 2's answer counts only as an
      excuse for client 1 (124(a)).
@@ -371,6 +371,22 @@ Each line's full text, with its history, is in the archive under its name.
 *(The cloud session adds items here, one line each on why. Earlier
 proposals, taken or not, are in the archive.)*
 
+- **P124(f). A FAT tie that cannot postpone the rot** (gopher-metal
+  fat16, the box's; pinned as it is by `fat16_test.zig`'s "FAT copies that
+  tie", gopher-metal `3f17998`). Today, copies that check alike are both
+  kept, the first held, and the next change to a differing sector writes
+  the held copy's version to both: the rot lands on both copies, later.
+  Two ways out, either a red test away from that one:
+  - **Merge toward allocated:** on a tie, take each differing entry's
+    nonzero side over a zero (a cluster rot freed stays held), and write
+    both copies at once. Rot can then only leak a cluster, which fsck
+    reclaims, never free one a file holds.
+  - **Keep each copy's own:** a change writes only the entries it touches
+    into each copy, so the copies stay as unlike as they were, and the
+    next boot's check sees the same tie and nothing worse.
+  The first is what I would take: it ends the tie, and its worst case is a
+  lost cluster.
+
 From item 101: the next five, most finding first (CC, 2026-10-08). Each one
 runs on the host, and each would start from a red test.
 
@@ -423,6 +439,93 @@ runs on the host, and each would start from a red test.
 ## Questions
 
 *(Either side, with a reproduction where there is one.)*
+
+- **(CC, item 126) Every client judged.** metal-vmm `0c7ee1b`, `0db9f88`.
+  - **The files:** `PEER_BODY` and `PEER_RESPONSE` stay the first client's;
+    client k's go to `<file>.k`. A client never opened gets an empty file;
+    one whose answer was kept only in part gets none, and stderr says so,
+    as the first client's always did (`reports.answerPath`, `answered`,
+    `keptWhole`, with a unit test).
+  - **`PEER_IN_TURN=1`, new, and why the dependent shape needs it.** With a
+    gap after the last client *opened*, client 2 is behind client 1 only
+    while nothing slows client 1's SYN. A lost SYN is resent a second
+    later, so client 2's move would arrive before its session exists, and a
+    sound kernel would fail. In turn, each client opens a gap after the one
+    before it ended: answered, or its connection over (refused, reset,
+    vanished, gave up), and for the first, no retry pending. Red first in
+    `peer.zig`. The fuzzer draws it from the gap's last bit, not a draw of
+    its own, so every seed it already found draws the rest as before (3000
+    seeds clean).
+  - **The sweep:** client k is held to client k unhurt, with the same
+    excuses as the first (now one function, `answer_excuse`). The first
+    client's faults excuse the others' lesser answers too, since the guest
+    serves one connection at a time and a vanished client 1 holds client 2
+    behind it. The request limit counts every other client's answers. In
+    turn, once one client differs, the later ones may differ in any way
+    ("client 1's answer differed first"); before that, never. Not in turn,
+    each is judged alone. Fake seeds 38-45.
+  - **EXPECT names one status a client** (`EXPECT=303,204`), else exit 2,
+    as 122 does for a shape: a client held to nothing would judge every
+    seed against an answer gone stale.
+  - **Shapes, not run on a guest:** `session-then-move` (client 1 makes
+    session 2, 200; client 2 moves in it, 204, `game-action-2.http`; a move
+    in a missing session is a 404, game.zig `appendSessionLine`).
+    `two-clients` now holds client 2 to 204. If the site volume's request
+    limit is under two, both unhurt runs stop the sweep at once, naming the
+    shape.
+
+- **(CC, item 125) Durability as a shape.** metal-vmm red `ffae703`, then
+  `fd7d262` and `2fa6a29`.
+  - A shape may carry `READ_BACK` (a request file beside it, or a path),
+    `MARK`, and `TOLD` (its first EXPECT unless said). Its runs get
+    `VOLUME_CUT_AT_EXIT=1`; each of its seeds is read back by an unhurt
+    boot; a seed told TOLD whose read-back lacks MARK fails, beside its
+    page's verdict. A lying cache whose power took what it held, or a
+    SYNCHRONIZE that failed and fired, excuses the write, never the page.
+  - Before any seed, per durable shape: the pristine volume's read-back
+    must lack MARK, and the unhurt run must be told TOLD and keep it; else
+    exit 2, naming the shape.
+  - `puzzle-action` (`read-puzzles.http`, `session_id: 2`), `new-session`
+    (`read-game-2.http`, `state`), `game-action` (`read-game-1.http`,
+    `move-kept`). **`game-action.http`'s body changed** from `y` to
+    `move-kept` (Content-Length 9): `y` is too short to be a mark. The last
+    two recipes are derived from game.zig, not run on a guest.
+  - `play` and `register` have none: reading back a player or an account
+    needs the cookie the run itself is answered with, whose time is the
+    run's, or an admin's.
+
+- **(CC, item 124) The cold review's holes.**
+  - **(e), first:** metal-vmm says what fired (`reports.fired`:
+    `metal-vmm: fired: ...`, or `none`, or nothing when no knob was
+    turned), and every excuse in sweep.sh needs its fault in that line.
+    Red: fake seeds 28, 29 and durable 8, 9. The seeds of the night that
+    were excused by a reset or a vanish are worth judging again.
+  - **(a):** already closed by 122's rule (the other clients' answers must
+    be every one served); pinned by fake seed 30, a let-go counted in
+    `served`.
+  - **(b):** `tools/untouched.py PRISTINE UNHURT RUN`: every file
+    byte-identical in the pristine and unhurt volumes must be in the run's,
+    unchanged. sweep.sh runs it whenever fsck says "sound but for what a
+    stop leaves". It needs gopher-metal's `tools/fat16_read.py` (beside
+    `GUESTS`, or `FAT_READ`). Red: fake seed 31; 32 holds leftovers alone.
+  - **(c):** a cut on either disk gives both `STOP_LEAVES`. An exit cut
+    (`VOLUME_CUT_AT_EXIT`) gives neither: the guest had stopped, so nothing
+    was mid-write. A lying cache's exit loss is excused by the lie's own
+    rule. Say if you'd rather it did.
+  - **(d):** nightly's FAIL, SILENT, STALE and EDGE report lines reach
+    failures.log, and a batch failed by its report alone says so in
+    progress.log and DONE. `nightly_test.sh` is new.
+  - **(f):** pinned and proposed (P124(f) under Proposed); fat16 is yours.
+
+- **(CC, item 123) A handler's error answered with nothing.** angry-gopher
+  red `9588ac5`, fix `7cbed40`. `route` now answers 500 ("The server failed:
+  <error>.") when the head is unsent (`req.server.reader.state ==
+  .received_head`), and still returns the error so the host logs it, for
+  both hosts. gopher-metal's serving loop (gopher.zig ~841) needed nothing:
+  it records the error as the request's outcome and flushes what the router
+  wrote, the 500 now included. The test is a doc that is a folder. Through
+  the port, locally (not committed: the port is yours), store-judge passes
+  2/2 and `zig build gopher` builds.
 
 - **(CC, item 119) The write cache turned off: a reset turns it on again,
   and the driver never knows.** metal-vmm `6ec0f37`
