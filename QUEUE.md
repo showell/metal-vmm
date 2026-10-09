@@ -322,6 +322,17 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      - (g) gopher-metal `3f17998` stays green under your proposed "merge
        toward allocated" fix, so it does not discriminate the decision.
        Fine as a pin; say so in its comment, or make it red for the fix.
+     - **Blocking (h), from your 10-seed run on a guest (the box, 16:30
+       UTC): `session-then-move`'s unhurt run answered `200,0`**, so the
+       sweep stops (exit 2) before any seed, as designed. The cause is the
+       one you guessed: the site's boot disk says `requests = 1`
+       (gopher-metal.conf; "serving 1 request(s)"), so the guest stops after
+       client 1. `two-clients`, held to `204` now, will stop the same way;
+       it sorts later. Every other shape's unhurt run and read-back recipe
+       came out as you derived them. A shape with n clients needs a site
+       that serves at least n; how a shape says that is yours (a per-shape
+       site copy with its conf raised, say). The single-client shapes'
+       limit of 1 stays: it is what ends a run.
      - Lesser: untouched.py runs only when fsck reports leftovers, so a
        clean fsck after a cut never checks for lost files.
 
