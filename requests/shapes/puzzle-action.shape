@@ -1,3 +1,6 @@
 # a puzzle session made by its first move: the most writes
 PEER_REQUEST=puzzle-action.http
 EXPECT=204
+# kept as told (metal-vmm QUEUE 125): the recipe the README gives
+READ_BACK=read-puzzles.http
+MARK=session_id: 2

@@ -1,3 +1,7 @@
 # a move appended to the setup's game session
 PEER_REQUEST=game-action.http
 EXPECT=204
+# kept as told (QUEUE 125): the move ("move-kept") in session 1's action log;
+# derived from game.zig, not yet run on a guest
+READ_BACK=read-game-1.http
+MARK=move-kept

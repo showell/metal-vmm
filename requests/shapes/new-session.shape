@@ -1,3 +1,7 @@
 # a game session made, as the setup's player
 PEER_REQUEST=new-session.http
 EXPECT=200
+# kept as told (QUEUE 125): session 2 (the setup made 1), its meta holding
+# the body sent ("state"); derived from game.zig, not yet run on a guest
+READ_BACK=read-game-2.http
+MARK=state
