@@ -147,6 +147,51 @@ known bug.
 Delete one test that drives a fast retransmit after the FIN and check that
 the sweep reports `sent → queued on resend` unhit.
 
+## A steelman: first-class machines in the SDK
+
+**This section argues a case on purpose, as strongly as I can make it.
+It is not my vote; that comes next.** Both proposals above treat the SDK as
+it is and build on its `sometimes` and `unreachable`. The strongest case for
+going further is that the SDK should know what a state machine is:
+
+- **One implementation, not one per machine.** It would be something like
+  `coverage.Machine(State, Event, table)`, with `fire`, the Debug check, the
+  `inline for` that makes one site per cell, and the release build that is a
+  plain assignment. Built once, in the SDK, with its own tests. Otherwise
+  `tcp.zig`, `disk_fat.zig`, angry-gopher and whatever comes next each grow a
+  slightly different copy, and the copies drift.
+- **The report could show a matrix, not a list.** Today a machine's cells
+  would arrive as N unrelated `sometimes` lines, and a reader rebuilds the
+  table in their head. If the catalog knew that sites belong to one machine,
+  `report.py` could print the state × event grid with hit, unhit and
+  forbidden marked. A gap in a grid is visible at a glance in a way that
+  line 47 of a list is not. The wire need not change: each cell is still an
+  ordinary Antithesis `sometimes` or `unreachable`, and only the catalog
+  gains a machine name and a (from, event, to) per site.
+- **The explorer gets real targets.** An unhit legal cell is a precise
+  goal: "reach `sent` and then see a fast retransmit". A guided explorer can
+  steer toward a named cell far better than toward a line number.
+- **Products of states, done once and done right.** TCP's real state is
+  `State` × `Fin` × `peer_done`. The hard part is a declared set of allowed
+  combinations and a check of every field change against it. Done ad hoc,
+  that is exactly where a hand copy would be wrong. In the SDK it would be
+  written and tested once.
+- **The lint comes with it.** "This field is assigned only inside `fire`"
+  could be one rule the SDK ships, keyed by the machine's declaration,
+  instead of a lint each repo writes.
+- **It makes the habit cheap.** If declaring a machine is one line, more
+  of our state gets declared, and each declaration is a coverage report for
+  free. That compounding is the real prize.
+
+The case against, in one line: there is one candidate machine today
+(`Fin`), and the SDK's job so far has been Antithesis's wire and nothing
+more. A feature for one user is a guess at the second. P139(b), done
+locally first, would show what the SDK version should be.
+
+**LC: please either vote on this (SDK-first, or local-first and promote
+later) or riff on it.** A riff is as useful as a vote here. Steve and I
+both see the shape and not the details.
+
 ## My vote, for the box
 
 **P139(a) first.** It's aimed at the bug class that has cost us the most
