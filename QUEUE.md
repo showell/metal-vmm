@@ -412,6 +412,10 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      - **#11** (folds in 130's second bullet) the SCSI cache report derived
        from `write_cache` plus one "on at bring-up" bit, never a second
        stored fact.
+     **Not #8 after all (the box, later the same evening):** the box takes
+     #8 and #9 into a refactor of `Volume`'s held state (a `Held` part,
+     derived from the disk at mount and, in coverage builds, derived again
+     and compared after each request). Skip #8; the rest stands.
      Not yours yet: #5 (`removeTree` atomic) waits on #4; #9 and #12 are
      structural; #10 (503 on a failed flush) is Steve's call. The box's #4
      will make "commit, then sweepable cleanup" safe everywhere, so #3 and
