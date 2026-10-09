@@ -596,6 +596,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
 
 Each line's full text, with its history, is in the archive under its name.
 
+- **B29 (2026-10-09, found moving the slow-reader gate): stray resets after a reader that paused.** A client that shuts its window for 2.5 s mid-page (`PEER_SHUT_AFTER=4096 PEER_SHUT_FOR_US=2500000`, the 231 KB `requests/big-page.http`) gets the whole page, but the guest's tcp line then counts 8 strays reset (none unhurt), with 4 timeouts resent. Something reaches the guest for a connection it no longer holds: either the peer keeps talking after it is done, or the guest forgets a connection the peer is still owed (TIME-WAIT's ACK, say). Find which, from a frame trace; a peer fault is fixed here, a guest one becomes a red test in gopher-metal.
 - **B28, done (2026-10-09, metal-vmm `a92ca03`, gopher-metal `21b1e47`): the coverage door.** A coverage boot is now 6,660 exits to the release kernel's 6,256, with the same page. `nightly.sh` takes `KERNEL_ELF` and `PEER_REQUEST`. **Was:** the sweeps judged no coverage property (found 2026-10-09).
   `sweep.sh` and `nightly.sh` run gopher.elf as a release builds it. Its
   properties are recorded but never written out ("201 runs, 0
