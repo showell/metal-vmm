@@ -176,7 +176,7 @@ about the module, not a gap in the simulator. So:
   the model client went silent after TIME-WAIT, gopher-metal `02de06f`).
   Read the RFC, not the model, before calling it the code's.
 - **A simulator finds; it does not fix the code it drives.** A defect in
-  `tcp.zig`, `fat16.zig` or any module the kernel runs is a seed kept as a
+  `tcp.zig`, `disk_fat.zig` or any module the kernel runs is a seed kept as a
   named regression test, failing, plus a line under Questions. The box fixes
   it and decides whether it needs a new image for the site.
 - **Since 2026-10-06, the Store too** (QUEUE 76-81): its interface, model,

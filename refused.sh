@@ -6,7 +6,7 @@
 #   ./refused.sh gopher all             # the REAL server, on the site's volume
 #
 # One run per request: the disk answers that one with an I/O error, exactly as
-# a real one does when it cannot do the work, and the guest's own fat16.zig
+# a real one does when it cannot do the work, and the guest's own disk_fat.zig
 # turns that into ReadFailed. Outcomes are tallied rather than listed, because
 # the interesting thing about 709 runs is how many DIFFERENT things happened.
 #

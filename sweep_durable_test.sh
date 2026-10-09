@@ -61,7 +61,7 @@ esac
 echo "{\"metal_vmm_run\":{\"seed\":${s:-null},\"knobs\":\"$knobs\"}}" >> "$COVERAGE_OUT"
 echo '{"antithesis_sdk":{"language":{"name":"Zig","version":"0.16.0"},"sdk_version":"0.0.1","protocol_version":"1.1.0"}}' >> "$COVERAGE_OUT"
 # A kernel built -Dcoverage: one property, and the line metal-vmm ends with.
-echo '{"antithesis_assert":{"hit":true,"must_hit":true,"assert_type":"x","display_type":"Sometimes","message":"fat: common","condition":true,"id":"fat: common","location":{"class":"fat","function":"f","file":"fat16.zig","begin_line":1,"begin_column":1}}}' >> "$COVERAGE_OUT"
+echo '{"antithesis_assert":{"hit":true,"must_hit":true,"assert_type":"x","display_type":"Sometimes","message":"fat: common","condition":true,"id":"fat: common","location":{"class":"fat","function":"f","file":"disk_fat.zig","begin_line":1,"begin_column":1}}}' >> "$COVERAGE_OUT"
 echo "metal-vmm: coverage: 1 of 1 properties reached (1 hold, 0 broken), from 2 lines over 1 boots" >&2
 status=303
 case "$s" in

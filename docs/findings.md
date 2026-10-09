@@ -17,9 +17,9 @@ current kernel does. Commits are in the repo named.
 | a refused read of `gopher-metal.conf` reads as "no config", and `requests` defaults to forever | gopher-metal `probe/gopher.zig`, `readConfig` | **fixed** (`6b5e00f`): a missing file is the defaults; any other failure stops the boot |
 | every open failure became `FileNotFound` | gopher-metal `src/io.zig` (the port of angry-gopher's) | **fixed** (`0b36067`): a failed read is `ReadFailed` |
 | a failed topic announcement discarded with `catch {}`, after which the volume would not mount | angry-gopher `zig-server/src/chat.zig` | **fixed** (`298c0871`): `try` |
-| one refused write to the FAT's second copy, and the volume never mounts again | gopher-metal `src/fat16.zig`, `cacheFat` | **fixed** (`5f08fc5`): copies that differ are brought into line with the first at mount |
+| one refused write to the FAT's second copy, and the volume never mounts again | gopher-metal `src/disk_fat.zig`, `cacheFat` | **fixed** (`5f08fc5`): copies that differ are brought into line with the first at mount |
 | a failed read of the pinned file overwrites every pin | angry-gopher `zig-server/src/chat_state.zig`, `setSessionPinned` | **fixed** (`298c0871`): a failed read leaves the pins alone |
-| reported write failures leave leaked clusters and orphaned long names | gopher-metal `src/fat16.zig` | **partly addressed**, not re-swept: a failed allocation gives back what it took; orphaned long names are tombstoned before an entry is written after them |
+| reported write failures leave leaked clusters and orphaned long names | gopher-metal `src/disk_fat.zig` | **partly addressed**, not re-swept: a failed allocation gives back what it took; orphaned long names are tombstoned before an entry is written after them |
 | a failed write closes the connection with no response | angry-gopher's host contract | **a design decision**, not rechecked |
 
 Two more were in this program, and are fixed here: a serial port that did not
@@ -304,7 +304,7 @@ same application sits on a journalling filesystem; on bare metal it sits on
 this. A reported write failure is not a crash, so the code that knows a write
 failed could undo what it began.
 
-**Partly addressed, not re-swept.** gopher-metal's `fat16.zig` now gives back
+**Partly addressed, not re-swept.** gopher-metal's `disk_fat.zig` now gives back
 a chain whose allocation fails part way ("a failed allocation leaves nothing
 behind", `allocChain`), and tombstones live long-name parts left before a free
 slot before writing an entry there (`writeEntry`). The FAT copies are the

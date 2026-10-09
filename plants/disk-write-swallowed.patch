@@ -1,8 +1,8 @@
-diff --git a/src/fat16.zig b/src/fat16.zig
-index 7546e6d..30294b9 100644
---- a/src/fat16.zig
-+++ b/src/fat16.zig
-@@ -1239,7 +1239,12 @@ pub const Volume = struct {
+diff --git a/src/disk_fat.zig b/src/disk_fat.zig
+index c6a47b5..476e1eb 100644
+--- a/src/disk_fat.zig
++++ b/src/disk_fat.zig
+@@ -1223,7 +1223,12 @@ pub const Volume = struct {
          if (self.blk.writeMany(self.start_lba + lba, @intFromPtr(from), count) != virtio.blk_s_ok) {
              if (self.dirs) |*c| c.drop(lba, count);
              props.reachable(@src(), "fat: a run of sectors fails to write", null);

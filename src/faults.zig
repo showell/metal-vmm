@@ -14,7 +14,7 @@
 //! and its handling of what arrives out of order, twice, or damaged.
 //!
 //! **THE DISK CAN REFUSE TO SERVE A REQUEST**, which is the same idea one
-//! layer over: the guest's own `fat16.zig` turns a bad status byte into
+//! layer over: the guest's own `disk_fat.zig` turns a bad status byte into
 //! `ReadFailed`, and those paths have almost certainly never run.
 //!
 //! **PICKING THE NTH IS THE INTERESTING KNOB**, more than a rate. A rate
@@ -337,7 +337,7 @@ test "a frame arrives when the wire says, and in the order it was sent" {
 }
 
 /// **THE DISK, WHEN IT WILL NOT.** virtio-blk answers every request with a
-/// status byte, and the guest's own fat16.zig turns anything but "ok" into
+/// status byte, and the guest's own disk_fat.zig turns anything but "ok" into
 /// `ReadFailed` or `WriteFailed` — paths that a disk which always works never
 /// reaches.
 pub const Drive = struct {
