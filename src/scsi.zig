@@ -435,7 +435,9 @@ pub const Scsi = struct {
         const len = std.mem.readInt(u16, cdb[7..9], .big);
         if (len == 0) return .{};
         const from = out orelse return self.check(key_illegal_request, asc_invalid_field);
-        if (from.len < len or len < 8 + 20) return self.check(key_illegal_request, asc_invalid_parameter);
+        // The header and the one page, and nothing past it: QEMU reads
+        // every byte of the list as pages, and refuses one it does not know.
+        if (from.len < len or len != 8 + 20) return self.check(key_illegal_request, asc_invalid_parameter);
         const list = from[0..len];
         // The header: mode data length is reserved, no block descriptors.
         if (list[0] != 0 or list[1] != 0 or std.mem.readInt(u16, list[6..8], .big) != 0)
