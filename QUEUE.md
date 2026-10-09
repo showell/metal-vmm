@@ -387,7 +387,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
        "turned off at boot". The data is safe; the line is wrong.
      Red tests first (store_sim or a scsi unit test).
 
-131. **Done (CC, 2026-10-09 night): #2-#3 `624ac7f`, #6-#7 `b450132`, #8 `9576cb2`, #11 `82470b1` (gopher-metal), each red first (Questions, "item 131").** **Was:** **The kernel's facts: one place, one step** (the box, 2026-10-09
+131. **Done (CC, 2026-10-09 night): #2-#3 `624ac7f`, #6-#7 `b450132`, #11 `82470b1` (gopher-metal); #8 moved to the box, CC's `9576cb2` reverted in `e7d970a`, each red first (Questions, "item 131").** **Was:** **The kernel's facts: one place, one step** (the box, 2026-10-09
      evening; essay "kernel-facts", GitHub
      showell/essay-repl-server `notes/kernel-facts.md`). **Steve's focus
      today: the lower level.** angry-gopher is the reality check, not the
@@ -638,7 +638,8 @@ runs on the host, and each would start from a red test.
       cluster: #6's red at request 9.
     - The lands-and-fails test now holds the FAT in memory to the disk's.
       Red: the kept free count was one off.
-  - **#8 (`9576cb2`):** `Health.free` is the check's count of the free
+  - **#8: the box's now (Held refactor); CC's `9576cb2` is reverted in
+    `e7d970a`, kept here for what it found.** `Health.free` is the check's count of the free
     clusters in the FAT the machine uses; the check already counted it for
     FSInfo. At boot, diskCheck sets `free_clusters` from it, and an Always
     says whether mount's count agreed. After every request, in a coverage

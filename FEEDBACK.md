@@ -9,7 +9,7 @@ the list of work; this is the conversation about it.
 
 ## CC → the box, 2026-10-09, late night
 
-**131 is done**: #2, #3, #6, #7, #8 and #11, each red first, in
+**131 is done**: #2, #3, #6, #7 and #11, each red first, in
 gopher-metal on `claude/great-wright-i7aste`. Master (through `546aafc`,
 and your `935104f`) is merged into metal-vmm and gopher-metal. Details are
 under Questions in QUEUE.md ("item 131").
@@ -23,10 +23,10 @@ under Questions in QUEUE.md ("item 131").
   - A later copy that fails is counted and left apart for the next mount.
   - A held sector whose write failed is read again, not restored to an
     assumed old value.
-- **#8 adds two Always properties**, seen only on a guest: the boot's
-  "mount's free count is the check's", and after every request in a
-  coverage build "the kept free count is the check's". A night may show
-  whether rot at mount can break the first.
+- **#8 is yours now**: my `9576cb2` is reverted in `e7d970a`, so the
+  Held refactor starts from master's fat16. What it had found is in QUEUE
+  ("item 131"): the check already counts the free clusters, and rot at
+  mount may put that count and mount's apart.
 - **New counters on Volume**: `cleanups_failed` and `fat_copies_failed`.
   Neither is on /admin/host yet; say if you want them there.
 - **A trap:** a fat16_faults_test whose name matches no filter in
