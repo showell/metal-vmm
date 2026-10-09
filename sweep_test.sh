@@ -76,6 +76,9 @@ printf 'pristine volume' > "$T/site.img"
 #           404 as the pristine volume's: allowed, not told. 47: told 200, nothing written,
 #           a 404: FAIL. 48: told 200, a lying cache lost what it held and
 #           left the volume so the read-back is a 500: allowed (127(f)).
+#   53-55   the kernel's "no damage" property broken (QUEUE 128). 53: by a
+#           DISK_ROT that fired: allowed. 54: the same, and another property
+#           broken too: FAIL. 55: DISK_ROT drawn, never fired: FAIL.
 #   9       a 200 whose page metal-vmm did not write (an answer kept only in
 #           part): FAIL, never a match of two empty pages
 #   38-45   two clients (QUEUE 126), each paged its own request file, client
@@ -113,13 +116,13 @@ s="${FAULT_SEED:-}"
 L='"location":{"class":"tcp","function":"f","file":"tcp.zig","begin_line":1,"begin_column":1}'
 ev() { echo "{\"antithesis_assert\":{\"hit\":$3,\"must_hit\":true,\"assert_type\":\"x\",\"display_type\":\"$1\",\"message\":\"$2\",\"condition\":$4,\"id\":\"$2\",$L}}" >> "$COVERAGE_OUT"; }
 knobs="none"
-case "$s" in 23 | 25 | 26) knobs="DISK_CACHE=lie DISK_CUT_AFTER=2" ;; 27) knobs="WIRE_EAT=3" ;; 28) knobs="PEER_RESET_AT=500" ;; 29) knobs="DISK_REFUSE=4" ;; 30) knobs="WIRE_EAT=3" ;; 31 | 32 | 33) knobs="DISK_CUT_AFTER=2" ;; 36 | 48) knobs="VOLUME_CACHE=lie" ;; 46) knobs="PEER_RESET_AT=500" ;; 39 | 42 | 50 | 51) knobs="PEER_RESET_AT=500" ;; 40) knobs="PEER_VANISH_AFTER=3" ;; 52) knobs="DISK_CUT_AFTER=2" ;; 45) knobs="DISK_REFUSE=4" ;; 24) knobs="DISK_CACHE=lie" ;; 18 | 19) knobs="WIRE_EAT=3" ;; 16) knobs="PEER_RESET_AT=500" ;; 17) knobs="WIRE_EAT=17" ;; 3) knobs="PEER_RESET_AT=500" ;; 12) knobs="DISK_REFUSE=4" ;; 13) knobs="PEER_RESET_AT=500" ;; 14) knobs="DISK_REFUSE=4" ;; 15) knobs="PEER_RESET_AT=500" ;; 4) knobs="DISK_WRITES_ONLY=1" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
+case "$s" in 23 | 25 | 26) knobs="DISK_CACHE=lie DISK_CUT_AFTER=2" ;; 27) knobs="WIRE_EAT=3" ;; 28) knobs="PEER_RESET_AT=500" ;; 29) knobs="DISK_REFUSE=4" ;; 30) knobs="WIRE_EAT=3" ;; 31 | 32 | 33) knobs="DISK_CUT_AFTER=2" ;; 36 | 48) knobs="VOLUME_CACHE=lie" ;; 46) knobs="PEER_RESET_AT=500" ;; 39 | 42 | 50 | 51) knobs="PEER_RESET_AT=500" ;; 40) knobs="PEER_VANISH_AFTER=3" ;; 53 | 54 | 55) knobs="DISK_ROT=4093,20" ;; 52) knobs="DISK_CUT_AFTER=2" ;; 45) knobs="DISK_REFUSE=4" ;; 24) knobs="DISK_CACHE=lie" ;; 18 | 19) knobs="WIRE_EAT=3" ;; 16) knobs="PEER_RESET_AT=500" ;; 17) knobs="WIRE_EAT=17" ;; 3) knobs="PEER_RESET_AT=500" ;; 12) knobs="DISK_REFUSE=4" ;; 13) knobs="PEER_RESET_AT=500" ;; 14) knobs="DISK_REFUSE=4" ;; 15) knobs="PEER_RESET_AT=500" ;; 4) knobs="DISK_WRITES_ONLY=1" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
 [ -n "$s" ] && echo "metal-vmm: FAULT_SEED=$s is $knobs" >&2
 # What fired, as metal-vmm says it (reports.zig `fired`): every fault the
 # seed drew, but for 28 and 29, whose faults never came.
 fired=""; turned=""
 for k in PEER_RESET_AT PEER_VANISH_AFTER DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DISK_ROT DISK_BAD_SECTOR VOLUME_CUT_AFTER VOLUME_SHORT_AT VOLUME_GONE_AT VOLUME_READ_ONLY_AT VOLUME_SYNC_FAIL; do
-  case " $knobs" in *" $k="*) turned=1; case "$s" in 28 | 29) ;; *) fired="$fired $k" ;; esac ;; esac
+  case " $knobs" in *" $k="*) turned=1; case "$s" in 28 | 29 | 55) ;; *) fired="$fired $k" ;; esac ;; esac
 done
 [ -z "$turned" ] || echo "metal-vmm: fired:${fired:- none}" >&2
 echo "{\"metal_vmm_run\":{\"seed\":${s:-null},\"knobs\":\"$knobs\"}}" >> "$COVERAGE_OUT"
@@ -133,6 +136,8 @@ case "$s" in
   4) printf 'UNSOUND' > "$img" ;;
   5) code=1 ;;
   6) ev Always "tcp: an always" true false; broken=1 ;;
+  53 | 55) ev Always "fat: at boot, a volume has no damage beyond what a stop leaves" true false; broken=1 ;;
+  54) ev Always "fat: after a request, a volume has no damage beyond what a stop leaves" true false; ev Always "tcp: an always" true false; broken=2 ;;
   7) printf 'sound, written' > "$img"; ev Sometimes "tcp: only seed 7" true true ;;
   8) page=""; status=0; echo "metal-vmm: the first client gave up: it sent the same thing too often, unanswered" >&2 ;;
   10) page="hel"; echo "  let go at the end: 1 response(s) cut by the stop, 2 bytes never acknowledged" ;;
@@ -156,7 +161,7 @@ case "$s" in
   27) page=""; status=0; echo "  serving 2 request(s), as gopher-metal.conf says"; echo "  served 2 request(s); base heap holds 52 live bytes"; echo "peer 2: 204, 1 of 1 answers, 65 bytes, done" ;;
   11) page="oops"; status=500; echo "  let go at the end: 1 response(s) cut by the stop, 2 bytes never acknowledged" ;;
 esac
-case "$s" in [2-9] | 1[0-9] | 2[3-9] | 30 | 52) ;; *) [ -z "${PEER_REQUEST:-}" ] || page="$(cat "${PEER_REQUEST%%,*}")" ;; esac
+case "$s" in [2-9] | 1[0-9] | 2[3-9] | 30 | 52 | 53 | 54 | 55) ;; *) [ -z "${PEER_REQUEST:-}" ] || page="$(cat "${PEER_REQUEST%%,*}")" ;; esac
 # A durable shape's write, and its read-back (QUEUE 125).
 if [ "$page" = "WRITE" ]; then
   case "$s" in 35 | 36 | 46 | 47) ;; 48) printf ' CORRUPT' >> "$VOLUME" ;; *) printf ' written' >> "$VOLUME" ;; esac
@@ -375,6 +380,20 @@ printf 'PEER_REQUEST=w.http\nEXPECT=200\nREAD_BACK=r.http\nMARK=never\n' > "$T/d
 SHAPES="$T/durable" VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 34 34 > "$T/durable.out" 2>&1
 [ $? = 2 ] || { echo "FAIL: a durable shape whose unhurt run keeps no MARK did not stop the sweep with 2"; fail=1; }
 expect "the recipe that does not hold" 'shape w: its unhurt run was told 200 and its read-back lacks "never"' "$(cat "$T/durable.out")"
+
+# **DAMAGE THE DISK WAS DEALT** (QUEUE 128): a broken "no damage" property
+# is excused by a damaging fault that fired, and nothing else is.
+rot=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 53 55 2>&1)
+expect "seed 53" '^53 .*allowed: DISK_ROT (fat: at boot, a volume has no damage beyond what a stop leaves)' "$rot"
+expect "seed 54" '^54 .*FAIL: 2 coverage properties broken' "$rot"
+expect "seed 55" '^55 .*FAIL: 1 coverage properties broken' "$rot"
+# The excused break is not the merged report's failure either: left out of
+# it, and said, the seed's own coverage file keeping it.
+alone=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 53 53 2>&1)
+[ $? = 0 ] || { echo "FAIL: a sweep whose one break the damage dealt excuses did not pass:"; echo "$alone" | sed 's/^/    /'; fail=1; }
+expect "the break left out, and said" 'left out of the merged report, each excused by the damage its seed was dealt: 53' "$alone"
+if grep -q '^FAIL  *Always  *fat: at boot' <<< "$alone"; then echo "FAIL: an excused damage break failed the merged report"; fail=1; fi
+if ! grep -q '^FAIL  *Always  *fat: at boot' <<< "$rot"; then echo "FAIL: seed 55's unexcused damage break left the merged report"; fail=1; fi
 
 # **EVERY CLIENT JUDGED** (QUEUE 126): two clients, at once (p) and in turn
 # (q), each held to the same client unhurt.

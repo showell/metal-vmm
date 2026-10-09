@@ -12,7 +12,11 @@
 #     start is a failure whatever the faults were;
 #   - it must break no coverage property (metal-vmm's "N broken"), so the
 #     kernel must be built -Dcoverage: one whose unhurt run reports no
-#     property stops the sweep before any seed, since it would judge none;
+#     property stops the sweep before any seed, since it would judge none.
+#     But the kernel's own "no damage" check, broken by a fault that wrote
+#     damage and fired (DISK_ROT, DISK_TEAR, DISK_BAD_SECTOR, a lying cache
+#     that lost what it held), is allowed, and left out of the merged report
+#     (QUEUE 128); any other break fails;
 #   - a volume the guest wrote must still be a filesystem (sound.sh): after
 #     a power cut, but for what a stop leaves; and a disk that lied about its
 #     cache (`*_CACHE=lie`), then lost its power and with it writes it held,
@@ -303,6 +307,28 @@ peer_end_of() { sed -n 's/^metal-vmm: the first client \(gave up\|vanished\).*/\
 # run that says no fired line had none turned.
 fired_of() { echo " $(sed -n 's/^metal-vmm: fired: //p' "$WORK/$1.err" | tail -1 | sed 's/^none$//') "; }
 broken_of() { sed -n 's/^metal-vmm: coverage: .*, \([0-9]*\) broken).*/\1/p' "$WORK/$1.err" | tail -1; }
+# broken_props <run>: the id of each property the run broke, once each, from
+# its own coverage lines: a must-hold one (Always, AlwaysOrUnreachable,
+# Unreachable) hit with its condition false, as report.py counts them.
+broken_props() {
+  python3 - "$WORK/$1.cov" <<'PY'
+import json, sys
+seen = []
+for line in open(sys.argv[1], errors="replace"):
+    try:
+        a = json.loads(line).get("antithesis_assert")
+    except ValueError:
+        continue
+    if a and a.get("display_type") in ("Always", "AlwaysOrUnreachable", "Unreachable") and a.get("hit") and not a.get("condition"):
+        if a["id"] not in seen:
+            seen.append(a["id"])
+print("\n".join(seen))
+PY
+}
+# **THE KERNEL'S OWN DAMAGE CHECK** (gopher.zig, `vol.check` at boot and
+# after each request): its properties, which a disk fault that writes damage
+# rightly breaks (QUEUE 128).
+DAMAGE_PROPS=("fat: at boot, a volume has no damage beyond what a stop leaves" "fat: after a request, a volume has no damage beyond what a stop leaves")
 
 # lie_lost <disk|volume> <name>: whether that disk's cache lost what it
 # held at the cut (metal-vmm QUEUE 122): a lie that cost nothing excuses
@@ -400,7 +426,34 @@ verdict() {
       why="$why, exit $exit (unhurt: $(cat "$WORK/$u.exit"))"
     fi
   fi
-  [ "${broken:-0}" = 0 ] || why="$why, $broken coverage properties broken"
+  # **A PROPERTY BROKEN BY THE DAMAGE THE DISK WAS DEALT** (QUEUE 128): the
+  # kernel's "no damage" check counts what rot, a torn write, a bad sector or
+  # a lying cache's lost writes left, and is right to. Only those
+  # properties, and only when such a fault fired; any other break fails, as
+  # does one of these with no such fault. The property does not say which
+  # disk it found the damage on, so a fault on either disk excuses it.
+  local damage_by=""
+  if [ "${broken:-0}" != 0 ]; then
+    local props other=""
+    props=$(broken_props "$name")
+    if [ -z "$props" ]; then other=yes
+    else
+      local p d is
+      while IFS= read -r p; do
+        is=""
+        for d in "${DAMAGE_PROPS[@]}"; do [ "$p" != "$d" ] || is=yes; done
+        [ -n "$is" ] || other=yes
+      done <<< "$props"
+    fi
+    if [ -z "$other" ]; then
+      for f in DISK_ROT DISK_TEAR DISK_BAD_SECTOR; do
+        case "$fired" in *" $f "*) damage_by="$damage_by${damage_by:+, }$f" ;; esac
+      done
+      case " $knobs" in *" DISK_CACHE=lie"*) ! lie_lost disk "$name" || damage_by="$damage_by${damage_by:+, }DISK_CACHE=lie" ;; esac
+      case " $knobs" in *" VOLUME_CACHE=lie"*) ! lie_lost volume "$name" || damage_by="$damage_by${damage_by:+, }VOLUME_CACHE=lie" ;; esac
+    fi
+    [ -n "$damage_by" ] || why="$why, $broken coverage properties broken"
+  fi
   # metal-vmm's own fault: a frame lost that no knob asked for.
   ! grep -q "^metal-vmm: the wire was full and pushed out .*, which it never sends again" "$WORK/$name.err" || why="$why, the wire pushed out the peer's frames, which it never sends again"
   # A disk whose power was cut mid-write may hold what a stop leaves
@@ -423,6 +476,9 @@ verdict() {
   # at the end, VOLUME_CUT_AT_EXIT). Kept apart from `excuse`, which the
   # page's judgement reads: a lie excuses the disk, never the page.
   local unsound="" exit_cut=""
+  [ -z "$damage_by" ] || unsound="$damage_by ($(broken_props "$name" | sed ':a;N;$!ba;s/\n/; /'))"
+  # Noted, for the merge below: these breaks are not the report's failure.
+  [ -z "$damage_by" ] || : > "$WORK/$name.damage_excused"
   grep -q "^metal-vmm: the power failed when the guest stopped" "$WORK/$name.err" && exit_cut=1
   local site
   site=$(site_of "$sh")
@@ -659,12 +715,34 @@ while [ "$seed" -le "$LAST" ]; do
   seed=$((seed + 1))
 done
 
+# **A BREAK THE DAMAGE DEALT EXCUSES IS NOT THE REPORT'S FAILURE** (QUEUE
+# 128): such a seed's false "no damage" events are left out of the merge,
+# and said; its own coverage file keeps them (KEEP).
+excused_damage=""
 for name in $(for n in "${SHAPE_NAMES[@]}"; do unhurt_of "$n"; done) $(seq -f "seed%g" "$FIRST" "$LAST"); do
-  [ ! -f "$WORK/$name.cov" ] || cat "$WORK/$name.cov" >> "$COVERAGE"
+  [ -f "$WORK/$name.cov" ] || continue
+  if [ -f "$WORK/$name.damage_excused" ]; then
+    excused_damage="$excused_damage ${name#seed}"
+    python3 - "$WORK/$name.cov" "${DAMAGE_PROPS[@]}" >> "$COVERAGE" <<'PY'
+import json, sys
+props = set(sys.argv[2:])
+for line in open(sys.argv[1], errors="replace"):
+    try:
+        a = json.loads(line).get("antithesis_assert")
+    except ValueError:
+        a = None
+    if a and a.get("id") in props and a.get("hit") and not a.get("condition"):
+        continue
+    sys.stdout.write(line)
+PY
+  else
+    cat "$WORK/$name.cov" >> "$COVERAGE"
+  fi
 done
 
 echo
 echo "coverage over the sweep:"
+[ -z "$excused_damage" ] || echo "the kernel's \"no damage\" breaks left out of the merged report, each excused by the damage its seed was dealt:$excused_damage"
 merged=0
 if [ -n "${FLOOR:-}" ]; then python3 "$REPORT" "$COVERAGE" --floor "$FLOOR" || merged=1
 else python3 "$REPORT" "$COVERAGE" || merged=1; fi
