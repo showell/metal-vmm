@@ -10,7 +10,9 @@
 #
 #   - its exit must be the unhurt run's: a crash, a stuck guest or a refused
 #     start is a failure whatever the faults were;
-#   - it must break no coverage property (metal-vmm's "N broken");
+#   - it must break no coverage property (metal-vmm's "N broken"), so the
+#     kernel must be built -Dcoverage: one whose unhurt run reports no
+#     property stops the sweep before any seed, since it would judge none;
 #   - a volume the guest wrote must still be a filesystem (sound.sh): after
 #     a power cut, but for what a stop leaves; and a disk that lied about its
 #     cache (`*_CACHE=lie`) and then lost its power is excused (Steve,
@@ -344,6 +346,15 @@ for n in "${SHAPE_NAMES[@]}"; do
   u=$(unhurt_of "$n")
   # shellcheck disable=SC2086
   run "$u" $(shape_env "$n")
+  # **A KERNEL THAT REPORTS NO PROPERTY JUDGES NOTHING** (2026-10-09): one
+  # built without -Dcoverage records its properties and never says them, so
+  # "no property broken" would hold of every run, vacuously, all night.
+  # Stopped here, before any seed.
+  if ! grep -qE '^metal-vmm: coverage: [0-9]+ of [1-9][0-9]* properties' "$WORK/$u.err"; then
+    echo "$KERNEL reported no coverage property in its unhurt run: it was built without -Dcoverage, or the run ended before it said any. Nothing can be judged."
+    echo "  build one: (cd ~/showell_repos/gopher-metal && zig build gopher -Dcoverage), and copy probe/gopher.elf aside: gates.sh wants the release build there"
+    exit 2
+  fi
   if [ -n "$n" ]; then
     st=$(status_of "$u")
     echo "shape $n: unhurt status ${st:-none}, $([ -f "$WORK/$u.body" ] && wc -c < "$WORK/$u.body" || echo no) bytes (${SHAPE_ENV[$n]})"

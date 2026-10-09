@@ -35,9 +35,11 @@
 # **THE BINARIES ARE FROZEN AT THE START**: metal-vmm and the kernel are
 # copied into the night's folder and run from there, so a rebuild of either
 # during the night changes nothing about it. The kernel is gopher-metal's
-# probe/gopher.elf as it stands, unless KERNEL_ELF names another: build it
-# first (`./port.sh && zig build gopher` in gopher-metal, `-Dcoverage` for
-# the properties) if it should be master's.
+# probe/gopher.elf as it stands, unless KERNEL_ELF names another. It must
+# be built -Dcoverage (sweep.sh refuses one that reports no property, and
+# the night stops): `./port.sh && zig build gopher -Dcoverage` in
+# gopher-metal, then copy it aside, since gates.sh wants the release build
+# in probe/.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${NIGHTLY_ROOT:-$HOME/nightly}"
@@ -109,6 +111,14 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
         SOUND="$OUT/bin/sound.sh" REPORT="$OUT/bin/report.py" COVERAGE_SDK="$SDK" KEEP_FAILED="$OUT/failed" \
         "$OUT/bin/sweep.sh" "$seed" "$last" > "$log" 2>&1
     code=$?
+    # **A SWEEP THAT CANNOT JUDGE STOPS THE NIGHT** (sweep.sh exits 2: a
+    # kernel that reports no property, an unhurt run with no page, a shape
+    # not as expected): every batch after it would say the same.
+    if [ $code = 2 ]; then
+        { echo "batch $seed-$last: sweep.sh could not judge (exit 2), so the night stops:"; grep -v '^$' "$log" | tail -5; } >> "$OUT/failures.log"
+        echo "stopped $(date '+%F %T %Z'): sweep.sh could not judge; see failures.log" | tee "$OUT/DONE" >> "$OUT/progress.log"
+        exit 2
+    fi
     summary=$(grep -E '^[0-9]+ seeds: ' "$log" | tail -1)
     ok=$(sed -n -E 's/.* ([0-9]+) ok,.*/\1/p' <<< "$summary"); ok=${ok:-0}
     diff=$(sed -n -E 's/.* ([0-9]+) differ.*/\1/p' <<< "$summary"); diff=${diff:-0}

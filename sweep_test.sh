@@ -93,7 +93,7 @@ fi
 # whenever the peer can lose one: it is not the status.
 echo "peer: 51 frames sent, 1 lost (#3), 6309 ms of the guest's time" >&2
 echo "peer: $status \"$page\""
-echo "metal-vmm: coverage: 1 of 1 properties reached (1 hold, $broken broken), from 3 lines over 1 boots" >&2
+[ -n "${FAKE_NO_COVERAGE:-}" ] || echo "metal-vmm: coverage: 1 of 1 properties reached (1 hold, $broken broken), from 3 lines over 1 boots" >&2
 exit $code
 EOF
 cat > "$T/sound" <<'EOF'
@@ -171,6 +171,13 @@ lied=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "
 expect "seed 23" '^23 .*differs (allowed: DISK_CACHE=lie (the volume left unsound))' "$lied"
 expect "seed 24" '^24 .*FAIL: the volume is not sound' "$lied"
 expect "seed 25" '^25 .*FAIL: not the page (status 200)' "$lied"
+
+# A kernel that reports no property (built without -Dcoverage) stops the
+# sweep before any seed: it would judge none.
+silent=$(FAKE_NO_COVERAGE=1 VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 1 1 2>&1)
+[ $? = 2 ] || { echo "FAIL: a kernel that reports no property did not stop the sweep with 2"; fail=1; }
+expect "a kernel without its coverage" 'reported no coverage property in its unhurt run' "$silent"
+if grep -q '^1 ' <<< "$silent"; then echo "FAIL: a seed ran on a kernel that reports no property"; fail=1; fi
 
 # An unhurt run with no page leaves nothing to judge: the sweep stops, 2.
 nothing=$(FAKE_UNHURT_NO_PAGE=1 VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 1 1 2>&1)
