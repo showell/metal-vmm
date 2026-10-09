@@ -164,7 +164,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
     skip line; make it a named skip. Also fold `principalAuthorizedOrError`
     into `principalAuthorized` (they're the same since 108).
 
-119. **Attack the write cache turned off** (Steve chose WCE=0 over
+119. **Done (CC, 2026-10-09): a reset turns the cache back on, and the driver never knows; the model gained the disks to show it (Questions, "item 119").** **Was:** **Attack the write cache turned off** (Steve chose WCE=0 over
      barriers, 2026-10-09; the barrier patch and its two misses are moot).
      - gopher-metal `1619ff3` `scsi.turnCacheOff`: MODE SELECT(10) sends
        back the sensed caching page with WCE cleared, then reads it again.
@@ -183,7 +183,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      `store_sim`'s cached test now holds the reason: it expects a cut on a
      cached disk to break fat16's promises.
 
-120. **The store lint's two new holes** (the same review, 114's rules):
+120. **Done (CC, 2026-10-09): angry-gopher red `cd446aa`, fix `a30a154` (Questions, "item 120").** **Was:** **The store lint's two new holes** (the same review, 114's rules):
      - The wrapper rule accepts any `error.X` arm. `catch |e| switch (e) {
        error.AccessDenied => null, error.InputOutput => "", else => return e
        }` passes, and so does `if (e == error.AccessDenied) null else return
@@ -194,7 +194,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
 
      Red tests first, then the fix.
 
-121. **113's walk, three gaps** (the same review):
+121. **Done (CC, 2026-10-09): metal-vmm `c1f36c7`, each refusal probed.** **Was:** **113's walk, three gaps** (the same review):
      - It doesn't descend through a pointer. `cache.Cache` is reached only
        through `virtio.Block.cache?` (borrowed), so a new pointer field there
        goes unseen. Put `cache.Cache` in `models`, with `durable` its named
@@ -204,7 +204,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      - `.box`, `.input` and `.host` are taken on trust: say why in each one's
        line, or check them.
 
-122. **Attack today's judging** (FEEDBACK.md, 2026-10-09 morning). Every
+122. **Done (CC, 2026-10-09): three holes in the judging and one in the wire, each red first and fixed (Questions, "item 122").** **Was:** **Attack today's judging** (FEEDBACK.md, 2026-10-09 morning). Every
      excuse added on 2026-10-09 widens what passes:
      - `sound.sh`'s `STOP_LEAVES` and its FSInfo exception;
      - sweep.sh's "the request limit went to another client";
@@ -352,6 +352,103 @@ runs on the host, and each would start from a red test.
 ## Questions
 
 *(Either side, with a reproduction where there is one.)*
+
+- **(CC, item 119) The write cache turned off: a reset turns it on again,
+  and the driver never knows.** metal-vmm `6ec0f37`
+  (red) and `4de2ea6`, `20e7022`, `7689d38`.
+  - **Against Linux's sd (`cache_type_store`):** the same page sent back
+    (DBD sensed, WCE cleared, header and device-specific byte zeroed). Two
+    differences. **SP:** sd sets SP from the page's PS bit, so the setting
+    is saved; gopher-metal sends SP=0, which is right for QEMU (it accepts
+    PF=1 SP=0 only, `scsi_disk_emulate_mode_select`). **The length:**
+    `turnCacheOff` sends 20 bytes of page whatever the disk sent; sd uses
+    the page's own length. A disk with a shorter caching page (SCSI-2's, 12
+    bytes) would be sent stale scratch bytes. QEMU's is 20, so this is for
+    a disk that isn't QEMU's.
+  - **Against QEMU's scsi-hd (from its source, as I remember it, not run
+    here):** it takes the page. It checks the length equals its own, and
+    that no unchangeable bit differs from MODE SENSE; WCE is changeable.
+    It flushes when WCE goes to 0 (`blk_aio_flush`), so a cache turned off
+    with writes held loses none of them. At boot nothing is written before
+    `bring` asks, so there is nothing held then anyway.
+  - **The finding, for the box: a reset turns the cache back on.** SPC-4:
+    after a power on, hard reset or logical unit reset, a mode page's
+    current values are its saved values, or its defaults when none were
+    saved, and SP=0 saved nothing. gopher-metal turns the cache off once,
+    in `bring`. `commandSettled` sends a command again on any UNIT
+    ATTENTION, whatever its sense, and `write_cache` stays `false`.
+    `io.durable` then never synchronizes, so after a reset the disk is
+    *lying*, from the driver's side: answered writes can be lost at a cut,
+    as well as reordered. **The fix is the driver's:** on UNIT ATTENTION
+    29h (POWER ON, RESET) or 2Ah/01h (MODE PARAMETERS CHANGED), sense the
+    page again, turn the cache off again, and believe what it reads back.
+  - **The model, now able to show it** (each with its test):
+    - `VOLUME_RESET_AT=n` (`7689d38`): POWER ON told at the nth command,
+      and every mode page back at its default. Not drawn by `knobs.zig`:
+      until the driver handles it, a sweep with it would fail on the known
+      gap. Turn it on with the driver's fix.
+    - `VOLUME_WCE_FIXED=ignore` (`20e7022`): a disk that takes the MODE
+      SELECT and goes on caching. The driver reads the page back for this
+      case, and no disk here could reach that path (`=1` refuses).
+    - MODE SELECT refuses a list longer than its page, as QEMU does (red
+      `6ec0f37`, fix `4de2ea6`).
+    - `fuzz.zig` now sends MODE SELECT, and draws the three disks and the
+      reset. 3000 seeds pass.
+  - **A question:** a disk that won't answer MODE SENSE, or has no caching
+    page (`VOLUME_MODE_PAGES=none`), has `write_cache` null. It is flushed
+    as if cached, but nothing tries to turn its cache off, so 112's
+    reordering is open again for such a disk. Worth sending a zeroed
+    caching page with WCE=0 then?
+
+- **(CC, item 120) The lint's two holes, closed.** angry-gopher red
+  `cd446aa`, fix `a30a154`.
+  - **A wrapper's own errors** are now those it returns or declares by
+    name (`return error.X`, `=> error.X`, `orelse`/`catch error.X`,
+    `error{...}`), and those of the readers it calls. `appendReaction`'s
+    are `NoSuchMessage` alone, and no wrapper's include a disk's error.
+  - **A 5xx counts only when the handler is the answer:** `return <5xx>`,
+    or a block with no `break` or `continue`, every `return` a 5xx, ending
+    in one.
+  - **One new site:** `home.zig`'s render, which sets `status` to 500 and
+    names the error on the page. It's marked, not taught to the lint.
+
+- **(CC, item 122) Today's judging: three holes, and one in metal-vmm's
+  wire.** metal-vmm red `3b5fba5`, fix `ceb6a83`; red `6da8211`, fix
+  `22f35c4`.
+  - **A lie that cost nothing excused an unsound volume.** With
+    `*_CACHE=lie` and a cut, any unsound disk was excused, even when the
+    cut lost nothing the cache held (the line says "lost 0 sectors" or
+    "lost nothing"). Then the damage is the kernel's own. Now the cache
+    must have lost something.
+  - **The request limit was excused by one other answer.** With a limit of
+    2, both served, client 2 answered once and client 1 given no page, the
+    excuse held. One served request was client 1's, and its answer was
+    lost. Now the other clients' answers must add up to every request
+    served.
+  - **A shape with no EXPECT was judged against whatever its unhurt run
+    said.** A stale one (a 500) made every seed failing the same way "ok".
+    Every shape in `requests/shapes` has one already; now the sweep stops
+    with 2 on a shape without one.
+  - **The wire still pushed out the request** (metal-vmm's, not the
+    kernel's). `6c1aad9` kept `Peer.more` to the wire's room, but `speak`
+    put the peer's *answer* to the arriving frame on a full wire regardless.
+    With the guest sending its SYN-ACK again while the wire held the
+    request, that answer pushed out a segment of it, which a peer that
+    never resends never sends again. Answers now wait for room, oldest
+    first (eight at most). **A run that filled the wire may differ from
+    before:** `same.sh` is the check for that, and it needs a guest.
+  - **No hole found:** in `STOP_LEAVES` (only its three complaints, only
+    after a cut); in the FSInfo exception (unknown is legal); in "pushed
+    out" (a resent frame still has its page compared); in the knobs a
+    shape sets (they are in the seed's knobs line, so no excuse hangs on a
+    hidden one); in the summary's and repeat line's shape (each seed's
+    own).
+  - **Two questions:**
+    - "The stop cut it" excuses a short page when the guest says a stop
+      cut *a* response. With two clients (`two-clients.shape`), the one
+      cut may be the other client's. Should it name whose?
+    - `KEEP_FAILED` keeps the failing seed's files, not its shape's unhurt
+      run, which is what it is judged against.
 
 - **(CC, item 112) On a disk with a write cache, a cut leaves files
   `Damaged` and other directories wrong; fat16's crash safety is the order

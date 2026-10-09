@@ -194,6 +194,8 @@ pub fn run(seed: u64) u64 {
     if (vr.uintLessThan(u8, 8) == 0) w.volume.read_only_at = vr.uintLessThan(u64, 300);
     if (vr.uintLessThan(u8, 8) == 0) w.volume.sector_said = ([_]u32{ 1, 4096, 520, 1 << 20 })[vr.uintLessThan(usize, 4)];
     w.volume.no_mode_pages = vr.uintLessThan(u8, 8) == 0;
+    w.volume.wce_fixed = ([_]scsi.WceFixed{ .no, .no, .refuses, .ignores })[vr.uintLessThan(usize, 4)];
+    if (vr.uintLessThan(u8, 4) == 0) w.volume.reset_at = vr.uintLessThan(u64, 60);
     w.pit.frozen = vr.uintLessThan(u8, 8) == 0;
     w.rtc.absent = vr.uintLessThan(u8, 8) == 0;
     w.rtc.stuck = vr.uintLessThan(u8, 8) == 0;
@@ -316,13 +318,26 @@ fn volumeSide(w: *World, r: std.Random) void {
         var lun = [8]u8{ 1, 0, 0x40, 0, 0, 0, 0, 0 };
         if (r.uintLessThan(u8, 8) == 0) r.bytes(lun[0..4]);
         @memcpy(w.ram[0x400..][0..8], &lun);
-        const ops = [_]u8{ scsi.op_test_unit_ready, scsi.op_inquiry, scsi.op_read_capacity, scsi.op_mode_sense, scsi.op_read, scsi.op_write, scsi.op_synchronize };
+        const ops = [_]u8{ scsi.op_test_unit_ready, scsi.op_inquiry, scsi.op_read_capacity, scsi.op_mode_sense, scsi.op_read, scsi.op_write, scsi.op_synchronize, scsi.op_mode_select };
         var cdb: [scsi.cdb_size]u8 = undefined;
         r.bytes(&cdb);
         cdb[0] = if (r.uintLessThan(u8, 8) != 0) ops[r.uintLessThan(usize, ops.len)] else r.int(u8);
         if (r.uintLessThan(u8, 4) != 0) {
             std.mem.writeInt(u32, cdb[2..6], r.uintLessThan(u32, 72), .big);
             std.mem.writeInt(u16, cdb[7..9], count, .big);
+        }
+        // A MODE SELECT is often the one gopher-metal sends: PF set, the
+        // header and the caching page, WCE either way (metal-vmm QUEUE 119).
+        if (cdb[0] == scsi.op_mode_select and r.boolean()) {
+            cdb[1] = 0x10;
+            std.mem.writeInt(u16, cdb[7..9], 8 + 20, .big);
+            if (data <= w.ram.len -| 28) {
+                const list = w.ram[@intCast(data)..][0..28];
+                @memset(list, 0);
+                list[8] = 0x08;
+                list[9] = 18;
+                if (r.boolean()) list[10] = 0x04;
+            }
         }
         @memcpy(w.ram[0x400 + 19 ..][0..scsi.cdb_size], &cdb);
     }
