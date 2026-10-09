@@ -39,7 +39,7 @@ memslot stay). No dirty log yet: it doesn't see the devices' own writes into
 guest memory, and it splits huge pages.
 
 **The devices:** `main`'s device locals move into one static `Box`
-(`src/box.zig`); a snapshot is `saved = box.*`, a restore `box.* = saved`
+(`src/box.zig`, to be written); a snapshot is `saved = box.*`, a restore `box.* = saved`
 in the same storage, so every pointer between models stays right (assert the
 storage is the one saved from). What a value copy misses:
 - `cache.Cache.durable` is a heap map: save a clone, and on restore keep the
@@ -81,7 +81,7 @@ run ends, so a branch's line names the branch's knobs.
    it may branch), and the result must match a fresh boot with it.
 3. **One process, a whole sweep:** boot once, then for each run restore,
    apply, serve, finish, keeping each run's outputs apart; `sweep.sh` and
-   long.sh use it, and fall back to a boot for a seed that cannot branch.
+   long.sh (gopher-metal's release check) use it, and fall back to a boot for a seed that cannot branch.
 4. **Several snapshots** sorted by point; a branch restores the latest one
    before its first changed decision (later: snapshots stored as the pages
    that differ from their parent).

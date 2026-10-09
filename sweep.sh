@@ -43,10 +43,10 @@
 # as that player.
 #
 # Environment: GUESTS, SITE and PATH_WANTED (default /) as rest.sh has them;
-# TRANSPORT (default pci, the machine that rests); FLOOR; RUN_TIMEOUT;
-# JOBS (2: runs side by side); KEEP_FAILED=<dir>: a failing seed's files kept
-# (seconds, default 300); KEEP=<dir> keeps every run's log, page and the
-# coverage JSONL there. VMM, REPORT and SOUND name the programs, for a test;
+# TRANSPORT (default pci, the machine that rests); FLOOR; RUN_TIMEOUT
+# (seconds a run, default 300); JOBS (2: runs side by side);
+# KEEP_FAILED=<dir>: a failing seed's files kept; KEEP=<dir> keeps every
+# run's log, page and the coverage JSONL there. VMM, REPORT and SOUND name the programs, for a test;
 # REPORT is $COVERAGE_SDK/tools/report.py, the SDK a sibling checkout unless
 # COVERAGE_SDK says where (as gopher-metal's long.sh reads it).
 # VOLUME_SITE=<image> attaches a fresh copy of that image to every run as its

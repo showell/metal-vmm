@@ -17,8 +17,8 @@ What works best, so far, is **a class hunt**: name one kind of mistake,
 walk every place in the code it could live, and end in red tests. Seed
 sweeps find less than they cost. The judge is moving from "does this run
 differ from the unhurt one, and is the difference excused?" to "did anything
-forbidden happen?", and `plants.sh` (a standing set of planted bugs) is run
-on every change to it. The whole-machine snapshot (`docs/SNAPSHOT.md`) is
+forbidden happen?", and `plants.sh` (a standing set of planted bugs) is to
+run on every change to it (written 2026-10-09; its first run is pending). The whole-machine snapshot (`docs/SNAPSHOT.md`) is
 parked. Essays: `notes/the-plan-after-the-postmortem.md`,
 `notes/our-lexicon.md` (the shared vocabulary).
 
@@ -30,7 +30,7 @@ parked. Essays: `notes/the-plan-after-the-postmortem.md`,
   QEMU. It runs the guests: `check.sh`, `same.sh`, `site.sh`, `rest.sh`,
   `sweep.sh`, `nightly.sh` and the rest. It merges your branch into `master`
   after `check-cc.sh` (your branch built and swept on a guest, then
-  `plants.sh`), a cold review and the unit tests; what the guests catch comes
+  `plants.sh`; its first run is pending), a cold review and the unit tests; what the guests catch comes
   back to you as new items. It owns gopher-metal,
   the guest side of every contract here, and the releases.
 - **You (CC)**: build what needs no emulator, and anything adversarial

@@ -28,10 +28,9 @@ const std = @import("std");
 /// machine; this one is a trade. Too small and a guest waiting a virtual half
 /// second asks hundreds of thousands of questions to get there, each of which
 /// costs a real trip through the kernel. Too large and the machine cannot
-/// measure anything finer than the quantum. Ten microseconds puts the guest's
-/// PIT calibration at a few thousand exits and keeps its shortest measured
-/// wait — a quarter-millisecond nap between RTC polls — at twenty-five of
-/// them.
+/// measure anything finer than the quantum. A hundred microseconds keeps the
+/// guest's shortest measured wait, a quarter-millisecond nap between RTC
+/// polls, at two or three questions.
 pub const per_question_ns: u64 = 100_000;
 
 /// **THE RATE OF THE GUEST'S PROCESSOR IS A DECISION, NOT A MEASUREMENT.**
