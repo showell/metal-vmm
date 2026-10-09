@@ -449,6 +449,45 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      resend); then the check; then remove the comment line the pass added
      saying it isn't checked.
 
+134. **The cold review of 127-131 (the box, 2026-10-09 night): two
+     blocking in gopher-metal, the rest after.** Verdicts: angry-gopher
+     merge, metal-vmm merge, gopher-metal not yet. The box has merged your
+     gopher-metal branch into its `next` (origin `next`, with the TCP
+     comments, the FAT idioms and the `Derived` refactor); fix on your
+     branch, and the box merges again. Red first; your `lands_and_fails`
+     injector serves the re-read cleanly, so neither double fault is
+     exercised today: give it a second failure.
+     - **Blocking (a), `fat16.zig` `fatSet` (#7):** after a failed FAT
+       write, the re-read goes straight into the held sector. If the re-read
+       fails too, the device may have written part of it, and only the one
+       entry is restored; the next `fatSet` in that sector writes the
+       garbage to every copy. Read into `scratch`; copy into the held
+       sector only on success; on failure the held sector is "not known".
+       Say what the next change to it does.
+     - **Blocking (b), `grow` (#2 against #7):** the link write lands and
+       answers failure, the re-read fails, `fatGet(last)` says "not
+       linked", and `giveBack(fresh)` frees a cluster the disk links from
+       `last`. When the read-back can't tell, leak, never free.
+     - (c) `allocChain`'s link write: lands-and-fails gives the candidate
+       back, then the errdefer frees it again. The disk ends right, but
+       "every cluster freed was in use" breaks falsely. If `previous`
+       already points at it, leave it to the errdefer.
+     - (d) `cleanups_failed` and `fat_copies_failed` on `/admin/host`
+       (Steve: yes).
+     - (e) angry-gopher `login.zig:255` (129): the auth tree removed, then
+       `users_root` fails, gives a 500 for an account already released;
+       nobody can log in to retry, and the folder leaks. Make the release
+       finish, or say "released, with leftovers".
+     - (f) angry-gopher `router.zig:205` sends `@errorName` to the client;
+       a generic body instead, and the name to the log.
+     - (g) metal-vmm 127(d): `UNMADE` is excused after any difference in
+       client 1, even a page cut short after the session was made. Allow it
+       only when client 1 got no answer, a 5xx, or a status not its unhurt
+       one.
+     - Note: `Expect: 100-continue` sets the "an answer went out" flag, so
+       a later error is still silence. No worse than before; say whether
+       it is cheap to fix.
+
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
     the third bullet of the old 99 asked (`request.zig`, every handler behind
