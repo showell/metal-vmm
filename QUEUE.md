@@ -354,6 +354,26 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
        line (`gopher.zig` 1358/1417), yours to propose.
      - Red first with a fake seed.
 
+129. **Class hunt 1: a revoke or delete that fails quietly** (the box,
+     2026-10-09 evening, after 127-128). The first of CC's class hunts, the
+     new main work (essay "the plan after the postmortem", section 4; the
+     list is the essay "questions to ask"). Walk every `catch {}` and `catch
+     continue` in angry-gopher's `zig-server/src` (chat_store 22,
+     chat_retire 18, users 13, uid_cookie 9, roots 8, login 7) and
+     gopher-metal's served code, and ask of each: **does this call remove
+     authority or data?** Where it does, a failure must not be answered as
+     done.
+     - **One instance, confirmed by the box:** `users.clearUserAPIKey` is
+       `store.remove(...) catch {}`. Both callers (settings.zig:44,
+       admin.zig:60) then redirect with `keyrevoked=1`, so a failed remove
+       leaves the old key authenticating. Red test first (store_sim failing
+       that remove, then the old key used).
+     - Next lead: logout's release (`login.zig:250`) deletes the record
+       even when `deleteUserData` failed.
+     - Report every site, with its verdict: harmless, fixed (with a red
+       test), or a policy question for Steve. Like 105: ship the dangerous
+       sites first, and ask before a sweeping change.
+
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
     the third bullet of the old 99 asked (`request.zig`, every handler behind
