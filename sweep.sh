@@ -37,7 +37,13 @@
 # every run of it: `PEER_REQUEST=a[,b]` (files in the same folder),
 # `PEER_CLIENTS=2`, any knob, and `EXPECT=<status>`, which the
 # shape's unhurt run must answer or nothing can be judged; every shape has
-# one. Seed s is the
+# one. **A WRITE SHAPE MAY CARRY ITS READ-BACK** (metal-vmm QUEUE 125):
+# `READ_BACK=<request file beside it, or a path>`, `MARK=<text>` and
+# `TOLD=<status>` (its EXPECT unless said). Its runs then lose at the end what
+# no cache synchronized (VOLUME_CUT_AT_EXIT=1), each seed's volume is read
+# back by an unhurt boot, and a seed told TOLD whose read-back lacks MARK
+# fails, beside its page's verdict, as a durability sweep's does. Its
+# unhurt run must keep MARK, and the pristine volume must not hold it. Seed s is the
 # shape (s mod n) of the n in name order, judged against that shape's
 # unhurt run. An optional `setup` file there names requests (one a line)
 # sent first, each an unhurt boot, to a copy of VOLUME_SITE that every run
@@ -113,7 +119,7 @@ COVERAGE="$WORK/coverage.jsonl"
 # The shapes: their names, and each one's settings as VAR=value words, the
 # request files made absolute. No SHAPES is one shape, named "", with none.
 SHAPE_NAMES=("")
-declare -A SHAPE_ENV=() SHAPE_EXPECT=()
+declare -A SHAPE_ENV=() SHAPE_EXPECT=() SHAPE_READ=() SHAPE_MARK=() SHAPE_TOLD=()
 if [ -n "${SHAPES:-}" ]; then
   [ -d "$SHAPES" ] || { echo "no folder at SHAPES=$SHAPES"; exit 1; }
   [ -z "$DURABLE" ] || { echo "SHAPES and POST are two sweeps; choose one"; exit 1; }
@@ -129,6 +135,15 @@ if [ -n "${SHAPES:-}" ]; then
       [ -n "$line" ] || continue
       case "$line" in
         EXPECT=*) SHAPE_EXPECT[$n]="${line#EXPECT=}" ;;
+        # **DURABILITY AS A SHAPE** (metal-vmm QUEUE 125): its read-back
+        # request (a file beside it) or path, the text a kept write leaves
+        # in it, and the status that promises it (EXPECT unless said).
+        READ_BACK=*)
+          v="${line#READ_BACK=}"
+          [ ! -f "$SHAPES/$v" ] || v="$SHAPES/$v"
+          SHAPE_READ[$n]="$v" ;;
+        MARK=*) SHAPE_MARK[$n]="${line#MARK=}" ;;
+        TOLD=*) SHAPE_TOLD[$n]="${line#TOLD=}" ;;
         PEER_REQUEST=*)
           files=""
           IFS=, read -ra parts <<< "${line#PEER_REQUEST=}"
@@ -146,6 +161,14 @@ if [ -n "${SHAPES:-}" ]; then
     # 122): with none, a shape gone stale (a cookie expired, a 500) is every
     # seed's baseline, and every seed that fails as it does is "ok".
     [ -n "${SHAPE_EXPECT[$n]:-}" ] || { echo "shape $n: no EXPECT=<status>: its unhurt run is held to nothing, so nothing can be judged"; exit 2; }
+    if [ -n "${SHAPE_READ[$n]:-}" ]; then
+      [ -n "${SHAPE_MARK[$n]:-}" ] || { echo "shape $n: READ_BACK needs MARK=<text>"; exit 1; }
+      [ -n "${VOLUME_SITE:-}" ] || { echo "shape $n: READ_BACK needs VOLUME_SITE=<image>: the write is kept on the volume"; exit 1; }
+      SHAPE_TOLD[$n]="${SHAPE_TOLD[$n]:-${SHAPE_EXPECT[$n]}}"
+      # Each write cache loses what was never synchronized when the guest
+      # stops, as in a durability sweep.
+      SHAPE_ENV[$n]="${SHAPE_ENV[$n]}${SHAPE_ENV[$n]:+ }VOLUME_CUT_AT_EXIT=1"
+    fi
   done
   [ ${#SHAPE_NAMES[@]} -gt 0 ] || { echo "no *.shape in $SHAPES"; exit 1; }
 fi
@@ -182,24 +205,27 @@ run() {
   # in part, and an empty one would match another empty one.
 }
 
-# read_back <name> [volume]: an unhurt boot on a copy of that run's volume
-# (or the one named), asking for READ_BACK; its page in <name>.read, its
-# status in <name>.readstatus. The run's own volume stays as the run left it,
-# for sound.sh.
+# read_back <name> [volume] [request]: an unhurt boot on a copy of that run's
+# volume (or the one named), asking for READ_BACK (or the request named: a
+# durable shape's); its page in <name>.read, its status in <name>.readstatus.
+# The run's own volume stays as the run left it, for sound.sh.
 read_back() {
-  local name="$1" vol="${2:-$WORK/$1.vol}"
+  local name="$1" vol="${2:-$WORK/$1.vol}" request="${3:-${READ_BACK:-}}"
   cp "$SITE" "$WORK/$name.readimg"
   cp "$vol" "$WORK/$name.readvol"
-  # READ_BACK is a path, or a request file (one that carries a cookie, say).
-  local ask=() path="$READ_BACK"
-  if [ -f "$READ_BACK" ]; then ask=(PEER_REQUEST="$READ_BACK"); path=/; fi
+  # A path, or a request file (one that carries a cookie, say).
+  local ask=() path="$request"
+  if [ -f "$request" ]; then ask=(PEER_REQUEST="$request"); path=/; fi
   env "${ask[@]}" VOLUME="$WORK/$name.readvol" PEER_BODY="$WORK/$name.read" \
     timeout "$RUN_TIMEOUT" "$VMM" "$KERNEL" "$WORK/$name.readimg" "" "$path" > "$WORK/$name.readout" 2> "$WORK/$name.readerr"
   [ -f "$WORK/$name.read" ] || : > "$WORK/$name.read"
   sed -n -E 's/^peer: ([0-9]+)( "|, [0-9]+ bytes$).*/\1/p' "$WORK/$name.readout" | head -1 > "$WORK/$name.readstatus"
   rm -f "$WORK/$name.readimg" "$WORK/$name.readvol"
 }
-kept() { grep -qF -- "$MARK" "$WORK/$1.read"; }
+# kept <name> [mark]: whether that read-back holds MARK (or the mark named).
+kept() { grep -qF -- "${2:-$MARK}" "$WORK/$1.read"; }
+# read_of <shape>: its read-back request, if it is a durable shape.
+read_of() { [ -z "$1" ] || echo "${SHAPE_READ[$1]:-}"; }
 
 # The client's own line (`peer: 200 "..."` or `peer: 200, 13668 bytes`), not
 # the wire's account of the peer's frames (`peer: 51 frames sent, ...`),
@@ -237,7 +263,7 @@ changed() { [ "$(stat -c %y "$1")" != "$(cat "$1.copied")" ]; }
 # verdict <name>: "ok", "differs (allowed: ...)", or "FAIL: ..." for one run
 # against the unhurt one.
 verdict() {
-  local name="$1" u="${2:-unhurt}" why="" exit status knobs broken excuse="" fired
+  local name="$1" u="${2:-unhurt}" sh="${3:-}" why="" exit status knobs broken excuse="" fired
   exit=$(cat "$WORK/$name.exit")
   status=$(status_of "$name")
   knobs=$(knobs_of "$name")
@@ -298,6 +324,24 @@ verdict() {
         *" VOLUME_CACHE=lie"*) [ -n "$volume_cut$exit_cut" ] && lie_lost volume "$name" && unsound="$unsound${unsound:+, }VOLUME_CACHE=lie (the attached volume left unsound)" || why="$why, the attached volume is not sound" ;;
         *) why="$why, the attached volume is not sound" ;;
       esac
+    fi
+  fi
+  # **A DURABLE SHAPE KEEPS WHAT IT WAS TOLD IT KEPT** (QUEUE 125), judged
+  # beside its page: told TOLD and its MARK not in the read-back fails, as a
+  # durability sweep's does, but where a lying cache's power took what it
+  # held, or a SYNCHRONIZE CACHE failed; those excuse the write, never the
+  # page.
+  if [ -n "$(read_of "$sh")" ]; then
+    local shape_read
+    shape_read=$(cat "$WORK/$name.readstatus")
+    if [ "$shape_read" != "200" ]; then
+      why="$why, the read-back boot got no page (status ${shape_read:-none})"
+    elif [ "$status" = "${SHAPE_TOLD[$sh]}" ] && ! kept "$name" "${SHAPE_MARK[$sh]}"; then
+      local lost=""
+      case " $knobs" in *" VOLUME_CACHE=lie"*) ! lie_lost volume "$name" || lost="VOLUME_CACHE=lie (the write lost)" ;; esac
+      case "$fired" in *" VOLUME_SYNC_FAIL "*) lost="$lost${lost:+, }VOLUME_SYNC_FAIL (the write lost)" ;; esac
+      if [ -n "$lost" ]; then unsound="$unsound${unsound:+, }$lost"
+      else why="$why, told ${SHAPE_TOLD[$sh]} and the write is not on the volume"; fi
     fi
   fi
   if [ -n "$DURABLE" ]; then
@@ -414,6 +458,18 @@ for n in "${SHAPE_NAMES[@]}"; do
       exit 2
     fi
     [ -f "$WORK/unhurt.exit" ] || for x in exit out err body cov; do [ ! -f "$WORK/$u.$x" ] || cp "$WORK/$u.$x" "$WORK/unhurt.$x"; done
+    # **A DURABLE SHAPE'S RECIPE MUST HOLD** (QUEUE 125): the pristine
+    # volume without its MARK, and its unhurt run told TOLD and keeping it.
+    if [ -n "$(read_of "$n")" ]; then
+      read_back "pristine-$n" "$VOLUME_SITE" "${SHAPE_READ[$n]}"
+      read_back "$u" "" "${SHAPE_READ[$n]}"
+      ! kept "pristine-$n" "${SHAPE_MARK[$n]}" || { echo "shape $n: the pristine volume's read-back already holds \"${SHAPE_MARK[$n]}\": nothing can be judged"; exit 2; }
+      if [ "$st" != "${SHAPE_TOLD[$n]}" ] || ! kept "$u" "${SHAPE_MARK[$n]}"; then
+        echo "shape $n: its unhurt run was told ${st:-nothing} and its read-back $(kept "$u" "${SHAPE_MARK[$n]}" && echo holds || echo lacks) \"${SHAPE_MARK[$n]}\" (TOLD=${SHAPE_TOLD[$n]}): nothing can be judged"
+        exit 2
+      fi
+      echo "shape $n: each seed is read back with $(basename "${SHAPE_READ[$n]}") for \"${SHAPE_MARK[$n]}\" when told ${SHAPE_TOLD[$n]}"
+    fi
   fi
 done
 unhurt_status=$(status_of unhurt)
@@ -443,7 +499,10 @@ JOBS="${JOBS:-2}"
 seed="$FIRST"
 while [ "$seed" -le "$LAST" ]; do
   # shellcheck disable=SC2086
-  ( run "seed$seed" FAULT_SEED="$seed" $(shape_env "$(shape_of "$seed")"); [ -z "$DURABLE" ] || read_back "seed$seed" ) &
+  sh=$(shape_of "$seed")
+  # shellcheck disable=SC2086
+  ( run "seed$seed" FAULT_SEED="$seed" $(shape_env "$sh"); [ -z "$DURABLE" ] || read_back "seed$seed"
+    [ -z "$(read_of "$sh")" ] || read_back "seed$seed" "" "${SHAPE_READ[$sh]}" ) &
   while [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do wait -n; done
   seed=$((seed + 1))
 done
@@ -453,7 +512,7 @@ ok=0
 allowed=0
 seed="$FIRST"
 while [ "$seed" -le "$LAST" ]; do
-  v=$(verdict "seed$seed" "$(unhurt_of "$(shape_of "$seed")")")
+  v=$(verdict "seed$seed" "$(unhurt_of "$(shape_of "$seed")")" "$(shape_of "$seed")")
   case "$v" in
     ok*) ok=$((ok + 1)) ;;
     differs* | lost* | allowed*) allowed=$((allowed + 1)) ;;
@@ -488,12 +547,12 @@ else
   echo "$total seeds: $ok ok, $allowed differ as their faults allow, $(echo $failing | wc -w) failed"
 fi
 for s in $failing; do
-  echo "  FAULT_SEED=$s: $(verdict "seed$s" "$(unhurt_of "$(shape_of "$s")")")"
+  echo "  FAULT_SEED=$s: $(verdict "seed$s" "$(unhurt_of "$(shape_of "$s")")" "$(shape_of "$s")")"
   if [ -n "$DURABLE" ]; then
     echo "    repeat it: $(knobs_of "seed$s") PEER_REQUEST=$POST VOLUME=<a copy of $VOLUME_SITE> VOLUME_CUT_AT_EXIT=1 TRANSPORT=$TRANSPORT $VMM $KERNEL <disk> \"\" /; then read back $READ_BACK"
   else
     sh=$(shape_of "$s")
-    echo "    repeat it: $(knobs_of "seed$s")${PEER_REQUEST:+ PEER_REQUEST=$PEER_REQUEST}${sh:+ $(shape_env "$sh")} TRANSPORT=$TRANSPORT $VMM $KERNEL <volume${SHAPES:+, after the setup}> \"\" $PATH_WANTED"
+    echo "    repeat it: $(knobs_of "seed$s")${PEER_REQUEST:+ PEER_REQUEST=$PEER_REQUEST}${sh:+ $(shape_env "$sh")} TRANSPORT=$TRANSPORT $VMM $KERNEL <volume${SHAPES:+, after the setup}> \"\" $PATH_WANTED$([ -z "$(read_of "$sh")" ] || echo "; then read back ${SHAPE_READ[$sh]} for \"${SHAPE_MARK[$sh]}\"")"
   fi
 done
 [ -z "$failing" ] && [ $merged = 0 ]
