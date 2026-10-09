@@ -13,8 +13,9 @@
 #   - it must break no coverage property (metal-vmm's "N broken");
 #   - a volume the guest wrote must still be a filesystem (sound.sh): after
 #     a power cut, but for what a stop leaves; and a disk that lied about its
-#     cache (`*_CACHE=lie`) and then lost its power is excused (Steve,
-#     2026-10-09), as the durability judge excuses its lost write;
+#     cache (`*_CACHE=lie`), then lost its power and with it writes it held,
+#     is excused (Steve, 2026-10-09), as the durability judge excuses its
+#     lost write; a lie whose cut lost nothing excuses nothing;
 #   - the page must be the unhurt run's, status and body, unless the seed
 #     reset the connection, made the peer vanish, refused a disk request or
 #     cut the power, which may rightly cost the page: then it is "differs
@@ -31,7 +32,8 @@
 # a request's setting, one VAR=value a line (`#` for comments), passed to
 # every run of it: `PEER_REQUEST=a[,b]` (files in the same folder),
 # `PEER_CLIENTS=2`, any knob, and `EXPECT=<status>`, which the
-# shape's unhurt run must answer or nothing can be judged. Seed s is the
+# shape's unhurt run must answer or nothing can be judged; every shape has
+# one. Seed s is the
 # shape (s mod n) of the n in name order, judged against that shape's
 # unhurt run. An optional `setup` file there names requests (one a line)
 # sent first, each an unhurt boot, to a copy of VOLUME_SITE that every run
@@ -128,6 +130,10 @@ if [ -n "${SHAPES:-}" ]; then
       esac
     done < "$f"
     SHAPE_ENV[$n]="${words# }"
+    # **EVERY SHAPE SAYS WHAT ITS UNHURT RUN MUST ANSWER** (metal-vmm QUEUE
+    # 122): with none, a shape gone stale (a cookie expired, a 500) is every
+    # seed's baseline, and every seed that fails as it does is "ok".
+    [ -n "${SHAPE_EXPECT[$n]:-}" ] || { echo "shape $n: no EXPECT=<status>: its unhurt run is held to nothing, so nothing can be judged"; exit 2; }
   done
   [ ${#SHAPE_NAMES[@]} -gt 0 ] || { echo "no *.shape in $SHAPES"; exit 1; }
 fi
@@ -194,6 +200,16 @@ knobs_of() { sed -n 's/^metal-vmm: FAULT_SEED=[0-9]* is //p' "$WORK/$1.err" | he
 peer_end_of() { sed -n 's/^metal-vmm: the first client \(gave up\|vanished\).*/\1/p' "$WORK/$1.err" | head -1; }
 broken_of() { sed -n 's/^metal-vmm: coverage: .*, \([0-9]*\) broken).*/\1/p' "$WORK/$1.err" | tail -1; }
 
+# lie_lost <disk|volume> <name>: whether that disk's cache lost what it
+# held at the cut (metal-vmm QUEUE 122): a lie that cost nothing excuses
+# nothing, and an unsound disk is then the guest's own doing.
+lie_lost() {
+  case "$1" in
+    disk) grep -qE "^metal-vmm: disk: a write cache, .*lost [1-9][0-9]* sectors never flushed" "$WORK/$2.err" ;;
+    volume) grep -qE "^metal-vmm: volume: .*; the power (cut|failed when the guest stopped and) lost sectors never synchronized" "$WORK/$2.err" ;;
+  esac
+}
+
 # changed <image>: whether its modification time moved since it was copied.
 changed() { [ "$(stat -c %y "$1")" != "$(cat "$1.copied")" ]; }
 
@@ -238,7 +254,7 @@ verdict() {
   if changed "$WORK/$name.img" && ! cmp -s "$WORK/$name.img" "$SITE"; then
     if ! STOP_LEAVES="$disk_cut" "$SOUND" "$WORK/$name.img" > "$WORK/$name.sound" 2>&1; then
       case " $knobs" in
-        *" DISK_CACHE=lie"*) [ -n "$disk_cut$exit_cut" ] && unsound="$unsound${unsound:+, }DISK_CACHE=lie (the volume left unsound)" || why="$why, the volume is not sound" ;;
+        *" DISK_CACHE=lie"*) [ -n "$disk_cut$exit_cut" ] && lie_lost disk "$name" && unsound="$unsound${unsound:+, }DISK_CACHE=lie (the volume left unsound)" || why="$why, the volume is not sound" ;;
         *) why="$why, the volume is not sound" ;;
       esac
     fi
@@ -246,7 +262,7 @@ verdict() {
   if [ -n "${VOLUME_SITE:-}" ] && changed "$WORK/$name.vol" && ! cmp -s "$WORK/$name.vol" "$VOLUME_SITE"; then
     if ! STOP_LEAVES="$volume_cut" "$SOUND" "$WORK/$name.vol" > "$WORK/$name.vsound" 2>&1; then
       case " $knobs" in
-        *" VOLUME_CACHE=lie"*) [ -n "$volume_cut$exit_cut" ] && unsound="$unsound${unsound:+, }VOLUME_CACHE=lie (the attached volume left unsound)" || why="$why, the attached volume is not sound" ;;
+        *" VOLUME_CACHE=lie"*) [ -n "$volume_cut$exit_cut" ] && lie_lost volume "$name" && unsound="$unsound${unsound:+, }VOLUME_CACHE=lie (the attached volume left unsound)" || why="$why, the attached volume is not sound" ;;
         *) why="$why, the attached volume is not sound" ;;
       esac
     fi
@@ -306,12 +322,14 @@ verdict() {
       # **THE REQUEST LIMIT WENT TO ANOTHER CLIENT**: a machine told to
       # serve n requests (the site volume's conf) serves n and stops, so with
       # more clients than that, one a fault slowed may be the one not
-      # served. Only when another client was answered and the guest served
-      # exactly its limit.
-      local limit served
+      # served. Only when the guest served exactly its limit and the other
+      # clients' answers are every one of them: one served and not counted
+      # was this client's, and its answer lost (metal-vmm QUEUE 122).
+      local limit served others
       limit=$(sed -n -E 's/^  serving ([0-9]+) request\(s\).*/\1/p' "$WORK/$name.out" | head -1)
       served=$(sed -n -E 's/^  served ([0-9]+) request\(s\).*/\1/p' "$WORK/$name.out" | tail -1)
-      if [ -n "$limit" ] && [ "$limit" = "$served" ] && grep -qE '^peer [2-9]: [0-9]+, [1-9][0-9]* of [0-9]+ answers' "$WORK/$name.out"; then
+      others=$(sed -n -E 's/^peer ([2-9]|[1-9][0-9]+): [0-9]+, ([0-9]+) of [0-9]+ answers.*/\2/p' "$WORK/$name.out" | awk '{ n += $1 } END { print n + 0 }')
+      if [ -n "$limit" ] && [ "$limit" = "$served" ] && [ "$others" -gt 0 ] && [ "$others" = "$served" ]; then
         excuse="$excuse${excuse:+, }the request limit went to another client"
       fi
     fi
