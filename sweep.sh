@@ -11,7 +11,10 @@
 #   - its exit must be the unhurt run's: a crash, a stuck guest or a refused
 #     start is a failure whatever the faults were;
 #   - it must break no coverage property (metal-vmm's "N broken");
-#   - a volume the guest wrote must still be a filesystem (sound.sh);
+#   - a volume the guest wrote must still be a filesystem (sound.sh): after
+#     a power cut, but for what a stop leaves; and a disk that lied about its
+#     cache (`*_CACHE=lie`) and then lost its power is excused (Steve,
+#     2026-10-09), as the durability judge excuses its lost write;
 #   - the page must be the unhurt run's, status and body, unless the seed
 #     reset the connection, made the peer vanish, refused a disk request or
 #     cut the power, which may rightly cost the page: then it is "differs
@@ -223,11 +226,30 @@ verdict() {
   local disk_cut="" volume_cut=""
   grep -qE "^metal-vmm: the power was cut (in the guest's write [0-9]+:|after the guest's write [0-9]+ \(sector)" "$WORK/$name.err" && disk_cut=1
   grep -qE "^metal-vmm: the power was cut after the guest's write [0-9]+ to the volume" "$WORK/$name.err" && volume_cut=1
+  # **A DISK THAT LIED ABOUT ITS CACHE, THEN LOST ITS POWER** (Steve,
+  # 2026-10-09): it said it writes through, so nothing was ever flushed, and
+  # the cut kept what it held in an order of its own. No driver can defend
+  # against that, so it excuses an unsound disk, as the durability judge
+  # excuses a lost write; only with both the lie and a cut (mid-write, or
+  # at the end, VOLUME_CUT_AT_EXIT). Kept apart from `excuse`, which the
+  # page's judgement reads: a lie excuses the disk, never the page.
+  local unsound="" exit_cut=""
+  grep -q "^metal-vmm: the power failed when the guest stopped" "$WORK/$name.err" && exit_cut=1
   if changed "$WORK/$name.img" && ! cmp -s "$WORK/$name.img" "$SITE"; then
-    STOP_LEAVES="$disk_cut" "$SOUND" "$WORK/$name.img" > "$WORK/$name.sound" 2>&1 || why="$why, the volume is not sound"
+    if ! STOP_LEAVES="$disk_cut" "$SOUND" "$WORK/$name.img" > "$WORK/$name.sound" 2>&1; then
+      case " $knobs" in
+        *" DISK_CACHE=lie"*) [ -n "$disk_cut$exit_cut" ] && unsound="$unsound${unsound:+, }DISK_CACHE=lie (the volume left unsound)" || why="$why, the volume is not sound" ;;
+        *) why="$why, the volume is not sound" ;;
+      esac
+    fi
   fi
   if [ -n "${VOLUME_SITE:-}" ] && changed "$WORK/$name.vol" && ! cmp -s "$WORK/$name.vol" "$VOLUME_SITE"; then
-    STOP_LEAVES="$volume_cut" "$SOUND" "$WORK/$name.vol" > "$WORK/$name.vsound" 2>&1 || why="$why, the attached volume is not sound"
+    if ! STOP_LEAVES="$volume_cut" "$SOUND" "$WORK/$name.vol" > "$WORK/$name.vsound" 2>&1; then
+      case " $knobs" in
+        *" VOLUME_CACHE=lie"*) [ -n "$volume_cut$exit_cut" ] && unsound="$unsound${unsound:+, }VOLUME_CACHE=lie (the attached volume left unsound)" || why="$why, the attached volume is not sound" ;;
+        *) why="$why, the attached volume is not sound" ;;
+      esac
+    fi
   fi
   if [ -n "$DURABLE" ]; then
     local read_status
@@ -240,7 +262,8 @@ verdict() {
       [ -n "$excuse" ] || why="$why, told 303 and the message is not on the volume"
     fi
     if [ -n "$why" ]; then echo "FAIL: ${why#, }"
-    elif [ -n "$excuse" ]; then echo "lost (allowed: $excuse)"
+    elif [ -n "$excuse" ]; then echo "lost (allowed: $excuse${unsound:+, $unsound})"
+    elif [ -n "$unsound" ]; then echo "allowed: unsound ($unsound)"
     elif [ "$status" = 303 ]; then echo "ok, kept"
     elif kept "$name"; then echo "ok, not told, kept"
     else echo "ok, not told, not kept"; fi
@@ -295,7 +318,7 @@ verdict() {
     [ -n "$excuse" ] || why="$why, not the page (status ${status:-none})"
   fi
   if [ -n "$why" ]; then echo "FAIL: ${why#, }"
-  elif [ -n "$excuse" ]; then echo "differs (allowed: $excuse)"
+  elif [ -n "$excuse$unsound" ]; then echo "differs (allowed: $excuse${excuse:+${unsound:+, }}$unsound)"
   else echo "ok"; fi
 }
 
@@ -371,7 +394,7 @@ while [ "$seed" -le "$LAST" ]; do
   v=$(verdict "seed$seed" "$(unhurt_of "$(shape_of "$seed")")")
   case "$v" in
     ok*) ok=$((ok + 1)) ;;
-    differs* | lost*) allowed=$((allowed + 1)) ;;
+    differs* | lost* | allowed*) allowed=$((allowed + 1)) ;;
     *) failing="$failing $seed"
        # Kept for reading after the sweep (`KEEP_FAILED=<dir>`): the run's
        # stdout, stderr, page and coverage; its images too, if it wrote them.
