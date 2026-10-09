@@ -387,6 +387,36 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
        "turned off at boot". The data is safe; the line is wrong.
      Red tests first (store_sim or a scsi unit test).
 
+131. **The kernel's facts: one place, one step** (the box, 2026-10-09
+     evening; essay "kernel-facts", GitHub
+     showell/essay-repl-server `notes/kernel-facts.md`). **Steve's focus
+     today: the lower level.** angry-gopher is the reality check, not the
+     only consumer; the kernel is judged by its own promises (STORE.md).
+     A cold agent applied "one fact, one place, one atomic step" to
+     gopher-metal. The box takes #1 (an atomic overwrite in `writeFileIn`)
+     and #4 (leaks reclaimed at boot). Yours, each red first in
+     `fat16_test`/`store_sim`, in this order:
+     - **#2** `makeDirIn`: no rollback once the commit (`writeEntry`) is
+       attempted; a failed-but-landed entry write must not free the
+       directory's cluster.
+     - **#3** `rename` / `unlinkEntry`: after the commit write, a
+       `freeChain` failure is a leak, not the operation's error.
+     - **#6** `allocChain`: give back a partial chain on every error, not
+       only `Full`; `grow`'s fresh cluster needs an errdefer; count a
+       failed give-back rather than swallowing it.
+     - **#7** `fatSet`: on a failed FAT write, re-read the sector rather
+       than assuming the old value; a second-copy failure is not the
+       operation's failure.
+     - **#8** the kept free count set from the boot check's count, and
+       asserted equal per request in coverage builds.
+     - **#11** (folds in 130's second bullet) the SCSI cache report derived
+       from `write_cache` plus one "on at bring-up" bit, never a second
+       stored fact.
+     Not yours yet: #5 (`removeTree` atomic) waits on #4; #9 and #12 are
+     structural; #10 (503 on a failed flush) is Steve's call. The box's #4
+     will make "commit, then sweepable cleanup" safe everywhere, so #3 and
+     #6 may lean on it: say so in a comment rather than waiting.
+
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
     the third bullet of the old 99 asked (`request.zig`, every handler behind
