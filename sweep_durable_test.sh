@@ -32,6 +32,10 @@ printf 'POST /chat HTTP/1.1\r\n\r\nhello from the sweep' > "$T/post.req"
 #   5       303, lost, VOLUME_SYNC_FAIL: allowed
 #   6       303, and the volume left unreadable: the read-back gets no page
 #   7       no answer, but kept: ok, not told, kept
+#   8       303, lost, VOLUME_CACHE=lie, and the cut lost nothing the cache
+#           held: FAIL (the lie cost nothing; metal-vmm QUEUE 124(e))
+#   9       303, lost, VOLUME_SYNC_FAIL drawn and no SYNCHRONIZE ever
+#           failed: FAIL (an excuse needs its fault to have fired)
 cat > "$T/vmm" <<'EOF'
 #!/bin/bash
 s="${FAULT_SEED:-}"
@@ -43,8 +47,15 @@ if [ -z "${PEER_REQUEST:-}" ]; then
 fi
 [ "$VOLUME_CUT_AT_EXIT" = 1 ] || { echo "no VOLUME_CUT_AT_EXIT" >&2; exit 3; }
 knobs="none"
-case "$s" in 3) knobs="VOLUME_CACHE=lie" ;; 5) knobs="VOLUME_CACHE=1 VOLUME_SYNC_FAIL=2" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
+case "$s" in 3 | 8) knobs="VOLUME_CACHE=lie" ;; 5 | 9) knobs="VOLUME_CACHE=1 VOLUME_SYNC_FAIL=2" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
 [ -n "$s" ] && echo "metal-vmm: FAULT_SEED=$s is $knobs" >&2
+# The volume's line and what fired, as metal-vmm says them.
+case "$s" in
+  3) echo "metal-vmm: volume: a write cache that says it writes through (VOLUME_CACHE=lie); 1 reads, 2 writes, 0 SYNCHRONIZE CACHE, 1 MODE SENSE; the power failed when the guest stopped and lost sectors never synchronized" >&2 ;;
+  8) echo "metal-vmm: volume: a write cache that says it writes through (VOLUME_CACHE=lie); 1 reads, 2 writes, 0 SYNCHRONIZE CACHE, 1 MODE SENSE; the power failed when the guest stopped and lost nothing" >&2 ;;
+  5) echo "metal-vmm: fired: VOLUME_SYNC_FAIL" >&2 ;;
+  9) echo "metal-vmm: fired: none" >&2 ;;
+esac
 echo "{\"metal_vmm_run\":{\"seed\":${s:-null},\"knobs\":\"$knobs\"}}" >> "$COVERAGE_OUT"
 echo '{"antithesis_sdk":{"language":{"name":"Zig","version":"0.16.0"},"sdk_version":"0.0.1","protocol_version":"1.1.0"}}' >> "$COVERAGE_OUT"
 # A kernel built -Dcoverage: one property, and the line metal-vmm ends with.
@@ -52,7 +63,7 @@ echo '{"antithesis_assert":{"hit":true,"must_hit":true,"assert_type":"x","displa
 echo "metal-vmm: coverage: 1 of 1 properties reached (1 hold, 0 broken), from 2 lines over 1 boots" >&2
 status=303
 case "$s" in
-  2 | 3 | 5) ;;
+  2 | 3 | 5 | 8 | 9) ;;
   4) status=0 ;;
   6) echo UNREADABLE >> "$VOLUME" ;;
   7) status=0; tail -c 20 "$PEER_REQUEST" >> "$VOLUME" ;;
@@ -89,6 +100,12 @@ expect "seed 7" '^7 .*ok, not told, kept' "$out"
 expect "the summary" '^7 seeds: 3 ok, 2 lost as their faults allow, 2 failed' "$out"
 expect "how to repeat it" 'repeat it: WIRE_EAT=2 PEER_REQUEST=.*post.req VOLUME=<a copy of .*volume.img> VOLUME_CUT_AT_EXIT=1' "$out"
 [ $code = 1 ] || { echo "FAIL: sweep.sh exited $code, not 1"; fail=1; }
+
+# A lie that cost nothing, and a SYNCHRONIZE failure that never came, excuse
+# no lost write (QUEUE 124(e)).
+out=$(run_sweep 8 9)
+expect "seed 8" '^8 .*FAIL: told 303 and the write is not on the volume' "$out"
+expect "seed 9" '^9 .*FAIL: told 303 and the write is not on the volume' "$out"
 
 # Nothing can be judged when the pristine volume already holds the message.
 printf 'conversation:\nhello from the sweep\n' > "$T/volume.img"
