@@ -309,7 +309,7 @@ for s in $failing; do
   if [ -n "$DURABLE" ]; then
     echo "    repeat it: $(knobs_of "seed$s") PEER_REQUEST=$POST VOLUME=<a copy of $VOLUME_SITE> VOLUME_CUT_AT_EXIT=1 TRANSPORT=$TRANSPORT $VMM $KERNEL <disk> \"\" /; then read back $READ_BACK"
   else
-    echo "    repeat it: $(knobs_of "seed$s") TRANSPORT=$TRANSPORT $VMM $KERNEL <volume> \"\" $PATH_WANTED"
+    echo "    repeat it: $(knobs_of "seed$s")${PEER_REQUEST:+ PEER_REQUEST=$PEER_REQUEST} TRANSPORT=$TRANSPORT $VMM $KERNEL <volume> \"\" $PATH_WANTED"
   fi
 done
 [ -z "$failing" ] && [ $merged = 0 ]

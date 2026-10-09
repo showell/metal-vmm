@@ -218,7 +218,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
 
 Each line's full text, with its history, is in the archive under its name.
 
-- **B28. The sweeps judge no coverage property (found 2026-10-09).**
+- **B28, done (2026-10-09, metal-vmm `a92ca03`, gopher-metal `21b1e47`): the coverage door.** A coverage boot is now 6,660 exits to the release kernel's 6,256, with the same page. `nightly.sh` takes `KERNEL_ELF` and `PEER_REQUEST`. **Was:** the sweeps judged no coverage property (found 2026-10-09).
   `sweep.sh` and `nightly.sh` run gopher.elf as a release builds it. Its
   properties are recorded but never written out ("201 runs, 0
   properties"), so a broken Always in a sweep is unseen unless it also

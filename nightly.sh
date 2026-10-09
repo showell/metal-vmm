@@ -6,6 +6,13 @@
 #   ./nightly.sh                    10 hours, from where the last night stopped
 #   HOURS=0.33 ./nightly.sh         a 20-minute trial
 #   FIRST=1 BATCH=100 ./nightly.sh  from seed 1, 100 seeds a batch
+#   KERNEL_ELF=<elf> PEER_REQUEST=<file> ./nightly.sh
+#                                   another kernel (a -Dcoverage build, whose
+#                                   properties are then judged too, through
+#                                   the coverage door), and every run sends
+#                                   that request instead of GET / (a write,
+#                                   say: POST /play, so the volume's faults
+#                                   meet one)
 #
 # **WHAT IT WRITES** (in `~/nightly/<date-time>/`, or NIGHTLY_OUT), all of it
 # as it goes, so it can be read mid-run:
@@ -18,12 +25,15 @@
 #   nightly.out/.err  this script's own stdout and stderr
 #   DONE              written last, with the night's totals
 # The next night starts after the last seed this one ran (`~/nightly/next-seed`).
+# A property a run broke fails its seed; the report's FAIL lines go to
+# failures.log as well.
 #
 # **THE BINARIES ARE FROZEN AT THE START**: metal-vmm and the kernel are
 # copied into the night's folder and run from there, so a rebuild of either
 # during the night changes nothing about it. The kernel is gopher-metal's
-# probe/gopher.elf as it stands: build it first (`./port.sh && zig build
-# gopher` in gopher-metal) if it should be master's.
+# probe/gopher.elf as it stands, unless KERNEL_ELF names another: build it
+# first (`./port.sh && zig build gopher` in gopher-metal, `-Dcoverage` for
+# the properties) if it should be master's.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${NIGHTLY_ROOT:-$HOME/nightly}"
@@ -31,6 +41,7 @@ HOURS="${HOURS:-10}"
 BATCH="${BATCH:-200}"
 GOPHER="${GOPHER:-$HOME/showell_repos/gopher-metal}"
 SITE="${SITE:-$HOME/build/gopher-metal/probe/gopher/pristine.img}"
+KERNEL_ELF="${KERNEL_ELF:-$GOPHER/probe/gopher.elf}"
 
 if [ -z "${NIGHTLY_ATTACHED:-}" ]; then
     OUT="${NIGHTLY_OUT:-$ROOT/$(date +%F-%H%M)}"
@@ -43,10 +54,16 @@ fi
 OUT="$NIGHTLY_OUT"
 mkdir -p "$OUT/bin" "$OUT/batches" "$OUT/failed"
 [ -x "$HERE/zig-out/bin/metal-vmm" ] || { echo "no metal-vmm built" >&2; exit 2; }
-[ -f "$GOPHER/probe/gopher.elf" ] || { echo "no $GOPHER/probe/gopher.elf" >&2; exit 2; }
+[ -f "$KERNEL_ELF" ] || { echo "no kernel at $KERNEL_ELF" >&2; exit 2; }
+[ -z "${PEER_REQUEST:-}" ] || [ -f "$PEER_REQUEST" ] || { echo "no request at PEER_REQUEST=$PEER_REQUEST" >&2; exit 2; }
 [ -f "$SITE" ] || { echo "no site volume at $SITE" >&2; exit 2; }
 cp "$HERE/zig-out/bin/metal-vmm" "$OUT/bin/metal-vmm"
-cp "$GOPHER/probe/gopher.elf" "$OUT/bin/gopher.elf"
+cp "$KERNEL_ELF" "$OUT/bin/gopher.elf"
+request=()
+if [ -n "${PEER_REQUEST:-}" ]; then
+    cp "$PEER_REQUEST" "$OUT/bin/request"
+    request=(PEER_REQUEST="$OUT/bin/request")
+fi
 cp "$SITE" "$OUT/bin/site.img"
 # sweep.sh and sound.sh too: an edit to either during the night changes
 # nothing about it.
@@ -61,7 +78,8 @@ deadline=$((start + $(python3 -c "print(int(float('$HOURS') * 3600))")))
     echo "nightly sweep, started $(date '+%F %T %Z')"
     echo "metal-vmm     $(git -C "$HERE" rev-parse --short HEAD)$( [ -n "$(git -C "$HERE" status --porcelain)" ] && echo ' (with uncommitted changes)')"
     echo "gopher-metal  $(git -C "$GOPHER" rev-parse --short HEAD)$( [ -n "$(git -C "$GOPHER" status --porcelain)" ] && echo ' (with uncommitted changes)')"
-    echo "kernel        $(sha256sum "$OUT/bin/gopher.elf" | cut -c1-16) (gopher.elf as built)"
+    echo "kernel        $(sha256sum "$OUT/bin/gopher.elf" | cut -c1-16) ($KERNEL_ELF as built$(grep -aq antithesis_sdk "$OUT/bin/gopher.elf" && echo ', with the coverage properties'))"
+    echo "request       $( [ -n "${PEER_REQUEST:-}" ] && echo "$PEER_REQUEST, its first line: $(head -1 "$PEER_REQUEST" | tr -d '\r')" || echo "GET /")"
     echo "volume        $SITE"
     echo "seeds from    $FIRST, $BATCH a batch, for $HOURS hours (no batch starts after $(date -d "@$deadline" '+%F %T %Z'))"
     echo "machine       TRANSPORT=pci, a volume (VOLUME_SITE), JOBS=${JOBS:-2}"
@@ -74,7 +92,7 @@ tot=0; tok=0; tdiff=0; tfail=0
 while [ "$(date +%s)" -lt "$deadline" ]; do
     last=$((seed + BATCH - 1))
     log="$OUT/batches/$seed-$last.log"
-    VMM="$OUT/bin/metal-vmm" KERNEL="$OUT/bin/gopher.elf" SITE="$OUT/bin/site.img" VOLUME_SITE="$OUT/bin/site.img" \
+    env "${request[@]}" VMM="$OUT/bin/metal-vmm" KERNEL="$OUT/bin/gopher.elf" SITE="$OUT/bin/site.img" VOLUME_SITE="$OUT/bin/site.img" \
         SOUND="$OUT/bin/sound.sh" REPORT="$OUT/bin/report.py" COVERAGE_SDK="$SDK" KEEP_FAILED="$OUT/failed" \
         "$OUT/bin/sweep.sh" "$seed" "$last" > "$log" 2>&1
     code=$?
@@ -90,6 +108,7 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
         fail=$BATCH
     fi
     grep -E '^  FAULT_SEED=[0-9]+: FAIL|^    repeat it:' "$log" >> "$OUT/failures.log"
+    grep -E '^FAIL ' "$log" | sed "s/^/batch $seed-$last: /" >> "$OUT/failures.log"
     tot=$((tot + BATCH)); tok=$((tok + ok)); tdiff=$((tdiff + diff)); tfail=$((tfail + fail))
     elapsed=$(( $(date +%s) - start ))
     rate=$(( tot * 3600 / (elapsed > 0 ? elapsed : 1) ))
