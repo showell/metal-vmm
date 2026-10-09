@@ -37,7 +37,14 @@
 # every run of it: `PEER_REQUEST=a[,b]` (files in the same folder),
 # `PEER_CLIENTS=2`, any knob, and `EXPECT=<status>`, which the
 # shape's unhurt run must answer or nothing can be judged; every shape has
-# one. **A WRITE SHAPE MAY CARRY ITS READ-BACK** (metal-vmm QUEUE 125):
+# one. **EVERY CLIENT IS JUDGED** (metal-vmm QUEUE 126): a shape of n clients
+# names n statuses (`EXPECT=303,204`), one for each client's unhurt answer,
+# and each client is held to the same client in the unhurt run, as the
+# first is (client k's page is metal-vmm's `<PEER_BODY>.k`). With
+# `PEER_IN_TURN=1` each client asks after the one before was answered, so a
+# request may depend on the last one's write (a move in the session it
+# made): then a client's answer may differ in any way once an earlier
+# client's did ("client 1's answer differed first"), and never otherwise. **A WRITE SHAPE MAY CARRY ITS READ-BACK** (metal-vmm QUEUE 125):
 # `READ_BACK=<request file beside it, or a path>`, `MARK=<text>` and
 # `TOLD=<status>` (its EXPECT unless said). Its runs then lose at the end what
 # no cache synchronized (VOLUME_CUT_AT_EXIT=1), each seed's volume is read
@@ -120,6 +127,18 @@ COVERAGE="$WORK/coverage.jsonl"
 # request files made absolute. No SHAPES is one shape, named "", with none.
 SHAPE_NAMES=("")
 declare -A SHAPE_ENV=() SHAPE_EXPECT=() SHAPE_READ=() SHAPE_MARK=() SHAPE_TOLD=()
+# setting_of <shape> <VAR>: that setting's value in the shape (or, for no
+# shape, the environment's).
+setting_of() {
+  if [ -z "$1" ]; then printenv "$2"; return 0; fi
+  local w
+  for w in ${SHAPE_ENV[$1]:-}; do case "$w" in "$2="*) echo "${w#"$2"=}" ;; esac; done
+  return 0
+}
+# clients_of <shape>: how many clients it is (PEER_CLIENTS, 1 unless said;
+# metal-vmm holds it to 8). in_turn_of <shape>: whether they ask in turn.
+clients_of() { local c; c=$(setting_of "$1" PEER_CLIENTS); echo "${c:-1}"; }
+in_turn_of() { [ "$(setting_of "$1" PEER_IN_TURN)" = 1 ]; }
 if [ -n "${SHAPES:-}" ]; then
   [ -d "$SHAPES" ] || { echo "no folder at SHAPES=$SHAPES"; exit 1; }
   [ -z "$DURABLE" ] || { echo "SHAPES and POST are two sweeps; choose one"; exit 1; }
@@ -161,10 +180,15 @@ if [ -n "${SHAPES:-}" ]; then
     # 122): with none, a shape gone stale (a cookie expired, a 500) is every
     # seed's baseline, and every seed that fails as it does is "ok".
     [ -n "${SHAPE_EXPECT[$n]:-}" ] || { echo "shape $n: no EXPECT=<status>: its unhurt run is held to nothing, so nothing can be judged"; exit 2; }
+    # One status a client (QUEUE 126): a client held to nothing would judge
+    # every seed against an answer gone stale.
+    want=$(clients_of "$n")
+    IFS=, read -ra statuses <<< "${SHAPE_EXPECT[$n]}"
+    [ "${#statuses[@]}" = "$want" ] || { echo "shape $n: EXPECT names ${#statuses[@]} status(es) for $want client(s): each client's unhurt answer must be held to one (EXPECT=303,204 for two), so nothing can be judged"; exit 2; }
     if [ -n "${SHAPE_READ[$n]:-}" ]; then
       [ -n "${SHAPE_MARK[$n]:-}" ] || { echo "shape $n: READ_BACK needs MARK=<text>"; exit 1; }
       [ -n "${VOLUME_SITE:-}" ] || { echo "shape $n: READ_BACK needs VOLUME_SITE=<image>: the write is kept on the volume"; exit 1; }
-      SHAPE_TOLD[$n]="${SHAPE_TOLD[$n]:-${SHAPE_EXPECT[$n]}}"
+      SHAPE_TOLD[$n]="${SHAPE_TOLD[$n]:-${SHAPE_EXPECT[$n]%%,*}}"
       # Each write cache loses what was never synchronized when the guest
       # stops, as in a durability sweep.
       SHAPE_ENV[$n]="${SHAPE_ENV[$n]}${SHAPE_ENV[$n]:+ }VOLUME_CUT_AT_EXIT=1"
@@ -236,6 +260,20 @@ read_of() { [ -z "$1" ] || echo "${SHAPE_READ[$1]:-}"; }
 # account of the peer's frames, how the peer ended, the coverage line). Read
 # together, the wire's "peer: 51 frames sent" was once taken for a status.
 status_of() { sed -n -E 's/^peer: ([0-9]+)( "|, [0-9]+ bytes$).*/\1/p' "$WORK/$1.out" | head -1; }
+# client_status <run> <k>: client k's status, from its own line (`peer 2:
+# 204, 1 of 1 answers, 65 bytes, done`); none for a client never opened.
+client_status() { sed -n -E "s/^peer $2: ([0-9]+), .*/\1/p" "$WORK/$1.out" | head -1; }
+# client_page <run> <k>: client k's page file (metal-vmm's PEER_BODY, and
+# `<PEER_BODY>.k` for client k past the first; QUEUE 126).
+client_page() { if [ "$2" = 1 ]; then echo "$WORK/$1.body"; else echo "$WORK/$1.body.$2"; fi; }
+# statuses_of <run> <shape>: every client's status, comma-separated, as a
+# shape's EXPECT names them.
+statuses_of() {
+  local all k
+  all=$(status_of "$1")
+  for ((k = 2; k <= $(clients_of "$2"); k++)); do all="$all,$(client_status "$1" "$k")"; done
+  echo "$all"
+}
 knobs_of() { sed -n 's/^metal-vmm: FAULT_SEED=[0-9]* is //p' "$WORK/$1.err" | head -1; }
 # The peer's own end, when it let the page go itself (REVIEW-peer.md S1).
 peer_end_of() { sed -n 's/^metal-vmm: the first client \(gave up\|vanished\).*/\1/p' "$WORK/$1.err" | head -1; }
@@ -259,6 +297,64 @@ lie_lost() {
 
 # changed <image>: whether its modification time moved since it was copied.
 changed() { [ "$(stat -c %y "$1")" != "$(cat "$1.copied")" ]; }
+
+# answer_excuse <run> <k> <status> <unhurt status> <page> <unhurt page>
+# <fired>: what excuses client k's answer differing from the same client's
+# unhurt one, comma-separated, or nothing.
+answer_excuse() {
+  local name="$1" k="$2" status="$3" ustatus="$4" page="$5" upage="$6" fired="$7" excuse=""
+  # **A FAULT EXCUSES LESS OF THE PAGE, NEVER ANOTHER ONE** (Steve,
+  # 2026-10-08): no answer at all, or the unhurt run's status with its
+  # page cut short. Another status (a 404, a 200 where it was a 303) or
+  # another page under the same status is a failure, whatever was turned;
+  # the one other status excused is a 5xx after a disk fault, below.
+  local less=no
+  if [ -z "$status" ] || [ "$status" = 0 ]; then less=yes
+  elif [ "$status" = "$ustatus" ] && [ -f "$page" ] && [ -f "$upage" ]; then
+    local got want
+    got=$(wc -c < "$page")
+    want=$(wc -c < "$upage")
+    [ "$got" -lt "$want" ] && cmp -s -n "$got" "$page" "$upage" && less=yes
+  fi
+  # **A SERVER THAT SAYS IT FAILED, WHEN ITS DISK DID**: a 5xx is excused
+  # by a fault on the disk or the volume, and by nothing else.
+  case "$status" in 5??)
+    for f in DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DISK_ROT DISK_BAD_SECTOR VOLUME_CUT_AFTER VOLUME_SHORT_AT VOLUME_GONE_AT VOLUME_READ_ONLY_AT; do
+      case "$fired" in *" $f "*) excuse="$excuse${excuse:+, }$f (a $status)" ;; esac
+    done ;;
+  esac
+  if [ $less = yes ]; then
+    # The first client's own faults excuse the others' lesser answers too:
+    # the guest serves one connection at a time, so a client that vanished
+    # holds the rest behind it.
+    for f in PEER_RESET_AT PEER_VANISH_AFTER DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DISK_ROT VOLUME_CUT_AFTER; do
+      case "$fired" in *" $f "*) excuse="$excuse${excuse:+, }$f" ;; esac
+    done
+    local gone
+    gone=$(peer_end_of "$name")
+    [ -z "$gone" ] || excuse="$excuse${excuse:+, }the peer $gone"
+    # The guest's own word that its stop cut a response: a run with a
+    # request limit (the site volume serves one) ends 2 s after it,
+    # wherever the client is; a machine with no limit never stops.
+    if grep -q '^  let go at the end: .* cut by the stop' "$WORK/$name.out"; then
+      excuse="$excuse${excuse:+, }the stop cut it"
+    fi
+    # **THE REQUEST LIMIT WENT TO ANOTHER CLIENT**: a machine told to
+    # serve n requests (the site volume's conf) serves n and stops, so with
+    # more clients than that, one a fault slowed may be the one not
+    # served. Only when the guest served exactly its limit and the other
+    # clients' answers are every one of them: one served and not counted
+    # was this client's, and its answer lost (metal-vmm QUEUE 122).
+    local limit served others
+    limit=$(sed -n -E 's/^  serving ([0-9]+) request\(s\).*/\1/p' "$WORK/$name.out" | head -1)
+    served=$(sed -n -E 's/^  served ([0-9]+) request\(s\).*/\1/p' "$WORK/$name.out" | tail -1)
+    others=$(sed -n -E 's/^peer ([1-9][0-9]*): [0-9]+, ([0-9]+) of [0-9]+ answers.*/\1 \2/p' "$WORK/$name.out" | awk -v k="$k" '$1 != k { n += $2 } END { print n + 0 }')
+    if [ -n "$limit" ] && [ "$limit" = "$served" ] && [ "$others" -gt 0 ] && [ "$others" = "$served" ]; then
+      excuse="$excuse${excuse:+, }the request limit went to another client"
+    fi
+  fi
+  echo "$excuse"
+}
 
 # verdict <name>: "ok", "differs (allowed: ...)", or "FAIL: ..." for one run
 # against the unhurt one.
@@ -364,56 +460,22 @@ verdict() {
     else echo "ok, not told, not kept"; fi
     return
   fi
-  if [ "$status" != "$(status_of "$u")" ] || ! cmp -s "$WORK/$name.body" "$WORK/$u.body"; then
-    # **A FAULT EXCUSES LESS OF THE PAGE, NEVER ANOTHER ONE** (Steve,
-    # 2026-10-08): no answer at all, or the unhurt run's status with its
-    # page cut short. Another status (a 404, a 200 where it was a 303) or
-    # another page under the same status is a failure, whatever was turned;
-    # the one other status excused is a 5xx after a disk fault, below.
-    local less=no
-    if [ -z "$status" ] || [ "$status" = 0 ]; then less=yes
-    elif [ "$status" = "$(status_of "$u")" ] && [ -f "$WORK/$name.body" ] && [ -f "$WORK/$u.body" ]; then
-      local got want
-      got=$(wc -c < "$WORK/$name.body")
-      want=$(wc -c < "$WORK/$u.body")
-      [ "$got" -lt "$want" ] && cmp -s -n "$got" "$WORK/$name.body" "$WORK/$u.body" && less=yes
-    fi
-    # **A SERVER THAT SAYS IT FAILED, WHEN ITS DISK DID**: a 5xx is excused
-    # by a fault on the disk or the volume, and by nothing else.
-    case "$status" in 5??)
-      for k in DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DISK_ROT DISK_BAD_SECTOR VOLUME_CUT_AFTER VOLUME_SHORT_AT VOLUME_GONE_AT VOLUME_READ_ONLY_AT; do
-        case "$fired" in *" $k "*) excuse="$excuse${excuse:+, }$k (a $status)" ;; esac
-      done ;;
-    esac
-    if [ $less = yes ]; then
-      for k in PEER_RESET_AT PEER_VANISH_AFTER DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DISK_ROT VOLUME_CUT_AFTER; do
-        case "$fired" in *" $k "*) excuse="$excuse${excuse:+, }$k" ;; esac
-      done
-      local gone
-      gone=$(peer_end_of "$name")
-      [ -z "$gone" ] || excuse="$excuse${excuse:+, }the peer $gone"
-      # The guest's own word that its stop cut a response: a run with a
-      # request limit (the site volume serves one) ends 2 s after it,
-      # wherever the client is; a machine with no limit never stops.
-      if grep -q '^  let go at the end: .* cut by the stop' "$WORK/$name.out"; then
-        excuse="$excuse${excuse:+, }the stop cut it"
-      fi
-      # **THE REQUEST LIMIT WENT TO ANOTHER CLIENT**: a machine told to
-      # serve n requests (the site volume's conf) serves n and stops, so with
-      # more clients than that, one a fault slowed may be the one not
-      # served. Only when the guest served exactly its limit and the other
-      # clients' answers are every one of them: one served and not counted
-      # was this client's, and its answer lost (metal-vmm QUEUE 122).
-      local limit served others
-      limit=$(sed -n -E 's/^  serving ([0-9]+) request\(s\).*/\1/p' "$WORK/$name.out" | head -1)
-      served=$(sed -n -E 's/^  served ([0-9]+) request\(s\).*/\1/p' "$WORK/$name.out" | tail -1)
-      others=$(sed -n -E 's/^peer ([2-9]|[1-9][0-9]+): [0-9]+, ([0-9]+) of [0-9]+ answers.*/\2/p' "$WORK/$name.out" | awk '{ n += $1 } END { print n + 0 }')
-      if [ -n "$limit" ] && [ "$limit" = "$served" ] && [ "$others" -gt 0 ] && [ "$others" = "$served" ]; then
-        excuse="$excuse${excuse:+, }the request limit went to another client"
-      fi
-    fi
-    [ -n "$excuse" ] || why="$why, not the page (status ${status:-none})"
-  fi
+  # **EVERY CLIENT, AGAINST THE SAME CLIENT UNHURT** (metal-vmm QUEUE 126).
+  # In turn, a client asks after the one before was answered, and may ask
+  # what that one wrote: once one differs, the later ones may differ in any
+  # way. Not in turn, or before any differs, each is judged alone.
+  local k ks us cex differed=""
+  for ((k = 1; k <= $(clients_of "$sh"); k++)); do
+    if [ "$k" = 1 ]; then ks="$status"; us=$(status_of "$u"); else ks=$(client_status "$name" "$k"); us=$(client_status "$u" "$k"); fi
+    [ "$ks" != "$us" ] || ! cmp -s "$(client_page "$name" "$k")" "$(client_page "$u" "$k")" || continue
+    if [ -n "$differed" ] && in_turn_of "$sh"; then cex="client $differed's answer differed first"
+    else cex=$(answer_excuse "$name" "$k" "$ks" "$us" "$(client_page "$name" "$k")" "$(client_page "$u" "$k")" "$fired"); fi
+    [ -n "$differed" ] || differed="$k"
+    if [ "$k" = 1 ]; then
+      if [ -n "$cex" ]; then excuse="$excuse${excuse:+, }$cex"; else why="$why, not the page (status ${status:-none})"; fi
+    elif [ -n "$cex" ]; then excuse="$excuse${excuse:+, }client $k: $cex"
+    else why="$why, client $k: not its page (status ${ks:-none}; unhurt: ${us:-none})"; fi
+  done
   if [ -n "$why" ]; then echo "FAIL: ${why#, }"
   elif [ -n "$excuse$unsound" ]; then echo "differs (allowed: $excuse${excuse:+${unsound:+, }}$unsound)"
   else echo "ok"; fi
@@ -450,11 +512,20 @@ for n in "${SHAPE_NAMES[@]}"; do
     echo "  build one: (cd ~/showell_repos/gopher-metal && zig build gopher -Dcoverage), and copy probe/gopher.elf aside: gates.sh wants the release build there"
     exit 2
   fi
+  # **EVERY CLIENT'S UNHURT PAGE** (QUEUE 126): each client past the first
+  # is held to its own, so each must have one.
+  for ((k = 2; k <= $(clients_of "$n"); k++)); do
+    if [ -z "$(client_status "$u" "$k")" ] || [ ! -f "$(client_page "$u" "$k")" ]; then
+      echo "${n:+shape $n: }the unhurt run's client $k got $([ -n "$(client_status "$u" "$k")" ] && echo "status $(client_status "$u" "$k") and no page" || echo "no answer"): nothing can be judged; see $WORK/$u.out"
+      exit 2
+    fi
+  done
   if [ -n "$n" ]; then
     st=$(status_of "$u")
-    echo "shape $n: unhurt status ${st:-none}, $([ -f "$WORK/$u.body" ] && wc -c < "$WORK/$u.body" || echo no) bytes (${SHAPE_ENV[$n]})"
-    if [ -n "${SHAPE_EXPECT[$n]:-}" ] && [ "$st" != "${SHAPE_EXPECT[$n]}" ]; then
-      echo "shape $n: its unhurt run answered ${st:-nothing}, not ${SHAPE_EXPECT[$n]}: nothing can be judged; see $WORK/$u.out"
+    sts=$(statuses_of "$u" "$n")
+    echo "shape $n: unhurt status ${sts:-none}, $([ -f "$WORK/$u.body" ] && wc -c < "$WORK/$u.body" || echo no) bytes (${SHAPE_ENV[$n]})"
+    if [ -n "${SHAPE_EXPECT[$n]:-}" ] && [ "$sts" != "${SHAPE_EXPECT[$n]}" ]; then
+      echo "shape $n: its unhurt run answered ${sts:-nothing}, not ${SHAPE_EXPECT[$n]}: nothing can be judged; see $WORK/$u.out"
       exit 2
     fi
     [ -f "$WORK/unhurt.exit" ] || for x in exit out err body cov; do [ ! -f "$WORK/$u.$x" ] || cp "$WORK/$u.$x" "$WORK/unhurt.$x"; done

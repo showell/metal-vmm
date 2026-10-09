@@ -1,5 +1,6 @@
 # a player made while another's puzzle move is written: two clients at once,
-# the first one's answer judged
+# each one's answer judged (metal-vmm QUEUE 126; client 2's 204 is
+# puzzle-action's own, not yet run on a guest beside client 1)
 PEER_CLIENTS=2
 PEER_REQUEST=play.http,puzzle-action.http
-EXPECT=303
+EXPECT=303,204

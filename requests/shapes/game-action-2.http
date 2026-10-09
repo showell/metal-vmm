@@ -1,0 +1,8 @@
+POST /game/sessions/2/actions HTTP/1.1
+Host: lynrummy.com
+Cookie: gopher_uid=p2.1789732801.JQe2xbtKNu4Ie7fkr4jBC50RH_RYdoQnr1S3tHAGoiw
+Content-Type: text/plain
+Content-Length: 8
+Connection: close
+
+move-two

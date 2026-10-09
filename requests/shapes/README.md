@@ -31,6 +31,20 @@ The last two recipes are derived from angry-gopher's game.zig and have not
 been run on a guest: `SHAPES=requests/shapes ./sweep.sh 1 10` says at once
 whether each holds.
 
+**EVERY CLIENT IS JUDGED** (metal-vmm QUEUE 126): a shape of n clients
+names n statuses in its `EXPECT`, and each client is held to the same client
+unhurt.
+- `two-clients`: a player made (`303`) while another's puzzle move is
+  written (`204`), at once.
+- `session-then-move`: client 1 makes session 2 (`200`), and client 2 moves
+  in it (`204`, `game-action-2.http`), asking only once client 1 was
+  answered (`PEER_IN_TURN=1`). A move in a session that is not there is a
+  404, so a request that damages the next one shows; one whose own answer a
+  fault cost excuses the next one's, as it asked of another state.
+
+Neither pair has been run on a guest. If the site volume's request limit is
+under two, their unhurt runs say so at once.
+
 `read-puzzles.http` is no shape (it has no `.shape`): it is the read-back of
 a durable sweep of puzzle moves. After the setup's two requests, on a copy
 of the volume they left (`VOLUME_SITE`):
