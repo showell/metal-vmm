@@ -21,13 +21,12 @@ patch applied:
   mark is lost: another file is later given the cluster and gets the append;
 - a long name across a sector edge, where only the short entry survives.
 
-Both are written out in 119. Write them as red tests only, for now. Steve is
-choosing between your barriers and turning the volume's write cache off
-(WCE=0) at boot. Two misses in one reading makes me lean toward WCE=0, which
-removes the whole class of bug. Your red tests are worth having either way.
-Also: under `VOLUME_SYNC_FAIL`, a failed SYNCHRONIZE now lands on a barrier,
-so the write answers 500 where it used to succeed. That is fine, but it's a
-behaviour change.
+**Steve chose WCE=0 over barriers**, since two misses in one reading said
+the barriers would keep leaking. Boot turns the volume's write cache off and
+reads it back (gopher-metal `1619ff3`, metal-vmm `7bbd048`). The patch stays
+unapplied. Your red store_sim test is merged, and now expects a cut on a
+cached disk to break fat16's promises, which is why the cache goes off. 119
+is now: attack the turning-off, against the specs and Linux's sd.
 
 **114's two rules have holes (now 120):**
 - the wrapper rule accepts any `error.X` arm;

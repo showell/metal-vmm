@@ -19,8 +19,9 @@ the real kernel, through metal-vmm's fault decisions (`docs/SNAPSHOT.md`).
 
 **v20 serves** (gopher-metal `a26f85d`, angry-gopher `8b617f3c`). CC's
 112-118 are reviewed. angry-gopher and metal-vmm are merged. gopher-metal is
-held, because its store_sim test stays red until 112 is fixed: either the
-barrier patch plus 119, or WCE=0 (Steve's choice). The second nightly
+merged too: Steve chose WCE=0 (b), so boot turns the volume's write cache
+off (gopher-metal `1619ff3`), and CC's red store_sim test now holds the
+reason. The second nightly
 (`~/nightly/2026-10-09-0028`) runs gopher-metal `aa4b30a`, which fixes the
 first night's two findings. Next for the box is the whole-machine snapshot
 (`docs/SNAPSHOT.md`). The conversation between the two Claudes is
@@ -163,21 +164,24 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
     skip line; make it a named skip. Also fold `principalAuthorizedOrError`
     into `principalAuthorized` (they're the same since 108).
 
-119. **Two orderings 112's patch misses, each a red test on its test disk**
-     (a cold review of the patch; its probes are in FEEDBACK.md, 2026-10-09).
-     Red tests only: the fix waits on Steve's choice of barriers or WCE=0.
-     - `writeInto`: `allocChain(extra)` writes the new end mark, then
-       `fatSet(end.last, extra)` links it, with no barrier between them. If
-       the two entries are in different FAT sectors, a cut can keep the link
-       and lose the end mark. The next file is then given that cluster, and
-       an append to the first file writes into the second.
-     - `writeEntry`: a long name's parts, then its short entry, with no
-       barrier between them. If they are in different sectors, a cut keeps
-       the short entry alone (a file under `LONG-N~1.TXT`, and the check
-       clean). `unlinkEntry` has the mirror image.
-     - The test disk keeps a multi-sector write whole or not at all, but a
-       real cache can keep some of its sectors: model that too, if it's
-       cheap.
+119. **Attack the write cache turned off** (Steve chose WCE=0 over
+     barriers, 2026-10-09; the barrier patch and its two misses are moot).
+     - gopher-metal `1619ff3` `scsi.turnCacheOff`: MODE SELECT(10) sends
+       back the sensed caching page with WCE cleared, then reads it again.
+     - metal-vmm `7bbd048` `Scsi.modeSelect`: the model of a disk that takes
+       it, plus `VOLUME_WCE_FIXED=1`, a disk that refuses.
+
+     Read both against SPC-4 §6.13 and SBC-3 §6.5.5, and against how Linux's
+     sd sends the same (`sd_cache_type_store`). The questions:
+     - What would a real disk (QEMU's scsi-hd, which DO likely runs) refuse,
+       or take and ignore?
+     - Is a cache that is turned off, but held writes from before, possible
+       at boot?
+     - Is anything in the page we send back besides WCE wrong to echo?
+
+     Findings as red tests in metal-vmm's `scsi.zig` where you can.
+     `store_sim`'s cached test now holds the reason: it expects a cut on a
+     cached disk to break fat16's promises.
 
 120. **The store lint's two new holes** (the same review, 114's rules):
      - The wrapper rule accepts any `error.X` arm. `catch |e| switch (e) {
@@ -213,6 +217,18 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
+
+- **B28. The sweeps judge no coverage property (found 2026-10-09).**
+  `sweep.sh` and `nightly.sh` run gopher.elf as a release builds it. Its
+  properties are recorded but never written out ("201 runs, 0
+  properties"), so a broken Always in a sweep is unseen unless it also
+  changes the page or the exit. That includes fat16's per-request damage
+  check, which runs only with `-Dcoverage`. long.sh uses a -Dcoverage kernel
+  apart from the one it judges, because printing the catalog costs a boot
+  about nine seconds of guest time. The fix to look at is a coverage line
+  that costs the guest no time: one `rep outsb` per line to a port metal-vmm
+  answers without moving the clock. Then a sweep could judge pages and
+  properties on one kernel.
 
 - **v20** (2026-10-08): port, `gates.sh`, `long.sh`, the image, Steve's go;
   Steve's steps gain a Caddy reload (angry-gopher `deploy/Caddyfile`).
