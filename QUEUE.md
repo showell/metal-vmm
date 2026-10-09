@@ -419,7 +419,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      will make "commit, then sweepable cleanup" safe everywhere, so #3 and
      #6 may lean on it: say so in a comment rather than waiting.
 
-132. **A reserve on the volume, for small writes** (Steve, 2026-10-09
+132. **Done (CC, 2026-10-09 night): gopher-metal `9e7d8e9`, red first; with 131's counters on /admin/host (Steve: yes).** **Was:** **A reserve on the volume, for small writes** (Steve, 2026-10-09
      evening: "a little breathing room for emergencies"; for v22, after
      131). In gopher-metal's `fat16.allocChain`: keep a reserve, about
      64 MiB in clusters, capped at a small fraction of a small volume. An
@@ -435,7 +435,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      - Say the reserve in the boot line and in `/admin/host`'s volume line.
      - The size: 64 MiB (Steve, 2026-10-09).
 
-133. **A duplicate ACK must name SND.UNA** (the box, 2026-10-09 evening, from
+133. **Done (CC, 2026-10-09 night): gopher-metal `db1ade8`, red first; five tcp_sim crowd seeds no longer witness the ring (Questions, "item 133").** **Was:** **A duplicate ACK must name SND.UNA** (the box, 2026-10-09 evening, from
      a cold comment pass over tcp.zig; for v22). RFC 5681 §2 counts a
      duplicate only when its acknowledgement number equals the greatest
      acknowledged (`una`). `tcp.zig`'s count (the `dupacks += 1` arm in
@@ -447,7 +447,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      resend); then the check; then remove the comment line the pass added
      saying it isn't checked.
 
-134. **The cold review of 127-131 (the box, 2026-10-09 night): two
+134. **Done (CC, 2026-10-09 night): (a)-(c) `b810e98`, (h) `8134209` (gopher-metal); (d) `9e7d8e9`; (e)-(f) angry-gopher `14d964e`; (g) metal-vmm `8f8b431`; each red first (Questions, "item 134").** **Was:** **The cold review of 127-131 (the box, 2026-10-09 night): two
      blocking in gopher-metal, the rest after.** Verdicts: angry-gopher
      merge, metal-vmm merge, gopher-metal not yet. The box has merged your
      gopher-metal branch into its `next` (origin `next`, with the TCP
@@ -496,7 +496,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
        a later error is still silence. No worse than before; say whether
        it is cheap to fix.
 
-135. **No seed refuses a write on the volume** (the box, 2026-10-09 night,
+135. **Done (CC, 2026-10-09 night): metal-vmm `f0dc9d8` (the draws; the plant moved up), `cd77816` (cannot_judge, FAILED_SEEDS); red first.** **Was:** **No seed refuses a write on the volume** (the box, 2026-10-09 night,
      from a pre-run review of `plants.sh`). `knobs.zig`'s `withVolume`
      draws none of `VOLUME_GONE_AT`, `VOLUME_READ_ONLY_AT`,
      `VOLUME_SHORT_AT`. So every night so far has never refused a
@@ -672,6 +672,71 @@ runs on the host, and each would start from a red test.
 ## Questions
 
 *(Either side, with a reproduction where there is one.)*
+
+- **(CC, items 132-135)**
+  - **132 (`9e7d8e9`):** `Volume.reserve_clusters` is 64 MiB of clusters
+    or a sixteenth of the volume, whichever is less, set at mount.
+    allocChain refuses (`Full`, before taking anything) an allocation of
+    more than two clusters that would leave fewer free. The boot line says
+    the reserve. /admin/host's volume line says it, and 131's
+    `cleanups_failed` and `fat_copies_failed`. The judge's "N MB free of
+    M MB" still reads it (test_judges passes). The full-volume oracles in
+    fat_sim and store_sim hold.
+  - **133 (`db1ade8`):** a duplicate now needs `number == una`. **Worth
+    your eyes:** five of item 24's crowd seeds (1733, 6918, 7374, 7968,
+    9728) now pass with the revival ring off. Each had failed by exactly
+    such spurious fast retransmits, so they left `crowd_red`, with a
+    comment. 16 crowd seeds and all 14 rough seeds still need the ring.
+    The comment line 133 says a pass added is not on master's tcp.zig;
+    there was nothing to remove.
+  - **134:**
+    - **(a)-(c) (`b810e98`):**
+      - A failed held-FAT write's read-back goes into scratch, and is
+        copied in only if it came.
+      - A sector whose read-back fails is **not known**
+        (`Volume.fat_unknown`; past eight, every sector is). **The next
+        change to it:** fatGet or fatSet there reads it from the disk
+        first and fails if that read fails, so no decision rests on an
+        unknown value, and no failed read's bytes reach a copy.
+      - grow's read-back failing is now an error: a leak, never a free.
+      - allocChain reads its link again after a failure. Linked, the
+        errdefer's chain frees it. Not linked, it goes back alone. Not
+        known, it leaks.
+      - Red, with virtio's `then_fail` (the next N requests fail, a read
+        first scribbling its buffer): /data broken on the same mount;
+        grow's double fault; "every cluster freed was in use" broken
+        (counted from a coverage.reset per run).
+    - **(h) (`8134209`):** `adoptSector` moves the free count entry by
+      entry for whatever the disk's bytes change, both in the read-back and
+      in knowSector. Red with `then_garbage` (a rotten read-back): the
+      kept count was 8092 against the held FAT's 7840.
+    - **(d):** done in `9e7d8e9`.
+    - **(e) (angry-gopher `14d964e`):** deleteUserRecord removes users_root
+      first and auth_root last. A failure leaves an account that logs in
+      and can be released again. Red: removals refused under users_root.
+    - **(f):** the 500's body is "The server failed."; route still returns
+      the error for the host to log.
+    - **(g) (metal-vmm `8f8b431`):** UNMADE opens only after a client
+      whose write is in doubt: no answer, a 5xx, or another status. Red:
+      fake seed 57, a page cut short under its own 200.
+    - **The 100-continue note: cheap.** `Sent` would keep its first 25
+      bytes and a count, and answerFailure would still answer when all
+      that went out is `HTTP/1.1 100 Continue\r\n\r\n` (a final
+      response may follow a 100). About ten lines; not done, say if you
+      want it.
+  - **135:**
+    - **The draws (`f0dc9d8`):** one seed in eight with a volume draws one
+      of `VOLUME_GONE_AT`, `VOLUME_READ_ONLY_AT` and `VOLUME_SHORT_AT`, at
+      a command from 1 to 250. They are drawn last, so every earlier draw
+      of every seed is unchanged. "Aimed at the write requests" is only as
+      good as that range. A guest run's volume line (N reads, M writes)
+      would let you narrow it.
+    - **The plant:** disk-write-swallowed moved to `plants/` (it applies
+      at gopher-metal's branch and master). plants.sh is not run here.
+    - **The suggestion (`cd77816`), taken:** every "nothing can be judged"
+      in sweep.sh exits 2 through `cannot_judge` (28 sites; some exited 1
+      before). The sweep's last line is `FAILED_SEEDS: ...`, which
+      plants.sh and nightly.sh now read.
 
 - **(CC, item 131) The kernel's facts.** All in gopher-metal, each red
   first in fat16_faults_test, fat16_test or scsi_mode.

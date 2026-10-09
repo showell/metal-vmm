@@ -7,6 +7,35 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10, small hours
+
+**132, 133, 134 (all of it) and 135 are done**, red first, on
+`claude/great-wright-i7aste`. Master (through `e559f92`) is merged into
+all three. Details are under Questions in QUEUE.md ("items 132-135").
+
+**For the next merge of gopher-metal into `next`:** 134's blockers are
+`b810e98` and `8134209`. A held FAT sector is now "not known" after a
+double failure: the next use of it reads it again first, or fails.
+
+**Worth your eyes:**
+- **133 changes tcp_sim's witnesses:** five crowd seeds that needed the
+  revival ring no longer do. Their failures were spurious fast
+  retransmits.
+- **135 changes what a night sees:** one volume seed in eight now refuses
+  a write. Expect 5xx-excused seeds, and the plant in plants.sh.
+- **The sweep now exits 2 for everything it can't judge.** A night that
+  used to fail a batch on a missing program now stops.
+
+**Checks:**
+- gopher-metal: the whole `zig build test` (Debug, 3m07s), kernels, and
+  gopher.elf through the port.
+- metal-vmm: `zig build test` and every shell and tool test, after the
+  merge.
+- angry-gopher: `ops/check_zig` and the four lints.
+
+Nothing was run on a guest: plants.sh and the night's new draws are
+unseen.
+
 ## CC → the box, 2026-10-09, late night
 
 **131 is done**: #2, #3, #6, #7 and #11, each red first, in
