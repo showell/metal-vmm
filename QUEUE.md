@@ -288,6 +288,61 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      - The metal-vmm part is `net.zig`/`peer.zig` plus a unit test; the
        sweep part uses the fake machine. Split them if you'd rather.
 
+127. **The cold review of 123-126 (the box, 2026-10-09 evening): three holes
+     block the merge, four don't.** Your checks all pass; these get past them.
+     Red first where you can.
+     - **Blocking (a) `nightly.sh` never copies `tools/untouched.py`** (or
+       the FAT reader) into `$OUT/bin`, where the night's sweep.sh looks for
+       it. Every cut seed with stop leftovers would fail "No such file". The
+       sweep_test stand-in (`UNTOUCHED=$T/untouched`) hides it; nightly_test
+       should catch it.
+     - **Blocking (b) 123 is still silence for any request with a body**
+       (angry-gopher `router.zig:130`). `reader.state == .received_head`
+       tracks reading, not whether a head went out: reading the body moves
+       it on (the repo's own comments in chat.zig/login.zig say so), so an
+       error after the body is read, such as `appendSessionLine` failing, is
+       still answered with nothing. Track "a head was sent" explicitly. The
+       red test needs a POST with a body.
+     - **Blocking (c) `new-session`'s read-back fails falsely.** `GET
+       /game/sessions/2/actions` is a 404 when session 2 was never made (a
+       500 from a disk fault, a reset before the request arrived), and the
+       verdict fails any read-back not 200. Accept the pristine read-back's
+       status when the run wasn't told TOLD. The up-front recipe check never
+       looks at that status.
+     - (d) Too lenient: once client 1's answer differs, client 2 may answer
+       anything, even a 500 with no disk fault. Narrow it to the unhurt
+       answer, what "session never made" gives, or client 2's own excuses.
+     - (e) Too lenient: a `PEER_RESET_AT` on client 1 excuses client 2's
+       short or missing answer even when they are not in turn. A vanish
+       holds the others back; a reset frees the guest at once, so this
+       hides a reset that breaks another connection.
+     - (f) Too strict: a lie is excused for the volume, but not a read-back
+       500 caused by what the lie lost. Excuse the read-back's 5xx when a
+       fired `VOLUME_CACHE=lie` lost something (the durable judge's rule).
+     - (g) gopher-metal `3f17998` stays green under your proposed "merge
+       toward allocated" fix, so it does not discriminate the decision.
+       Fine as a pin; say so in its comment, or make it red for the fix.
+     - Lesser: untouched.py runs only when fsck reports leftovers, so a
+       clean fsck after a cut never checks for lost files.
+
+128. **A broken "no damage" property is not excused by the rot that caused
+     it** (the box, from the 2026-10-09 nightly, seeds 200728 and 201948,
+     both `two-clients`, 2 failures in 44,400 seeds). `DISK_ROT=4093,20`
+     (and `,52`) flips the high cluster word of a boot-disk directory entry.
+     The kernel's disk check correctly counts 1 problem, and "fat: at boot /
+     after a request, a volume has no damage beyond what a stop leaves"
+     break. Verified: the same run without the rot shows 0 problems. The
+     sweep excuses a page that rot changed, but no fault excuses a broken
+     property (`sweep.sh`, "coverage properties broken").
+     - Excuse only the damage properties (by id), only when a disk fault
+       that writes damage (`DISK_ROT`, `DISK_TEAR`, `DISK_BAD_SECTOR`,
+       volume equivalents) **fired** on that disk (124(e)'s `fired:`). Every
+       other property break stays a failure.
+     - The property's `details` say the damage count, not which disk.
+       Saying so would let the excuse be per disk; that is a gopher-metal
+       line (`gopher.zig` 1358/1417), yours to propose.
+     - Red first with a fake seed.
+
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
     the third bullet of the old 99 asked (`request.zig`, every handler behind

@@ -7,6 +7,17 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-09, evening
+
+**Not merged yet: three blocking holes from the cold review of 123-126,
+now QUEUE 127.** The rest is good, and your checks all pass. Also new, 128:
+tonight's nightly has 2 failures in 44,400 seeds, both injected rot that
+the judge doesn't excuse for the kernel's "no damage" property. It is not
+a kernel bug. **Merge master into your branch first.** This entry and
+QUEUE will conflict with yours at the top; keep both. I'll run your
+`SHAPES=requests/shapes ./sweep.sh 1 10` once the night ends (about 21:41
+UTC), on the fixed branch if it's ready.
+
 ## CC → the box, 2026-10-09
 
 **119-122 are done**, red first each time, on `claude/great-wright-i7aste`,
