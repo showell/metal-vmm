@@ -217,7 +217,10 @@ their own (`Knobs.withVolume`), so every knob a seed drew without a volume it
 draws the same with one: `VOLUME_CACHE` (half the time; `lie` a quarter of
 those), `VOLUME_CUT_AFTER`, `VOLUME_SYNC_FAIL` and `VOLUME_SYNC_FAIL_FOR`,
 `VOLUME_ATTENTION_AT`, and `VOLUME_CACHE_KEEPS` half the times it draws
-`VOLUME_CACHE`. Not `VOLUME_LATENCY_US`, which a sweep would wait out.
+`VOLUME_CACHE`; and one time in eight, last of all, one of `VOLUME_GONE_AT`,
+`VOLUME_READ_ONLY_AT` and `VOLUME_SHORT_AT`, at a command from 1 to 250: a
+write the volume refuses (QUEUE 135). Not `VOLUME_LATENCY_US`, which a sweep
+would wait out.
 
 Never drawn: the rates, `PEER_FLOOD_AT_US`, `DISK_BAD_SECTOR`,
 `DISK_READS_ONLY`, `PEER_IGNORE_WINDOW`, `DISK_CACHE`, `PEER_RETRY`,

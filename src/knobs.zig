@@ -55,10 +55,11 @@
 //! `VOLUME_CUT_AFTER`, `VOLUME_SYNC_FAIL`, `VOLUME_SYNC_FAIL_FOR`,
 //! `VOLUME_ATTENTION_AT` and, with a cache, `VOLUME_RESET_AT` (a reset that
 //! turns the cache on again, which gopher-metal turns off again since
-//! 2026-10-09, metal-vmm QUEUE 119); it never draws `VOLUME_LATENCY_US`,
-//! `VOLUME_GONE_AT`, `VOLUME_READ_ONLY_AT`, `VOLUME_SYNC_US`,
-//! `VOLUME_CUT_AT_EXIT`, `VOLUME_SECTOR`, `VOLUME_MODE_PAGES`,
-//! `VOLUME_SHORT_AT`, `VOLUME_WCE_FIXED` (a cache gopher-metal cannot turn
+//! 2026-10-09, metal-vmm QUEUE 119), and in one seed in eight one of
+//! `VOLUME_GONE_AT`, `VOLUME_READ_ONLY_AT` and `VOLUME_SHORT_AT` (a write
+//! refused, QUEUE 135); it never draws `VOLUME_LATENCY_US`,
+//! `VOLUME_SYNC_US`, `VOLUME_CUT_AT_EXIT`, `VOLUME_SECTOR`,
+//! `VOLUME_MODE_PAGES`, `VOLUME_WCE_FIXED` (a cache gopher-metal cannot turn
 //! off, which leaves FAT's order to the cache: the damage is known, and said
 //! at boot). Nor are
 //! `RTC_ABSENT`, `RTC_STUCK` or `PIT_FROZEN`: each stops a boot, which a
@@ -187,6 +188,20 @@ pub const Knobs = struct {
         // After that, for the same reason: a reset that puts the cache back
         // on, mid-run, only where there is a cache to put back.
         if (self.get("VOLUME_CACHE") != null and chance(r, 4)) self.number(index("VOLUME_RESET_AT"), r.intRangeAtMost(u64, 1, 250));
+        // **A WRITE THE VOLUME REFUSES** (metal-vmm QUEUE 135): no seed ever
+        // refused one, so a kernel that took a refused write as written
+        // passed every night. One seed in eight with a volume: it goes, it
+        // turns read-only, or one of its transfers comes up short, at a
+        // command from the boot's reads on into the requests' writes. Last,
+        // so every draw above is what it was.
+        if (chance(r, 8)) {
+            const which: usize = switch (r.uintLessThan(u8, 3)) {
+                0 => index("VOLUME_GONE_AT"),
+                1 => index("VOLUME_READ_ONLY_AT"),
+                else => index("VOLUME_SHORT_AT"),
+            };
+            self.number(which, r.intRangeAtMost(u64, 1, 250));
+        }
     }
 
     fn word(self: *Knobs, i: usize, text: []const u8) void {
@@ -412,8 +427,10 @@ test "no seed and no knobs: nothing is turned" {
 test "a volume's knobs are drawn only with a volume, on dice of their own" {
     var buf_a: [1024]u8 = undefined;
     var buf_b: [1024]u8 = undefined;
-    var turned = [_]bool{false} ** 6;
-    const vol = [_][]const u8{ "VOLUME_CACHE", "VOLUME_CUT_AFTER", "VOLUME_SYNC_FAIL", "VOLUME_SYNC_FAIL_FOR", "VOLUME_ATTENTION_AT", "VOLUME_CACHE_KEEPS" };
+    // With the three that refuse a write (metal-vmm QUEUE 135): one of
+    // them at most a seed, at a command from 1 to 250.
+    const vol = [_][]const u8{ "VOLUME_CACHE", "VOLUME_CUT_AFTER", "VOLUME_SYNC_FAIL", "VOLUME_SYNC_FAIL_FOR", "VOLUME_ATTENTION_AT", "VOLUME_CACHE_KEEPS", "VOLUME_GONE_AT", "VOLUME_READ_ONLY_AT", "VOLUME_SHORT_AT" };
+    var turned = [_]bool{false} ** vol.len;
     for (0..500) |seed| {
         const plain = Knobs.fromSeed(seed);
         var with = Knobs.fromSeed(seed);
@@ -424,6 +441,12 @@ test "a volume's knobs are drawn only with a volume, on dice of their own" {
         for (vol, 0..) |n, i| if (with.get(n) != null) {
             turned[i] = true;
         };
+        var refusing: u32 = 0;
+        for ([_][]const u8{ "VOLUME_GONE_AT", "VOLUME_READ_ONLY_AT", "VOLUME_SHORT_AT" }) |n| if (with.get(n)) |v| {
+            refusing += 1;
+            try inRange(v, 1, 250);
+        };
+        try testing.expect(refusing <= 1);
         _ = plain.format(&buf_a);
         _ = with.format(&buf_b);
     }
