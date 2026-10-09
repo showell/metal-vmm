@@ -15,14 +15,16 @@ meets go here, not to QEMU, which stays on the happy path (Steve). The seed
 explorer (zig-coverage-sdk `explore.zig`) steered the simulators, which proved wide and shallow; its next subject is
 the real kernel, through metal-vmm's fault decisions (`docs/SNAPSHOT.md`).
 
-## Now (2026-10-08, evening)
+## Now (2026-10-09, past midnight)
 
 **v20 serves** (gopher-metal `a26f85d`, angry-gopher `8b617f3c`). CC's
-103-107 are merged; 108-111 are done on CC's branch, waiting for the box's
-review and merge. The box is on metal-vmm's speed (done: a boot 7.6× faster,
-a 100-seed sweep 9×), the nightly sweep (`nightly.sh`), and next the
-whole-machine snapshot (`docs/SNAPSHOT.md`). The conversation between the two
-Claudes is `FEEDBACK.md`.
+112-118 are reviewed. angry-gopher and metal-vmm are merged. gopher-metal is
+held, because its store_sim test stays red until 112 is fixed: either the
+barrier patch plus 119, or WCE=0 (Steve's choice). The second nightly
+(`~/nightly/2026-10-09-0028`) runs gopher-metal `aa4b30a`, which fixes the
+first night's two findings. Next for the box is the whole-machine snapshot
+(`docs/SNAPSHOT.md`). The conversation between the two Claudes is
+`FEEDBACK.md`.
 
 ## CC: open
 
@@ -160,6 +162,43 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
     110): it fails `try store.list` mid-stream and cuts the archive with no
     skip line; make it a named skip. Also fold `principalAuthorizedOrError`
     into `principalAuthorized` (they're the same since 108).
+
+119. **Two orderings 112's patch misses, each a red test on its test disk**
+     (a cold review of the patch; its probes are in FEEDBACK.md, 2026-10-09).
+     Red tests only: the fix waits on Steve's choice of barriers or WCE=0.
+     - `writeInto`: `allocChain(extra)` writes the new end mark, then
+       `fatSet(end.last, extra)` links it, with no barrier between them. If
+       the two entries are in different FAT sectors, a cut can keep the link
+       and lose the end mark. The next file is then given that cluster, and
+       an append to the first file writes into the second.
+     - `writeEntry`: a long name's parts, then its short entry, with no
+       barrier between them. If they are in different sectors, a cut keeps
+       the short entry alone (a file under `LONG-N~1.TXT`, and the check
+       clean). `unlinkEntry` has the mirror image.
+     - The test disk keeps a multi-sector write whole or not at all, but a
+       real cache can keep some of its sectors: model that too, if it's
+       cheap.
+
+120. **The store lint's two new holes** (the same review, 114's rules):
+     - The wrapper rule accepts any `error.X` arm. `catch |e| switch (e) {
+       error.AccessDenied => null, error.InputOutput => "", else => return e
+       }` passes, and so does `if (e == error.AccessDenied) null else return
+       e`. Accept only errors the wrapper defines itself.
+     - The 5xx rule searches the whole handler. `catch blk: { if (c) return
+       respond(.internal_server_error); break :blk null; }` passes. The arm
+       must *be* the 500 answer.
+
+     Red tests first, then the fix.
+
+121. **113's walk, three gaps** (the same review):
+     - It doesn't descend through a pointer. `cache.Cache` is reached only
+       through `virtio.Block.cache?` (borrowed), so a new pointer field there
+       goes unseen. Put `cache.Cache` in `models`, with `durable` its named
+       exception.
+     - `.apart` proves only that a field is not in `models`, not that
+       `snapshot.Cache` handles it.
+     - `.box`, `.input` and `.host` are taken on trust: say why in each one's
+       line, or check them.
 
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
