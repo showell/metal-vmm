@@ -80,7 +80,10 @@ printf 'pristine volume' > "$T/site.img"
 #           part): FAIL, never a match of two empty pages
 #   38-45   two clients (QUEUE 126), each paged its own request file, client
 #           k's page at <PEER_BODY>.k and its status on its "peer k:" line.
-#           Shape p asks at once, shape q in turn (PEER_IN_TURN=1).
+#           Shape p asks at once, shape q in turn (PEER_IN_TURN=1). As
+#           the site's own limit of 1 does on a guest, a boot disk that
+#           sweep.sh did not raise (no "REQUESTS=") serves client 1 alone
+#           (QUEUE 127(h)).
 #           38 (p): client 2's page differs, nothing to excuse it: FAIL.
 #           39 (q): client 1 reset (PEER_RESET_AT) and no answer, client 2
 #           answered 404: allowed, client 2 asked after client 1 differed.
@@ -174,6 +177,7 @@ if [ "${PEER_CLIENTS:-1}" -gt 1 ]; then
       40) p2=""; s2=0; a2=0 ;;
       45) p2="Home unavailable"; s2=500 ;;
     esac
+    grep -q "REQUESTS=" "$img" || { p2=""; s2=0; a2=0; }
     printf '%s' "$p2" > "$PEER_BODY.$k"
     others="${others}peer $k: $s2, $a2 of 1 answers, ${#p2} bytes, done
 "
@@ -207,8 +211,14 @@ cat > "$T/untouched" <<'EOF'
 if grep -q LOSTFILE "$3"; then echo "  /DATA/KEPT.MD: gone"; exit 1; fi
 exit 0
 EOF
-chmod +x "$T/vmm" "$T/sound" "$T/untouched"
-export UNTOUCHED="$T/untouched"
+# The site raised to serve n requests (tools/site_requests.py), as the fake
+# machine reads it.
+cat > "$T/site_requests" <<'EOF'
+#!/bin/bash
+cp "$1" "$2" && printf ' REQUESTS=%s' "$3" >> "$2"
+EOF
+chmod +x "$T/vmm" "$T/sound" "$T/untouched" "$T/site_requests"
+export UNTOUCHED="$T/untouched" SITE_REQUESTS="$T/site_requests"
 REPORT="${COVERAGE_SDK:-$HERE/../zig-coverage-sdk}/tools/report.py"
 [ -f "$REPORT" ] || { echo "no $REPORT: set COVERAGE_SDK"; exit 1; }
 
@@ -362,6 +372,8 @@ printf 'PEER_CLIENTS=2\nPEER_REQUEST=a.http,b.http\nEXPECT=200,200\n' > "$T/clie
 printf 'PEER_CLIENTS=2\nPEER_IN_TURN=1\nPEER_REQUEST=a.http,b.http\nEXPECT=200,200\n' > "$T/clients/q.shape"
 both=$(SHAPES="$T/clients" VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 38 45 2>&1)
 expect "shape p's unhurt clients" '^shape p: unhurt status 200,200, 6 bytes' "$both"
+expect "shape p's site, raised" '^shape p: the site raised to 2 requests' "$both"
+expect "a repeat on the raised site" 'repeat it: .*PEER_CLIENTS=2 .*VOLUME=<a copy of the volume, after the setup> .*<a copy of the site, its requests raised by tools/site_requests.py to 2> "" /' "$both"
 expect "seed 38" '^38 *p .*FAIL: client 2: not its page (status 200; unhurt: 200)' "$both"
 expect "seed 39" "^39 *q .*differs (allowed: PEER_RESET_AT, client 2: client 1's answer differed first)" "$both"
 expect "seed 40" '^40 *p .*differs (allowed: client 2: PEER_RESET_AT)' "$both"

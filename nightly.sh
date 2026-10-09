@@ -34,7 +34,8 @@
 # alone says "report failed" on its progress line.
 #
 # **THE BINARIES ARE FROZEN AT THE START**: metal-vmm and the kernel (and
-# sweep.sh, sound.sh, untouched.py and gopher-metal's FAT reader) are
+# sweep.sh, sound.sh, untouched.py, site_requests.py and gopher-metal's FAT
+# reader) are
 # copied into the night's folder and run from there, so a rebuild of either
 # during the night changes nothing about it. The kernel is gopher-metal's
 # probe/gopher.elf as it stands, unless KERNEL_ELF names another. It must
@@ -83,10 +84,11 @@ cp "$SITE" "$OUT/bin/site.img"
 # nothing about it.
 cp "$HERE/sweep.sh" "$HERE/sound.sh" "$OUT/bin/"
 # And what judges a cut's leftovers (QUEUE 127(a)): untouched.py, and
-# gopher-metal's FAT reader it reads with.
+# gopher-metal's FAT reader it reads with; and site_requests.py, which
+# raises the site's limit for a shape of several clients (127(h)).
 FAT_READ="${FAT_READ:-$GOPHER/tools/fat16_read.py}"
 [ -f "$FAT_READ" ] || { echo "no FAT reader at $FAT_READ; set FAT_READ=<gopher-metal's tools/fat16_read.py>" >&2; exit 2; }
-cp "$HERE/tools/untouched.py" "$OUT/bin/"
+cp "$HERE/tools/untouched.py" "$HERE/tools/site_requests.py" "$OUT/bin/"
 cp "$FAT_READ" "$OUT/bin/fat16_read.py"
 SDK="${COVERAGE_SDK:-$HERE/../zig-coverage-sdk}"
 cp "$SDK/tools/report.py" "$OUT/bin/report.py"
@@ -117,7 +119,7 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
     last=$((seed + BATCH - 1))
     log="$OUT/batches/$seed-$last.log"
     env "${request[@]}" VMM="$OUT/bin/metal-vmm" KERNEL="$OUT/bin/gopher.elf" SITE="$OUT/bin/site.img" VOLUME_SITE="$OUT/bin/site.img" \
-        SOUND="$OUT/bin/sound.sh" REPORT="$OUT/bin/report.py" UNTOUCHED="$OUT/bin/untouched.py" FAT_READ="$OUT/bin/fat16_read.py" COVERAGE_SDK="$SDK" KEEP_FAILED="$OUT/failed" \
+        SOUND="$OUT/bin/sound.sh" REPORT="$OUT/bin/report.py" UNTOUCHED="$OUT/bin/untouched.py" SITE_REQUESTS="$OUT/bin/site_requests.py" FAT_READ="$OUT/bin/fat16_read.py" COVERAGE_SDK="$SDK" KEEP_FAILED="$OUT/failed" \
         "$OUT/bin/sweep.sh" "$seed" "$last" > "$log" 2>&1
     code=$?
     # **A SWEEP THAT CANNOT JUDGE STOPS THE NIGHT** (sweep.sh exits 2: a

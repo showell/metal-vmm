@@ -44,7 +44,10 @@
 # `PEER_IN_TURN=1` each client asks after the one before was answered, so a
 # request may depend on the last one's write (a move in the session it
 # made): then a client's answer may differ in any way once an earlier
-# client's did ("client 1's answer differed first"), and never otherwise. **A WRITE SHAPE MAY CARRY ITS READ-BACK** (metal-vmm QUEUE 125):
+# client's did ("client 1's answer differed first"), and never otherwise.
+# The site's own limit (`requests = 1`) ends a run, so a shape of n clients
+# asking k times each boots from a copy of SITE raised to n x k
+# (`tools/site_requests.py`, QUEUE 127(h); SITE_REQUESTS names another). **A WRITE SHAPE MAY CARRY ITS READ-BACK** (metal-vmm QUEUE 125):
 # `READ_BACK=<request file beside it, or a path>`, `MARK=<text>` and
 # `TOLD=<status>` (its EXPECT unless said). Its runs then lose at the end what
 # no cache synchronized (VOLUME_CUT_AT_EXIT=1), each seed's volume is read
@@ -104,6 +107,8 @@ SOUND="${SOUND:-$HERE/sound.sh}"
 # The untouched files' check (tools/untouched.py), with gopher-metal's FAT
 # reader beside the guests unless FAT_READ says where.
 UNTOUCHED="${UNTOUCHED:-$HERE/tools/untouched.py}"
+# The site raised to serve a shape's every request (tools/site_requests.py).
+SITE_REQUESTS="${SITE_REQUESTS:-$HERE/tools/site_requests.py}"
 [ -n "${FAT_READ:-}" ] || [ ! -f "$GUESTS/../tools/fat16_read.py" ] || export FAT_READ="$GUESTS/../tools/fat16_read.py"
 export TRANSPORT="${TRANSPORT:-pci}"
 RUN_TIMEOUT="${RUN_TIMEOUT:-300}"
@@ -144,6 +149,10 @@ setting_of() {
 # metal-vmm holds it to 8). in_turn_of <shape>: whether they ask in turn.
 clients_of() { local c; c=$(setting_of "$1" PEER_CLIENTS); echo "${c:-1}"; }
 in_turn_of() { [ "$(setting_of "$1" PEER_IN_TURN)" = 1 ]; }
+asks_of() { local a; a=$(setting_of "$1" PEER_ASKS); echo "${a:-1}"; }
+# site_of <shape>: the boot disk its runs start from: the site, or the copy
+# raised to serve all its requests (QUEUE 127(h)).
+site_of() { if [ -f "$WORK/site-${1:-none}.img" ]; then echo "$WORK/site-${1:-none}.img"; else echo "$SITE"; fi; }
 if [ -n "${SHAPES:-}" ]; then
   [ -d "$SHAPES" ] || { echo "no folder at SHAPES=$SHAPES"; exit 1; }
   [ -z "$DURABLE" ] || { echo "SHAPES and POST are two sweeps; choose one"; exit 1; }
@@ -218,7 +227,8 @@ unhurt_of() { if [ -z "$1" ]; then echo unhurt; else echo "unhurt-$1"; fi; }
 # (64 MB of holes, 70 ms a compare).
 run() {
   local name="$1"; shift
-  cp "$SITE" "$WORK/$name.img"
+  local site="${RUN_SITE:-$SITE}"
+  cp "$site" "$WORK/$name.img"
   stat -c %y "$WORK/$name.img" > "$WORK/$name.img.copied"
   local volume=() post=()
   if [ -n "${VOLUME_SITE:-}" ]; then
@@ -405,9 +415,11 @@ verdict() {
   # page's judgement reads: a lie excuses the disk, never the page.
   local unsound="" exit_cut=""
   grep -q "^metal-vmm: the power failed when the guest stopped" "$WORK/$name.err" && exit_cut=1
-  if changed "$WORK/$name.img" && ! cmp -s "$WORK/$name.img" "$SITE"; then
+  local site
+  site=$(site_of "$sh")
+  if changed "$WORK/$name.img" && ! cmp -s "$WORK/$name.img" "$site"; then
     if STOP_LEAVES="$disk_cut" "$SOUND" "$WORK/$name.img" > "$WORK/$name.sound" 2>&1; then
-      grep -q "sound but for what a stop leaves" "$WORK/$name.sound" && ! "$UNTOUCHED" "$SITE" "$WORK/$u.img" "$WORK/$name.img" > "$WORK/$name.untouched" 2>&1 &&
+      grep -q "sound but for what a stop leaves" "$WORK/$name.sound" && ! "$UNTOUCHED" "$site" "$WORK/$u.img" "$WORK/$name.img" > "$WORK/$name.untouched" 2>&1 &&
         why="$why, the volume lost a file the request does not touch ($(head -1 "$WORK/$name.untouched" | sed 's/^ *//'))"
     else
       case " $knobs" in
@@ -524,7 +536,18 @@ fi
 for n in "${SHAPE_NAMES[@]}"; do
   u=$(unhurt_of "$n")
   # shellcheck disable=SC2086
-  run "$u" $(shape_env "$n")
+  # **A SITE THAT SERVES EVERY CLIENT** (QUEUE 127(h)): the site's own
+  # limit (`requests = 1`) is what ends a run, and would serve a shape of n
+  # clients its first alone. Such a shape boots from a copy saying
+  # clients x asks.
+  need=$(( $(clients_of "$n") * $(asks_of "$n") ))
+  if [ "$need" -gt 1 ]; then
+    "$SITE_REQUESTS" "$SITE" "$WORK/site-${n:-none}.img" "$need" > "$WORK/site-${n:-none}.out" 2>&1 ||
+      { echo "${n:+shape $n: }could not raise the site's requests to $need:"; sed 's/^/  /' "$WORK/site-${n:-none}.out"; exit 2; }
+    echo "${n:+shape $n: }the site raised to $need requests ($(tail -1 "$WORK/site-${n:-none}.out"))"
+  fi
+  # shellcheck disable=SC2086
+  RUN_SITE=$(site_of "$n") run "$u" $(shape_env "$n")
   # **A KERNEL THAT REPORTS NO PROPERTY JUDGES NOTHING** (2026-10-09): one
   # built without -Dcoverage records its properties and never says them, so
   # "no property broken" would hold of every run, vacuously, all night.
@@ -594,7 +617,7 @@ while [ "$seed" -le "$LAST" ]; do
   # shellcheck disable=SC2086
   sh=$(shape_of "$seed")
   # shellcheck disable=SC2086
-  ( run "seed$seed" FAULT_SEED="$seed" $(shape_env "$sh"); [ -z "$DURABLE" ] || read_back "seed$seed"
+  ( RUN_SITE=$(site_of "$sh") run "seed$seed" FAULT_SEED="$seed" $(shape_env "$sh"); [ -z "$DURABLE" ] || read_back "seed$seed"
     [ -z "$(read_of "$sh")" ] || read_back "seed$seed" "" "${SHAPE_READ[$sh]}" ) &
   while [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do wait -n; done
   seed=$((seed + 1))
@@ -645,7 +668,7 @@ for s in $failing; do
     echo "    repeat it: $(knobs_of "seed$s") PEER_REQUEST=$POST VOLUME=<a copy of $VOLUME_SITE> VOLUME_CUT_AT_EXIT=1 TRANSPORT=$TRANSPORT $VMM $KERNEL <disk> \"\" /; then read back $READ_BACK"
   else
     sh=$(shape_of "$s")
-    echo "    repeat it: $(knobs_of "seed$s")${PEER_REQUEST:+ PEER_REQUEST=$PEER_REQUEST}${sh:+ $(shape_env "$sh")} TRANSPORT=$TRANSPORT $VMM $KERNEL <volume${SHAPES:+, after the setup}> \"\" $PATH_WANTED$([ -z "$(read_of "$sh")" ] || echo "; then read back ${SHAPE_READ[$sh]} for \"${SHAPE_MARK[$sh]}\"")"
+    echo "    repeat it: $(knobs_of "seed$s")${PEER_REQUEST:+ PEER_REQUEST=$PEER_REQUEST}${sh:+ $(shape_env "$sh")}${VOLUME_SITE:+ VOLUME=<a copy of the volume${SHAPES:+, after the setup}>} TRANSPORT=$TRANSPORT $VMM $KERNEL <a copy of $([ "$(site_of "$sh")" = "$SITE" ] && echo "the site" || echo "the site, its requests raised by tools/site_requests.py to $(( $(clients_of "$sh") * $(asks_of "$sh") ))")> \"\" $PATH_WANTED$([ -z "$(read_of "$sh")" ] || echo "; then read back ${SHAPE_READ[$sh]} for \"${SHAPE_MARK[$sh]}\"")"
   fi
 done
 [ -z "$failing" ] && [ $merged = 0 ]

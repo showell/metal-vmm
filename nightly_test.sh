@@ -48,7 +48,9 @@ expect "the batch's report failure in progress.log" '1-3 .* report failed' "$pro
 expect "the night's report failures in DONE" 'report failed in 1 batch' "$(cat "$T/out/DONE" 2>/dev/null)"
 # The night's sweep can judge a cut's leftovers: untouched.py and its reader
 # are frozen with it, and ready (QUEUE 127(a)).
-[ -f "$T/out/bin/untouched.py" ] && [ -f "$T/out/bin/fat16_read.py" ] || { echo "FAIL: the night's bin lacks untouched.py or fat16_read.py"; fail=1; }
+for f in untouched.py site_requests.py fat16_read.py; do
+  [ -f "$T/out/bin/$f" ] || { echo "FAIL: the night's bin lacks $f"; fail=1; }
+done
 FAT_READ="$T/out/bin/fat16_read.py" python3 "$T/out/bin/untouched.py" --ready || { echo "FAIL: the night's untouched.py is not ready"; fail=1; }
 expect "the batch was judged" '1-3  *3  *0  *0 |' "$progress"
 if [ $fail = 0 ]; then echo "nightly_test: a report-only failure is said where a night is read, and a cut's leftovers can be judged"; fi

@@ -42,8 +42,11 @@ unhurt.
   404, so a request that damages the next one shows; one whose own answer a
   fault cost excuses the next one's, as it asked of another state.
 
-Neither pair has been run on a guest. If the site volume's request limit is
-under two, their unhurt runs say so at once.
+The site's boot disk says `requests = 1`, which is what ends a run, so
+sweep.sh boots each of these from a copy raised to the clients' requests
+(`tools/site_requests.py`, metal-vmm QUEUE 127(h)): "shape two-clients: the
+site raised to 2 requests". The box's first run of `session-then-move`
+answered `200,0` on the unraised site.
 
 `read-puzzles.http` is no shape (it has no `.shape`): it is the read-back of
 a durable sweep of puzzle moves. After the setup's two requests, on a copy
