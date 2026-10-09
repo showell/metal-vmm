@@ -58,6 +58,16 @@ pub const Net = struct {
     /// every exit, so a doorbell handled later in the same exit has the right
     /// answer without being handed one.
     now: u64 = 0,
+    /// **THE PEER'S ANSWERS THE WIRE HAD NO ROOM FOR** (metal-vmm QUEUE 122),
+    /// oldest first: each goes on before anything else the peer has to say,
+    /// as the guest takes frames and makes room. Put on a full wire, an
+    /// answer pushed out a segment of the request, which a peer that never
+    /// resends never sent again. Past `waiting.len` of them, one is put on
+    /// regardless, and what it pushes out is counted (`Wire.pushed_out`).
+    waiting: [8]Waiting = undefined,
+    waiting_len: usize = 0,
+
+    const Waiting = struct { len: usize, bytes: [faults.frame_bytes]u8 };
 
     pub fn device(self: *Net) virtio.Device {
         var d = virtio.Device{
@@ -91,7 +101,8 @@ pub const Net = struct {
         self.sent += 1;
         if (!self.line.carries()) return;
         const frame = buf[@sizeOf(Header)..];
-        if (self.peer.answer(frame, self.now)) |reply| self.line.hold(reply, self.now);
+        if (self.peer.answer(frame, self.now)) |reply| self.answer(reply);
+        self.sendWaiting();
         // One frame arriving can mean more to send (`Peer.more`): as many as
         // the wire has room for, and `pump` sends the rest as the guest takes
         // frames. All at once, a request in more segments than the wire holds
@@ -105,11 +116,36 @@ pub const Net = struct {
         self.arrivals(d, ram);
     }
 
+    /// The peer's answer onto the wire, or to wait for room behind the
+    /// answers already waiting.
+    fn answer(self: *Net, reply: []const u8) void {
+        if (self.waiting_len == 0 and self.line.room() > 0) return self.line.hold(reply, self.now);
+        if (self.waiting_len == self.waiting.len or reply.len > faults.frame_bytes) return self.line.hold(reply, self.now);
+        const w = &self.waiting[self.waiting_len];
+        w.len = reply.len;
+        @memcpy(w.bytes[0..reply.len], reply);
+        self.waiting_len += 1;
+    }
+
+    /// The waiting answers, oldest first, as far as the wire has room.
+    fn sendWaiting(self: *Net) void {
+        var sent: usize = 0;
+        while (sent < self.waiting_len and self.line.room() > 0) : (sent += 1) {
+            const w = &self.waiting[sent];
+            self.line.hold(w.bytes[0..w.len], self.now);
+        }
+        if (sent == 0) return;
+        std.mem.copyForwards(Waiting, self.waiting[0 .. self.waiting_len - sent], self.waiting[sent..self.waiting_len]);
+        self.waiting_len -= sent;
+    }
+
     /// **THE MACHINE'S HEARTBEAT FOR THIS DEVICE.** The guest polls memory, so
     /// a frame that is not delivered during an exit is not delivered at all.
     /// Every exit is therefore an opportunity, and this takes it.
     pub fn pump(self: *Net, d: *virtio.Device, ram: []u8, now: u64) void {
         self.now = now;
+        // Its answers that had no room first: they were said before the rest.
+        self.sendWaiting();
         // What the peer says unspoken to — a timer of its own, a flood, a
         // reset — goes on the wire first, at this instant, **AS FAR AS THE
         // WIRE HAS ROOM**: what is left waits for the guest to take frames,

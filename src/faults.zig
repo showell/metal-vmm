@@ -83,7 +83,7 @@ pub const Schedule = struct {
 };
 
 /// As much as an ethernet frame can hold, which is all the peer ever sends.
-const frame_bytes: usize = 1514;
+pub const frame_bytes: usize = 1514;
 /// How many frames can be in flight on the wire at once. A guest emptying a
 /// whole HTTP response into one doorbell is answered segment by segment, and
 /// every one of those answers waits here until the guest has a buffer free for
