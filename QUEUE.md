@@ -387,7 +387,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
        "turned off at boot". The data is safe; the line is wrong.
      Red tests first (store_sim or a scsi unit test).
 
-131. **The kernel's facts: one place, one step** (the box, 2026-10-09
+131. **Done (CC, 2026-10-09 night): #2-#3 `624ac7f`, #6-#7 `b450132`, #8 `9576cb2`, #11 `82470b1` (gopher-metal), each red first (Questions, "item 131").** **Was:** **The kernel's facts: one place, one step** (the box, 2026-10-09
      evening; essay "kernel-facts", GitHub
      showell/essay-repl-server `notes/kernel-facts.md`). **Steve's focus
      today: the lower level.** angry-gopher is the reality check, not the
@@ -592,6 +592,69 @@ runs on the host, and each would start from a red test.
 ## Questions
 
 *(Either side, with a reproduction where there is one.)*
+
+- **(CC, item 131) The kernel's facts.** All in gopher-metal, each red
+  first in fat16_faults_test, fat16_test or scsi_mode.
+  - **A new fault kind**, `lands_and_fails` (virtio.zig, the disk in
+    memory): a write lands whole and answers an error. A new test runs it
+    at every request of every operation.
+  - **#2 (`624ac7f`):** makeDirIn undoes nothing once its entry's write is
+    asked. Red: "make a directory" left /data broken, its cluster freed
+    under an entry that landed.
+  - **#3 (`624ac7f`):** after the commit (the short entry cleared in
+    unlinkEntry; the entry repointed in rename over a file, and in **your
+    #1 overwrite**, whose doc comment left this to #3), freeing the old
+    chain or clearing long-name parts is `afterCommit`. Its failure is
+    counted (`Volume.cleanups_failed`) and said by a property; it is never
+    swallowed and never the operation's error. The failed-request test
+    now holds that done is said of what is done, and only of it: answering
+    done means the finished outcome, and the finished outcome means
+    answering done. Red on replace, remove and rename over a file, each
+    shown alone. The stop test goes on past a done-with-a-leak.
+  - **#6 (`b450132`):**
+    - allocChain gives back its partial chain on every error (an
+      errdefer), and on its own a cluster marked and not yet linked.
+    - grow's fresh cluster and a new file's chain go back on a failure
+      before their commit. writeEntry now marks the commit at the entry's
+      own write (`committing`): its read before that write had counted as
+      the commit, and leaked.
+    - grow reads its link again after a failed write and gives back the
+      cluster when the link did not land.
+    - Every give-back that fails is counted, never `catch {}`.
+    - Red: a new test fails every request before a new file's commit on
+      FAT16, with and without its directory growing; no cluster may leak.
+  - **#7 (`b450132`):**
+    - The first FAT copy decides. A failed write of it is the caller's
+      error, and the sector is read again for what landed (and for the
+      kept count), never assumed old.
+    - A later copy's failure is counted (`fat_copies_failed`) and left for
+      the next mount to bring into line; it is not the operation's
+      failure. Before, it failed the operation with the first copy
+      already changed, so an allocation never learned it had taken that
+      cluster: #6's red at request 9.
+    - The lands-and-fails test now holds the FAT in memory to the disk's.
+      Red: the kept free count was one off.
+  - **#8 (`9576cb2`):** `Health.free` is the check's count of the free
+    clusters in the FAT the machine uses; the check already counted it for
+    FSInfo. At boot, diskCheck sets `free_clusters` from it, and an Always
+    says whether mount's count agreed. After every request, in a coverage
+    build, an Always holds the kept count to the check's. Both are seen
+    only on a guest; neither is run here. **A thought for the sweeps**:
+    rot on a FAT sector's read at mount could put the two counts apart
+    and break the boot property. If a night shows that, it belongs with
+    128's damage excuses.
+  - **#11 (`82470b1`):** `cache_turned_off` is gone. virtio.Block keeps
+    `cache_on_at_bringup` (one bit), and `scsi_mode.report` derives what
+    the boot line and /admin/host say from it and `write_cache`. A recheck
+    only sets `write_cache`, so 130's `sensedNotOn` went with it.
+  - **Leaning on your #4:** #2, #3 and #6 leave a leak where a write
+    landed or failed unknowably. Each comment names the boot's reclaim
+    (#4) as what clears it.
+  - **A trap found on the way**: a test in fat16_faults_test whose name
+    matches neither binary's filter (build.zig) never runs, and says
+    nothing. Mine didn't run at first; both new tests are in the filters
+    now. A check in build.zig that every test name matches a filter would
+    close it; yours, if you want it.
 
 - **(CC, item 129) Every `catch {}` and `catch continue`, asked "does this
   remove authority or data?"** 78 sites in angry-gopher's served

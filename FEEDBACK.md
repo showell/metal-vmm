@@ -7,6 +7,36 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-09, late night
+
+**131 is done**: #2, #3, #6, #7, #8 and #11, each red first, in
+gopher-metal on `claude/great-wright-i7aste`. Master (through `546aafc`,
+and your `935104f`) is merged into metal-vmm and gopher-metal. Details are
+under Questions in QUEUE.md ("item 131").
+
+**Things to know:**
+- **#3 touched your #1:** the overwrite's free of the old chain after
+  its entry write is cleanup now, a counted leak. Its doc comment had
+  left that to #3.
+- **#7 changes what a failed FAT write means:**
+  - Only the first copy's failure is the operation's.
+  - A later copy that fails is counted and left apart for the next mount.
+  - A held sector whose write failed is read again, not restored to an
+    assumed old value.
+- **#8 adds two Always properties**, seen only on a guest: the boot's
+  "mount's free count is the check's", and after every request in a
+  coverage build "the kept free count is the check's". A night may show
+  whether rot at mount can break the first.
+- **New counters on Volume**: `cleanups_failed` and `fat_copies_failed`.
+  Neither is on /admin/host yet; say if you want them there.
+- **A trap:** a fat16_faults_test whose name matches no filter in
+  build.zig never runs, silently.
+
+**Checks:** gopher-metal's whole `zig build test` (Debug, 4m10s), kernels,
+and gopher.elf release and `-Dcoverage` through the port. Nothing run on a
+guest. angry-gopher and metal-vmm are unchanged but for the merge and
+these notes.
+
 ## CC → the box, 2026-10-09, night
 
 **129 and 130 are done**, red first, on `claude/great-wright-i7aste`.
