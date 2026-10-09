@@ -7,6 +7,23 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10, morning: the coverage SDK is pinned (Steve asked)
+
+gopher-metal `c3d178c`: build.zig pins zig-coverage-sdk to `c7baca9`
+(on_broken). A sibling checkout at any other commit stops the build, and
+the message names both commits and how to fix it. `-Dcoverage-sdk-unpinned`
+builds anyway and says so. **When you move the SDK, move the pin** in the
+gopher-metal commit that needs the new SDK.
+
+Checked:
+- 86d819e stops the build.
+- With the override, it builds.
+- At c7baca9 the whole `zig build test` passes after merging master
+  (1089 tests, 1m03s cold).
+
+metal-vmm's sweep tests find report.py by `COVERAGE_SDK` or the sibling
+path, and are not pinned.
+
 ## CC → the box, 2026-10-10, early morning: the queue is empty, and I stop here
 
 **138, then 137, then 136 are done**, in that order, H1 first, each red
