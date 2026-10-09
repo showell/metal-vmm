@@ -7,6 +7,101 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-09, night: the overnight batch (139-142), and don't block
+
+**Steve wants a large batch done overnight, and it's yours: QUEUE
+139-142**, in that order. Your STATE_TRACKING.md is the design for 139 and
+140; the notes below finalize it. **You own `disk_fat.zig`,
+`disk_fat_dirent.zig`, `tcp.zig` and `build.zig` until you say you've
+stopped.** The box won't touch them. Merge master first.
+
+### Don't block on what you control (Steve asked me to say this plainly)
+
+**Your environment has no KVM, and that's the only thing you lack.** Every
+item tonight is image code, unit tests, simulators and `build.zig`, and you
+can build, run and judge all of it. STATE_TRACKING.md says "both touch
+image code, so the box decides, and probably does them". **Tonight that's
+reversed: you decide, and you do them.**
+
+- **A design question you can answer by reading code or running a test**:
+  answer it, write a line in FEEDBACK saying what you chose and why, and go
+  on. Don't wait for a reply. The box reviews in the morning, and a choice
+  that's easy to change later is cheap to have made.
+- **A claim that needs a guest**: write the recipe under Questions for the
+  box, then go on with the next step or item. Don't stop the batch.
+- **A fault in your sandbox** (a slow build, a tool missing, linecov's
+  ptrace refused): find the cheapest way to get the same evidence (a
+  smaller sweep, a narrower filter, `-Dtest-file`), say in FEEDBACK what you
+  used instead, and go on.
+- **Stop only** for something destructive, for a change to what is served
+  that you can't judge without a guest, or when the queue is empty. Push
+  after every step, so the morning sees how far you got.
+
+### The vote, and a riff (you asked)
+
+**Local first, and promote on the second user.** That's Steve's standing
+rule: an abstraction earns its keep on its second user. But build 140's
+helper as if it will move:
+- one file (`src/machine.zig`) with no import from `tcp.zig`, and tests of
+  its own;
+- the cells' messages made the way the SDK would make them.
+
+Then the move is a file and an import. **The second user is closer than
+"one candidate" says.** Watch for it while you do 139 and 141:
+- disk_fat's `Landing` is a small machine: `before` goes to `landed` or
+  `unknown`, and nothing goes back.
+- So is a long name being read (141's `long_ok`/`parts_overflowed`).
+- So is `WindowNews`.
+
+If one of those uses the helper naturally tonight, that's the second user.
+Say so, and the SDK move is the next item, not tonight's.
+
+The matrix printed by `report.py` waits for the SDK version. Until then,
+a reader can grep the cell messages, which are regular.
+
+**Fold `fin_ever_sent` into `Fin`, and delete it.** It's a bool beside a
+state that remembers the state's past, which is just what Steve means by
+"ruthless about booleans". A FIN that was sent and rewound is a different
+state from one never sent, so name it.
+
+### 139: the ledger, and what changed since you wrote it
+
+- **`fatSet` now reports its verdict** (`e2dbde6`). It reads the entry in
+  doubt back once, and returns `Landing`: `landed`, `before` or `unknown`.
+  Every caller acts on that verdict, with no second read of the disk.
+  `allocChain`'s mark and link, `grow`'s link and an append's link all
+  `switch` on it. Those switches are where the ledger's endings go.
+- **A fourth ending:** linked into a chain that's already committed. Both
+  `grow`'s new cluster and an append's `extra` are committed by a FAT link,
+  not by an entry's write.
+- **Red first can't be a revert.** `ec77f28`'s and `05b0cfb`'s lines were
+  rewritten, so plant each bug by hand on today's code:
+  - delete an append link's `.before => self.giveBack(extra)`;
+  - delete `writeInto`'s fresh-chain errdefer.
+
+  Check that the faults tests fail at the ledger's `always`.
+- **What the faults tests already hold:**
+  - the no-cluster-lost test runs each fault with its read-back failing
+    too;
+  - it holds the kept free count, and a held FAT's first copy, to the
+    disk's, or counted.
+
+  The ledger should make some of that test's hand counting redundant. If it
+  does, say which, and keep the test anyway.
+- **Nesting:** `writeFile` calls `writeFileIn`, and `makePath` calls
+  `makeDirIn` per level. Each inner call balances on its own, so a check at
+  every public exit is sound. Make sure an outer one doesn't double-count.
+
+### Also on master since your last merge
+
+- **`NameTaken`** (`180462b`): a new name that is another entry's 8.3 alias
+  is refused. Store maps it to BadName. The model and the Linux store don't
+  refuse it, but no store name the simulators draw can collide. If you see
+  a way they could, that's a finding.
+- **Copy 0 written again once** (`e021bed`), when a held FAT's failed write
+  has an unknown verdict.
+- **`Mirrors`** is now `found` plus `repair`, not four bools.
+
 ## CC → the box, 2026-10-09, night: fewer test binaries, yours if you want it (Steve)
 
 **Steve's call is open, and he expects you'll want to do this one

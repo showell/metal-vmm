@@ -16,14 +16,14 @@ is zero bugs in the lower levels; class hunts find more than seeds; the
 judge is becoming "did anything forbidden happen?", checked by `plants.sh`.
 The snapshot (`docs/SNAPSHOT.md`) is parked.
 
-## Now (2026-10-09, evening)
+## Now (2026-10-09, night)
 
-**v21 is tagged** (gopher-metal `81d7a35`, angry-gopher `a30a1542`; gates
-and long PASS), its image awaiting Steve; v20 serves until then. CC's
-123/127(b)/129/130/131 are merged into the box's `next` branches (not yet
-`master`); gopher-metal's `next` waits on 134(a)(b)(h) before it can
-release. CC's metal-vmm branch is merged after its first `check-cc.sh`.
-The conversation between the two Claudes is `FEEDBACK.md`.
+**v21 serves** (deployed 20:11 UTC; gopher-metal `81d7a35`, angry-gopher
+`a30a1542`); master is `next` in both repos, and `next` is gone. On master
+for v22: tcp's duplicate-ACK cap, Karn on a resent SYN-ACK, and the
+disk_fat fixes since. **Overnight, CC has 139-142** (below), and owns the
+files they touch until it stops. The conversation between the two Claudes
+is `FEEDBACK.md`.
 
 ## CC: open
 
@@ -582,6 +582,71 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      - The box will run M3 (the new knobs on a guest, one batch) after
        (d), before any night.
 
+**Overnight, 2026-10-09 → 10-10 (Steve: a large batch for CC; the box
+finalized the design).** In order; each red first, each pushed as it lands.
+**CC owns `disk_fat.zig`, `disk_fat_dirent.zig`, `tcp.zig` and `build.zig`
+tonight: the box does not touch them until CC says it has stopped.** Merge
+master first: the box's last disk_fat commits are `180462b` (NameTaken),
+`e2dbde6` (fatSet's verdict), `e021bed` (copy 0 written again), and the
+Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
+
+139. **P139(a): the ledger for clusters taken before a commit**
+    ([STATE_TRACKING.md](STATE_TRACKING.md)), with the box's notes in
+    FEEDBACK. In short:
+    - Four endings, not three: committed by the entry's write; **linked
+      into a chain already committed** (`grow`'s link, an append's link,
+      each a `Landing` from `fatSet` now); given back; a counted leak.
+    - **Plant the bugs on today's code; don't revert.** `ec77f28`'s and
+      `05b0cfb`'s lines were rewritten by `e2dbde6`, so a revert won't
+      apply. Remove the give-back by hand and check the ledger fails.
+    - Done when every public operation ends on the ledger's `always`, the
+      faults tests pass, and both planted bugs fail at it.
+
+140. **P139(b): `tcp.zig`'s `Fin` as a declared machine, with one
+    `sometimes` per legal cell and an `unreachable` per forbidden one.**
+    - **Fold `fin_ever_sent` into the state, and delete the bool**
+      (Steve, tonight: "be pretty ruthless about booleans... enums are
+      almost always more robust"). A FIN sent once and rewound is its own
+      state (say `resending`), not `queued` plus a flag.
+    - **Build the machine locally.** One helper in gopher-metal (say
+      `src/machine.zig`, with its own tests), shaped so that moving it to
+      the SDK later is a file move. The box's vote is in FEEDBACK.
+    - **Add the lint**: the state field is assigned only inside `fire`.
+      It can be a few lines in an existing tools script.
+    - Then look at the sweep's report and say what it shows. Done when the
+      planted forbidden transition fails `tcp_test`, and a deleted test
+      shows up as an unhit cell.
+
+141. **The rest of the boolean sweep in disk_fat** (Steve: enums over
+    booleans; predicates such as `isEnd`, `inData` and `isDirectory` stay
+    bools).
+    - Already done by the box: `Mirrors` (`found`, `repair`), grow's
+      `committing`, and `too_many`.
+    - Left:
+      - Lister's `loaded`, `done` and `long_ok`;
+      - the long-name `long_ok` and `parts_overflowed`, in three places,
+        plus `takeLongPart`'s `ok` in `disk_fat_dirent.zig` (one shared
+        enum, say, for how a long name stands);
+      - `writeInto`'s `fresh`;
+      - `fsinfo_unknown`;
+      - the visitors' `found` and `is_dir`;
+      - the checker's `stopped_short`.
+    - **Do this before or alongside 139**, since the ledger touches
+      `fresh`'s lines.
+    - Then the same sweep for `tcp.zig`, beyond `fin_ever_sent`.
+    - One commit per struct or function, naming each conversion.
+
+142. **Fewer test binaries** (your FEEDBACK `e87788d`; the box gives it to
+    you, since nobody else touches `build.zig` tonight).
+    - Measure first: a cold-cache `zig build test --summary all`, before
+      and after.
+    - Your FEEDBACK lists what to keep separate. Keep all of it: the
+      `tcp_test` starts, the disk_fat binaries and their filters,
+      `properties`, `store-judge`, `droplet/image.zig`, and `fat-coverage`'s
+      binaries (or point `linecov.py` at the merged one).
+    - Check `-Dtest-file` still works, and that one file's unreached site
+      can't fail or hide in another's verdict.
+
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
     the third bullet of the old 99 asked (`request.zig`, every handler behind
@@ -672,7 +737,7 @@ proposals, taken or not, are in the archive.)*
   committed, given back, or a counted leak (the class `ec77f28` and
   `05b0cfb` fixed). (b) `tcp.zig`'s `Fin` as a declared machine, with one
   `sometimes` per legal transition. CC votes (a) first. Written up in
-  [STATE_TRACKING.md](STATE_TRACKING.md).
+  [STATE_TRACKING.md](STATE_TRACKING.md). **Taken: 139 and 140 under "CC: open".**
 
 - **P128. The damage property says which disk** (gopher-metal
   `gopher.zig` ~1358 and ~1417, the box's). Its details carry
