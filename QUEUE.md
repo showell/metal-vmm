@@ -513,6 +513,27 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
        `FAILED_SEEDS: 3 17 42`, which `plants.sh` and `nightly.sh` read
        instead of the human table.
 
+136. **`zig build test` in gopher-metal costs the box 530 s** (the box,
+     2026-10-09, evening; Steve wants it fast before the next release
+     run). It was 77 s at v18, then 162, 326, 446, 530; your container
+     reports 3m07s, and the box has 2 cores. No test sleeps on wall time,
+     so it is compile or run. Find which binaries dominate (`--summary
+     all` gives each step's time; the box's gates now keep it in
+     `test-summary.txt`) and make `test` cheap. The simulators' seed
+     counts in Debug are the likely bulk, and `long.sh` sweeps them in
+     ReleaseSafe anyway, so `test` may need only a few seeds of each plus
+     every named regression seed. Lose no check that only `test` runs:
+     say in the commit what moved where, and the before/after numbers.
+     The box's goal: under two minutes there.
+
+137. **A keepalive setting for angry-gopher's Linux server, for tests**
+     (the box, 2026-10-09; Steve: "configure for tests"). The chat tab's
+     keepalive is fixed at 25 s on Linux, so the judge's tab story waits
+     27 s on each host. gopher-metal's kernel already takes `keepalive_ms`
+     from its config. Give the Linux server the same knob (however its
+     other test settings arrive), default unchanged, with a test that the
+     setting governs. The box changes the judge to use it.
+
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
     the third bullet of the old 99 asked (`request.zig`, every handler behind
