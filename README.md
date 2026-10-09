@@ -85,6 +85,7 @@ there by `zig build kernels`; `gopher.elf` by `./port.sh && zig build gopher`):
 | `./site.sh` | QEMU, curl, the site volume | the real server, here and under QEMU |
 | `./pc_vs_microvm.sh` | the site volume | the PC-shaped machine against the microvm-shaped one |
 | `./lossy.sh` | | which lost frames the guest survives |
+| `./timeouts.sh` | the site disk, mtools | **a timeout judged in the machine's time**: a silent client holds nobody up and is let go at the volume's `idle_timeout_ms`, read off each client's opened / answered / closed times; about a second for two settings |
 | `./refused.sh` | `mkfs.vfat`; the site volume for `gopher` | which refused disk requests it survives |
 | `./sweep.sh` | the site volume, zig-coverage-sdk, **a `-Dcoverage` gopher.elf** (`KERNEL=`; a release build reports no properties, and the sweep refuses it) | a range of seeds, each a whole fault schedule |
 | `./nightly.sh` | the same | **overnight, detached:** `sweep.sh` with a volume, batch after batch of new seeds for `HOURS` (10), logging as it goes in `~/nightly/<date-time>/` (`progress.log`, `failures.log`, each failing seed's files). `KERNEL_ELF=` a `-Dcoverage` build judges its properties too (through the coverage door, which costs the guest no time); `PEER_REQUEST=requests/post-play.http` sends a write instead of `GET /`, so the volume's faults meet one; `SHAPES=requests/shapes` gives each seed one of ten requests (reads, writes as a player the setup makes, two clients at once), each judged against its own unhurt run |
@@ -379,12 +380,15 @@ them by kind (port, clock, mmio, msr, halt). A clock exit carries the guest's
 `addr2line -i -f -C -e <kernel.elf>` names the loop that spends them; port
 exits counted by port name the device. That is how each row above was found.
 
-**Time is not fast-forwarded while the guest only waits.** It was weighed and
-refused: the guest's deadlines live in its registers, so a jump can carry it
-past one and change which branch it takes. A wait the guest spins through
-costs an exit a read, so the cure is in the guest: halt, as the PC-shaped
-machine's server does between frames, or do less waiting (the RTC's phase
-above made gopher-metal's one long boot wait 50 ms).
+**This machine tests the guest's logic; faithfulness to wall-clock time is
+not a goal** (Steve, 2026-10-09). Time is ours to move, and a wait should
+cost nothing. A halt already costs nothing: the clock jumps to the guest's
+next deadline (above). A wait the guest *spins* through still costs an exit
+a read, because a blind jump could carry the guest past a deadline held in
+its registers and change which branch it takes. The way to skip those is a
+hook, not a guess: the guest marks its wait with its deadline, as it marks
+`rdtsc`, and the machine jumps to it. Not built yet; the PC-shaped machine,
+which halts, is where waiting is free today.
 
 ## QEMU is the oracle
 
