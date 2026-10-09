@@ -1,0 +1,77 @@
+diff --git a/src/fat16.zig b/src/fat16.zig
+index 706fa17..01c53a2 100644
+--- a/src/fat16.zig
++++ b/src/fat16.zig
+@@ -1181,6 +1181,12 @@ pub const Volume = struct {
+         return result orelse Error.NotFound;
+     }
+ 
++    /// PROTOTYPE (metal-vmm QUEUE 112): what is written so far reaches the
++    /// media before anything after it. On a write-through disk, nothing.
++    fn barrier(self: *Volume) Error!void {
++        if (self.blk.flush() != virtio.blk_s_ok) return Error.WriteFailed;
++    }
++
+     fn writeSector(self: *Volume, lba: u32, from: *[sector_size]u8) Error!void {
+         if (self.blk.write(self.start_lba + lba, @intFromPtr(from)) != virtio.blk_s_ok) {
+             if (self.dirs) |*c| c.drop(lba, 1);
+@@ -1511,6 +1517,7 @@ pub const Volume = struct {
+         while (s < self.sectors_per_cluster) : (s += 1) {
+             try self.writeSector(self.clusterSector(fresh) + s, self.scratch);
+         }
++        try self.barrier();
+         try self.fatSet(last, fresh);
+     }
+ 
+@@ -1627,7 +1634,10 @@ pub const Volume = struct {
+                     }
+ 
+                     // 3. and only now, the data
+-                    if (free and chain >= 2) try self.freeChain(chain);
++                    if (free and chain >= 2) {
++                        try self.barrier();
++                        try self.freeChain(chain);
++                    }
+                     return;
+                 }
+                 long_ok = false;
+@@ -1836,6 +1846,7 @@ pub const Volume = struct {
+         const clusters: u32 = @intCast((@as(u64, bytes.len) + per_cluster - 1) / per_cluster);
+         const first = try self.allocChain(clusters);
+         if (bytes.len > 0) try self.writeChain(first, bytes);
++        try self.barrier();
+ 
+         // The entry goes last: until it is written, nothing points at the data,
+         // so a machine that stops here has lost a file rather than corrupted one.
+@@ -1887,6 +1898,7 @@ pub const Volume = struct {
+         dotdot[11] = attr_directory;
+         putCluster(dotdot, dir_cluster);
+         try self.writeSector(self.clusterSector(cluster), self.scratch);
++        try self.barrier();
+ 
+         try self.writeEntry(run, if (needs_long) name else name[0..0], short, attr_directory, cluster, 0);
+         return cluster;
+@@ -2006,6 +2018,7 @@ pub const Volume = struct {
+         }
+ 
+         try self.writeAt(first, offset, bytes);
++        try self.barrier();
+         try self.setEntry(entry, first, new_size);
+     }
+ 
+@@ -2247,6 +2260,7 @@ pub const Volume = struct {
+         }
+ 
+         try self.unlinkEntry(a.cluster, a.name, false);
++        try self.barrier();
+ 
+         if (dst) |d| {
+             props.reachable(@src(), "fat: a rename replaces a file", null);
+@@ -2261,6 +2275,7 @@ pub const Volume = struct {
+             putLe16(e[18..20], when.date); // last access date
+             putDos(e[22..26], when); // write time, write date
+             try self.writeSector(d.lba, self.scratch);
++            try self.barrier();
+             if (d.first_cluster >= 2) try self.freeChain(d.first_cluster);
+             return;
+         }

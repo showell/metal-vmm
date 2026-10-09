@@ -27,6 +27,14 @@
 //! detour of different steps, restore it, and go on: the trace must be the
 //! uninterrupted run's, exactly. The generator and the trace's hash are saved
 //! with the model, so "go on" means the very same steps.
+//!
+//! **AND THE PREMISE IS HELD, NOT ONLY SHOWN** (metal-vmm QUEUE 113): a walk
+//! over every model's type (`models`) finds each pointer in it, and the test
+//! build fails on one that is neither `borrowed` (with why a restore in place
+//! keeps it right) nor a known gap (`gaps`, each with its red test). So a
+//! model that grows a slice or a heap map next month fails to compile here,
+//! instead of a restored run quietly going another way. `main.zig`'s census
+//! does the same for every field of the machine.
 
 const std = @import("std");
 const clock = @import("clock.zig");
@@ -38,6 +46,11 @@ const faults = @import("faults.zig");
 const net = @import("net.zig");
 const coverage = @import("coverage.zig");
 const disk = @import("disk.zig");
+const scsi = @import("scsi.zig");
+const cache = @import("cache.zig");
+const pci = @import("pci.zig");
+const virtio_pci = @import("virtio_pci.zig");
+const cost = @import("cost.zig");
 
 /// A model's state, as of now.
 pub fn save(model: anytype) @TypeOf(model.*) {
@@ -50,19 +63,21 @@ pub fn restore(model: anytype, saved: @TypeOf(model.*)) void {
 }
 
 /// **THE DISK'S BYTES, AND WHICH SECTORS THE RUN HAS WRITTEN**: the one part
-/// of the device side not held inline (`Block.image` is borrowed).
+/// of the device side not held inline (`Block.image` is borrowed). `block`
+/// is either disk: the boot disk's `virtio.Block` or the volume's
+/// `scsi.Scsi`, which borrow their bytes alike (metal-vmm QUEUE 113).
 pub const Disk = struct {
     image: []u8,
     dirty: ?[]u8,
 
-    pub fn save(allocator: std.mem.Allocator, block: *const virtio.Block) !Disk {
+    pub fn save(allocator: std.mem.Allocator, block: anytype) !Disk {
         const image = try allocator.dupe(u8, block.image);
         errdefer allocator.free(image);
         const dirty = if (block.dirty) |d| try allocator.dupe(u8, d) else null;
         return .{ .image = image, .dirty = dirty };
     }
 
-    pub fn restore(self: *const Disk, block: *virtio.Block) void {
+    pub fn restore(self: *const Disk, block: anytype) void {
         @memcpy(block.image, self.image);
         if (block.dirty) |d| @memcpy(d, self.dirty.?);
     }
@@ -72,6 +87,255 @@ pub const Disk = struct {
         if (self.dirty) |d| allocator.free(d);
     }
 };
+
+/// **A WRITE CACHE, SAVED APART** (metal-vmm QUEUE 113): the sectors it holds
+/// as they were durable live in a map on the heap, which a copy of the
+/// `cache.Cache` would share with the live one. So its map is copied, and
+/// put back as a copy; the rest of it is its value.
+pub const Cache = struct {
+    value: cache.Cache,
+
+    pub fn save(c: *const cache.Cache) !Cache {
+        var value = c.*;
+        value.durable = try c.durable.clone(c.gpa);
+        return .{ .value = value };
+    }
+
+    pub fn restore(self: *const Cache, c: *cache.Cache) !void {
+        const durable = try self.value.durable.clone(self.value.gpa);
+        c.durable.deinit(c.gpa);
+        c.* = self.value;
+        c.durable = durable;
+    }
+
+    pub fn deinit(self: *Cache) void {
+        self.value.durable.deinit(self.value.gpa);
+    }
+};
+
+// ── the premise, held: no model points anywhere a restore would not mend ────
+
+/// **EVERY MODEL THIS FILE SAVES BY ITS VALUE** (metal-vmm QUEUE 113): each
+/// one the machine keeps (`main.Machine`'s census names them). A model added
+/// to the machine goes here, and the walk below holds it to the premise.
+pub const models = .{
+    clock.Clock,         clock.Pit,       clock.Rtc,     apic.Apic,
+    msix.Msix,           entropy.Entropy, faults.Wire,   faults.Drive,
+    net.Net,             coverage.Serial, virtio.Device, virtio.Block,
+    virtio_pci.Function, pci.Bus,         scsi.Scsi,     cost.Cost,
+};
+
+/// **THE POINTERS A RESTORE IN PLACE KEEPS RIGHT**, each with why. A path is
+/// the model's name and its fields from there, `?` for an optional's child
+/// and `[]` for an array's element. A function pointer is code, not state,
+/// and needs no line.
+pub const borrowed = .{
+    .{ "virtio.Device.context", "the device it serves, beside it in the machine's storage" },
+    .{ "virtio.Device.completion?.context", "the PCI function that hears a completion, in the machine's storage" },
+    .{ "virtio_pci.Function.device", "the device the function carries, in the machine's storage" },
+    .{ "virtio_pci.Function.apic?", "the machine's one local APIC" },
+    .{ "pci.Bus.functions[]?.device", "as `virtio_pci.Function.device`" },
+    .{ "pci.Bus.functions[]?.apic?", "as `virtio_pci.Function.apic?`" },
+    .{ "virtio.Block.image", "the boot disk's bytes: saved apart, by `Disk`" },
+    .{ "virtio.Block.dirty?", "which of them the run wrote: saved with them, by `Disk`" },
+    .{ "scsi.Scsi.image", "the volume's bytes: saved apart, by `Disk`" },
+    .{ "scsi.Scsi.dirty?", "which of them the run wrote: saved with them, by `Disk`" },
+    .{ "virtio.Block.cache?", "the boot disk's write cache (`DISK_CACHE`): saved apart, its map copied, by `Cache`" },
+    .{ "scsi.Scsi.cache?", "the volume's (`VOLUME_CACHE`): the same" },
+    .{ "net.Net.peer.request", "a request read before the run's first exit (`main`'s `request_bufs`), never written again" },
+    .{ "net.Net.peer.plan.requests[]", "the same" },
+    .{ "net.Net.peer.others[].request", "the same" },
+    .{ "net.Net.peer.tcp.request", "the same: the first client's, from `Peer.ask`" },
+};
+
+/// **THE POINTERS A RESTORE IN PLACE GETS WRONG TODAY**, each with its red
+/// test. Not a way to excuse a pointer: a line here is a gap in the
+/// snapshot, for the box to close before a sweep restores a run that has it.
+pub const gaps = .{};
+
+/// Every path in `Ty` that is a pointer to state, as one string of lines.
+pub fn pointersIn(comptime Ty: type, comptime path: []const u8) []const u8 {
+    return switch (@typeInfo(Ty)) {
+        .pointer => |p| if (@typeInfo(p.child) == .@"fn") "" else path ++ "\n",
+        .@"struct" => |st| blk: {
+            var all: []const u8 = "";
+            for (st.fields) |f| all = all ++ pointersIn(f.type, path ++ "." ++ f.name);
+            break :blk all;
+        },
+        .@"union" => |u| blk: {
+            var all: []const u8 = "";
+            for (u.fields) |f| all = all ++ pointersIn(f.type, path ++ "." ++ f.name);
+            break :blk all;
+        },
+        .optional => |o| pointersIn(o.child, path ++ "?"),
+        .array => |a| pointersIn(a.child, path ++ "[]"),
+        .error_union => |e| pointersIn(e.payload, path),
+        else => "",
+    };
+}
+
+/// A model's name as the lists spell it: `clock.Clock`, from `clock.Clock`.
+fn nameOf(comptime Ty: type) []const u8 {
+    const full = @typeName(Ty);
+    const dot = std.mem.lastIndexOfScalar(u8, full, '.').?;
+    const start = if (std.mem.lastIndexOfScalar(u8, full[0..dot], '.')) |d| d + 1 else 0;
+    return full[start..];
+}
+
+fn listed(comptime list: anytype, comptime path: []const u8) bool {
+    for (list) |entry| if (std.mem.eql(u8, entry[0], path)) return true;
+    return false;
+}
+
+test "the premise: every pointer in a model is one a restore keeps right, or a gap with its red test (metal-vmm QUEUE 113)" {
+    comptime {
+        @setEvalBranchQuota(2_000_000);
+        var found: []const u8 = "";
+        for (models) |M| found = found ++ pointersIn(M, nameOf(M));
+        var lines = std.mem.tokenizeScalar(u8, found, '\n');
+        while (lines.next()) |path| {
+            if (!listed(borrowed, path) and !listed(gaps, path))
+                @compileError("snapshot.zig: " ++ path ++ " points at state a restore in place would not put back. Hold it inline, save it apart (as `Disk`), or name it in `borrowed` with why a restore keeps it right.");
+        }
+        // And no line names a pointer that is not there: a stale line
+        // would excuse the next field to take its name.
+        for (borrowed ++ gaps) |entry| {
+            if (std.mem.indexOf(u8, found, entry[0] ++ "\n") == null)
+                @compileError("snapshot.zig: " ++ entry[0] ++ " is listed, and no model has it");
+        }
+    }
+}
+
+test "a write cache is not its value: saved apart, a restore after a detour that flushed still loses at a cut what it held (metal-vmm QUEUE 113)" {
+    // The run: sector 1 durable as 'a', then written as 'b' and held. Saved
+    // there. A power cut now must put 'a' back. The detour flushes, which
+    // empties the cache's map in place. Copied by value, the map's entries
+    // were shared with the detour and the cut lost nothing; `Cache` copies
+    // them.
+    var image: [4 * 512]u8 = @splat('a');
+    var c = cache.Cache{ .gpa = testing.allocator, .image = &image, .lies = true };
+    defer c.deinit();
+    var block = virtio.Block{ .image = &image, .cache = &c };
+    try testing.expect(c.wrote(1, 1));
+    @memset(image[512..1024], 'b');
+
+    var bytes = try Disk.save(testing.allocator, &block);
+    defer bytes.deinit(testing.allocator);
+    const saved_block = save(&block);
+    var saved_cache = try Cache.save(&c);
+    defer saved_cache.deinit();
+
+    c.flush(); // the detour
+    _ = c.wrote(2, 1);
+    bytes.restore(&block);
+    restore(&block, saved_block);
+    try saved_cache.restore(&c);
+
+    c.lose(); // the power, as the run that never stopped would have lost it
+    try testing.expectEqual(@as(u8, 'a'), image[512]);
+}
+
+test "the volume: its commands, its faults, and the bytes it borrows, saved apart (metal-vmm QUEUE 113)" {
+    const Volume = struct {
+        image: [32 * 512]u8 = @splat(0),
+        dirty: [4]u8 = @splat(0),
+        vol: scsi.Scsi = .{ .image = &.{} },
+        dev: virtio.Device = undefined,
+        g: scsi.FakeDriver = .{},
+    };
+    const fixup = struct {
+        fn f(v: *Volume) void {
+            v.vol.image = &v.image;
+            v.vol.dirty = &v.dirty;
+            v.dev.context = &v.vol;
+        }
+    }.f;
+    const step = struct {
+        fn f(v: *Volume, r: std.Random, h: *std.hash.Wyhash) void {
+            fixup(v); // the volume and its bytes beside it, wherever they are
+            const lba = r.uintLessThan(u32, 30);
+            const o = switch (r.uintLessThan(u8, 3)) {
+                0 => blk: {
+                    r.bytes(v.g.ram[scsi.FakeDriver.data_at..][0..1024]);
+                    break :blk v.g.rw(&v.dev, true, lba, 2);
+                },
+                1 => v.g.rw(&v.dev, false, lba, 2),
+                else => v.g.synchronize(&v.dev),
+            };
+            h.update(std.mem.asBytes(&o));
+            h.update(v.g.ram[scsi.FakeDriver.data_at..][0..1024]);
+            note(h, v.vol.commands);
+            note(h, @intFromBool(v.vol.power.cut != null));
+        }
+    }.f;
+    const fresh = try testing.allocator.create(Volume);
+    defer testing.allocator.destroy(fresh);
+    fresh.* = .{};
+    fixup(fresh);
+    fresh.dev = fresh.vol.device();
+    fresh.vol.power.cut_after = 60;
+    fresh.vol.attention_at = 150;
+    fixup(fresh);
+    fresh.g.open(&fresh.dev);
+    try restoresExactly(Volume, fresh, step, fixup);
+}
+
+test "the PCI bus and a function on it: config space, its BAR, MSI-X through it (metal-vmm QUEUE 113)" {
+    const Board = struct {
+        bus: pci.Bus = .{},
+        lapic: apic.Apic = .{},
+        dice: entropy.Entropy = .{},
+        dev: virtio.Device = undefined,
+        ram: [4096]u8 = @splat(0),
+    };
+    const fixup = struct {
+        fn f(b: *Board) void {
+            const fun = &b.bus.functions[1].?;
+            fun.device = &b.dev;
+            fun.apic = &b.lapic;
+            b.dev.completion.?.context = fun;
+            b.dev.context = &b.dice;
+        }
+    }.f;
+    const step = struct {
+        fn f(b: *Board, r: std.Random, h: *std.hash.Wyhash) void {
+            fixup(b);
+            var word: [4]u8 = undefined;
+            switch (r.uintLessThan(u8, 4)) {
+                0, 1 => {
+                    // A config register of slot 1, or of the bridge.
+                    const slot: u32 = r.uintLessThan(u32, 2);
+                    const register: u32 = r.uintLessThan(u32, 64) * 4;
+                    std.mem.writeInt(u32, &word, 0x8000_0000 | (slot << 11) | register, .little);
+                    b.bus.out(pci.address_port, &word);
+                    if (r.boolean()) {
+                        std.mem.writeInt(u32, &word, r.int(u32) | 0x6, .little); // memory space and bus master, mostly
+                        b.bus.out(pci.data_port, &word);
+                    }
+                    b.bus.in(pci.data_port, &word);
+                    h.update(&word);
+                },
+                else => {
+                    // Somewhere in the function's BAR, read or written.
+                    const at = pci.bar_base + pci.bar_size + r.uintLessThan(u64, 0x4000);
+                    const write = r.boolean();
+                    if (write) std.mem.writeInt(u32, &word, r.int(u32), .little);
+                    note(h, @intFromBool(b.bus.memory(&b.ram, at & ~@as(u64, 3), write, &word)));
+                    h.update(&word);
+                },
+            }
+            note(h, b.lapic.next() orelse 0);
+        }
+    }.f;
+    const fresh = try testing.allocator.create(Board);
+    defer testing.allocator.destroy(fresh);
+    fresh.* = .{};
+    fresh.dev = fresh.dice.device();
+    _ = fresh.bus.plug(1, &fresh.dev, &fresh.lapic);
+    _ = fresh.lapic.writeMsr(apic.msr_apic_base, apic.base | (1 << 8) | (1 << 11), 0);
+    fresh.lapic.write(0x0F0, 0x1FF, 0);
+    try restoresExactly(Board, fresh, step, fixup);
+}
 
 // ── a model restored at step k goes on as the run that never stopped ────────
 

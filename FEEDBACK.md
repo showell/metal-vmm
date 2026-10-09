@@ -7,6 +7,62 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-08, past midnight
+
+**112-118 are done**, each red first where a test could be, all on
+`claude/great-wright-i7aste`; master is merged into all three. The details
+are under Questions in QUEUE.md, newest first. The 110 blocker is taken: a
+red test that needed changing to pass was telling me something, and I'll
+look at what a dropped case says before dropping it.
+
+**The one that matters: 112 found a real one, and its fix is yours.** On a
+disk with a write cache, a cut inside an operation leaves files `Damaged`,
+and worse, a cluster in two directories (seed 247) or garbage names
+(seeds 53, 84, 218). fat16's crash safety is the order of its writes, and a
+cache keeps no order between flushes. A barrier at each order point fat16
+already names fixes it: 1000 cached seeds pass, and so does everything else
+but `io_test`'s flush count (4 per whole-file write, not 1). The patch is
+`docs/112-fat16-barriers.patch`; the other way is WCE=0 at boot. **A
+question:** what does lynrummy.com's facts page say for the volume's write
+cache? If it's on, this is production's shape.
+- **gopher-metal `zig build test` has one red test until then:**
+  `store_sim`'s "on a disk with a write cache" (`4d86d06`), as `fccad06`
+  was. `runSeed` is untouched, so every other seed runs as before.
+
+**The rest, briefly:**
+- **113:** the walk works, and found the write caches weren't values (a
+  shared heap map); `snapshot.Cache` saves them apart now, so `gaps` is
+  empty. The volume and the PCI bus have restore tests, and `Machine` has a
+  census. Nothing in the vCPU half is touched.
+- **114:** 231 readers followed. One real site: docs answered 404 for a doc
+  it couldn't read (now 500). 24 defended. Two rules I added, for you to
+  judge: a 5xx answer counts as telling the failure, and an arm naming a
+  wrapper's own error (not absence) passes.
+- **115:** L7 and P1 killed. S11 is equivalent in effect: `makeDirIn`
+  answers `BadName` first. MUTATION.md now has 71 of 76 not equivalent.
+- **116:** one formatting commit (layout only), then the check.
+- **117:** both gaps closed; the tree had neither.
+- **118:** a root that is a file was the as-root case. The mode-000 test
+  skips as root, and passes run as `nobody`. Folding found a third lint gap
+  (`if (call() catch v)` was never checked); closed.
+
+**Checks:**
+- metal-vmm: `zig build test`, 258 pass.
+- angry-gopher: `ops/check_zig`, all green (1004 pass, 2 skip as root).
+  Ported into gopher-metal, `store-judge` passes 2 of 2 and `zig build
+  gopher` builds.
+- gopher-metal: `zig build test`, 1023 of 1025 pass. One is skipped, and
+  the one failure is 112's red test, as planned. `zig build properties` at
+  its defaults exits 0 (every oracle held), and the new floor property is
+  reached 79 times.
+
+**Process notes:**
+- **One edit to a file of yours:** `virtio.Block` gained a host test's
+  `cache` hook (beside `memory`, `fault` and `fail_after`), null by default
+  and touched by nothing on metal.
+- **Nothing was too big to split.** 114's long tail was 24 one-line markers
+  and one fix, so I did it in one pass.
+
 ## The box → CC, 2026-10-08 late
 
 **108-111 are merged** (angry-gopher `9a924cbe`, gopher-metal `279267b`,
