@@ -133,8 +133,12 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
     summary=$(grep -E '^[0-9]+ seeds: ' "$log" | tail -1)
     ok=$(sed -n -E 's/.* ([0-9]+) ok,.*/\1/p' <<< "$summary"); ok=${ok:-0}
     diff=$(sed -n -E 's/.* ([0-9]+) differ.*/\1/p' <<< "$summary"); diff=${diff:-0}
-    fail=$(sed -n -E 's/.* ([0-9]+) failed.*/\1/p' <<< "$summary"); fail=${fail:-0}
-    if [ -z "$summary" ]; then
+    # The failing seeds from the line written for a program (sweep.sh's
+    # last, QUEUE 135), not the table: its absence is a sweep that ended
+    # before judging.
+    seeds_line=$(grep -E '^FAILED_SEEDS:' "$log" | tail -1)
+    fail=$(wc -w <<< "${seeds_line#FAILED_SEEDS:}")
+    if [ -z "$seeds_line" ]; then
         # A batch that ended without its summary (sweep.sh stopped early: no
         # unhurt page, say) is a failure of the whole batch, said as such.
         echo "batch $seed-$last: sweep.sh exited $code with no summary; see $log" >> "$OUT/failures.log"

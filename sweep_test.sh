@@ -260,6 +260,12 @@ expect "the summary" '^8 seeds: 2 ok, 2 differ as their faults allow, 4 failed' 
 expect "a failing seed, as knobs" 'FAULT_SEED=4: FAIL: the volume is not sound' "$out"
 expect "how to repeat it" 'repeat it: DISK_WRITES_ONLY=1 TRANSPORT=pci' "$out"
 [ $code = 1 ] || { echo "FAIL: sweep.sh exited $code, not 1"; fail=1; }
+# The failing seeds, for a program (QUEUE 135), last.
+expect "the machine line" '^FAILED_SEEDS: 2 4 5 6$' "$out"
+[ "$(tail -1 <<< "$out")" = "FAILED_SEEDS: 2 4 5 6" ] || { echo "FAIL: FAILED_SEEDS is not the last line"; fail=1; }
+# Nothing judged is exit 2, a missing program among it (QUEUE 135).
+VMM="$T/no-such-vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 1 1 > /dev/null 2>&1
+[ $? = 2 ] || { echo "FAIL: a sweep with no metal-vmm did not exit 2"; fail=1; }
 
 # A sweep of only good seeds, with a floor it meets, passes.
 printf 'tcp: common\n' > "$T/floor"

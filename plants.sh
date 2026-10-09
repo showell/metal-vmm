@@ -94,15 +94,17 @@ sweep() {
     KEEP_FAILED="$OUT/$1-failed" "$HERE/sweep.sh" "$FIRST" "$LAST" > "$OUT/$1.log" 2>&1
 }
 
-failed_seeds() { sed -n -E 's/^([0-9]+) .* FAIL: .*/\1/p' "$OUT/$1.log"; }
+# The failing seeds, from the line sweep.sh writes last for a program
+# (QUEUE 135), not from its table.
+failed_seeds() { sed -n 's/^FAILED_SEEDS://p' "$OUT/$1.log" | tail -1 | tr ' ' '\n' | grep .; }
 
 building=""
 trap '[ -z "$building" ] || git -C "$GOPHER" worktree remove --force "$building"' EXIT
 
-# judged <name>: the sweep ended with its summary line ("N seeds: ..."); a
-# sweep that stopped on a precondition (exit 1 or 2 with no summary) judged
-# nothing, and says so rather than passing for a clean kernel.
-judged() { grep -qE '^[0-9]+ seeds: ' "$OUT/$1.log"; }
+# judged <name>: the sweep ended with its FAILED_SEEDS line; one that stopped
+# on a precondition (exit 2, QUEUE 135) judged nothing, and says so rather
+# than passing for a clean kernel.
+judged() { grep -q '^FAILED_SEEDS:' "$OUT/$1.log"; }
 
 bad=0
 echo "plants, gopher-metal $commit, metal-vmm $(git -C "$HERE" rev-parse --short HEAD), seeds $FIRST-$LAST, logs in $OUT"

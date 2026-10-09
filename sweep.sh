@@ -33,8 +33,9 @@
 # Every run's coverage goes to one JSONL, judged at the end by
 # zig-coverage-sdk's tools/report.py, which names each run by its seed (with
 # FLOOR=<file> if set). The sweep ends with the failing seeds, each as
-# the knobs that repeat it without the seed. It exits 1 if any seed failed
-# or the merge did.
+# the knobs that repeat it without the seed, and then one line for a
+# program, `FAILED_SEEDS: 3 17 42` (empty when none). It exits 1 if any seed
+# failed or the merge did, and 2, always, when nothing can be judged.
 #
 # **MANY SHAPES OF REQUEST** (`SHAPES=<dir>`): each `<name>.shape` there is
 # a request's setting, one VAR=value a line (`#` for comments), passed to
@@ -100,6 +101,11 @@
 # and the pristine volume must not hold it, or nothing can be judged.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# **NOTHING CAN BE JUDGED: EXIT 2, ALWAYS, THROUGH HERE** (metal-vmm QUEUE
+# 135): a missing program, a shape that says nothing, an unhurt run that
+# answers otherwise. Exit 1 is only seeds that failed, or the coverage
+# report; a night stops on 2 and goes on after 1.
+cannot_judge() { [ $# = 0 ] || echo "$*"; exit 2; }
 GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
 KERNEL="${KERNEL:-$GUESTS/gopher.elf}"
 SITE="${SITE:-$HOME/build/gopher-metal/probe/gopher/pristine.img}"
@@ -119,20 +125,20 @@ SITE_REQUESTS="${SITE_REQUESTS:-$HERE/tools/site_requests.py}"
 export TRANSPORT="${TRANSPORT:-pci}"
 RUN_TIMEOUT="${RUN_TIMEOUT:-300}"
 if [ -n "${KEEP:-}" ]; then WORK="$KEEP"; mkdir -p "$WORK"; else WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT; fi
-[ -x "$VMM" ] || { echo "no $VMM; run: zig build"; exit 1; }
-[ -f "$REPORT" ] || { echo "no $REPORT; set COVERAGE_SDK=<zig-coverage-sdk checkout>"; exit 1; }
-[ -f "$KERNEL" ] || { echo "no $KERNEL"; exit 1; }
-[ -f "$SITE" ] || { echo "no volume at $SITE; set SITE=<image>"; exit 1; }
+[ -x "$VMM" ] || cannot_judge "no $VMM; run: zig build"
+[ -f "$REPORT" ] || cannot_judge "no $REPORT; set COVERAGE_SDK=<zig-coverage-sdk checkout>"
+[ -f "$KERNEL" ] || cannot_judge "no $KERNEL"
+[ -f "$SITE" ] || cannot_judge "no volume at $SITE; set SITE=<image>"
 # **THE CHECK A CUT NEEDS, READY BEFORE ANY SEED** (QUEUE 127(a)): a missing
 # untouched.py or FAT reader would fail every cut seed with stop leftovers
 # as "lost a file", all night. Exit 2: nothing can be judged, and a night
 # stops.
-"$UNTOUCHED" --ready > "$WORK/untouched.ready" 2>&1 || { echo "$UNTOUCHED --ready failed: a cut's leftovers could not be judged:"; sed 's/^/  /' "$WORK/untouched.ready"; exit 2; }
+"$UNTOUCHED" --ready > "$WORK/untouched.ready" 2>&1 || { echo "$UNTOUCHED --ready failed: a cut's leftovers could not be judged:"; sed 's/^/  /' "$WORK/untouched.ready"; cannot_judge; }
 DURABLE=""
 if [ -n "${POST:-}" ]; then
-  [ -f "$POST" ] || { echo "no request at POST=$POST"; exit 1; }
-  [ -n "${READ_BACK:-}" ] && [ -n "${MARK:-}" ] || { echo "POST needs READ_BACK=<path> and MARK=<text>"; exit 1; }
-  [ -n "${VOLUME_SITE:-}" ] || { echo "POST needs VOLUME_SITE=<image>: the message is kept on the volume"; exit 1; }
+  [ -f "$POST" ] || cannot_judge "no request at POST=$POST"
+  [ -n "${READ_BACK:-}" ] && [ -n "${MARK:-}" ] || cannot_judge "POST needs READ_BACK=<path> and MARK=<text>"
+  [ -n "${VOLUME_SITE:-}" ] || cannot_judge "POST needs VOLUME_SITE=<image>: the message is kept on the volume"
   DURABLE=yes
 fi
 TOLD="${TOLD:-303}"
@@ -160,8 +166,8 @@ asks_of() { local a; a=$(setting_of "$1" PEER_ASKS); echo "${a:-1}"; }
 # raised to serve all its requests (QUEUE 127(h)).
 site_of() { if [ -f "$WORK/site-${1:-none}.img" ]; then echo "$WORK/site-${1:-none}.img"; else echo "$SITE"; fi; }
 if [ -n "${SHAPES:-}" ]; then
-  [ -d "$SHAPES" ] || { echo "no folder at SHAPES=$SHAPES"; exit 1; }
-  [ -z "$DURABLE" ] || { echo "SHAPES and POST are two sweeps; choose one"; exit 1; }
+  [ -d "$SHAPES" ] || cannot_judge "no folder at SHAPES=$SHAPES"
+  [ -z "$DURABLE" ] || cannot_judge "SHAPES and POST are two sweeps; choose one"
   SHAPES="$(cd "$SHAPES" && pwd)"
   SHAPE_NAMES=()
   for f in "$SHAPES"/*.shape; do
@@ -190,34 +196,34 @@ if [ -n "${SHAPES:-}" ]; then
           files=""
           IFS=, read -ra parts <<< "${line#PEER_REQUEST=}"
           for part in "${parts[@]}"; do
-            [ -f "$SHAPES/$part" ] || { echo "shape $n: no request $SHAPES/$part"; exit 1; }
+            [ -f "$SHAPES/$part" ] || cannot_judge "shape $n: no request $SHAPES/$part"
             files="$files${files:+,}$SHAPES/$part"
           done
           words="$words PEER_REQUEST=$files" ;;
         *=*) words="$words $line" ;;
-        *) echo "shape $n: not VAR=value: $line"; exit 1 ;;
+        *) cannot_judge "shape $n: not VAR=value: $line" ;;
       esac
     done < "$f"
     SHAPE_ENV[$n]="${words# }"
     # **EVERY SHAPE SAYS WHAT ITS UNHURT RUN MUST ANSWER** (metal-vmm QUEUE
     # 122): with none, a shape gone stale (a cookie expired, a 500) is every
     # seed's baseline, and every seed that fails as it does is "ok".
-    [ -n "${SHAPE_EXPECT[$n]:-}" ] || { echo "shape $n: no EXPECT=<status>: its unhurt run is held to nothing, so nothing can be judged"; exit 2; }
+    [ -n "${SHAPE_EXPECT[$n]:-}" ] || cannot_judge "shape $n: no EXPECT=<status>: its unhurt run is held to nothing, so nothing can be judged"
     # One status a client (QUEUE 126): a client held to nothing would judge
     # every seed against an answer gone stale.
     want=$(clients_of "$n")
     IFS=, read -ra statuses <<< "${SHAPE_EXPECT[$n]}"
-    [ "${#statuses[@]}" = "$want" ] || { echo "shape $n: EXPECT names ${#statuses[@]} status(es) for $want client(s): each client's unhurt answer must be held to one (EXPECT=303,204 for two), so nothing can be judged"; exit 2; }
+    [ "${#statuses[@]}" = "$want" ] || cannot_judge "shape $n: EXPECT names ${#statuses[@]} status(es) for $want client(s): each client's unhurt answer must be held to one (EXPECT=303,204 for two), so nothing can be judged"
     if [ -n "${SHAPE_READ[$n]:-}" ]; then
-      [ -n "${SHAPE_MARK[$n]:-}" ] || { echo "shape $n: READ_BACK needs MARK=<text>"; exit 1; }
-      [ -n "${VOLUME_SITE:-}" ] || { echo "shape $n: READ_BACK needs VOLUME_SITE=<image>: the write is kept on the volume"; exit 1; }
+      [ -n "${SHAPE_MARK[$n]:-}" ] || cannot_judge "shape $n: READ_BACK needs MARK=<text>"
+      [ -n "${VOLUME_SITE:-}" ] || cannot_judge "shape $n: READ_BACK needs VOLUME_SITE=<image>: the write is kept on the volume"
       SHAPE_TOLD[$n]="${SHAPE_TOLD[$n]:-${SHAPE_EXPECT[$n]%%,*}}"
       # Each write cache loses what was never synchronized when the guest
       # stops, as in a durability sweep.
       SHAPE_ENV[$n]="${SHAPE_ENV[$n]}${SHAPE_ENV[$n]:+ }VOLUME_CUT_AT_EXIT=1"
     fi
   done
-  [ ${#SHAPE_NAMES[@]} -gt 0 ] || { echo "no *.shape in $SHAPES"; exit 1; }
+  [ ${#SHAPE_NAMES[@]} -gt 0 ] || cannot_judge "no *.shape in $SHAPES"
 fi
 # shape_env <shape>: its settings ("" for none).
 shape_env() { [ -z "$1" ] || echo "${SHAPE_ENV[$1]}"; }
@@ -596,7 +602,7 @@ verdict() {
 # **THE SETUP** (SHAPES' `setup`): its requests sent in turn, unhurt, to one
 # copy of VOLUME_SITE, which every run below then starts from.
 if [ -n "${SHAPES:-}" ] && [ -f "$SHAPES/setup" ]; then
-  [ -n "${VOLUME_SITE:-}" ] || { echo "a setup needs VOLUME_SITE=<image>"; exit 1; }
+  [ -n "${VOLUME_SITE:-}" ] || cannot_judge "a setup needs VOLUME_SITE=<image>"
   cp "$VOLUME_SITE" "$WORK/setup.vol"
   while IFS= read -r req; do
     req="${req%%#*}"; req="${req%"${req##*[![:space:]]}"}"
@@ -621,7 +627,7 @@ for n in "${SHAPE_NAMES[@]}"; do
   need=$(( $(clients_of "$n") * $(asks_of "$n") ))
   if [ "$need" -gt 1 ]; then
     "$SITE_REQUESTS" "$SITE" "$WORK/site-${n:-none}.img" "$need" > "$WORK/site-${n:-none}.out" 2>&1 ||
-      { echo "${n:+shape $n: }could not raise the site's requests to $need:"; sed 's/^/  /' "$WORK/site-${n:-none}.out"; exit 2; }
+      { echo "${n:+shape $n: }could not raise the site's requests to $need:"; sed 's/^/  /' "$WORK/site-${n:-none}.out"; cannot_judge; }
     echo "${n:+shape $n: }the site raised to $need requests ($(tail -1 "$WORK/site-${n:-none}.out"))"
   fi
   # shellcheck disable=SC2086
@@ -633,14 +639,14 @@ for n in "${SHAPE_NAMES[@]}"; do
   if ! grep -qE '^metal-vmm: coverage: [0-9]+ of [1-9][0-9]* properties' "$WORK/$u.err"; then
     echo "$KERNEL reported no coverage property in its unhurt run: it was built without -Dcoverage, or the run ended before it said any. Nothing can be judged."
     echo "  build one: (cd ~/showell_repos/gopher-metal && zig build gopher -Dcoverage), and copy probe/gopher.elf aside: gates.sh wants the release build there"
-    exit 2
+    cannot_judge
   fi
   # **EVERY CLIENT'S UNHURT PAGE** (QUEUE 126): each client past the first
   # is held to its own, so each must have one.
   for ((k = 2; k <= $(clients_of "$n"); k++)); do
     if [ -z "$(client_status "$u" "$k")" ] || [ ! -f "$(client_page "$u" "$k")" ]; then
       echo "${n:+shape $n: }the unhurt run's client $k got $([ -n "$(client_status "$u" "$k")" ] && echo "status $(client_status "$u" "$k") and no page" || echo "no answer"): nothing can be judged; see $WORK/$u.out"
-      exit 2
+      cannot_judge
     fi
   done
   if [ -n "$n" ]; then
@@ -649,7 +655,7 @@ for n in "${SHAPE_NAMES[@]}"; do
     echo "shape $n: unhurt status ${sts:-none}, $([ -f "$WORK/$u.body" ] && wc -c < "$WORK/$u.body" || echo no) bytes (${SHAPE_ENV[$n]})"
     if [ -n "${SHAPE_EXPECT[$n]:-}" ] && [ "$sts" != "${SHAPE_EXPECT[$n]}" ]; then
       echo "shape $n: its unhurt run answered ${sts:-nothing}, not ${SHAPE_EXPECT[$n]}: nothing can be judged; see $WORK/$u.out"
-      exit 2
+      cannot_judge
     fi
     [ -f "$WORK/unhurt.exit" ] || for x in exit out err body cov; do [ ! -f "$WORK/$u.$x" ] || cp "$WORK/$u.$x" "$WORK/unhurt.$x"; done
     # **A DURABLE SHAPE'S RECIPE MUST HOLD** (QUEUE 125): the pristine
@@ -657,10 +663,10 @@ for n in "${SHAPE_NAMES[@]}"; do
     if [ -n "$(read_of "$n")" ]; then
       read_back "pristine-$n" "$VOLUME_SITE" "${SHAPE_READ[$n]}"
       read_back "$u" "" "${SHAPE_READ[$n]}"
-      ! kept "pristine-$n" "${SHAPE_MARK[$n]}" || { echo "shape $n: the pristine volume's read-back already holds \"${SHAPE_MARK[$n]}\": nothing can be judged"; exit 2; }
+      ! kept "pristine-$n" "${SHAPE_MARK[$n]}" || cannot_judge "shape $n: the pristine volume's read-back already holds \"${SHAPE_MARK[$n]}\": nothing can be judged"
       if [ "$st" != "${SHAPE_TOLD[$n]}" ] || ! kept "$u" "${SHAPE_MARK[$n]}"; then
         echo "shape $n: its unhurt run was told ${st:-nothing} and its read-back $(kept "$u" "${SHAPE_MARK[$n]}" && echo holds || echo lacks) \"${SHAPE_MARK[$n]}\" (TOLD=${SHAPE_TOLD[$n]}): nothing can be judged"
-        exit 2
+        cannot_judge
       fi
       echo "shape $n: each seed is read back with $(basename "${SHAPE_READ[$n]}") for \"${SHAPE_MARK[$n]}\" when told ${SHAPE_TOLD[$n]}"
     fi
@@ -670,17 +676,17 @@ unhurt_status=$(status_of unhurt)
 if [ -n "$DURABLE" ]; then
   read_back pristine "$VOLUME_SITE"
   read_back unhurt
-  ! kept pristine || { echo "the pristine volume already holds MARK: nothing can be judged"; exit 2; }
+  ! kept pristine || cannot_judge "the pristine volume already holds MARK: nothing can be judged"
   if [ "$unhurt_status" != "$TOLD" ] || ! kept unhurt; then
     echo "the unhurt post was told ${unhurt_status:-nothing} and its read-back $(kept unhurt && echo holds || echo lacks) MARK: nothing can be judged"
-    exit 2
+    cannot_judge
   fi
   echo "durability: each seed posts $POST, then reads back $READ_BACK for \"$MARK\""
 fi
 if [ -z "$unhurt_status" ] || [ ! -f "$WORK/unhurt.body" ]; then
   echo "the unhurt run got $([ -n "$unhurt_status" ] && echo "status $unhurt_status and no page" || echo "no answer") (exit $(cat "$WORK/unhurt.exit")): nothing can be judged; see its log:"
   tail -5 "$WORK/unhurt.out" "$WORK/unhurt.err"
-  exit 2
+  cannot_judge
 fi
 echo "unhurt: exit $(cat "$WORK/unhurt.exit"), status $unhurt_status, $(wc -c < "$WORK/unhurt.body") bytes of $PATH_WANTED"
 printf '%-6s %-14s %-4s %-6s %-8s %-40s %s\n' seed shape exit status bytes verdict knobs
@@ -771,4 +777,8 @@ for s in $failing; do
     echo "    repeat it: $(knobs_of "seed$s")${PEER_REQUEST:+ PEER_REQUEST=$PEER_REQUEST}${sh:+ $(shape_env "$sh")}${VOLUME_SITE:+ VOLUME=<a copy of the volume${SHAPES:+, after the setup}>} TRANSPORT=$TRANSPORT $VMM $KERNEL <a copy of $([ "$(site_of "$sh")" = "$SITE" ] && echo "the site" || echo "the site, its requests raised by tools/site_requests.py to $(( $(clients_of "$sh") * $(asks_of "$sh") ))")> \"\" $PATH_WANTED$([ -z "$(read_of "$sh")" ] || echo "; then read back ${SHAPE_READ[$sh]} for \"${SHAPE_MARK[$sh]}\"")"
   fi
 done
+# **FOR A PROGRAM TO READ** (metal-vmm QUEUE 135): the failing seeds, one
+# line, always last but for nothing; plants.sh and nightly.sh read this, not
+# the table above.
+echo "FAILED_SEEDS:$(for s in $failing; do printf ' %s' "$s"; done)"
 [ -z "$failing" ] && [ $merged = 0 ]
