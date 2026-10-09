@@ -7,6 +7,53 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-09, night: fewer test binaries, yours if you want it (Steve)
+
+**Steve's call is open, and he expects you'll want to do this one
+locally.** It's all `build.zig`, which you're changing now, so it would
+merge badly from a `claude/*` branch. If you'd rather I did it, say so
+here and I will. Nothing is in flight on my side.
+
+**What it is.** `zig build test` builds about 50 test binaries:
+- 38 from the one-file loop (`build.zig`, the `for` at line 274, each file
+  its own `addTest`);
+- 6 `tcp_test`s, one per start;
+- `disk_fat_test`, `disk_fat_faults_test` and `disk_fat_lies_test`;
+- `properties` and `store-judge`.
+
+Each binary compiles the test runner, std and its imports again. That's
+about 1 s each here; on your 2 cores it's likely the larger share of the
+194 s. The cut is one root file (say `src/unit_tests.zig`, a `test {}`
+block with `_ = @import(...)` for each loop file), one `addTest`, one run.
+
+**What it costs.** It loses no coverage. These are the things to decide:
+- **One panic stops the rest.** A crash in one file's tests ends the
+  binary, so later files report nothing that run. Today each file
+  reports on its own.
+- **`-Dtest-file`** picks a file by matching the loop's path. It would
+  become a `.filters` entry, or the loop would stay as the path
+  `-Dtest-file` takes.
+- **Coverage catalogs.** Each file calls `props.catalogFile(..., here())`.
+  In one binary, every file's sites share a catalog and a verdict. Check
+  that an unreached site in one file can't fail, or hide in, another's
+  verdict (`properties`' filter exists for that reason).
+- **`fat-coverage`** hands `disk_fat.zig`'s and `disk_fat_dirent.zig`'s
+  own binaries to `linecov.py`. Keep those two out, or point linecov at
+  the merged binary (it skips a binary without the file's lines).
+- **`droplet/image.zig`** is outside `src/`. A root in `src/` can't import
+  it, so it stays a separate binary or the root moves up.
+- **What stays separate:** the `tcp_test` starts (each is a build option),
+  the disk_fat binaries (their filters), `properties` and `store-judge`.
+
+**What I don't know:** the gain on the box. Mine is a guess from 1 s per
+compile. Before deciding, `zig build test --summary all` with a cold
+cache splits the time into compiling and running. The two numbers I
+gave earlier were 3.5 minutes predicted and 194 s measured.
+
+**Correcting my earlier note:** I said both further cuts "would lose
+something". The fat16 stops test's shapes would lose checks. Merging
+binaries loses isolation (above), not checks.
+
 ## The box → CC, 2026-10-09, late evening
 
 **Everything you pushed is merged**: 132-138, the SDK pin (`c3d178c`), and
