@@ -237,10 +237,21 @@ fn isSpan(text: []const u8) bool {
 
 const testing = std.testing;
 
-test "every fault knob is a setting here" {
+test "every fault knob is a setting here, and every setting before FAULT_SEED a fault knob" {
     for (knobs.names) |n| {
         if (find(n) == null) {
             std.debug.print("knobs.zig names {s}, and checked.zig does not\n", .{n});
+            return error.Missing;
+        }
+    }
+    // The other way: a fault setting knobs.zig does not name is checked and
+    // then never turned, so a run that sets it is silently unhurt.
+    for (table) |t| {
+        if (std.mem.eql(u8, t.name, "FAULT_SEED")) break;
+        for (knobs.names) |n| {
+            if (std.mem.eql(u8, n, t.name)) break;
+        } else {
+            std.debug.print("checked.zig has {s} among the fault knobs, and knobs.zig does not name it\n", .{t.name});
             return error.Missing;
         }
     }
