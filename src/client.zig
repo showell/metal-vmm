@@ -162,6 +162,11 @@ pub const Tcp = struct {
     persist_at: ?u64 = null,
     persist_ns: u64 = initial_rto_ns,
     opened_at: u64 = 0,
+    /// **WHEN, IN THE MACHINE'S TIME**: its latest answer came whole, and
+    /// the guest first closed its side (its FIN, or its reset). A check that
+    /// a timeout governs reads these, never the host's clock.
+    answered_at: ?u64 = null,
+    guest_closed_at: ?u64 = null,
     /// The retransmission timer: when it goes off, and how long the next
     /// wait is.
     timer_at: ?u64 = null,
@@ -236,14 +241,14 @@ pub const Tcp = struct {
                 return build(out, server_ip, self.port, s.ack, 0, flag_rst, 0, "");
             }
             if (s.flags & flag_rst != 0) {
-                if (acceptable) self.refuse();
+                if (acceptable) self.refuse(now);
                 return null;
             }
         } else if (s.flags & flag_rst != 0) {
             // **A RESET MUST NAME RCV.NXT** (RFC 5961 §3.2): one inside the
             // window draws a challenge ACK, anything else is ignored.
             if (s.seq == self.ack) {
-                self.refuse();
+                self.refuse(now);
                 return null;
             }
             if (s.seq -% self.ack < self.window()) return self.segment(out, flag_ack, "");
@@ -310,7 +315,7 @@ pub const Tcp = struct {
                     self.reply_len += n;
                     self.received += s.data.len;
                     self.ack +%= @intCast(s.data.len);
-                    self.read(s.data);
+                    self.read(s.data, now);
                     if (self.rough.vanish_after) |after| if (self.reply_len >= after) {
                         self.state = .gone;
                         self.timer_at = null;
@@ -323,8 +328,9 @@ pub const Tcp = struct {
                 }
                 if (s.flags & flag_fin != 0) {
                     self.ack +%= 1; // their FIN takes one
+                    if (self.guest_closed_at == null) self.guest_closed_at = now;
                     self.answer.closed(); // an answer read to the close is whole
-                    if (self.answer.phase == .done) self.answered();
+                    if (self.answer.phase == .done) self.answered(now);
                     if (self.state == .established) {
                         self.state = .closing;
                         const frame = self.segment(out, flag_fin | flag_ack, "");
@@ -369,18 +375,19 @@ pub const Tcp = struct {
 
     /// The answer's bytes, as they come: each one that comes whole lets the
     /// next request go.
-    fn read(self: *Tcp, data: []const u8) void {
+    fn read(self: *Tcp, data: []const u8, now: u64) void {
         var rest = data;
         while (rest.len > 0) {
             const used = self.answer.feed(rest);
             rest = rest[used..];
             if (self.answer.phase != .done) break;
-            self.answered();
+            self.answered(now);
         }
     }
 
-    fn answered(self: *Tcp) void {
+    fn answered(self: *Tcp, now: u64) void {
         self.answers += 1;
+        self.answered_at = now;
         self.answer = .{};
     }
 
@@ -564,8 +571,9 @@ pub const Tcp = struct {
     }
 
     /// The guest reset it.
-    fn refuse(self: *Tcp) void {
+    fn refuse(self: *Tcp, now: u64) void {
         self.state = .refused;
+        if (self.guest_closed_at == null) self.guest_closed_at = now;
         self.timer_at = null;
         self.persist_at = null;
     }

@@ -209,10 +209,24 @@ pub fn client(peer: *const wire.Peer, buf: []u8) []const u8 {
     if (peer.plan.clients > 1 or peer.plan.asks > 1) {
         for (0..peer.opened) |i| {
             const c = peer.clientConst(i);
-            const each = std.fmt.bufPrint(buf[at..], "peer {d}: {d}, {d} of {d} answers, {d} bytes, {s}\n", .{
+            const each = std.fmt.bufPrint(buf[at..], "peer {d}: {d}, {d} of {d} answers, {d} bytes, {s}", .{
                 i + 1, c.status(), c.answers, c.asks, c.received, @tagName(c.state),
             }) catch break;
             at += each.len;
+            // **WHEN, IN THE MACHINE'S TIME** (ms, as the cost line says it):
+            // what a check that a timeout governs reads.
+            const marks = [_]struct { []const u8, ?u64 }{
+                .{ "opened", if (c.opened_at > 0) c.opened_at else null },
+                .{ "answered", c.answered_at },
+                .{ "the guest closed", c.guest_closed_at },
+            };
+            for (marks) |m| if (m[1]) |ns| {
+                const said = std.fmt.bufPrint(buf[at..], ", {s} at {d}.{d:0>3} ms", .{ m[0], ns / std.time.ns_per_ms, ns / std.time.ns_per_us % 1000 }) catch break;
+                at += said.len;
+            };
+            if (at >= buf.len) break;
+            buf[at] = '\n';
+            at += 1;
         }
     }
     return buf[0..at];
@@ -242,6 +256,17 @@ test "what the client got: one line, or its size, and a line a client when there
         \\peer: 200, 600 bytes
         \\peer 1: 200, 1 of 1 answers, 618 bytes, done
         \\peer 2: 0, 0 of 1 answers, 0 bytes, established
+        \\
+    , client(&peer, &buf));
+    // Each says when, in the machine's time, once it has a time to say.
+    peer.tcp.opened_at = 12_500_000;
+    peer.tcp.answered_at = 14_000_250;
+    peer.others[0].opened_at = 13_000_000;
+    peer.others[0].guest_closed_at = 2_013_100_000;
+    try testing.expectEqualStrings(
+        \\peer: 200, 600 bytes
+        \\peer 1: 200, 1 of 1 answers, 618 bytes, done, opened at 12.500 ms, answered at 14.000 ms
+        \\peer 2: 0, 0 of 1 answers, 0 bytes, established, opened at 13.000 ms, the guest closed at 2013.100 ms
         \\
     , client(&peer, &buf));
 }
