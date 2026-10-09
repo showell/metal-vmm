@@ -79,6 +79,20 @@ const load = loader.load;
 const pvhEntry = loader.pvhEntry;
 const tsc_port = loader.tsc_port;
 const msr_port = loader.msr_port;
+/// **THE COVERAGE DOOR**: a gopher-metal kernel built `-Dcoverage` reads it
+/// at boot, and finding `coverage_door_answer` there, writes its coverage
+/// lines to it instead of the serial port: each line in its own memory, a
+/// little-endian u32 length and then the bytes, and the line's physical
+/// address written to the door as one 32-bit `out`. One exit a line: KVM
+/// emulates `rep outsb` a byte at a time, an exit each (300 lines at boot
+/// were 111,448 exits). A one-byte write is taken as a byte of a line, as
+/// the serial port's would be. Neither costs the guest any
+/// time: no exit through it is counted, ticks the clock, delivers a frame
+/// or counts as progress, so a coverage kernel runs as its release build
+/// does, exit for exit, but for its own extra work. A release build never
+/// touches it.
+const coverage_door = loader.coverage_door;
+const coverage_door_answer: u8 = 'M';
 const describeProcessor = processor.describeProcessor;
 const forgetTheDice = processor.forgetTheDice;
 const sayTheApic = processor.sayTheApic;
@@ -535,6 +549,27 @@ const SerialOut = struct {
     }
 };
 
+/// The line a 32-bit write to the coverage door points at: a u32 length at
+/// `addr`, then that many bytes, all inside guest RAM. Null if not.
+fn doorLine(ram: []const u8, addr: u32) ?[]const u8 {
+    const start: usize = addr;
+    if (start + 4 > ram.len) return null;
+    const len: usize = std.mem.readInt(u32, ram[start..][0..4], .little);
+    if (len > ram.len - start - 4) return null;
+    return ram[start + 4 ..][0..len];
+}
+
+test "a coverage door line: the length and the bytes, or null past guest RAM" {
+    var ram: [32]u8 = @splat(0);
+    std.mem.writeInt(u32, ram[8..12], 3, .little);
+    @memcpy(ram[12..15], "ab\n");
+    try std.testing.expectEqualStrings("ab\n", doorLine(&ram, 8).?);
+    std.mem.writeInt(u32, ram[20..24], 9, .little);
+    try std.testing.expect(doorLine(&ram, 20) == null);
+    try std.testing.expect(doorLine(&ram, 30) == null);
+    try std.testing.expect(doorLine(&ram, 0xFFFF_FFFF) == null);
+}
+
 fn readLittle(data: []const u8) u64 {
     var value: u64 = 0;
     for (data, 0..) |b, i| value |= @as(u64, b) << @intCast(i * 8);
@@ -637,6 +672,23 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
                 std.debug.print("metal-vmm: the processor would not run: {s}\n", .{@tagName(e)});
                 return error.KvmFailed;
             },
+        }
+        if (@as(kvm.Exit, @enumFromInt(run.exit_reason)) == .io) {
+            const io = kvm.ioExit(page);
+            if (io.port == coverage_door) {
+                const data = kvm.ioData(page, io);
+                const at: coverage.When = .{ .exit = machine.exits, .ns = machine.time.ns };
+                const out: SerialOut = .{ .jsonl_fd = machine.coverage_fd };
+                if (io.direction != kvm.io_out) {
+                    @memset(data, coverage_door_answer);
+                } else if (io.size == 4) {
+                    if (doorLine(machine.ram, @truncate(readLittle(data)))) |line| machine.serial.door(line, at, out) else {
+                        machine.serial.table.lines += 1;
+                        machine.serial.table.malformed += 1;
+                    }
+                } else machine.serial.door(data, at, out);
+                continue;
+            }
         }
         // **EVERY EXIT IS A TICK OF THIS MACHINE'S CLOCK.** The guest asked
         // the outside world for something, and in here that is the only thing

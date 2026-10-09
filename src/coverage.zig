@@ -210,6 +210,11 @@ pub const Serial = struct {
     line_len: usize = 0,
     /// The current coverage line ran past `max_line`: it is malformed.
     overflowed: bool = false,
+    /// **THE COVERAGE DOOR'S LINE** (`door`): apart from the serial port's,
+    /// since the guest's console may be mid-line when one arrives.
+    door_line: [max_line]u8 = undefined,
+    door_len: usize = 0,
+    door_overflowed: bool = false,
     table: Table = .{},
 
     pub fn feed(self: *Serial, bytes: []const u8, at: When, out: anytype) void {
@@ -266,6 +271,36 @@ pub const Serial = struct {
         if (kept_len.* + need <= kept.len) return;
         out.stdout(kept[0..kept_len.*]);
         kept_len.* = 0;
+    }
+
+    /// **BYTES FROM THE COVERAGE DOOR** (main.zig `coverage_door`): the
+    /// SDK's JSONL lines whole, with no `coverage: ` before them, from a
+    /// kernel that found the door. Read into the same table as the serial
+    /// port's lines; withheld, each goes to the JSONL, and otherwise to
+    /// stdout as the serial port would have shown it.
+    pub fn door(self: *Serial, bytes: []const u8, at: When, out: anytype) void {
+        for (bytes) |b| {
+            if (b != '\n') {
+                if (self.door_len < self.door_line.len) {
+                    self.door_line[self.door_len] = b;
+                    self.door_len += 1;
+                } else self.door_overflowed = true;
+                continue;
+            }
+            var json = self.door_line[0..self.door_len];
+            if (json.len > 0 and json[json.len - 1] == '\r') json = json[0 .. json.len - 1];
+            if (self.door_overflowed) {
+                self.table.lines += 1;
+                self.table.malformed += 1;
+            } else self.table.take(json, at);
+            if (self.withhold) out.jsonl(json) else {
+                out.stdout(prefix);
+                out.stdout(json);
+                out.stdout("\n");
+            }
+            self.door_len = 0;
+            self.door_overflowed = false;
+        }
     }
 
     fn endLine(self: *Serial, at: When, out: anytype) void {
@@ -464,4 +499,40 @@ test "a run line names its seed, or its knobs" {
     var buf: [256]u8 = undefined;
     try testing.expectEqualStrings("{\"metal_vmm_run\":{\"seed\":4711,\"knobs\":\"WIRE_EAT=3\"}}", try runLine(&buf, 4711, "WIRE_EAT=3"));
     try testing.expectEqualStrings("{\"metal_vmm_run\":{\"seed\":null,\"knobs\":\"none\"}}", try runLine(&buf, null, "none"));
+}
+
+test "the coverage door: whole lines, no prefix, into the same table; withheld to the JSONL, else shown as the serial port shows them" {
+    const Out = struct {
+        shown: std.ArrayList(u8) = .empty,
+        kept: std.ArrayList(u8) = .empty,
+        pub fn stdout(self: *@This(), bytes: []const u8) void {
+            self.shown.appendSlice(std.testing.allocator, bytes) catch unreachable;
+        }
+        pub fn jsonl(self: *@This(), line: []const u8) void {
+            self.kept.appendSlice(std.testing.allocator, line) catch unreachable;
+            self.kept.append(std.testing.allocator, '\n') catch unreachable;
+        }
+    };
+    const line = "{\"antithesis_assert\":{\"id\":\"a\",\"message\":\"a\",\"condition\":true,\"display_type\":\"Always\",\"hit\":true,\"must_hit\":true,\"assert_type\":\"always\",\"location\":{},\"details\":null}}";
+    var out: Out = .{};
+    defer out.shown.deinit(std.testing.allocator);
+    defer out.kept.deinit(std.testing.allocator);
+    var s: Serial = .{ .withhold = true };
+    // A console line half printed, then a door line in two pieces.
+    s.feed("half a line", .{ .exit = 1, .ns = 1 }, &out);
+    s.door(line[0..10], .{ .exit = 2, .ns = 2 }, &out);
+    s.door(line[10..] ++ "\n", .{ .exit = 3, .ns = 3 }, &out);
+    s.feed(" ends\n", .{ .exit = 4, .ns = 4 }, &out);
+    try std.testing.expectEqualStrings("half a line ends\n", out.shown.items);
+    try std.testing.expectEqualStrings(line ++ "\n", out.kept.items);
+    try std.testing.expectEqual(@as(u64, 1), s.table.lines);
+    try std.testing.expect(s.table.find("a") != null);
+
+    var plain: Serial = .{};
+    var out2: Out = .{};
+    defer out2.shown.deinit(std.testing.allocator);
+    defer out2.kept.deinit(std.testing.allocator);
+    plain.door(line ++ "\n", .{ .exit = 1, .ns = 1 }, &out2);
+    try std.testing.expectEqualStrings(prefix ++ line ++ "\n", out2.shown.items);
+    try std.testing.expectEqual(@as(usize, 0), out2.kept.items.len);
 }
