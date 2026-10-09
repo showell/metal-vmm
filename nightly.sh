@@ -59,12 +59,13 @@ fi
 
 OUT="$NIGHTLY_OUT"
 mkdir -p "$OUT/bin" "$OUT/batches" "$OUT/failed"
-[ -x "$HERE/zig-out/bin/metal-vmm" ] || { echo "no metal-vmm built" >&2; exit 2; }
+VMM_BIN="${VMM_BIN:-$HERE/zig-out/bin/metal-vmm}" # another, for nightly_test.sh
+[ -x "$VMM_BIN" ] || { echo "no metal-vmm built" >&2; exit 2; }
 [ -f "$KERNEL_ELF" ] || { echo "no kernel at $KERNEL_ELF" >&2; exit 2; }
 [ -z "${PEER_REQUEST:-}" ] || [ -f "$PEER_REQUEST" ] || { echo "no request at PEER_REQUEST=$PEER_REQUEST" >&2; exit 2; }
 [ -z "${SHAPES:-}" ] || [ -d "$SHAPES" ] || { echo "no folder at SHAPES=$SHAPES" >&2; exit 2; }
 [ -f "$SITE" ] || { echo "no site volume at $SITE" >&2; exit 2; }
-cp "$HERE/zig-out/bin/metal-vmm" "$OUT/bin/metal-vmm"
+cp "$VMM_BIN" "$OUT/bin/metal-vmm"
 cp "$KERNEL_ELF" "$OUT/bin/gopher.elf"
 request=()
 if [ -n "${SHAPES:-}" ]; then
