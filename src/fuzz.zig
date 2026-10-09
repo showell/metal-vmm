@@ -523,6 +523,10 @@ fn peerSide(w: *World, r: std.Random) void {
             .shut_for_ns = r.uintLessThan(u64, 50_000_000),
         };
         p.plan = .{ .clients = r.intRangeAtMost(u8, 1, peer_zig.max_clients), .asks = r.intRangeAtMost(u32, 1, 3), .gap_ns = r.uintLessThan(u64, 2_000_000) };
+        // In turn half the time (QUEUE 126), by the gap's last bit rather
+        // than a draw of its own, so every seed already found draws the
+        // rest as it did.
+        p.plan.in_turn = p.plan.gap_ns & 1 == 1;
         w.note(p.open(w.request[0..n], w.now).len);
         return;
     }

@@ -140,9 +140,17 @@ pub const max_clients = 8;
 /// `PEER_ASKS`, `PEER_CLIENT_GAP_US`; main.zig). The first client opens when
 /// the guest says it is listening, and each of the others a gap after the
 /// one before. Each asks its own request, or the last one named.
+///
+/// **IN TURN** (`PEER_IN_TURN=1`, metal-vmm QUEUE 126): each of the others
+/// opens a gap after the one before it ended (`turnEnded`), not after it
+/// opened. A request that depends on the last one's write (a move in the
+/// session the last made) is then always asked after it, whatever a fault
+/// did to the last one's timing; a client that opens a gap after another
+/// opened is behind it only while nothing slows that one's SYN.
 pub const Plan = struct {
     clients: u8 = 1,
     gap_ns: u64 = std.time.ns_per_ms,
+    in_turn: bool = false,
     requests: [max_clients][]const u8 = @splat(""),
     /// How many requests were named; none means the one `open` is given.
     named: u8 = 0,
@@ -170,6 +178,8 @@ pub const Peer = struct {
     /// next opens.
     retried: u8 = 0,
     retry_at: ?u64 = null,
+    /// In turn: when the next client opens, once the last one's turn ended.
+    turn_at: ?u64 = null,
     /// **THE LEASE IT HANDS OUT** (`DHCP_LEASE_S`, a day by default), and
     /// what the guest did with it: when the last one ends, how many ACKs
     /// it was given and how many of them renewed a lease, and how many
@@ -201,6 +211,7 @@ pub const Peer = struct {
             if (c.port == segment.dst_port) {
                 const said = c.receive(segment, now, &self.scratch);
                 if (i == 0) self.noticeNoAnswer(now);
+                self.noticeTurn(now);
                 return said;
             }
         }
@@ -249,16 +260,40 @@ pub const Peer = struct {
     /// Anything else to say right now, after an answer, from whichever client
     /// has something. See `Tcp.more`.
     pub fn more(self: *Peer, now: u64) ?[]const u8 {
+        defer self.noticeTurn(now);
         for (0..self.opened) |i| {
             if (self.client(i).more(now, &self.scratch)) |frame| return frame;
         }
         return null;
     }
 
+    /// **WHETHER THE LAST CLIENT'S TURN ENDED**: every answer it asked for
+    /// came, or its connection is over without them (the guest reset it, it
+    /// gave up, it reset or vanished itself), and, for the first, no retry
+    /// is due.
+    fn turnEnded(self: *const Peer, i: usize) bool {
+        const c = self.clientConst(i);
+        if (i == 0 and self.retry_at != null) return false;
+        if (c.answers >= c.asks) return true;
+        return switch (c.state) {
+            .closing, .done, .refused, .reset, .gone, .gave_up => true,
+            .idle, .syn_sent, .established, .fin_wait => false,
+        };
+    }
+
+    /// In turn: the next client's opening, set when the last one's turn ends.
+    fn noticeTurn(self: *Peer, now: u64) void {
+        if (!self.plan.in_turn or self.turn_at != null or self.opened == 0) return;
+        if (self.opened >= @min(self.plan.clients, max_clients)) return;
+        if (self.turnEnded(self.opened - 1)) self.turn_at = now + self.plan.gap_ns;
+    }
+
     /// **WHAT IT SAYS UNSPOKEN TO, BY `now`**: the next of a flood's SYNs, a
     /// client opening, a reset, a window reopened, a segment sent again. One
     /// frame a call; null when there is nothing more.
     pub fn due(self: *Peer, now: u64) ?[]const u8 {
+        self.noticeTurn(now);
+        defer self.noticeTurn(now);
         if (self.retry_at) |at| if (now >= at) {
             // **THE SAME REQUEST, ON A NEW CONNECTION**: a port past the
             // clients' own, and new numbers.
@@ -277,6 +312,7 @@ pub const Peer = struct {
         if (self.nextOpening()) |at| if (now >= at) {
             const i = self.opened;
             self.opened += 1;
+            self.turn_at = null;
             const good = Rough{ .retransmits = self.rough.retransmits };
             return self.client(i).open(self.ask(i), now, good, &self.scratch);
         };
@@ -302,6 +338,7 @@ pub const Peer = struct {
     fn nextOpening(self: *const Peer) ?u64 {
         const at = self.opened_at orelse return null;
         if (self.opened >= @min(self.plan.clients, max_clients)) return null;
+        if (self.plan.in_turn) return self.turn_at;
         return at + @as(u64, self.opened) * self.plan.gap_ns;
     }
 
@@ -563,6 +600,37 @@ test "several clients: each opens a gap after the last, on its own port and its 
     try testing.expect(three.seq != two.seq);
     try testing.expect(peer.wakeAt() == null);
     try testing.expectEqual(@as(u8, 3), peer.opened);
+}
+
+test "clients in turn: each opens a gap after the one before it was answered, so a request may depend on the last one's write (QUEUE 126)" {
+    var peer = Peer{ .plan = .{ .clients = 3, .gap_ns = 5 * ms, .in_turn = true } };
+    var theirs: [2048]u8 = undefined;
+    _ = peer.open("GET /a HTTP/1.1\r\n\r\n", 100);
+    // Nothing is due while the first is unanswered, however long it takes.
+    try testing.expect(peer.wakeAt() == null);
+    try testing.expect(peer.due(100 + sec) == null);
+    const c1 = peer.client(0);
+    _ = peer.answer(fakeTo(&theirs, c1.port, flag_syn | flag_ack, 9000, c1.iss +% 1, ""), 2 * sec).?;
+    while (peer.more(2 * sec)) |_| {}
+    try testing.expect(peer.wakeAt() == null);
+    const answer = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
+    _ = peer.answer(fakeTo(&theirs, c1.port, flag_ack | flag_psh | flag_fin, 9001, c1.seq, answer), 3 * sec);
+    try testing.expectEqual(@as(u32, 1), c1.answers);
+    // Answered at 3 s: the second opens 5 ms on, and the third waits on it.
+    try testing.expectEqual(@as(?u64, 3 * sec + 5 * ms), peer.wakeAt());
+    try testing.expect(peer.due(3 * sec + 5 * ms - 1) == null);
+    const two = tcpIn(peer.due(3 * sec + 5 * ms).?).?;
+    try testing.expectEqual(@as(u16, 49153), two.src_port);
+    try testing.expect(peer.wakeAt() != 3 * sec + 10 * ms);
+    try testing.expectEqual(@as(u8, 2), peer.opened);
+    // A client that ends without an answer (the guest resets it) ends its
+    // turn too: the next is not held for ever.
+    const c2 = peer.client(1);
+    _ = peer.answer(fakeTo(&theirs, c2.port, flag_rst | flag_ack, 0, c2.iss +% 1, ""), 4 * sec);
+    try testing.expectEqual(Tcp.State.refused, c2.state);
+    try testing.expectEqual(@as(?u64, 4 * sec + 5 * ms), peer.wakeAt());
+    try testing.expectEqual(@as(u16, 49154), tcpIn(peer.due(4 * sec + 5 * ms).?).?.src_port);
+    try testing.expect(peer.wakeAt() == null or peer.wakeAt().? > 4 * sec + 5 * ms);
 }
 
 test "each client asks its own request, or the last one named, and is answered on its own port" {

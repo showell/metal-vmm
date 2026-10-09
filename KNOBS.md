@@ -124,10 +124,11 @@ only; any others behave.
 |---|---|---|
 | `PEER_CLIENTS=n` | the peer is `n` clients (8 at most), each on its own port and sequence numbers | 1 |
 | `PEER_CLIENT_GAP_US=us` | opens each client a gap after the last | 1,000 (1 ms) |
+| `PEER_IN_TURN=1` | opens each client a gap after the one before it ended (answered, or its connection over without an answer), not after it opened: a request that depends on the last one's write is always asked after it, whatever a fault did to that one's timing | off |
 | `PEER_REQUEST=a[,b,...]` | sends the bytes of request file `a` exactly as they are (a POST with a session cookie, say), and `b` for the second client; a client past the list asks the last | a GET of the path given as the fourth argument |
 | `PEER_ASKS=k` | each client asks `k` times on one connection, the next when the last answer is whole (by its length or its chunks), then closes it itself | 1 |
-| `PEER_BODY=<file>` | writes the body of the first client's answer to that file | unset: the closing line says how much there was |
-| `PEER_RESPONSE=<file>` | writes the first client's whole answer, headers included, to that file | unset |
+| `PEER_BODY=<file>` | writes the body of the first client's answer to that file, and with `PEER_CLIENTS=n`, client k's to `<file>.k` (k from 2 to n; empty for a client that never opened); a client whose answer was kept only in part gets no file, and says so | unset: the closing line says how much there was |
+| `PEER_RESPONSE=<file>` | writes the first client's whole answer, headers included, to that file, and client k's to `<file>.k`, as `PEER_BODY` | unset |
 | `DHCP_LEASE_S=s` | offers and acknowledges a DHCP lease of `s` seconds; the run ends saying how many requests renewed it, how many came after it ran out, and whether it was held to the end or ran out unrenewed, and when | a day |
 
 A client whose answer has neither a length nor chunks, such as a stream,

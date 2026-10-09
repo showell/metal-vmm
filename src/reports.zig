@@ -219,6 +219,54 @@ pub fn client(peer: *const wire.Peer, buf: []u8) []const u8 {
     return buf[0..at];
 }
 
+/// **WHERE CLIENT `i`'S ANSWER GOES** (`PEER_BODY`, `PEER_RESPONSE`;
+/// metal-vmm QUEUE 126): the first client's to the file named, as ever, so a
+/// caller that asks one client is unchanged; client k's beside it, at
+/// `<file>.k`. Null for a name that does not fit.
+pub fn answerPath(stem: []const u8, i: usize, buf: []u8) ?[:0]const u8 {
+    const named = if (i == 0)
+        std.fmt.bufPrint(buf, "{s}", .{stem})
+    else
+        std.fmt.bufPrint(buf, "{s}.{d}", .{ stem, i + 1 });
+    const text = named catch return null;
+    if (text.len >= buf.len) return null;
+    buf[text.len] = 0;
+    return buf[0..text.len :0];
+}
+
+/// How many clients' answers are written: every client the plan has, opened
+/// or not (one never opened got nothing, and its file says so by being
+/// empty), and the first at least.
+pub fn answered(peer: *const wire.Peer) usize {
+    return @max(1, @min(peer.plan.clients, wire.max_clients));
+}
+
+/// Whether a client kept its whole answer: past what it keeps, its files
+/// would hold a page's beginning, and are not written.
+pub fn keptWhole(c: *const wire.Tcp) bool {
+    return c.received <= c.reply_len;
+}
+
+test "each client's answer has its own file: the first the one named, client k's at <file>.k (QUEUE 126)" {
+    var buf: [64]u8 = undefined;
+    try testing.expectEqualStrings("/w/seed3.body", answerPath("/w/seed3.body", 0, &buf).?);
+    try testing.expectEqualStrings("/w/seed3.body.2", answerPath("/w/seed3.body", 1, &buf).?);
+    try testing.expectEqualStrings("/w/seed3.body.8", answerPath("/w/seed3.body", 7, &buf).?);
+    var small: [8]u8 = undefined;
+    try testing.expect(answerPath("12345678", 0, &small) == null);
+    try testing.expect(answerPath("123456", 1, &small) == null);
+    try testing.expectEqualStrings("12345.2", answerPath("12345", 1, &small).?);
+    var peer = wire.Peer{};
+    try testing.expectEqual(@as(usize, 1), answered(&peer));
+    peer.plan.clients = 3;
+    try testing.expectEqual(@as(usize, 3), answered(&peer)); // opened or not
+    var c = wire.Tcp{};
+    try testing.expect(keptWhole(&c));
+    c.reply_len = 10;
+    c.received = 11;
+    try testing.expect(!keptWhole(&c));
+}
+
 test "what the client got: one line, or its size, and a line a client when there are several" {
     var buf: [4096]u8 = undefined;
     var peer = wire.Peer{};

@@ -117,6 +117,7 @@ pub const table = [_]Setting{
     .{ .name = "PEER_CLIENTS", .kind = .{ .number = .{ .lo = 1, .hi = wire.max_clients } } },
     .{ .name = "PEER_ASKS", .kind = .{ .number = .{ .lo = 1, .hi = 1000 } } },
     .{ .name = "PEER_CLIENT_GAP_US", .kind = micros },
+    .{ .name = "PEER_IN_TURN", .kind = .flag },
     .{ .name = "PEER_REQUEST", .kind = .{ .files = wire.max_clients } },
     .{ .name = "PEER_BODY", .kind = .any },
     .{ .name = "PEER_RESPONSE", .kind = .any },

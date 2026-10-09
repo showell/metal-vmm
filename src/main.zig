@@ -923,8 +923,8 @@ test "an idle end keeps the guest's writes; a stuck, faulted or failed one does 
 
 /// **WHAT THE CLIENT GOT, IN ONE LINE** on stdout, so a run here can be
 /// compared with a run under QEMU where curl says the same thing; and its
-/// body and whole answer to files, when asked (`PEER_BODY`, `PEER_RESPONSE`).
-/// See `reports.client`.
+/// body and whole answer to files, when asked (`PEER_BODY`, `PEER_RESPONSE`),
+/// every client's. See `reports.client`.
 fn theClient(environ: std.process.Environ, peer: *const wire.Peer) void {
     // **A REAL PAGE DOES NOT FIT ON A LINE.** The probes answer with a
     // sentence and the line is compared against curl's; a guest serving an
@@ -936,14 +936,28 @@ fn theClient(environ: std.process.Environ, peer: *const wire.Peer) void {
     // would hold a page's beginning and a comparison of two of them (rest.sh)
     // would pass on half a page: they are not written, and the line says why,
     // so whatever reads them fails for want of them.
-    const cut = peer.tcp.received > peer.tcp.reply_len;
-    if (cut and (environ.getPosix("PEER_BODY") != null or environ.getPosix("PEER_RESPONSE") != null)) {
-        var line: [200]u8 = undefined;
-        const text = std.fmt.bufPrint(&line, "metal-vmm: the answer was {d} bytes and the client keeps {d}; PEER_BODY and PEER_RESPONSE are not written\n", .{ peer.tcp.received, peer.tcp.reply.len }) catch "metal-vmm: the answer was cut; PEER_BODY and PEER_RESPONSE are not written\n";
-        _ = linux.write(2, text.ptr, text.len);
-    } else {
-        if (environ.getPosix("PEER_BODY")) |into| writeOut(into, peer.tcp.body());
-        if (environ.getPosix("PEER_RESPONSE")) |into| writeOut(into, peer.tcp.whole());
+    //
+    // **EVERY CLIENT'S ANSWER** (metal-vmm QUEUE 126): client k's goes
+    // beside the first's, at `<file>.k` (`reports.answerPath`), so a sweep
+    // can hold each client to the same client unhurt.
+    const body_stem = environ.getPosix("PEER_BODY");
+    const response_stem = environ.getPosix("PEER_RESPONSE");
+    if (body_stem != null or response_stem != null) {
+        for (0..reports.answered(peer)) |i| {
+            const c = peer.clientConst(i);
+            if (!reports.keptWhole(c)) {
+                var line: [200]u8 = undefined;
+                const text = if (i == 0)
+                    std.fmt.bufPrint(&line, "metal-vmm: the answer was {d} bytes and the client keeps {d}; PEER_BODY and PEER_RESPONSE are not written\n", .{ c.received, c.reply.len }) catch "metal-vmm: the answer was cut; PEER_BODY and PEER_RESPONSE are not written\n"
+                else
+                    std.fmt.bufPrint(&line, "metal-vmm: client {d}'s answer was {d} bytes and the client keeps {d}; its PEER_BODY and PEER_RESPONSE are not written\n", .{ i + 1, c.received, c.reply.len }) catch "metal-vmm: a client's answer was cut; its PEER_BODY and PEER_RESPONSE are not written\n";
+                _ = linux.write(2, text.ptr, text.len);
+                continue;
+            }
+            var name: [4200]u8 = undefined;
+            if (body_stem) |stem| if (reports.answerPath(stem, i, &name)) |into| writeOut(into, c.body()) else writeFailed(stem);
+            if (response_stem) |stem| if (reports.answerPath(stem, i, &name)) |into| writeOut(into, c.whole()) else writeFailed(stem);
+        }
     }
     var buf: [4096]u8 = undefined;
     const text = reports.client(peer, &buf);
@@ -1267,13 +1281,15 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // `PEER_REQUEST=<file>` sends those bytes exactly as they are.
     //
     // **AND HOW MANY ASK** (peer.zig, `Plan`): `PEER_CLIENTS=n` clients, a
-    // gap apart (`PEER_CLIENT_GAP_US`), each asking `PEER_ASKS=k` times on
+    // gap apart (`PEER_CLIENT_GAP_US`; with `PEER_IN_TURN=1`, a gap after
+    // the one before was answered), each asking `PEER_ASKS=k` times on
     // its own connection. `PEER_REQUEST=a,b,...` names a file for each
     // client; a client past the list asks the last one's.
     const plan = &card.peer.plan;
     if (count(init.environ, "PEER_CLIENTS")) |n| plan.clients = @intCast(std.math.clamp(n, 1, wire.max_clients));
     if (count(init.environ, "PEER_ASKS")) |n| plan.asks = @intCast(std.math.clamp(n, 1, 1000));
     if (count(init.environ, "PEER_CLIENT_GAP_US")) |us| plan.gap_ns = us * std.time.ns_per_us;
+    if (init.environ.getPosix("PEER_IN_TURN")) |v| plan.in_turn = std.mem.eql(u8, v, "1");
     if (init.environ.getPosix("PEER_REQUEST")) |files| {
         var each = std.mem.tokenizeScalar(u8, files, ',');
         while (each.next()) |from| {
