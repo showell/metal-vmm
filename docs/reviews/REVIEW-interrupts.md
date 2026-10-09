@@ -123,7 +123,7 @@ at the `cli` after the `hlt`, so the window does not open. At the next
 because the vector is still "in service". The clock then runs out every
 deadline and frame, and `rest` reports nothing can wake it. The run ends.
 - *Likelihood*: low. It needs `ready_for_interrupt_injection == 0` at a halt
-  after `sti`, which rest.sh has not met: KVM clears the STI shadow when it
+  after `sti`, which pc_vs_microvm.sh has not met: KVM clears the STI shadow when it
   skips the `hlt`. But the path is untested, and when it is reached it ends
   the run.
 - *Fix shape*: the APIC answers what it would deliver without taking it
@@ -266,7 +266,7 @@ not "progress", so `quiet` keeps counting through them. An idle gopher-metal
 rests every millisecond of its own time, for a handful of exits per rest
 (the `rdtsc`, the deadline, the `hlt`, the EOI, and its polls). After
 `patience` (1,000,000) exits, roughly two to three minutes of guest time
-with no client, the run ends as `GuestStuck`. rest.sh's runs are short
+with no client, the run ends as `GuestStuck`. pc_vs_microvm.sh's runs are short
 enough not to reach it. A soak, or an explorer that leaves the server idle
 between requests, will.
 - *Fix shape*: on the PC-shaped machine a halt is not a hang. "Stuck" there

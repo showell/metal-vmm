@@ -72,10 +72,10 @@ counter prints both kinds as "timeouts", which flatters the timer.
 ## The disk, refused one request at a time
 
 `DISK_REFUSE=n` answers the guest's nth request with an I/O error, and
-`flaky.sh` sweeps it. Because every run repeats, the sweep is **exhaustive**:
+`refused.sh` sweeps it. Because every run repeats, the sweep is **exhaustive**:
 
 ```
-$ ./flaky.sh vfat all
+$ ./refused.sh vfat all
 vfat makes 173 disk requests; an untouched run: exit 0 — PASS
 refusing each of the first 173, one run each:
    144 runs  (#4..#147)  exit 1 — FAIL: a write failed
@@ -95,7 +95,7 @@ sector 0, which on this bare volume is right; on a partitioned disk the same
 fallback fails the mount, a layer later and under the volume's name.
 
 The real server makes **141 disk requests** to boot, back-fill its chat
-sidecars and answer `GET /`. `./flaky.sh gopher all`, seven minutes:
+sidecars and answer `GET /`. `./refused.sh gopher all`, seven minutes:
 
 ```
 gopher makes 141 disk requests; an untouched run: exit 0 — PASS — client got: 200, 13668 bytes

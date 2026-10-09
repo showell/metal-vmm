@@ -27,7 +27,7 @@ parked. Essays: `notes/the-plan-after-the-postmortem.md`,
 - **Steve** decides. He relays between the two Claudes only when he wants to;
   the default channel is git.
 - **The box Claude** works on Steve's development droplet, which has KVM and
-  QEMU. It runs the guests: `check.sh`, `same.sh`, `site.sh`, `rest.sh`,
+  QEMU. It runs the guests: `check.sh`, `same.sh`, `site.sh`, `pc_vs_microvm.sh`,
   `sweep.sh`, `nightly.sh` and the rest. It merges your branch into `master`
   after `check-cc.sh` (your branch built and swept on a guest, then
   `plants.sh`; its first run is pending), a cold review and the unit tests; what the guests catch comes
@@ -193,8 +193,8 @@ about the module, not a gap in the simulator. So:
 
 - **Your container's disk is small, and zig fills it.** Clear `.zig-cache`
   between large runs.
-- Do not change the scripts (`check.sh`, `same.sh`, `site.sh`, `rest.sh`,
-  `lossy.sh`, `flaky.sh`, `sound.sh`) without saying so in `QUEUE.md`.
+- Do not change the scripts (`check.sh`, `same.sh`, `site.sh`, `pc_vs_microvm.sh`,
+  `lossy.sh`, `refused.sh`, `sound.sh`) without saying so in `QUEUE.md`.
   gopher-metal's `gates.sh` runs three of them on a machine you cannot see.
   A change to the judge (`sweep.sh`, `sound.sh`, an excuse) says so in its
   commit, so the box runs `plants.sh` before merging it.

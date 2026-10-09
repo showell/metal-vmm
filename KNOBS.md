@@ -10,7 +10,7 @@ its default column says otherwise.
 Where a knob takes frame or request numbers, it takes a list: `3`, `3,9`, or a
 range, `8-40`, up to 32 of these. Numbering starts at 1. **A number is a better
 knob than a rate**: a rate explores at random, a number explores exhaustively,
-and a sweep over numbers is a map (`lossy.sh` for frames, `flaky.sh` for disk
+and a sweep over numbers is a map (`lossy.sh` for frames, `refused.sh` for disk
 requests). A run says on the error stream what each knob did.
 
 **A value that is not one stops the run** (exit 2, naming it): a word where

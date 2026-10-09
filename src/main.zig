@@ -926,7 +926,7 @@ fn theClient(environ: std.process.Environ, peer: *const wire.Peer) void {
     //
     // **AN ANSWER KEPT IN PART IS NOT WRITTEN AS IF WHOLE.** The client keeps
     // the first `reply.len` bytes of what came back. Past that, the files
-    // would hold a page's beginning and a comparison of two of them (rest.sh)
+    // would hold a page's beginning and a comparison of two of them (pc_vs_microvm.sh)
     // would pass on half a page: they are not written, and the line says why,
     // so whatever reads them fails for want of them.
     const cut = peer.tcp.received > peer.tcp.reply_len;

@@ -42,7 +42,7 @@
 # then starts from: a player made, so a request with its cookie is answered
 # as that player.
 #
-# Environment: GUESTS, SITE and PATH_WANTED (default /) as rest.sh has them;
+# Environment: GUESTS, SITE and PATH_WANTED (default /) as pc_vs_microvm.sh has them;
 # TRANSPORT (default pci, the machine that rests); FLOOR; RUN_TIMEOUT
 # (seconds a run, default 300); JOBS (2: runs side by side);
 # KEEP_FAILED=<dir>: a failing seed's files kept; KEEP=<dir> keeps every

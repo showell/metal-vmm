@@ -1,9 +1,9 @@
 #!/bin/bash
 # **A MAP OF WHICH DISK REQUESTS THIS GUEST CAN SURVIVE BEING REFUSED.**
 #
-#   ./flaky.sh [probe] [how many]     # vfat and its first 20 by default
-#   ./flaky.sh vfat all               # every request it makes, in turn
-#   ./flaky.sh gopher all             # the REAL server, on the site's volume
+#   ./refused.sh [probe] [how many]     # vfat and its first 20 by default
+#   ./refused.sh vfat all               # every request it makes, in turn
+#   ./refused.sh gopher all             # the REAL server, on the site's volume
 #
 # One run per request: the disk answers that one with an I/O error, exactly as
 # a real one does when it cannot do the work, and the guest's own fat16.zig

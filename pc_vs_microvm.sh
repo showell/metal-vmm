@@ -1,8 +1,8 @@
 #!/bin/bash
 # **THE PC-SHAPED MACHINE: THE REAL SERVER HALTS, AND WAKES ON INTERRUPTS.**
 #
-#   ./rest.sh [path]          # / by default
-#   ./rest.sh all             # every route site.sh fetches
+#   ./pc_vs_microvm.sh [path]          # / by default
+#   ./pc_vs_microvm.sh all             # every route site.sh fetches
 #
 # `TRANSPORT=pci` puts the devices on a PCI bus with an APIC (pci.zig,
 # apic.zig), which is what makes gopher.elf rest between frames as it does on

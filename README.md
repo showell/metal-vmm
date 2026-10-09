@@ -5,7 +5,16 @@ KVM, for one kind of guest: [gopher-metal](https://github.com/showell/gopher-met
 bare-metal kernels, the probes and the real server behind lynrummy.com. It is
 a test machine, never a production one. The same guest with the same seed
 gives the same run, byte for byte, and any input can be withheld or damaged to
-a recipe. Its work today is **judging**: a sweep of seeds, each a whole fault
+a recipe.
+
+**It has two roles.** It is **the judge of one kernel**, and it is **a
+storage lab**: a place to find out whether code that keeps data on a disk
+(a filesystem, a log, a small store) keeps what it promised through refused
+requests, torn writes, power cuts and write caches that lie, every one of
+them chosen by a recipe and repeatable to the byte (see "A storage lab"
+below). Today the only code in the lab is gopher-metal's FAT and its store.
+
+Its work today is **judging**: a sweep of seeds, each a whole fault
 schedule, asks of every run whether anything the guest promises was broken,
 and a standing set of planted bugs checks that the judge still catches them.
 An explorer like Antithesis's, steered by
@@ -74,9 +83,9 @@ there by `zig build kernels`; `gopher.elf` by `./port.sh && zig build gopher`):
 | `./check.sh` | QEMU, `mkfs.vfat`, `fsck.vfat` | is it right: the probes here and under QEMU, words and disks byte for byte |
 | `./same.sh` | `mkfs.vfat` | is it reproducible: each probe twice here |
 | `./site.sh` | QEMU, curl, the site volume | the real server, here and under QEMU |
-| `./rest.sh` | the site volume | the PC-shaped machine against the microvm-shaped one |
+| `./pc_vs_microvm.sh` | the site volume | the PC-shaped machine against the microvm-shaped one |
 | `./lossy.sh` | | which lost frames the guest survives |
-| `./flaky.sh` | `mkfs.vfat`; the site volume for `gopher` | which refused disk requests it survives |
+| `./refused.sh` | `mkfs.vfat`; the site volume for `gopher` | which refused disk requests it survives |
 | `./sweep.sh` | the site volume, zig-coverage-sdk, **a `-Dcoverage` gopher.elf** (`KERNEL=`; a release build reports no properties, and the sweep refuses it) | a range of seeds, each a whole fault schedule |
 | `./nightly.sh` | the same | **overnight, detached:** `sweep.sh` with a volume, batch after batch of new seeds for `HOURS` (10), logging as it goes in `~/nightly/<date-time>/` (`progress.log`, `failures.log`, each failing seed's files). `KERNEL_ELF=` a `-Dcoverage` build judges its properties too (through the coverage door, which costs the guest no time); `PEER_REQUEST=requests/post-play.http` sends a write instead of `GET /`, so the volume's faults meet one; `SHAPES=requests/shapes` gives each seed one of ten requests (reads, writes as a player the setup makes, two clients at once), each judged against its own unhurt run |
 | `./plants.sh` | the same, gopher-metal's port | **does the judge still judge**: the same seeds over a clean kernel, which must fail none, and over one kernel per `plants/<name>.patch` (a deliberate bug), each of which must fail a seed where its plant fired. Run after every change to the judge. **Written, not yet run**; one plant stands (`net-goback-byte`) |
@@ -86,6 +95,37 @@ there by `zig build kernels`; `gopher.elf` by `./port.sh && zig build gopher`):
 `~/build/gopher-metal/probe/gopher/pristine.img`, staged by gopher-metal's
 `probe/judge_gopher.py` (which needs a loop mount, and so sudo; the scripts
 here only read it).
+
+## A storage lab
+
+A storage author's questions, and what answers each here. Every answer is
+a map or a seed, never a sample: the same run repeats exactly, so a failure
+found once is a failure kept.
+
+| the question | what asks it |
+|---|---|
+| does each refused request leave something sane? | `./refused.sh`: one run per disk request, that one refused (`DISK_REFUSE`) |
+| is the volume still a filesystem afterwards? | `./sound.sh <image>`: `fsck.vfat -n`, reading only |
+| told it was saved, is it there after a power cut? | `sweep.sh`'s durability sweep (`POST`, `READ_BACK`, `MARK`): each seed cuts the power at its exit (`VOLUME_CUT_AT_EXIT`), then boots again, unhurt, and reads back |
+| what does a cut leave mid-write? | `DISK_CUT_AFTER`, `VOLUME_CUT_AFTER`; `DISK_TEAR` and `DISK_TEAR_KEEP` for a multi-sector write torn part-way |
+| what if the cache holds, or lies? | `DISK_CACHE`, `VOLUME_CACHE`, `VOLUME_CACHE_KEEPS` (which held writes survive a cut, seeded), `VOLUME_WCE_FIXED`, `VOLUME_SYNC_FAIL` |
+| what if the medium itself goes wrong? | `DISK_BAD_SECTOR`, `DISK_ROT`, `VOLUME_SHORT_AT`, `VOLUME_READ_ONLY_AT`, `VOLUME_GONE_AT`, `VOLUME_RESET_AT` |
+
+Two disks, two kinds of device: the boot disk is virtio-blk (`DISK_*`,
+`SITE` in a sweep), and the volume is virtio-scsi (`VOLUME_*`,
+`VOLUME_SITE`), as a droplet has them. [KNOBS.md](KNOBS.md) has each knob
+exactly.
+
+**What the lab assumes of its subject today**, which is the groundwork any
+other subject would need:
+
+- **a guest that boots here**: PVH entry, single-threaded, interrupts only at
+  a halt, its clock reads marked ("What a guest needs from us", and "`rdtsc`
+  does not exit");
+- **a FAT volume**, because `sound.sh` borrows `fsck.vfat`;
+- **an HTTP server**, because a sweep's request and read-back are HTTP, and
+  its page is part of the verdict. A subject with no network would need a
+  judge that reads the volume instead.
 
 ## A first run
 
@@ -158,7 +198,7 @@ own repeat runs.
 | virtio-blk | **works**, checked against QEMU — one queue and a disk image, mapped private, written back only at the end |
 | virtio-net and the peer | **works**, checked against QEMU — DHCP, and TCP clients that fetch what curl fetches; no tap device and no real network, deliberately |
 | the real server as the guest | **works**, checked against QEMU — angry-gopher's own route table, twelve routes, pages identical to curl's |
-| the PC-shaped machine | **works** (`TRANSPORT=pci`) — virtio-pci, MSI-X, a local APIC with a TSC-deadline timer; the server halts between frames, and `rest.sh` holds it to the microvm-shaped machine's pages. Only the paths gopher-metal walks are exercised by a guest |
+| the PC-shaped machine | **works** (`TRANSPORT=pci`) — virtio-pci, MSI-X, a local APIC with a TSC-deadline timer; the server halts between frames, and `pc_vs_microvm.sh` holds it to the microvm-shaped machine's pages. Only the paths gopher-metal walks are exercised by a guest |
 | a virtio-scsi volume | **works**, not compared with QEMU (`VOLUME`, `scsi.zig`) — the second disk a droplet has; unit-tested against gopher-metal's driver's sequence, and used by `sweep.sh`'s durability sweep |
 | faults on the wire | **works** — the guest's or the peer's nth frame lost or damaged, latency, lying frames (`mangle.zig`) |
 | a peer that misbehaves | **works** — resets, vanishing, SYN floods, shut windows, pipelining, slow clients, many clients |
@@ -277,8 +317,9 @@ filter sees it. So gopher-metal marks that one `wrmsr` with
 `mov $"mvmd", %esi`, and the loader makes it `out 0xE1, al`, answered from
 the registers.
 
-    ./rest.sh all     every route: the page the microvm-shaped machine
-                      serves, the same run twice, and real rests
+    ./pc_vs_microvm.sh all    every route: the page the microvm-shaped
+                              machine serves, the same run twice, and
+                              real rests
 
 With a 5 ms wire each route halts a few times and takes timer and MSI-X
 interrupts both. At 200 ms, `/` halts 361 times, 356 woken by the timer at
@@ -450,7 +491,7 @@ deterministic one can do it to a recipe. Every fault is an environment knob;
 the wire, the peer, the boot disk, the volume and the seeds.
 
 - **Exhaustive maps.** `./lossy.sh` loses the guest's first frame, then its
-  second, one run per frame; `./flaky.sh` does the same with disk requests.
+  second, one run per frame; `./refused.sh` does the same with disk requests.
   Because every run repeats, these are maps of every case, not samples.
 - **Seeds.** `FAULT_SEED=n` turns many knobs at once, so "seed 4711" names
   one exact run, and the run prints the knobs that repeat it without the seed.
