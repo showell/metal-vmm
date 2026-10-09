@@ -92,8 +92,16 @@ pub const Net = struct {
         if (!self.line.carries()) return;
         const frame = buf[@sizeOf(Header)..];
         if (self.peer.answer(frame, self.now)) |reply| self.line.hold(reply, self.now);
-        // One frame arriving can mean two to send: see `Peer.more`.
-        while (self.peer.more(self.now)) |another| self.line.hold(another, self.now);
+        // One frame arriving can mean more to send (`Peer.more`): as many as
+        // the wire has room for, and `pump` sends the rest as the guest takes
+        // frames. All at once, a request in more segments than the wire holds
+        // pushed out its own first ones, and a peer that never resends (no
+        // fault turned) waited forever: a head of 65 segments was never
+        // answered (2026-10-09, PEER_MSS=2).
+        while (self.line.room() > 0) {
+            const another = self.peer.more(self.now) orelse break;
+            self.line.hold(another, self.now);
+        }
         self.arrivals(d, ram);
     }
 
@@ -108,6 +116,11 @@ pub const Net = struct {
         // rather than pushing out ones already in flight.
         while (self.line.room() > 0) {
             const frame = self.peer.due(now) orelse break;
+            self.line.hold(frame, now);
+        }
+        // What the peer had more to send when the wire was full.
+        while (self.line.room() > 0) {
+            const frame = self.peer.more(now) orelse break;
             self.line.hold(frame, now);
         }
         self.arrivals(d, ram);
@@ -261,4 +274,30 @@ test "the peer sends no faster than the wire has room, and waits for the guest w
     for (0..10) |_| card.line.take();
     card.pump(&d, &ram, 1);
     try testing.expectEqual(@as(u32, 73), card.peer.flooded);
+}
+
+test "a request in more segments than the wire holds goes as the guest takes them, none pushed out" {
+    const frames = @import("frames.zig");
+    var card = Net{};
+    card.peer.rough.mss = 2;
+    var ram = [_]u8{0} ** 256;
+    var d = card.device();
+    const request: [130]u8 = @splat('a');
+    _ = card.connect(&d, &ram, &request);
+    const syn = frames.tcpIn(card.line.ready(0).?).?;
+    card.line.take();
+    var theirs: [2048]u8 = undefined;
+    var buf: [@sizeOf(Header) + 2048]u8 = @splat(0);
+    const syn_ack = frames.fakeSynAck(&theirs, 5000, syn.seq +% 1, 1460);
+    @memcpy(buf[@sizeOf(Header)..][0..syn_ack.len], syn_ack);
+    card.speak(&d, &ram, buf[0 .. @sizeOf(Header) + syn_ack.len]);
+    // The guest takes each frame as it comes; the peer sends on as it does.
+    var got: usize = 0;
+    while (card.line.ready(0)) |frame| {
+        if (frames.tcpIn(frame)) |seg| got += seg.data.len;
+        card.line.take();
+        card.pump(&d, &ram, 0);
+    }
+    try testing.expectEqual(@as(u64, 0), card.line.pushed_out);
+    try testing.expectEqual(request.len, got);
 }

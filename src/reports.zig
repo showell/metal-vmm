@@ -93,6 +93,15 @@ pub fn reportRest(machine: *const Machine) void {
 
 pub fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void {
     if (card.line.configured()) reportFaults("wire", "frames sent", &card.line.lost, ns);
+    // Frames a full wire pushed out, more than a bare ACK each: a loss no
+    // knob asked for. A peer that sends again what is lost (any knob that
+    // hurts it turns that on) recovers; one that never does may wait forever.
+    if (card.line.pushed_out > 0) {
+        if (card.peer.rough.retransmits)
+            std.debug.print("metal-vmm: the wire was full and pushed out {d} of the peer's frames; the peer sends again what is lost\n", .{card.line.pushed_out})
+        else
+            std.debug.print("metal-vmm: the wire was full and pushed out {d} of the peer's frames, which it never sends again: a loss no knob asked for\n", .{card.line.pushed_out});
+    }
     if (card.line.peer_lost.configured()) reportFaults("peer", "frames sent", &card.line.peer_lost, ns);
     if (card.line.peer_damaged.configured()) reportFaults("peer damage", "frames sent", &card.line.peer_damaged, ns);
     if (card.line.peer_mangled.configured()) {

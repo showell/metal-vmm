@@ -37,6 +37,9 @@ printf 'pristine volume' > "$T/site.img"
 #   17      an idle end (exit 1) with no client that left: FAIL
 #   14      a disk refusal answered 500: allowed (the server says it failed)
 #   15      a peer's reset answered 500: FAIL (only a disk fault excuses a 5xx)
+#   18      no answer, another client answered and the guest served its
+#           limit of 1: allowed (the request limit went to another client)
+#   19      no answer, the limit served, no other client answered: FAIL
 #   9       a 200 whose page metal-vmm did not write (an answer kept only in
 #           part): FAIL, never a match of two empty pages
 # A run with PEER_REQUEST (a shape's) and no seed above has for its page the
@@ -49,7 +52,7 @@ s="${FAULT_SEED:-}"
 L='"location":{"class":"tcp","function":"f","file":"tcp.zig","begin_line":1,"begin_column":1}'
 ev() { echo "{\"antithesis_assert\":{\"hit\":$3,\"must_hit\":true,\"assert_type\":\"x\",\"display_type\":\"$1\",\"message\":\"$2\",\"condition\":$4,\"id\":\"$2\",$L}}" >> "$COVERAGE_OUT"; }
 knobs="none"
-case "$s" in 16) knobs="PEER_RESET_AT=500" ;; 17) knobs="WIRE_EAT=17" ;; 3) knobs="PEER_RESET_AT=500" ;; 12) knobs="DISK_REFUSE=4" ;; 13) knobs="PEER_RESET_AT=500" ;; 14) knobs="DISK_REFUSE=4" ;; 15) knobs="PEER_RESET_AT=500" ;; 4) knobs="DISK_WRITES_ONLY=1" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
+case "$s" in 18 | 19) knobs="WIRE_EAT=3" ;; 16) knobs="PEER_RESET_AT=500" ;; 17) knobs="WIRE_EAT=17" ;; 3) knobs="PEER_RESET_AT=500" ;; 12) knobs="DISK_REFUSE=4" ;; 13) knobs="PEER_RESET_AT=500" ;; 14) knobs="DISK_REFUSE=4" ;; 15) knobs="PEER_RESET_AT=500" ;; 4) knobs="DISK_WRITES_ONLY=1" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
 [ -n "$s" ] && echo "metal-vmm: FAULT_SEED=$s is $knobs" >&2
 echo "{\"metal_vmm_run\":{\"seed\":${s:-null},\"knobs\":\"$knobs\"}}" >> "$COVERAGE_OUT"
 echo '{"antithesis_sdk":{"language":{"name":"Zig","version":"0.16.0"},"sdk_version":"0.0.1","protocol_version":"1.1.0"}}' >> "$COVERAGE_OUT"
@@ -70,9 +73,11 @@ case "$s" in
   16 | 17) page=""; status=0; code=1; echo "error: GuestIdle" >&2 ;;
   14) page="Home unavailable"; status=500 ;;
   15) page="Home unavailable"; status=500 ;;
+  18) page=""; status=0; echo "  serving 1 request(s), as gopher-metal.conf says"; echo "  served 1 request(s); base heap holds 52 live bytes"; echo "peer 2: 204, 1 of 1 answers, 65 bytes, done" ;;
+  19) page=""; status=0; echo "  serving 1 request(s), as gopher-metal.conf says"; echo "  served 1 request(s); base heap holds 52 live bytes"; echo "peer 2: 0, 0 of 1 answers, 0 bytes, established" ;;
   11) page="oops"; status=500; echo "  let go at the end: 1 response(s) cut by the stop, 2 bytes never acknowledged" ;;
 esac
-case "$s" in [2-9] | 1[0-7]) ;; *) [ -z "${PEER_REQUEST:-}" ] || page="$(cat "${PEER_REQUEST%%,*}")" ;; esac
+case "$s" in [2-9] | 1[0-9]) ;; *) [ -z "${PEER_REQUEST:-}" ] || page="$(cat "${PEER_REQUEST%%,*}")" ;; esac
 if [ "$s" = 9 ] || { [ -z "$s" ] && [ -n "${FAKE_UNHURT_NO_PAGE:-}" ]; }; then
   echo "metal-vmm: the answer was 70000 bytes and the client keeps 65536; PEER_BODY and PEER_RESPONSE are not written" >&2
 else
@@ -151,6 +156,10 @@ expect "seed 17" '^17 .*FAIL: exit 1 (unhurt: 0)' "$idle"
 five=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 14 15 2>&1)
 expect "seed 14" '^14 .*differs (allowed: DISK_REFUSE (a 500))' "$five"
 expect "seed 15" '^15 .*FAIL: not the page (status 500)' "$five"
+
+limit=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 18 19 2>&1)
+expect "seed 18" '^18 .*differs (allowed: the request limit went to another client)' "$limit"
+expect "seed 19" '^19 .*FAIL: not the page (status 0)' "$limit"
 
 # An unhurt run with no page leaves nothing to judge: the sweep stops, 2.
 nothing=$(FAKE_UNHURT_NO_PAGE=1 VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 1 1 2>&1)

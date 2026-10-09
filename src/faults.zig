@@ -131,6 +131,14 @@ pub const Wire = struct {
     latency_ns: u64 = 0,
 
     held: [in_flight]Held = @splat(.{}),
+    /// Frames a full wire pushed out to make room that carried more than an
+    /// acknowledgement (data, or SYN, FIN, RST): a loss no knob asked for,
+    /// which a peer that never resends never recovers from. The peer keeps
+    /// to `room` with what it sends, so a run that counts any has a bug
+    /// here. A bare ACK pushed out is a busy receiver's ordinary loss, and
+    /// the next ACK says all it said: `acks_pushed_out`.
+    pushed_out: u64 = 0,
+    acks_pushed_out: u64 = 0,
     /// The oldest frame in flight and the next free slot, as a ring.
     first: usize = 0,
     next: usize = 0,
@@ -163,7 +171,7 @@ pub const Wire = struct {
         const slot = &self.held[self.next % in_flight];
         // A full wire drops the oldest rather than the newest, which is what a
         // queue that overflows does.
-        if (self.next - self.first >= in_flight) self.first += 1;
+        if (self.next - self.first >= in_flight) self.pushOut();
         slot.due_ns = now + self.latency_ns;
         slot.len = bytes.len;
         @memcpy(slot.bytes[0..bytes.len], bytes);
@@ -172,6 +180,25 @@ pub const Wire = struct {
             slot.bytes[if (tcp) 34 + 16 else 24] ^= 0x5A; // a checksum's byte
         }
         self.next += 1;
+    }
+
+    /// The oldest frame goes, to make room, counted by what it carried.
+    fn pushOut(self: *Wire) void {
+        const oldest = &self.held[self.first % in_flight];
+        if (bareAck(oldest.bytes[0..oldest.len])) self.acks_pushed_out += 1 else self.pushed_out += 1;
+        self.first += 1;
+    }
+
+    /// A TCP segment with no data and no SYN, FIN or RST: an acknowledgement
+    /// alone, which a later one supersedes.
+    fn bareAck(f: []const u8) bool {
+        if (f.len < 54 or f[12] != 0x08 or f[13] != 0x00 or f[23] != 6) return false;
+        const ihl = @as(usize, f[14] & 0x0F) * 4;
+        const total = (@as(usize, f[16]) << 8) | f[17];
+        if (f.len < 14 + ihl + 20) return false;
+        const tcp = f[14 + ihl ..];
+        const header = @as(usize, tcp[12] >> 4) * 4;
+        return tcp[13] & 0x07 == 0 and total == ihl + header;
     }
 
     /// The lying copy of `bytes`, put on the wire ahead of it.
@@ -186,7 +213,7 @@ pub const Wire = struct {
         };
         if (copy.len > frame_bytes) return;
         const slot = &self.held[self.next % in_flight];
-        if (self.next - self.first >= in_flight) self.first += 1;
+        if (self.next - self.first >= in_flight) self.pushOut();
         slot.due_ns = now + self.latency_ns;
         slot.len = copy.len;
         @memcpy(slot.bytes[0..copy.len], copy);
@@ -582,4 +609,19 @@ test "PEER_MANGLE: the picked frame arrives after a copy that lies, each kind in
     try testing.expectEqual(@as(?[]const u8, null), w.ready(0));
     try testing.expectEqual(@as(u32, 1), w.mangled[0]);
     try testing.expectEqual(@as(u32, 1), w.mangled_not_tcp);
+}
+
+test "a full wire counts what it pushes out: a bare ACK apart from a segment the peer would not resend" {
+    const frames = @import("frames.zig");
+    var w: Wire = .{};
+    var buf: [2048]u8 = undefined;
+    // The oldest a bare ACK, then a full wire: one more pushes it out.
+    w.hold(frames.fakeSegment(&buf, frames.flag_ack, 1, 1, ""), 0);
+    for (1..in_flight) |_| w.hold(frames.fakeSegment(&buf, frames.flag_ack, 1, 1, "data"), 0);
+    w.hold(frames.fakeSegment(&buf, frames.flag_ack, 1, 1, "more"), 0);
+    try std.testing.expectEqual(@as(u64, 1), w.acks_pushed_out);
+    try std.testing.expectEqual(@as(u64, 0), w.pushed_out);
+    // The oldest now carries data: pushing it out is the loss that counts.
+    w.hold(frames.fakeSegment(&buf, frames.flag_ack, 1, 1, "more"), 0);
+    try std.testing.expectEqual(@as(u64, 1), w.pushed_out);
 }

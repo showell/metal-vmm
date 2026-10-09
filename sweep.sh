@@ -216,6 +216,8 @@ verdict() {
     fi
   fi
   [ "${broken:-0}" = 0 ] || why="$why, $broken coverage properties broken"
+  # metal-vmm's own fault: a frame lost that no knob asked for.
+  ! grep -q "^metal-vmm: the wire was full and pushed out .*, which it never sends again" "$WORK/$name.err" || why="$why, the wire pushed out the peer's frames, which it never sends again"
   # A disk whose power was cut mid-write may hold what a stop leaves
   # (sound.sh, `STOP_LEAVES`), and nothing else.
   local disk_cut="" volume_cut=""
@@ -277,6 +279,17 @@ verdict() {
       # wherever the client is; a machine with no limit never stops.
       if grep -q '^  let go at the end: .* cut by the stop' "$WORK/$name.out"; then
         excuse="$excuse${excuse:+, }the stop cut it"
+      fi
+      # **THE REQUEST LIMIT WENT TO ANOTHER CLIENT**: a machine told to
+      # serve n requests (the site volume's conf) serves n and stops, so with
+      # more clients than that, one a fault slowed may be the one not
+      # served. Only when another client was answered and the guest served
+      # exactly its limit.
+      local limit served
+      limit=$(sed -n -E 's/^  serving ([0-9]+) request\(s\).*/\1/p' "$WORK/$name.out" | head -1)
+      served=$(sed -n -E 's/^  served ([0-9]+) request\(s\).*/\1/p' "$WORK/$name.out" | tail -1)
+      if [ -n "$limit" ] && [ "$limit" = "$served" ] && grep -qE '^peer [2-9]: [0-9]+, [1-9][0-9]* of [0-9]+ answers' "$WORK/$name.out"; then
+        excuse="$excuse${excuse:+, }the request limit went to another client"
       fi
     fi
     [ -n "$excuse" ] || why="$why, not the page (status ${status:-none})"
