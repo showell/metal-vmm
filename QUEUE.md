@@ -431,7 +431,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
        refused while a small one still succeeds.
      - Check `fat_sim` and `store_sim`'s full-volume oracles still hold.
      - Say the reserve in the boot line and in `/admin/host`'s volume line.
-     - The size is Steve's call; propose a number and why.
+     - The size: 64 MiB (Steve, 2026-10-09).
 
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
