@@ -301,3 +301,40 @@ test "a request in more segments than the wire holds goes as the guest takes the
     try testing.expectEqual(@as(u64, 0), card.line.pushed_out);
     try testing.expectEqual(request.len, got);
 }
+
+test "an answer to the guest while the wire is full waits for room too, none pushed out (metal-vmm QUEUE 122)" {
+    // `speak` kept the peer's later frames to the wire's room, and put its
+    // answer to this frame on regardless: with the wire full of the
+    // request, the guest sending its SYN-ACK again pushed out a segment of
+    // it, which a peer that never resends never sends again.
+    const frames = @import("frames.zig");
+    var card = Net{};
+    card.peer.rough.mss = 2;
+    var ram = [_]u8{0} ** 256;
+    var d = card.device();
+    const request: [400]u8 = @splat('a');
+    _ = card.connect(&d, &ram, &request);
+    const syn = frames.tcpIn(card.line.ready(0).?).?;
+    card.line.take();
+    var theirs: [2048]u8 = undefined;
+    var buf: [@sizeOf(Header) + 2048]u8 = @splat(0);
+    const syn_ack = frames.fakeSynAck(&theirs, 5000, syn.seq +% 1, 1460);
+    @memcpy(buf[@sizeOf(Header)..][0..syn_ack.len], syn_ack);
+    card.speak(&d, &ram, buf[0 .. @sizeOf(Header) + syn_ack.len]);
+    try testing.expectEqual(@as(usize, 0), card.line.room());
+    // The guest takes the peer's bare ACK and nothing more: the oldest frame
+    // left is the request's first segment, and the wire has one slot. The
+    // peer's next frame takes it, and the wire is full again.
+    card.line.take();
+    card.pump(&d, &ram, 0);
+    try testing.expectEqual(@as(usize, 0), card.line.room());
+    card.speak(&d, &ram, buf[0 .. @sizeOf(Header) + syn_ack.len]);
+    try testing.expectEqual(@as(u64, 0), card.line.pushed_out);
+    var got: usize = 0;
+    while (card.line.ready(0)) |frame| {
+        if (frames.tcpIn(frame)) |seg| got += seg.data.len;
+        card.line.take();
+        card.pump(&d, &ram, 0);
+    }
+    try testing.expect(got >= request.len);
+}
