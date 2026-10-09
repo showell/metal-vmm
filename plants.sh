@@ -10,7 +10,7 @@
 #   - the clean kernel must fail no seed: a failure there is the judge
 #     crying wolf, or a real bug;
 #   - each planted kernel must fail at least one seed, and every seed it
-#     fails must be one where the plant fired (its `PLANT: the bug fires`
+#     fails must be one where the plant fired (its `PLANT: <name> fires`
 #     property reached); a failure where it didn't fire, that the clean
 #     kernel passes, is the judge being inconsistent.
 #
@@ -46,18 +46,19 @@ mkdir -p "$OUT"
 [ -e "$OUT/zig-coverage-sdk" ] || ln -s "${COVERAGE_SDK:-$HOME/showell_repos/zig-coverage-sdk}" "$OUT/zig-coverage-sdk"
 # and its build finds angry-gopher's assets at ../angry-gopher.
 [ -e "$OUT/angry-gopher" ] || ln -s "${ANGRY_GOPHER:-$HOME/showell_repos/angry-gopher}" "$OUT/angry-gopher"
-fires="PLANT: the bug fires"
 
 names=()
 if [ -n "${PLANTS:-}" ]; then
   for p in $PLANTS; do names+=("$p"); done
 else
+  # plants/pending/ holds those the judge cannot see yet (its README).
   for f in "$HERE"/plants/*.patch; do names+=("$(basename "$f" .patch)"); done
 fi
 
 commit=$(git -C "$GOPHER" rev-parse --short HEAD) || exit 2
 [ -z "$(git -C "$GOPHER" status --porcelain --untracked-files=no)" ] ||
   { echo "gopher-metal has uncommitted changes; plants build from a commit"; exit 2; }
+sdk=$(git -C "${COVERAGE_SDK:-$HOME/showell_repos/zig-coverage-sdk}" rev-parse --short HEAD) || exit 2
 ported=$(grep -o 'content-[0-9a-f]*' "$PORT/PORTED_FROM" 2>/dev/null | cut -c9-20)
 [ -n "$ported" ] || { echo "no port at $PORT (gopher-metal's ./port.sh)"; exit 2; }
 mkdir -p "$KERNELS"
@@ -66,12 +67,13 @@ mkdir -p "$KERNELS"
 # patch, its path on stdout.
 build() {
   local name="$1" tag elf wt
-  tag="$commit-ag$ported"
+  tag="$commit-ag$ported-sdk$sdk"
   [ "$name" = clean ] || tag="$tag-$(sha256sum "$HERE/plants/$name.patch" | cut -c1-8)"
   elf="$KERNELS/gopher-coverage-$name-$tag.elf"
   if [ ! -f "$elf" ]; then
     wt="$OUT/build-$name"
     git -C "$GOPHER" worktree add -q --detach "$wt" "$commit" >&2 || return 2
+    building="$wt"
     if [ "$name" != clean ]; then
       git -C "$wt" apply "$HERE/plants/$name.patch" >&2 ||
         { echo "plants/$name.patch no longer applies at gopher-metal $commit" >&2; git -C "$GOPHER" worktree remove --force "$wt"; return 2; }
@@ -79,6 +81,7 @@ build() {
     (cd "$wt" && zig build gopher -Dcoverage -Dgopher="$PORT") >&2 && cp "$wt/probe/gopher.elf" "$elf"
     local ok=$?
     git -C "$GOPHER" worktree remove --force "$wt"
+    building=""
     [ $ok = 0 ] || { echo "the $name kernel did not build" >&2; return 2; }
   fi
   echo "$elf"
@@ -93,11 +96,19 @@ sweep() {
 
 failed_seeds() { sed -n -E 's/^([0-9]+) .* FAIL: .*/\1/p' "$OUT/$1.log"; }
 
+building=""
+trap '[ -z "$building" ] || git -C "$GOPHER" worktree remove --force "$building"' EXIT
+
+# judged <name>: the sweep ended with its summary line ("N seeds: ..."); a
+# sweep that stopped on a precondition (exit 1 or 2 with no summary) judged
+# nothing, and says so rather than passing for a clean kernel.
+judged() { grep -qE '^[0-9]+ seeds: ' "$OUT/$1.log"; }
+
 bad=0
 echo "plants, gopher-metal $commit, metal-vmm $(git -C "$HERE" rev-parse --short HEAD), seeds $FIRST-$LAST, logs in $OUT"
 clean_elf=$(build clean) || exit 2
 sweep clean "$clean_elf"; code=$?
-[ $code = 2 ] && { echo "clean: sweep.sh could not judge (exit 2); see $OUT/clean.log"; exit 2; }
+judged clean || { echo "clean: sweep.sh judged nothing (exit $code); see $OUT/clean.log"; exit 2; }
 clean_failed=$(failed_seeds clean | tr '\n' ' ')
 if [ -n "$clean_failed" ]; then
   echo "FAIL  clean: seeds failed with no plant: $clean_failed"; bad=1
@@ -108,7 +119,8 @@ fi
 for name in "${names[@]}"; do
   elf=$(build "$name") || exit 2
   sweep "$name" "$elf"; code=$?
-  [ $code = 2 ] && { echo "$name: sweep.sh could not judge (exit 2); see $OUT/$name.log"; exit 2; }
+  judged "$name" || { echo "$name: sweep.sh judged nothing (exit $code); see $OUT/$name.log"; exit 2; }
+  fires="PLANT: $name fires"
   fired=$(grep -F "  $fires  (" "$OUT/$name.log" | sed -n -E 's/.*reached by ([0-9]+) of ([0-9]+) runs.*/\1 of \2 runs/p' | head -1)
   caught=0; stray=""
   for s in $(failed_seeds "$name"); do

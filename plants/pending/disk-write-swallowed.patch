@@ -10,7 +10,7 @@ index 7546e6d..30294b9 100644
 +            // PLANTED BUG (metal-vmm plants/disk-write-swallowed, never to
 +            // merge): a write the disk refused is taken as written, so the
 +            // caller answers "saved" over a hole.
-+            props.reachable(@src(), "PLANT: the bug fires", null);
++            props.reachable(@src(), "PLANT: disk-write-swallowed fires", null);
 +            if (self.dirs) |*c| c.wrote(lba, count, from);
 +            return;
          }
