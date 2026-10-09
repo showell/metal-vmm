@@ -379,12 +379,15 @@ them by kind (port, clock, mmio, msr, halt). A clock exit carries the guest's
 `addr2line -i -f -C -e <kernel.elf>` names the loop that spends them; port
 exits counted by port name the device. That is how each row above was found.
 
-**Time is not fast-forwarded while the guest only waits.** It was weighed and
-refused: the guest's deadlines live in its registers, so a jump can carry it
-past one and change which branch it takes. A wait the guest spins through
-costs an exit a read, so the cure is in the guest: halt, as the PC-shaped
-machine's server does between frames, or do less waiting (the RTC's phase
-above made gopher-metal's one long boot wait 50 ms).
+**This machine tests the guest's logic; faithfulness to wall-clock time is
+not a goal** (Steve, 2026-10-09). Time is ours to move, and a wait should
+cost nothing. A halt already costs nothing: the clock jumps to the guest's
+next deadline (above). A wait the guest *spins* through still costs an exit
+a read, because a blind jump could carry the guest past a deadline held in
+its registers and change which branch it takes. The way to skip those is a
+hook, not a guess: the guest marks its wait with its deadline, as it marks
+`rdtsc`, and the machine jumps to it. Not built yet; the PC-shaped machine,
+which halts, is where waiting is free today.
 
 ## QEMU is the oracle
 
