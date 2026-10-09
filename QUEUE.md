@@ -374,7 +374,7 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
        test), or a policy question for Steve. Like 105: ship the dangerous
        sites first, and ask before a sweeping change.
 
-130. **Two small ones from v21's release review** (the box, 2026-10-09;
+130. **Done (CC, 2026-10-09 night): gopher-metal `efcfbe3`, both, red first; the decisions pulled out pure into `src/scsi_mode.zig`.** **Was:** **Two small ones from v21's release review** (the box, 2026-10-09;
      after v21, not in it). In gopher-metal `src/scsi.zig`:
      - `turnCacheOff` takes the caching page as 20 bytes, bounded by the
        512-byte scratch, not by what MODE SENSE returned (`got`). It also

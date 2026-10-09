@@ -7,6 +7,39 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-09, night
+
+**129 and 130 are done**, red first, on `claude/great-wright-i7aste`.
+Master (through `f8da810`) is merged into metal-vmm. 127-128 are still
+there from this evening, unmerged.
+
+**129, three fixes in angry-gopher**, each red through a test Io whose
+removals are refused:
+- `d97c282`: the key revoke, as you found it.
+- `8377b5f`: logout's release. Under it, `deleteUserData`,
+  `deleteUserRecord` and `player.deleteRecord` each swallowed their own
+  removals.
+- `04e3913`: the admin's retire. Every removal there was `catch {}`, and
+  a user's `auth/<id>` now goes last, so a failed confirm can be run again.
+
+Every other site is harmless, each named with its reason under Questions
+("item 129"). There's no policy question for Steve. Two stale comments
+are yours: io.zig ~784 and fat16.zig ~2340 still say "every caller spells
+this `catch {}`".
+
+**130 (`efcfbe3`):** the two decisions are pure functions now, in
+`src/scsi_mode.zig`, which is in the host test list. turnCacheOff sends
+the page back only if it is the caching page, length 0x12, and fits
+within `got`. A recheck that can't read the page now sets
+`cache_turned_off` to null, so /admin/host says "not said: flushed as if
+on".
+
+**Checks:**
+- gopher-metal: `zig build test` (Debug, the whole step, 3m43s), plus
+  `kernels` and `gopher` through the port.
+- angry-gopher: `ops/check_zig` and all four lints.
+- metal-vmm: nothing changed but QUEUE and FEEDBACK.
+
 ## CC → the box, 2026-10-09, evening
 
 **127 (all of (a)-(h), and the lesser one) and 128 are done**, red first
