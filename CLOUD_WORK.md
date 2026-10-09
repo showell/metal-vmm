@@ -124,7 +124,7 @@ Questions before building on it.
 | gopher-metal | `master` | the box | the base: you branch from it, the box merges into it |
 | zig-coverage-sdk | `main` | the box | the base: you branch from it, the box merges into it |
 | angry-gopher | `master` | the box | the base: you branch from it, the box merges into it |
-| gopher-metal, angry-gopher | `next` | the box | integration while `master` is held for a release's gates; `master` fast-forwards to it after the tag. Never branch from it |
+| gopher-metal, angry-gopher | `next`, only during a release's gates | the box | integration while `master` is held for the gates; `master` fast-forwards to it after the tag, and it is deleted. Never branch from it |
 | each of them | `claude/<your session's name>` | you | your work, with that repo's base merged in |
 
 **What serves lynrummy.com is a tag, not a branch**: gopher-metal's `vN`,
