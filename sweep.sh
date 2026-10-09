@@ -88,6 +88,10 @@ VMM="${VMM:-$HERE/zig-out/bin/metal-vmm}"
 COVERAGE_SDK="${COVERAGE_SDK:-$HERE/../zig-coverage-sdk}"
 REPORT="${REPORT:-$COVERAGE_SDK/tools/report.py}"
 SOUND="${SOUND:-$HERE/sound.sh}"
+# The untouched files' check (tools/untouched.py), with gopher-metal's FAT
+# reader beside the guests unless FAT_READ says where.
+UNTOUCHED="${UNTOUCHED:-$HERE/tools/untouched.py}"
+[ -n "${FAT_READ:-}" ] || [ ! -f "$GUESTS/../tools/fat16_read.py" ] || export FAT_READ="$GUESTS/../tools/fat16_read.py"
 export TRANSPORT="${TRANSPORT:-pci}"
 RUN_TIMEOUT="${RUN_TIMEOUT:-300}"
 if [ -n "${KEEP:-}" ]; then WORK="$KEEP"; mkdir -p "$WORK"; else WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT; fi
@@ -256,10 +260,15 @@ verdict() {
   # metal-vmm's own fault: a frame lost that no knob asked for.
   ! grep -q "^metal-vmm: the wire was full and pushed out .*, which it never sends again" "$WORK/$name.err" || why="$why, the wire pushed out the peer's frames, which it never sends again"
   # A disk whose power was cut mid-write may hold what a stop leaves
-  # (sound.sh, `STOP_LEAVES`), and nothing else.
+  # (sound.sh, `STOP_LEAVES`), and nothing else. **ONE POWER STOPS THE WHOLE
+  # MACHINE** (metal-vmm QUEUE 124(c)): a cut on either disk stops the guest
+  # mid-write on the other too, so either cut lets both hold a stop's
+  # leftovers. What a stop leaves never covers a file the request does not
+  # touch: that must survive whole (`untouched`, QUEUE 124(b)).
   local disk_cut="" volume_cut=""
   grep -qE "^metal-vmm: the power was cut (in the guest's write [0-9]+:|after the guest's write [0-9]+ \(sector)" "$WORK/$name.err" && disk_cut=1
   grep -qE "^metal-vmm: the power was cut after the guest's write [0-9]+ to the volume" "$WORK/$name.err" && volume_cut=1
+  [ -z "$disk_cut$volume_cut" ] || { disk_cut=1; volume_cut=1; }
   # **A DISK THAT LIED ABOUT ITS CACHE, THEN LOST ITS POWER** (Steve,
   # 2026-10-09): it said it writes through, so nothing was ever flushed, and
   # the cut kept what it held in an order of its own. No driver can defend
@@ -270,7 +279,10 @@ verdict() {
   local unsound="" exit_cut=""
   grep -q "^metal-vmm: the power failed when the guest stopped" "$WORK/$name.err" && exit_cut=1
   if changed "$WORK/$name.img" && ! cmp -s "$WORK/$name.img" "$SITE"; then
-    if ! STOP_LEAVES="$disk_cut" "$SOUND" "$WORK/$name.img" > "$WORK/$name.sound" 2>&1; then
+    if STOP_LEAVES="$disk_cut" "$SOUND" "$WORK/$name.img" > "$WORK/$name.sound" 2>&1; then
+      grep -q "sound but for what a stop leaves" "$WORK/$name.sound" && ! "$UNTOUCHED" "$SITE" "$WORK/$u.img" "$WORK/$name.img" > "$WORK/$name.untouched" 2>&1 &&
+        why="$why, the volume lost a file the request does not touch ($(head -1 "$WORK/$name.untouched" | sed 's/^ *//'))"
+    else
       case " $knobs" in
         *" DISK_CACHE=lie"*) [ -n "$disk_cut$exit_cut" ] && lie_lost disk "$name" && unsound="$unsound${unsound:+, }DISK_CACHE=lie (the volume left unsound)" || why="$why, the volume is not sound" ;;
         *) why="$why, the volume is not sound" ;;
@@ -278,7 +290,10 @@ verdict() {
     fi
   fi
   if [ -n "${VOLUME_SITE:-}" ] && changed "$WORK/$name.vol" && ! cmp -s "$WORK/$name.vol" "$VOLUME_SITE"; then
-    if ! STOP_LEAVES="$volume_cut" "$SOUND" "$WORK/$name.vol" > "$WORK/$name.vsound" 2>&1; then
+    if STOP_LEAVES="$volume_cut" "$SOUND" "$WORK/$name.vol" > "$WORK/$name.vsound" 2>&1; then
+      grep -q "sound but for what a stop leaves" "$WORK/$name.vsound" && ! "$UNTOUCHED" "$VOLUME_SITE" "$WORK/$u.vol" "$WORK/$name.vol" > "$WORK/$name.vuntouched" 2>&1 &&
+        why="$why, the attached volume lost a file the request does not touch ($(head -1 "$WORK/$name.vuntouched" | sed 's/^ *//'))"
+    else
       case " $knobs" in
         *" VOLUME_CACHE=lie"*) [ -n "$volume_cut$exit_cut" ] && lie_lost volume "$name" && unsound="$unsound${unsound:+, }VOLUME_CACHE=lie (the attached volume left unsound)" || why="$why, the attached volume is not sound" ;;
         *) why="$why, the attached volume is not sound" ;;
