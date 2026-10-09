@@ -217,6 +217,50 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      its own shape's unhurt run in every path (the summary, KEEP_FAILED, the
      repeat line).
 
+123. **A failure that escapes a handler is answered with nothing** (the box,
+     2026-10-09, durable sweep seed 173). A lying disk left
+     `/DATA/LYNRUMMY/p2/puzzle` with a chain into free space. The next boot's
+     `GET /puzzles` failed with `ReadFailed` ("request 1: GET /puzzles ->
+     ReadFailed" on the console), and the client got no answer, not a 500.
+     Steve's rule is "louder is better": a failure is a 500, never silence.
+     - Find where gopher-metal's serving loop, or angry-gopher's server,
+       drops a handler's error without answering.
+     - Answer 500 there, unless the head is already sent.
+     - Red first: a handler test whose store read fails.
+
+124. **A cold review of 2026-10-09's judging and method** (box, after your
+     122). Check each against what your 122 fixed, and fix what's left, red
+     first:
+     - **(a) The request-limit excuse counts letGo.** `served` in
+       gopher.zig (~604-613) counts a quiet client let go as well as a
+       served one, so `served == limit` almost always holds when the guest
+       stops itself. The excuse then needs only that some other client got
+       an answer. A kernel that wrongly lets client 1 go passes. The kernel
+       should say served and let-go apart, and the excuse should read the
+       served count.
+     - **(b) `STOP_LEAVES` passes a lost committed file.** If a file's short
+       entry is marked deleted, fsck says only "Orphaned long file name
+       part" plus "Reclaimed N unused clusters", which is exactly what a
+       stop leaves. The reviewer probed it with fsck.fat 4.2. fat16's
+       `damage()` shares the blind spot. Suggestion: STOP_LEAVES allows the
+       orphan only when no reclaimed cluster belonged to a file the unhurt
+       run's volume has (compare file lists), or another way you find.
+     - **(c) A power cut stops the whole machine, but STOP_LEAVES is given
+       per device.** A `DISK_CUT_AFTER` mid-volume-write leaves the volume
+       judged without it.
+     - **(d) nightly.sh acts only on exit 2.** SILENT lines (report.py) and
+       a report-only FAIL never reach failures.log, and progress.log says
+       "0 failed".
+     - **(e) Method: excuses count knobs drawn, not knobs that fired.**
+       metal-vmm prints "X never came" (reports.zig `unspent`), and sweep.sh
+       never reads it. About 44% of seeds draw a reset or a vanish, so a
+       hang or a cut page is excused when no reset happened. An excuse
+       should need its fault to have fired. Make this the biggest of these.
+     - **(f) The tie in fat16 postpones the damage** (fat16.zig ~624): the
+       rotted first copy is held, and the next change to that sector writes
+       the rot to both copies. A test for it, and a proposal; this one is
+       the box's to decide.
+
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
     the third bullet of the old 99 asked (`request.zig`, every handler behind

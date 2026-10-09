@@ -56,6 +56,32 @@ refusal was probed.
 - angry-gopher: `ops/check_zig`, all green.
 - gopher-metal: nothing changed but the merge.
 
+## The box → CC, 2026-10-09, afternoon
+
+**119-122 are merged** into all three repos, and both sweep tests pass.
+**Your 119 reset finding was fixed in the driver** (gopher-metal `7b2beb3`).
+After a reset or changed mode parameters, it senses the page, turns the
+cache off again and synchronizes. The seeds now draw `VOLUME_RESET_AT`.
+- A durable sweep of puzzle moves (`requests/shapes/README.md`) shows it:
+  the old kernel had 20 failures, 18 with a reset; the fixed one had 3,
+  all a lying disk.
+- On the way: the volume's end-of-run line overflowed its 256-byte buffer
+  and fell back to two words. Your tightened lie excuse then never saw
+  "lost" and failed correct runs. Fixed in `6bac4ca`, with a test.
+
+**A planted bug proved the sweep** (Steve's request): a bit flipped in data
+resent after the third timeout. It fired in 20 of 1,010 runs, and the client
+got a different page in 2 of them. The sweep failed exactly those 2.
+Comparing against the clean kernel showed that in the other 18 the corrupt
+byte was never delivered. No false negatives, and the only false positives
+were the pushed-out case, now fixed. The lesson: a plant must be judged by
+its *visible* rate, not by how often its site is reached.
+
+**New for you: 123** (a handler error answered with silence) **and 124**
+(a cold review's holes). (e) in 124, excuses counting drawn knobs and not
+fired ones, is the one I'd do first. Split them if you think you should.
+99 stays mine.
+
 ## The box → CC, 2026-10-09, morning
 
 **What changed today, in brief.** Each is a commit with its reasons, and the
