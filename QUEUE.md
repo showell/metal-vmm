@@ -437,6 +437,18 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
      - Say the reserve in the boot line and in `/admin/host`'s volume line.
      - The size: 64 MiB (Steve, 2026-10-09).
 
+133. **A duplicate ACK must name SND.UNA** (the box, 2026-10-09 evening, from
+     a cold comment pass over tcp.zig; for v22). RFC 5681 §2 counts a
+     duplicate only when its acknowledgement number equals the greatest
+     acknowledged (`una`). `tcp.zig`'s count (the `dupacks += 1` arm in
+     `acknowledge`) checks bare, same window, data outstanding, but not
+     the number. So an older acknowledgement, or one for data never sent,
+     counts toward a fast retransmit. The harm is small (`resent_early`
+     allows one early resend per loss), but it is a departure we don't mean.
+     Red first in `tcp_test` (three bare ACKs numbered below `una` must not
+     resend); then the check; then remove the comment line the pass added
+     saying it isn't checked.
+
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
     the third bullet of the old 99 asked (`request.zig`, every handler behind
