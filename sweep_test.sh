@@ -51,6 +51,9 @@ printf 'pristine volume' > "$T/site.img"
 #   27      no answer, the limit of 2 served, another client answered
 #           once: FAIL (one request served was this client's, and its
 #           answer lost; QUEUE 122)
+#   28      a reset drawn that never came, and no page: FAIL (an excuse needs
+#           its fault to have fired; metal-vmm QUEUE 124(e))
+#   29      a disk refusal drawn that never came, answered 500: FAIL
 #   9       a 200 whose page metal-vmm did not write (an answer kept only in
 #           part): FAIL, never a match of two empty pages
 # A run with PEER_REQUEST (a shape's) and no seed above has for its page the
@@ -63,8 +66,15 @@ s="${FAULT_SEED:-}"
 L='"location":{"class":"tcp","function":"f","file":"tcp.zig","begin_line":1,"begin_column":1}'
 ev() { echo "{\"antithesis_assert\":{\"hit\":$3,\"must_hit\":true,\"assert_type\":\"x\",\"display_type\":\"$1\",\"message\":\"$2\",\"condition\":$4,\"id\":\"$2\",$L}}" >> "$COVERAGE_OUT"; }
 knobs="none"
-case "$s" in 23 | 25 | 26) knobs="DISK_CACHE=lie DISK_CUT_AFTER=2" ;; 27) knobs="WIRE_EAT=3" ;; 24) knobs="DISK_CACHE=lie" ;; 18 | 19) knobs="WIRE_EAT=3" ;; 16) knobs="PEER_RESET_AT=500" ;; 17) knobs="WIRE_EAT=17" ;; 3) knobs="PEER_RESET_AT=500" ;; 12) knobs="DISK_REFUSE=4" ;; 13) knobs="PEER_RESET_AT=500" ;; 14) knobs="DISK_REFUSE=4" ;; 15) knobs="PEER_RESET_AT=500" ;; 4) knobs="DISK_WRITES_ONLY=1" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
+case "$s" in 23 | 25 | 26) knobs="DISK_CACHE=lie DISK_CUT_AFTER=2" ;; 27) knobs="WIRE_EAT=3" ;; 28) knobs="PEER_RESET_AT=500" ;; 29) knobs="DISK_REFUSE=4" ;; 24) knobs="DISK_CACHE=lie" ;; 18 | 19) knobs="WIRE_EAT=3" ;; 16) knobs="PEER_RESET_AT=500" ;; 17) knobs="WIRE_EAT=17" ;; 3) knobs="PEER_RESET_AT=500" ;; 12) knobs="DISK_REFUSE=4" ;; 13) knobs="PEER_RESET_AT=500" ;; 14) knobs="DISK_REFUSE=4" ;; 15) knobs="PEER_RESET_AT=500" ;; 4) knobs="DISK_WRITES_ONLY=1" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
 [ -n "$s" ] && echo "metal-vmm: FAULT_SEED=$s is $knobs" >&2
+# What fired, as metal-vmm says it (reports.zig `fired`): every fault the
+# seed drew, but for 28 and 29, whose faults never came.
+fired=""; turned=""
+for k in PEER_RESET_AT PEER_VANISH_AFTER DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DISK_ROT DISK_BAD_SECTOR VOLUME_CUT_AFTER VOLUME_SHORT_AT VOLUME_GONE_AT VOLUME_READ_ONLY_AT VOLUME_SYNC_FAIL; do
+  case " $knobs" in *" $k="*) turned=1; case "$s" in 28 | 29) ;; *) fired="$fired $k" ;; esac ;; esac
+done
+[ -z "$turned" ] || echo "metal-vmm: fired:${fired:- none}" >&2
 echo "{\"metal_vmm_run\":{\"seed\":${s:-null},\"knobs\":\"$knobs\"}}" >> "$COVERAGE_OUT"
 echo '{"antithesis_sdk":{"language":{"name":"Zig","version":"0.16.0"},"sdk_version":"0.0.1","protocol_version":"1.1.0"}}' >> "$COVERAGE_OUT"
 ev Sometimes "tcp: common" true true
@@ -89,10 +99,12 @@ case "$s" in
   23 | 24 | 25 | 26) printf 'UNSOUND' > "$img"; [ "$s" = 24 ] || echo "metal-vmm: the power was cut after the guest's write 2 (sector 9, 1 sectors)" >&2; [ "$s" != 25 ] || page="jello"
     lost=3; [ "$s" != 26 ] || lost=0
     [ "$s" = 24 ] || echo "metal-vmm: disk: a write cache, write-back, though the guest did not negotiate FLUSH (DISK_CACHE=lie); 4 writes held, 0 flushes; the power cut lost $lost sectors never flushed" >&2 ;;
+  28) page=""; status=0 ;;
+  29) page="Home unavailable"; status=500 ;;
   27) page=""; status=0; echo "  serving 2 request(s), as gopher-metal.conf says"; echo "  served 2 request(s); base heap holds 52 live bytes"; echo "peer 2: 204, 1 of 1 answers, 65 bytes, done" ;;
   11) page="oops"; status=500; echo "  let go at the end: 1 response(s) cut by the stop, 2 bytes never acknowledged" ;;
 esac
-case "$s" in [2-9] | 1[0-9] | 2[3-7]) ;; *) [ -z "${PEER_REQUEST:-}" ] || page="$(cat "${PEER_REQUEST%%,*}")" ;; esac
+case "$s" in [2-9] | 1[0-9] | 2[3-9]) ;; *) [ -z "${PEER_REQUEST:-}" ] || page="$(cat "${PEER_REQUEST%%,*}")" ;; esac
 # A request that is only "fail500" is answered 500: a shape gone stale.
 [ "$page" != "fail500" ] || status=500
 if [ "$s" = 9 ] || { [ -z "$s" ] && [ -n "${FAKE_UNHURT_NO_PAGE:-}" ]; }; then
@@ -184,6 +196,9 @@ expect "seed 24" '^24 .*FAIL: the volume is not sound' "$lied"
 expect "seed 25" '^25 .*FAIL: not the page (status 200)' "$lied"
 expect "seed 26" '^26 .*FAIL: the volume is not sound' "$lied"
 limit2=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 27 27 2>&1)
+unfired=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 28 29 2>&1)
+expect "seed 28" '^28 .*FAIL: not the page (status 0)' "$unfired"
+expect "seed 29" '^29 .*FAIL: not the page (status 500)' "$unfired"
 expect "seed 27" '^27 .*FAIL: not the page (status 0)' "$limit2"
 
 # A kernel that reports no property (built without -Dcoverage) stops the
