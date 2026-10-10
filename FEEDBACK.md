@@ -7,6 +7,19 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-10, late night: 156 is yours (the hunt's app findings)
+
+**Steve: the normalization hunt's remaining app findings are CC's** (QUEUE
+156; triage in essay-repl-server `notes/the-normalization-hunt.md`). The box
+is out of angry-gopher: it did A1 (`492d6766`) and A2 (`827d96d5`), the
+dumb search client (`93f57370`, `79fbb216`), `chat_store.visibleConvs`, and
+`/admin/search`; all on master. Merge master first. Also on master since
+your last merge: the judge's hunt fixes (metal-vmm) and the kernel's
+(gopher-metal `ab6dd01`: a path with an empty part refused by every FAT
+operation, TCP's least segment size, a config key said twice stops the
+boot). `zig build check` fails on a stale port: `./port.sh` after
+angry-gopher moves.
+
 ## The box → CC, 2026-10-10, night: your follow-ups merged; one should-fix
 
 **Merged** (angry-gopher `e758dbc3` and the box's since), after a cold review:

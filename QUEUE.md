@@ -167,6 +167,57 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
     If boot gets annoying, say so in FEEDBACK before making it lazy: Steve's
     fallback is the first search or an idle window.
 
+156. **The normalization hunt's app findings** (Steve, 2026-10-10: CC's;
+    the triage is essay-repl-server `notes/the-normalization-hunt.md`,
+    bucket A). Each a refusal, or a decision named and tested; red first;
+    the smaller ones may batch. The box did A1 (the open redirect,
+    `492d6766`) and A2 (the retire keep list, `827d96d5`); these are the rest,
+    each a reviewer's claim until its red test shows it:
+    - **(a) A new topic differing only in case merges into the old**
+      (`chat.zig` topic creation, ~421): the duplicate check is
+      case-sensitive, the store is not. Compare without case; 409.
+    - **(b) A send that stored nothing answers success** (`chat.zig`
+      ~363-369): a missing `markdown` field reads as "" and answers 204; the
+      trim strips a first line's indentation (a code block becomes a
+      paragraph); `DROP_ON_FLOOR` drops a real message (no one uses it:
+      delete it). A missing field is 400; trim only to test emptiness.
+    - **(c) The fan-out's `catch continue` skips more than it names**
+      (`chat_store.zig` ~355-384): one surface's failure loses that member's
+      other surfaces (images, code: durable, no rebuild). A block per
+      surface, each failure said.
+    - **(d) A channel file's lines are trusted as uids** (`chat_store.zig`
+      ~855): a line `../../x` becomes a path the fan-out writes under; `3 #
+      Claude` drops a member; a duplicate double-notifies. A line that is not
+      a canonical uid, or a duplicate, makes the channel malformed, said.
+    - **(e) Sign-up rewrites a name instead of refusing it** (`login.zig`
+      ~102): `sanitizeUser` before `validateUserName`, so `Bob<x>` registers
+      as `Bobx`. Validate what was sent; never sanitize.
+    - **(f) Sessions:** one `issued` in the future never expires
+      (`users.zig` ~126); a signed player cookie never expires server-side
+      (`uid_cookie.zig` ~88). Refuse the future past a small skew; name the
+      player cookie's lifetime.
+    - **(g) Pins and bookmarks fail silently and answer 204**
+      (`chat_state.zig` ~70, 130, 139); the login mirror swallows its write
+      (`player.zig` ~114). Fail loudly (500), or name and test.
+    - **(h) The transcript decoder never refuses** (`chat_store.zig` 61-104):
+      a block with no `MSG_`, author or date decodes as a message of "".
+      Refuse it (said, counted where it is skipped); name the blank-piece
+      skip a torn append relies on.
+    - **(i) Smaller:** a missing name file reads as "" for a member
+      (`users.zig` ~233); two URL decoders disagree (`chat.zig` urlDecode vs
+      player.zig formDecode; duplicates take the first); account ids not held
+      to canonical form (`+7`, `007`); `ops/start` reports the old server ready
+      when the port never frees; chat.js reads a bad backlog size as 0
+      (`chat.js` ~253) and a failed save as nothing; an admin delete of an
+      unknown id says nothing (`admin_lynrummy.zig` ~59); `metalShape`
+      undercounts a path with an empty part (`store.zig` ~97, now refused on
+      metal).
+    - **(j) From the search UI's walkthrough:** a topic that does not exist is
+      served as an empty one (`chat.zig` topicRoute ~299) and, for a DM,
+      becomes where `/chat/default` resumes; a channel the viewer was removed
+      from is a bare 404. Decide each (a 404 page that says why, no resume
+      pointer to a topic that is not there).
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
