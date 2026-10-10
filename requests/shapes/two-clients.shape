@@ -4,3 +4,11 @@
 PEER_CLIENTS=2
 PEER_REQUEST=play.http,puzzle-action.http
 EXPECT=303,204
+# kept as told (QUEUE 149): client 2's puzzle move, read back as
+# puzzle-action's is (read-puzzles.http, "session_id: 2"). Client 1's player
+# has no read-back without its own cookie (play.shape says why), so this
+# judges the move, when both clients were told theirs (TOLD names each).
+# Derived, not yet run on a guest.
+READ_BACK=read-puzzles.http
+MARK=session_id: 2
+TOLD=303,204

@@ -9,3 +9,11 @@ PEER_REQUEST=new-session.http,game-action-2.http
 EXPECT=200,204
 # client 1's session never made (its answer cost by a fault): the move is a 404
 UNMADE=404
+# kept as told (QUEUE 149): client 2's move ("move-two") in session 2's action
+# log, read back as new-session's is (read-game-2.http, a 404 on the pristine
+# volume, which has no session 2). Judged when both clients were told theirs
+# (TOLD names each: sweep.sh's told_of). Derived from game.zig, not yet run
+# on a guest.
+READ_BACK=read-game-2.http
+MARK=move-two
+TOLD=200,204
