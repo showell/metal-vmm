@@ -1,18 +1,20 @@
 diff --git a/src/disk_fat.zig b/src/disk_fat.zig
-index c6a47b5..476e1eb 100644
+index 2229845..f46c71b 100644
 --- a/src/disk_fat.zig
 +++ b/src/disk_fat.zig
-@@ -1223,7 +1223,12 @@ pub const Volume = struct {
-         if (self.blk.writeMany(self.start_lba + lba, @intFromPtr(from), count) != virtio.blk_s_ok) {
-             if (self.dirs) |*c| c.drop(lba, count);
-             props.reachable(@src(), "fat: a run of sectors fails to write", null);
+@@ -1146,7 +1146,14 @@ pub const Volume = struct {
+         if (self.blk.write(self.start_lba + lba, @intFromPtr(from)) != virtio.blk_s_ok) {
+             if (self.dirs) |*c| c.drop(lba, 1);
+             props.reachable(@src(), "fat: a sector write fails", null);
 -            return Error.WriteFailed;
 +            // PLANTED BUG (metal-vmm plants/disk-write-swallowed, never to
 +            // merge): a write the disk refused is taken as written, so the
-+            // caller answers "saved" over a hole.
++            // caller answers "saved" over a hole. On the one-sector write,
++            // which the shapes' small writes reach; the run-of-sectors write
++            // they never do (0 of 311 runs, 2026-10-10).
 +            props.reachable(@src(), "PLANT: disk-write-swallowed fires", null);
-+            if (self.dirs) |*c| c.wrote(lba, count, from);
++            if (self.dirs) |*c| c.wrote(lba, 1, from);
 +            return;
          }
-         if (self.dirs) |*c| c.wrote(lba, count, from);
+         if (self.dirs) |*c| c.wrote(lba, 1, from);
      }
