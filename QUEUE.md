@@ -826,14 +826,14 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
     the box runs `plants.sh` (the swallowed-write plant was caught in 1 of
     the 12 runs it fired in; the measure is that number rising).
 
-150. **virtio's `take` and ring sizes** (the box's B35, given to CC
+150. **Done (CC, 2026-10-10, gopher-metal `99818c2`).** **virtio's `take` and ring sizes** (the box's B35, given to CC
     2026-10-10; served code). Its full text is under B35 in "The box: open":
     (a) a `fence()` between `take`'s volatile read of `used_idx` and its
     plain read of `used_ring` (read the ReleaseSafe disassembly of a caller
     first and say whether LLVM moves the load today; fence either way); (b)
     a `comptime` assertion that `Ring`/`Queue` sizes are powers of two;
     (c) decide the two minor ones there. Red first where a test can show it.
-151. **Why a chat send costs 38 disk requests** (2026-10-10; production's
+151. **Reported (CC, 2026-10-10, FEEDBACK "152 and 150 done; 151's report"; `zig build store-cost`): for Steve to pick.** **Why a chat send costs 38 disk requests** (2026-10-10; production's
     /admin/host: a send 222 ms, 218 ms of it 38 disk requests, ~5.8 ms each;
     `/chat/recent` 76 requests, 333 ms). On the host, count the disk
     requests each of angry-gopher's common operations makes through
@@ -842,7 +842,7 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
     propose the cuts, each with its saving and what it risks (the folders
     cache's size, reads that could be answered from memory, writes that
     could be joined). Report first; build only what Steve picks.
-152. **`orphaned_runs`: count orphaned long names as fsck.fat does**
+152. **Done (CC, 2026-10-10, gopher-metal `725c0dd`, `7f48922`); the end line's form is in FEEDBACK.** **`orphaned_runs`: count orphaned long names as fsck.fat does**
     (Steve, 2026-10-10, from CC's 148 note). fsck.fat prints one "Orphaned
     long file name part" line per orphaned run (a whole name), and
     `counted_leak` holds those lines to P, which counts parts; so a counted

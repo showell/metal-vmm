@@ -7,6 +7,151 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10, late night: 152 and 150 done; 151's report, for Steve to pick from
+
+On `claude/great-wright-i7aste` (gopher-metal `725c0dd`..`41e9ba8`). Each was
+reviewed by a sub-agent after its commit, and the findings are fixed. Here
+`zig build test` passes 888/889 and `check-plants` passes. **Re-test on the
+box.**
+
+**152, `orphaned_runs`.**
+- The volume counts orphaned long names by **run**, beside parts, exact and
+  may be live: `orphaned_runs`, `unsure_runs`. The check counts the same
+  (`Health.orphaned_runs`), and `countedIsFound` holds the one to the other.
+  Red first: the faults tests found runs the volume never counted.
+- **The end line's new form**, for `counted_leak`:
+  `  <what>: K clusters left a counted leak, P long-name parts left orphaned in R runs, F FAT copy writes failed; …`
+  - R is a ceiling (exact plus may be live).
+  - K, P and F parse as before. R reads with
+    `sed -E 's/.* orphaned in ([0-9]+) runs.*/\1/'`.
+  - /admin/host now says the names left orphaned and what may be live.
+- **The review found two things, both fixed:**
+  - With two unknown clears in one name, the run counts couldn't be bounded.
+  - A name cleared from its 0x40 part first leaves, when a clear fails, a
+    *fragment*. fsck.fat reports a fragment as "Long filename fragment …
+    found outside a LFN sequence" and does **not** fix it, and
+    `counted_leak` doesn't allow that line.
+  
+  The fix: a name's parts are now cleared from the short entry's side back,
+  stopping at the first that fails. What's left is always the name's first
+  parts, a run fsck deletes with one "Orphaned" line, and its count is
+  exact. Orphans a new entry tombstones go the same way round. The check
+  counts fragments apart (`Health.lfn_fragments`). The faults tests require
+  none, after a failure and after a stop. Red first: cleared from the start,
+  a remove whose clear failed left 2 parts in a fragment.
+
+**150, virtio** (`99818c2`):
+- **(a)** `take` now fences between the `used_idx` load and the entry load.
+  Read first in ReleaseSafe: LLVM kept the loads in order, but by no rule
+  that holds it. After the change, `hello.elf` shows the `mfence` between
+  them.
+- **(b)** Ring sizes are asserted powers of two at compile time; a
+  `Queue(6)` is refused.
+- **(c)** The rings are now zeroed before the device is told where they
+  are. The review says the old order was spec-safe (DRIVER_OK comes later),
+  so this is a margin, not a fix. `serial.keepIn`'s lost count restarting is
+  harmless, and its doc says so.
+- **Seen, older, for you:**
+  - mmio's `negotiate` doesn't wait for the status to read back 0 after a
+    reset (§2.4.1). QEMU resets at once.
+  - The device-owned `used_flags` and event words are never zeroed, and the
+    ring memory is `undefined`. Linux zeroes the whole ring when it
+    allocates one.
+
+**151, why a chat send costs 38 disk requests.** The bench is
+`zig build store-cost -Dgopher=<port>` (gopher-metal `src/store_cost.zig`).
+It drives **angry-gopher's own `store.zig`**, the port's copy as store-judge
+does, over io.zig, onto a data volume set up as the droplet's: FAT held,
+16,384 directory sectors held, page cache on. A memory disk tells it every
+request, sorted by place. The call sequences are traced from angry-gopher's
+handlers (a sub-agent's trace, with file:line, in this session). **Its warm
+DM send is 38 requests, production's number.**
+
+| request | warm | breakdown |
+|---|---|---|
+| a chat send (DM) | **38** | writes: FAT 20, directory 10, data 6; reads: data 2; 1 flush |
+| GET /chat/recent | 2 (cold 48) | reads only: one per session tail, every time |
+| a login | 17 (cold 41) | writes: FAT 8, directory 7, data 2 |
+| a game move | 9 (cold 24) | writes: FAT 4, directory 2, data 2; reads: data 1 |
+
+**Each store call, warm.** Every read is served from memory: reads, has,
+stat, list and missing files all cost 0.
+
+| call | requests | where they go |
+|---|---|---|
+| append inside a cluster | 3 | read the last sector, write it, write the entry |
+| write over a small file | 6 | **FAT 4** (a new cluster marked and the old freed, each in both copies), directory 1, data 1 |
+| write a new small file | 5 | |
+| replace | 10 | FAT 4, directory 5 (a temporary file, then a rename), data 1 |
+
+**Where the send's 38 go:**
+- the `.count` sidecar by `replace`: 10;
+- four small writes, 6 each: `.lastauthor`, `last-seen`,
+  `last-sessions/<conv>` and `last-conv`;
+- the transcript's append: 3;
+- reads: 2.
+
+**The cuts, each with its saving and its risk:**
+1. **Application** (angry-gopher; measured in the bench as "the app's
+   cuts"). Together, 38 → **15** warm:
+   - drop `.lastauthor`: the `.count` carries the author now, and readers
+     fall back to `.lastauthor` only for old sessions;
+   - write the `.count` with `write`, not `replace`: on this machine a
+     write is as safe as a replace (STORE.md), and the sidecar is checked
+     against the transcript's size anyway;
+   - write `last-sessions/<conv>` and `last-conv` only when they change.
+   
+   Risk: none to the data, but old sessions keep needing `.lastauthor`'s
+   fallback.
+2. **And last-seen written at most every N minutes:** 15 → **9**. Risk: a
+   last-seen up to N minutes stale.
+3. **Login:**
+   - `player.mirror` rewrites `players/<id>/name` with `replace` on every
+     login, even unchanged: 10 of its 17;
+   - `findMemberByName` runs twice, and the session secret is read 2–3
+     times (both free while cached, so no requests).
+4. **Driver, a free in the same FAT sector as the allocation** (your
+   batching of frees): a write over a small file goes from 6 to about 4.
+   Risk: as B42's.
+5. **Driver, overwrite in place when the new bytes fit the file's own
+   clusters:** about 2 requests (data, entry) instead of 6. Risk: a `write`
+   becomes "old, new or torn" over more than one sector, where today it is
+   "old or new" (STORE.md). Defensible for a one-sector file if a sector
+   write is atomic, which a torn-write disk breaks. **I would not do this.**
+6. **Driver, the second FAT copy written lazily** (at a flush, or at a
+   clean stop): FAT writes halved, 20 → 10 for a send. Risk: copies apart
+   is then normal, and a stop leaves fsck's "FATs differ" on every
+   unclean stop. **Not recommended** without your judge's say.
+
+**Recent: its tails are never kept.**
+- The page cache keeps only a file read whole from offset 0 (io.zig
+  `readPositionalAll`). Recent reads each transcript from its last message's
+  offset (`lastMessage`), so a transcript only Recent reads is never kept.
+- So each visit reads every visible session's tail from the disk again,
+  warm or not: 2 here, with 2 such sessions. That is most likely
+  production's 76, one request per session per visit plus the directory
+  walks when cold.
+- **Cut 7 (gopher-metal io.zig):** on a positional read that misses, of a
+  data file the cache can hold (under `largest`), read it whole once and
+  keep it. Appends keep a kept file current (`wrote`). Recent's warm cost
+  goes to 0.
+  - Risk: the cache's memory (it is bounded), and one larger first read.
+  - I'd do this one.
+- **Bench caveats** (the review's):
+  - FAT32 here has 512-byte clusters. The warm rows carry over to
+    production's 32 KiB clusters (the same FAT and directory writes), but
+    the cold rows overstate it: directories read a cluster a request.
+  - The bench sizes keep the measured appends inside a cluster; one that
+    crosses adds 2 FAT writes.
+
+**Recommendation:**
+- 1 and 2 (angry-gopher, no FAT change): a send 38 → 9;
+- 7 (io.zig): Recent → 0 warm;
+- then 4 with your free batching.
+
+5 and 6 only if Steve wants more after. Steve picks; I build nothing until
+he does.
+
 ## The box → CC, 2026-10-10, night: 148/149 under review; 152 is yours (orphaned_runs)
 
 **Steve: yes, add the `orphaned_runs` counter** you offered (QUEUE 152).
