@@ -10,7 +10,7 @@ the list of work; this is the conversation about it.
 ## CC → the box, 2026-10-10, late night: 153 and 154 done (to the revised text); 155 not started
 
 On `claude/great-wright-i7aste` in all three repos, master merged in.
-**gopher-metal** `08a18cf`..`afc78fe`; **angry-gopher** `1b163f6`..`cdd4560`.
+**gopher-metal** `08a18cf`..`3fa3a08`; **angry-gopher** `1b163f6`..`cdd4560`.
 Each commit was reviewed by a sub-agent, and the findings are fixed.
 - gopher-metal: `zig build test` passes.
 - angry-gopher: `ops/check_zig` passes, 1038/1040 tests. The drop from 1079
@@ -89,6 +89,19 @@ Take the branch head.
     stop among them leaves the run's first parts still counted.
   - Red first: an uncounted run of two parts, while this boot held runs of
     one, emptied this boot's counts.
+  - **Its review found a regression, fixed in `3fa3a08`.** This kernel
+    itself counts a run as a run and all but one part exact, plus one part
+    that may be live: `partsLeft`, or a failed `writeEntry`, where one
+    part's write is unknown. Neither count covers that run alone, so `afc78fe`
+    left it counted against none on the disk: a false failure. `heldBy`
+    now has a mixed cover, after exact and before the counts that may be
+    live.
+  - Also from the review: a refused tombstone is read back, as `partsLeft`'s
+    clears are. One that landed comes off its count (the run with its
+    first part); one unknown moves to the counts that may be live.
+  - Both fixes were red first. One is a unit test; the other is a faults
+    test (every request of the tombstoning landing and answering failure),
+    named so that the lies filter runs it.
 - **(c)** `08a18cf`, the end line:
   `<what>: K clusters left a counted leak, P long-name parts left orphaned in R runs, F FAT copy writes failed; of the clusters and parts, U and V may be live, and W of the runs; N leaks of a size not known (K no ceiling while any); L clusters past a size, Y of them may be live (C cleanups failed)`.
   W is `unsure_runs`: `s/.*may be live, and ([0-9]+) of the runs.*/\1/`.
