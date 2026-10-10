@@ -26,6 +26,14 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 dd if="$IMAGE" of="$WORK/part.img" bs=512 skip="$FIRST_LBA" status=none conv=sparse
 out=$(fsck.vfat -n "$WORK/part.img" 2>&1)
+code=$?
+# **AN FSCK THAT DID NOT CHECK IS NO VERDICT** (the normalization hunt): 0 is
+# no errors, 1 errors found; anything else (2: it did not reach the volume) is
+# said and fails, where its few lines could pass the filters below as sound.
+case $code in
+    0 | 1) ;;
+    *) echo "  fsck.vfat could not check the volume (exit $code):"; echo "$out" | sed 's/^/    /'; exit 1 ;;
+esac
 echo "$out" | tail -1 | sed 's/.*img: /  /'
 # Anything that is not the version line, the tally or the headings is a
 # complaint, and a complaint is the answer. Except one: FAT32's FSInfo free
