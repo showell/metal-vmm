@@ -37,7 +37,12 @@ complaints=$(echo "$out" | grep -v "^fsck.fat\|files, .*clusters\|^Checking\|^$\
 if [ -n "${STOP_LEAVES:-}" ] && [ -n "$complaints" ]; then
     left=$(echo "$complaints" | grep -c "^Reclaimed [0-9]* unused clusters\? (\|^Orphaned long file name part \|^FATs differ but appear to be intact\.$")
     complaints=$(echo "$complaints" | grep -v "^Reclaimed [0-9]* unused clusters\? (\|^Orphaned long file name part \|^  *Auto-deleting\.$\|^FATs differ but appear to be intact\.$\|^  *Using first FAT\.$\|^Leaving filesystem unchanged\.$")
-    [ "$left" = 0 ] || [ -n "$complaints" ] || { echo "  sound but for what a stop leaves ($left)"; exit 0; }
+    # What the stop left is said, line by line, before the verdict: the judge
+    # holds it to one operation's worth beside the kernel's own count
+    # (sweep.sh `stop_leftovers`), never excuses it unread.
+    [ "$left" = 0 ] || [ -n "$complaints" ] || {
+        echo "$out" | grep "^Reclaimed [0-9]* unused clusters\? (\|^Orphaned long file name part \|^FATs differ but appear to be intact\.$" | sed 's/^/  /'
+        echo "  sound but for what a stop leaves ($left)"; exit 0; }
 fi
 if [ -n "$complaints" ]; then
     echo "$complaints" | sed 's/^/  /'

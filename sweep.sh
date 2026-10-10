@@ -122,6 +122,7 @@ SOUND="${SOUND:-$HERE/sound.sh}"
 # reader beside the guests unless FAT_READ says where.
 UNTOUCHED="${UNTOUCHED:-$HERE/tools/untouched.py}"
 FAT_TAKEN="${FAT_TAKEN:-$HERE/tools/fat_taken.py}"
+LARGEST_WRITE="${LARGEST_WRITE:-$HERE/tools/largest_write.py}"
 # The site raised to serve a shape's every request (tools/site_requests.py).
 SITE_REQUESTS="${SITE_REQUESTS:-$HERE/tools/site_requests.py}"
 [ -n "${FAT_READ:-}" ] || [ ! -f "$GUESTS/../tools/fat16_read.py" ] || export FAT_READ="$GUESTS/../tools/fat16_read.py"
@@ -429,6 +430,33 @@ counted_leak() {
   echo "${n:-0} of $k clusters ($u may be live), $q of $r names ($p parts, $v may be live), $x of $l clusters past a size in $t files, FAT copies $( [ "$d" = 0 ] && echo agree || echo "apart ($f writes failed)")"
 }
 
+# stop_leftovers <sound output> <run's stdout> <what> <pristine> <unhurt>:
+# whether what a power cut left (`sound.sh` STOP_LEAVES: reclaimed clusters,
+# orphaned names, FATs apart) is **NO MORE THAN ONE OPERATION'S WORTH** beside
+# what the kernel counted (the normalization hunt, 2026-10-10). It excused any
+# amount: a rename that leaked 500 clusters each time passed if a cut came
+# next. One handler at a time means one operation is in flight at a cut, and
+# it can leave at most the chain of the file it was writing and a folder's
+# new cluster: `tools/largest_write.py` reads that off the shape's unhurt run
+# (the largest file it left new or changed, +1). And one orphaned name.
+# Before the cut, the kernel's end line counts what earlier failures left (K
+# clusters, R names), when the run lived to print it. Echoes what it compared.
+stop_leftovers() {
+  local n q k r line op
+  n=$(sed -n -E 's/^  Reclaimed ([0-9]+) unused clusters? \(.*/\1/p' "$1" | head -1)
+  q=$(grep -c "^  Orphaned long file name part " "$1")
+  k=0 r=0
+  line=$(grep -E "^  $3: [0-9]+ clusters left a counted leak, [0-9]+ long-name parts left orphaned" "$2" | tail -1)
+  if [ -n "$line" ]; then
+    k=$(echo "$line" | sed -E 's/.*: ([0-9]+) clusters left.*/\1/')
+    r=$(echo "$line" | sed -E 's/.*, ([0-9]+) long-name parts.*/\1/')
+    case "$line" in *" long-name parts left orphaned in "*) r=$(echo "$line" | sed -E 's/.* orphaned in ([0-9]+) runs.*/\1/') ;; esac
+  fi
+  op=$("$LARGEST_WRITE" "$4" "$5") || { echo "the unhurt run's largest write could not be read"; return 1; }
+  echo "${n:-0} clusters reclaimed (the kernel counted $k, one operation $op), $q names orphaned (the kernel counted $r, one operation 1)"
+  [ "${n:-0}" -le $((k + op)) ] && [ "$q" -le $((r + 1)) ]
+}
+
 # lie_lost <disk|volume> <name>: whether that disk's cache lost what it
 # held at the cut (metal-vmm QUEUE 122): a lie that cost nothing excuses
 # nothing, and an unsound disk is then the guest's own doing.
@@ -591,6 +619,9 @@ verdict() {
     if STOP_LEAVES="$disk_cut" "$SOUND" "$WORK/$name.img" > "$WORK/$name.sound" 2>&1; then
       { grep -q "sound but for what a stop leaves" "$WORK/$name.sound" || [ -n "$disk_cut$exit_cut" ]; } && ! "$UNTOUCHED" "$site" "$WORK/$u.img" "$WORK/$name.img" > "$WORK/$name.untouched" 2>&1 &&
         why="$why, the volume lost a file the request does not touch ($(head -1 "$WORK/$name.untouched" | sed 's/^ *//'))"
+      if grep -q "sound but for what a stop leaves" "$WORK/$name.sound" && ! c=$(stop_leftovers "$WORK/$name.sound" "$WORK/$name.out" "the boot disk" "$site" "$WORK/$u.img"); then
+        why="$why, a stop left the boot disk more than one operation's worth ($c)"
+      fi
     else
       case " $knobs" in
         *" DISK_CACHE=lie"*) [ -n "$disk_cut$exit_cut" ] && lie_lost disk "$name" && unsound="$unsound${unsound:+, }DISK_CACHE=lie (the volume left unsound)" || why="$why, the volume is not sound" ;;
@@ -606,6 +637,9 @@ verdict() {
     if STOP_LEAVES="$volume_cut" "$SOUND" "$WORK/$name.vol" > "$WORK/$name.vsound" 2>&1; then
       { grep -q "sound but for what a stop leaves" "$WORK/$name.vsound" || [ -n "$volume_cut$exit_cut" ]; } && ! "$UNTOUCHED" "$VOLUME_SITE" "$WORK/$u.vol" "$WORK/$name.vol" > "$WORK/$name.vuntouched" 2>&1 &&
         why="$why, the attached volume lost a file the request does not touch ($(head -1 "$WORK/$name.vuntouched" | sed 's/^ *//'))"
+      if grep -q "sound but for what a stop leaves" "$WORK/$name.vsound" && ! c=$(stop_leftovers "$WORK/$name.vsound" "$WORK/$name.out" "the volume" "$VOLUME_SITE" "$WORK/$u.vol"); then
+        why="$why, a stop left the attached volume more than one operation's worth ($c)"
+      fi
     else
       case " $knobs" in
         *" VOLUME_CACHE=lie"*) [ -n "$volume_cut$exit_cut" ] && lie_lost volume "$name" && unsound="$unsound${unsound:+, }VOLUME_CACHE=lie (the attached volume left unsound)" || why="$why, the attached volume is not sound" ;;

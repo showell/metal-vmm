@@ -245,7 +245,10 @@ cat > "$T/site_requests" <<'EOF'
 cp "$1" "$2" && printf ' REQUESTS=%s' "$3" >> "$2"
 EOF
 chmod +x "$T/vmm" "$T/sound" "$T/untouched" "$T/site_requests"
-export UNTOUCHED="$T/untouched" SITE_REQUESTS="$T/site_requests"
+# The unhurt run's largest write, as tools/largest_write.py says it: the fake
+# volumes here are no FAT, and their stops leave no clusters.
+printf '#!/bin/bash\necho 1\n' > "$T/largest_write_fake"; chmod +x "$T/largest_write_fake"
+export UNTOUCHED="$T/untouched" SITE_REQUESTS="$T/site_requests" LARGEST_WRITE="$T/largest_write_fake"
 REPORT="${COVERAGE_SDK:-$HERE/../zig-coverage-sdk}/tools/report.py"
 [ -f "$REPORT" ] || { echo "no $REPORT: set COVERAGE_SDK"; exit 1; }
 
@@ -512,6 +515,32 @@ expect "a chain 4 past its size, L 3" refused "$(long 3 "$past" "$cut")"
 expect "a truncation the FAT does not show, L 4" refused "$(long 4 "$past" "$cut" 3)"
 expect "a size past its chain (a file cut short), L 4" refused "$(long 4 "    File size is 1000 bytes, cluster chain length is 512 bytes." "    Truncating file to 512 bytes.")"
 expect "a chain past its size, no truncation said, L 4" refused "$(long 4 "$past" "    Contains a free cluster (116). Assuming EOF.")"
+
+# **WHAT A STOP LEAVES, HELD TO ONE OPERATION'S WORTH** (the normalization
+# hunt): the unhurt run's largest write (a fake tools/largest_write.py: 75,
+# a 74-cluster file and a folder grown); one orphaned name. Beyond the
+# kernel's count.
+eval "$(sed -n '/^stop_leftovers() {$/,/^}$/p' "$HERE/sweep.sh")"
+printf '#!/bin/bash\necho 75\n' > "$T/largest_write"; chmod +x "$T/largest_write"
+stop() { # stop <reclaimed> <orphan lines> [K R]: stop_leftovers' verdict
+  { echo "  1 files, 3/78736 clusters"
+    [ "$1" = 0 ] || echo "  Reclaimed $1 unused clusters ($(( $1 * 512 )) bytes)."
+    for _ in $(seq 1 "$2"); do echo "  Orphaned long file name part \"x\""; done
+    echo "  sound but for what a stop leaves (1)"; } > "$T/stop.sound"
+  if [ $# -ge 4 ]; then
+    echo "  the volume: $3 clusters left a counted leak, $4 long-name parts left orphaned in $4 runs, 0 FAT copy writes failed; of the clusters and parts, 0 and 0 may be live; 0 leaks of a size not known (K no ceiling while any); 0 clusters past a size (0 cleanups failed)"
+  else echo "metal-vmm: the power was cut after the guest's write 9 to the volume"; fi > "$T/stop.out"
+  LARGEST_WRITE="$T/largest_write" stop_leftovers "$T/stop.sound" "$T/stop.out" "the volume" "$T/p.img" "$T/u.img" > /dev/null && echo allowed || echo refused
+}
+expect "a stop: one file's clusters" allowed "$(stop 74 0)"
+expect "a stop: one file's clusters and a folder grown" allowed "$(stop 75 1)"
+expect "a stop: 500 clusters, one operation's worth is 75" refused "$(stop 500 0)"
+expect "a stop: two orphaned names, one operation leaves one" refused "$(stop 1 2)"
+expect "a stop beside the kernel's count: 80 clusters, 10 counted" allowed "$(stop 80 0 10 0)"
+expect "a stop beside the kernel's count: 86 clusters, 10 counted" refused "$(stop 86 0 10 0)"
+expect "a stop beside the kernel's count: two names, one counted" allowed "$(stop 1 2 0 1)"
+printf '#!/bin/bash\nexit 1\n' > "$T/largest_write_fails"; chmod +x "$T/largest_write_fails"
+expect "a stop whose unhurt run cannot be read is refused" refused "$(cp "$T/largest_write_fails" "$T/largest_write"; stop 1 0)"
 
 if [ $fail = 0 ]; then echo "sweep_test: every verdict and the summary as told"; fi
 exit $fail
