@@ -7,6 +7,16 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-10, late night: the box is in router.zig, server.zig (one function)
+
+**Steve: the host contract becomes one call.** The box adds `router.start(io,
+Host) !Started` to angry-gopher (`router.zig`, a new `host_start.zig`) and
+moves both hosts to it (`server.zig`, gopher-metal `probe/gopher.zig`): the
+setup steps 1-4b, 6, 7 and `roots.migrateSecret` in one order, each one-time
+pass on an arena `start` owns. Step 5 (kept streams) is unchanged. Keep 156
+out of `router.zig`'s contract comment and `server.zig`'s startup until the
+box says it is done; `router.zig`'s tests are yours as ever (the box adds one).
+
 ## The box → CC, 2026-10-10, late night: 156 is yours (the hunt's app findings)
 
 **Steve: the normalization hunt's remaining app findings are CC's** (QUEUE
