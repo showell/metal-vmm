@@ -25,8 +25,8 @@ import untouched  # noqa: E402  (its reader and its walk of files)
 
 
 def largest(fat, pristine, unhurt):
-    before = untouched.files(fat, pristine)
-    after = untouched.files(fat, unhurt)
+    before = untouched.files(fat, pristine, baseline=True)
+    after = untouched.files(fat, unhurt, baseline=True)
     v = fat.load(unhurt)
     most = 0
     for key, (path, digest) in after.items():
@@ -53,8 +53,8 @@ def main(argv):
     fat = untouched.reader()
     try:
         print(largest(fat, argv[1], argv[2]))
-    except fat.Problem as p:
-        print(f"largest_write: not a FAT volume: {p}", file=sys.stderr)
+    except (fat.Problem, untouched.CannotJudge) as p:
+        print(f"largest_write: {p}", file=sys.stderr)
         return 2
     return 0
 

@@ -100,6 +100,28 @@ class Untouched(unittest.TestCase):
         self.assertEqual(self.lost(pristine, unhurt, pristine), [])
 
 
+    # **A BASELINE THAT CANNOT BE WALKED WHOLE IS NO BASELINE** (the
+    # normalization hunt): its walk's problems were ignored and its files that
+    # could not be read skipped ("unreadable before"), so a file it could not
+    # show was never checked in the run.
+    def test_a_pristine_volume_with_a_broken_chain_cannot_judge(self):
+        pristine = volume({"A.TXT": b"a" * 700, "B.TXT": b"b" * 900})
+        # B's chain broken: its second cluster's entry free (B is clusters 4-5).
+        for copy in range(2):
+            struct.pack_into("<H", pristine, (RESERVED + copy * FAT_SECTORS) * 512 + 2 * 4, 0)
+        unhurt = volume({"A.TXT": b"A" * 700, "B.TXT": b"b" * 900})
+        with self.assertRaises(U.CannotJudge):
+            self.lost(pristine, unhurt, unhurt)
+
+    def test_two_names_one_file_to_fat_cannot_judge(self):
+        pristine = volume({"A.TXT": b"a" * 700, "B.TXT": b"b" * 900})
+        # B renamed A: two entries FAT reads as one name.
+        pristine[ROOT * 512 + 32: ROOT * 512 + 32 + 11] = b"A       TXT"
+        unhurt = volume({"A.TXT": b"A" * 700, "B.TXT": b"b" * 900})
+        with self.assertRaises(U.CannotJudge):
+            self.lost(pristine, unhurt, unhurt)
+
+
 class Ready(unittest.TestCase):
     """`--ready`, which sweep.sh asks before any seed (QUEUE 127(a))."""
 

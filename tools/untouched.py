@@ -39,9 +39,17 @@ def reader():
     return module
 
 
-def files(fat, image):
+class CannotJudge(Exception):
+    """A baseline (the pristine or the unhurt volume) that cannot be walked
+    whole: what it could not show would never be checked in the run."""
+
+
+def files(fat, image, baseline=False):
     """{path, case folded: (path, sha256 of its bytes, or None if they cannot
-    be read)} for every file on the volume."""
+    be read)} for every file on the volume. **A BASELINE IS WALKED WHOLE OR
+    NOT AT ALL** (the normalization hunt, 2026-10-10): for one, a problem in
+    its walk, a file that cannot be read, or two names that are one to FAT
+    raises CannotJudge, where they were skipped."""
     v = fat.load(image)
     problems = []
     out = {}
@@ -53,19 +61,26 @@ def files(fat, image):
             digest = hashlib.sha256(data).hexdigest() if len(data) == size else None
         except fat.Problem:
             digest = None
-        out[full.casefold()] = (full, digest)
+        key = full.casefold()
+        if baseline and key in out:
+            raise CannotJudge(f"{image}: {out[key][0]} and {full} are one name to FAT")
+        if baseline and digest is None:
+            raise CannotJudge(f"{image}: {full} cannot be read")
+        out[key] = (full, digest)
+    if baseline and problems:
+        raise CannotJudge(f"{image}: {problems[0]}")
     return out
 
 
 def lost(fat, pristine, unhurt, run):
     """What RUN lost of the files the request does not touch, as lines."""
-    before = files(fat, pristine)
-    after = files(fat, unhurt)
+    before = files(fat, pristine, baseline=True)
+    after = files(fat, unhurt, baseline=True)
     got = files(fat, run)
     out = []
     for key, (path, digest) in sorted(before.items()):
         if digest is None or after.get(key, (None, None))[1] != digest:
-            continue  # touched (changed or removed by the unhurt run), or unreadable before
+            continue  # touched: changed or removed by the unhurt run
         if key not in got:
             out.append(f"{path}: gone")
         elif got[key][1] != digest:
@@ -88,6 +103,9 @@ def main(argv):
     except fat.Problem as p:
         print(f"  not a FAT volume: {p}")
         return 1
+    except CannotJudge as c:
+        print(f"  cannot judge: {c}")
+        return 2
     for line in out:
         print(f"  {line}")
     return 1 if out else 0
