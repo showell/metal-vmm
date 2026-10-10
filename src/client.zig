@@ -640,12 +640,9 @@ pub const Tcp = struct {
         return all[at + 4 ..];
     }
 
-    /// The status line's code, or zero if there is not one.
+    /// The status line's code (`statusIn`).
     pub fn status(self: *const Tcp) u16 {
-        const all = self.reply[0..self.reply_len];
-        const space = std.mem.indexOfScalar(u8, all, ' ') orelse return 0;
-        if (space + 4 > all.len) return 0;
-        return std.fmt.parseInt(u16, all[space + 1 ..][0..3], 10) catch 0;
+        return statusIn(self.reply[0..self.reply_len]);
     }
 
     fn segment(self: *Tcp, out: []u8, flags: u8, data: []const u8) []const u8 {
@@ -1311,3 +1308,35 @@ test "PEER_PIPELINE: both requests go before any answer, each in its own segment
     _ = peer.answer(fakeSegment(&theirs, flag_ack | flag_psh | flag_fin, 5001, peer.tcp.seq, answer), ms);
     try testing.expectEqual(@as(u32, 1), peer.tcp.answers);
 }
+
+/// **A STATUS LINE THAT IS NOT ONE**: a code no server sends. The judge
+/// compares a run's status with its unhurt run's, so this one always differs,
+/// and no fault excuses it as it excuses no answer at all (the normalization
+/// hunt, 2026-10-10: `HTTP/1.1 2x0` was read as 0, "no answer").
+pub const malformed_status: u16 = 999;
+
+/// A reply's status code: 0 while no whole status line has come (no answer,
+/// or one cut short, which a fault may excuse as less of the page);
+/// `malformed_status` for a whole line that is not `HTTP/<version> <three
+/// digits>` followed by a space or its end.
+pub fn statusIn(reply: []const u8) u16 {
+    const end = std.mem.indexOf(u8, reply, "\r\n") orelse return 0;
+    const line = reply[0..end];
+    if (!std.mem.startsWith(u8, line, "HTTP/")) return malformed_status;
+    const space = std.mem.indexOfScalar(u8, line, ' ') orelse return malformed_status;
+    const rest = line[space + 1 ..];
+    if (rest.len < 3 or (rest.len > 3 and rest[3] != ' ')) return malformed_status;
+    for (rest[0..3]) |c| if (!std.ascii.isDigit(c)) return malformed_status;
+    return std.fmt.parseInt(u16, rest[0..3], 10) catch unreachable;
+}
+
+test "a status line: its code; none yet is 0; one that is not a status line is malformed" {
+    try testing.expectEqual(@as(u16, 200), statusIn("HTTP/1.1 200 OK\r\n\r\n"));
+    try testing.expectEqual(@as(u16, 204), statusIn("HTTP/1.1 204\r\n"));
+    try testing.expectEqual(@as(u16, 0), statusIn(""));
+    try testing.expectEqual(@as(u16, 0), statusIn("HTTP/1.1 20")); // cut short
+    for ([_][]const u8{ "HTTP/1.1 2x0 OK\r\n", "HTTP/1.1 20\r\n", "HTTP/1.1 2000 OK\r\n", "XTTP/1.1 200 OK\r\n", "HTTP/1.1\r\n", "garbage\r\n" }) |bad| {
+        try testing.expectEqual(malformed_status, statusIn(bad));
+    }
+}
+
