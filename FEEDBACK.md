@@ -7,6 +7,115 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10, late night: 153 and 154 done (to the revised text); 155 not started
+
+On `claude/great-wright-i7aste` in all three repos, master merged in.
+**gopher-metal** `08a18cf`..`afc78fe`; **angry-gopher** `1b163f6`..`cdd4560`.
+Each commit was reviewed by a sub-agent, and the findings are fixed.
+- gopher-metal: `zig build test` passes.
+- angry-gopher: `ops/check_zig` passes, 1038/1040 tests. The drop from 1079
+  is duplicate runs: player.zig's binary no longer pulls in users.zig's
+  tests. The router binary, which imports everything, went 208 → 204, the
+  4 tests removed.
+- `zig build check` type-checks gopher.elf against a port of angry-gopher
+  `d95dec2`, made here with port.sh. **Re-test on the box, and port.sh
+  from angry-gopher's branch head.**
+
+**153, against the revised text.**
+- **(1)** `.lastauthor` is gone, its reads too (`825c4da`, on top of
+  `1b163f6`).
+  - Where the `.count` is behind the transcript, the author is "", in
+    `lastMessage` and in recent.zig's Who cell alike.
+  - The slow path (a message past the 64 KiB window) trusts the sidecar's uid
+    only when the transcript matches it in count *and* size (the review).
+  - The boot pass writes an unknown uid for a session no sidecar knows. The
+    review checked that every session production holds had its uid copied
+    by an earlier boot. The three-field sidecar existed for 16 minutes on
+    09-17.
+  - A send no longer removes an older server's `.lastauthor`. Retire still
+    removes one it finds.
+  - The `.count` by `write`; its doc says why.
+  - last-sessions and last-conv are written only when they change.
+- **(2)** last-seen is gone (`d95dec2`): both files' writes (send, doc, move,
+  login) and the "Last active" columns of /admin and the Lyn Rummy roster,
+  which now list in id order. The 5-minute throttle I had built (`0b82e67`)
+  went with it. Files already on disk are left; nothing reads them.
+- **(3)** `0f9c858`, unchanged.
+- **(7)** **reverted** (gopher-metal `6ae8185`), as the text now says: measure
+  after 155. When it comes back, its review found three things:
+  - the guard admits a file `put` will refuse (past the budget, or a path
+    too long to key), read whole for nothing on every visit;
+  - a fault before the tail failed a read that the range alone would have
+    served;
+  - a backup's last 64 KiB piece of each file up to `largest` read the file
+    whole and swept it into the cache, evicting the hot transcripts.
+- **(4)** deferred, not built. For the record: as first framed it was unsafe.
+  The allocation's FAT write must land before the commit and the free's
+  after it. Only deferring the second FAT copy saves anything, about 1 of 4
+  writes, at the cost of copies that differ in a stop window.
+
+**store-cost after 153** (gopher-metal `4632efe`; warm, then cold):
+
+| operation | warm | cold |
+|---|---|---|
+| a send | 38 → 9 | 58 → 30 |
+| a login | 17 → 1 | 41 → 19 |
+| a move | 9 → 3 | 25 → 15 |
+| Recent | 2 (with (7) it was 0) | 48 |
+
+A send's 9 are the append (3) and the `.count` written over (6); nothing
+else in it writes. Reproduce with `zig build store-cost -Dgopher=<a fresh port>`.
+
+**angry-gopher commits for port.sh:** `1b163f6`, `0f9c858`, `b8b74e7`,
+`825c4da`, `d95dec2`, `cdd4560` (with `0b82e67` superseded by `d95dec2`).
+Take the branch head.
+
+**154.**
+- **(a)** `9c606ac`: `Queue.setup` zeroes the whole ring (`@memset` of the
+  ring, then the fence) before the device learns its address. Every caller
+  fills its descriptors after setup. A margin, as you say.
+- **(b)** `afc78fe`, no new state:
+  - A tombstoned orphan run is taken from the exact counts where they hold a
+    run of its parts (`orphaned_runs > 0` and `orphaned_parts >= len`), else
+    from the counts that may be live where those do, else from neither: an
+    earlier boot's run, left as counted.
+  - **Exact first where both cover** is a deliberate reading of "unsure first
+    where the run was unsure". Nothing without state says a run was unsure.
+    If the run was really unsure, taking it from the exact counts drops the
+    floor and leaves the sum, so the judge passes leniently. Unsure-first,
+    when the run was really exact, leaves the floor above what fsck finds:
+    a false failure. Flip it if you read the trade the other way.
+  - Parts are taken as their tombstones land and the run once all have, so a
+    stop among them leaves the run's first parts still counted.
+  - Red first: an uncounted run of two parts, while this boot held runs of
+    one, emptied this boot's counts.
+- **(c)** `08a18cf`, the end line:
+  `<what>: K clusters left a counted leak, P long-name parts left orphaned in R runs, F FAT copy writes failed; of the clusters and parts, U and V may be live, and W of the runs; N leaks of a size not known (K no ceiling while any); L clusters past a size, Y of them may be live (C cleanups failed)`.
+  W is `unsure_runs`: `s/.*may be live, and ([0-9]+) of the runs.*/\1/`.
+  Y is `unsure_long`: `s/.*past a size, ([0-9]+) of them may be live.*/\1/`.
+  Every earlier field reads as before; tried here against your regexes.
+- **(d)** report, not built. Today a fragment is only
+  `Health.lfn_fragments`, never a `Finding`, so neither the boot check nor
+  the after-request check counts it, and the boot summary line does not
+  print it.
+  - Since 152 this driver never leaves one: it clears names from the end
+    and tombstones from the end. A fragment is an older kernel's (pre-152
+    clearing started at the 0x40 part), or a bug.
+  - It is harmless: fsck.fat reports and leaves it, and nothing reads it.
+  - The host tests already hold fragments to none (`countedIsFound`'s
+    `no_fragments`, and the stop sweep).
+  - My proposal, in two steps:
+    1. Print the fragments on the boot's summary line (and /admin/host), so
+       a release tells you whether production holds any.
+    2. Then count, as damage, only fragments a run made: the after-request
+       check counts the fragments past the boot's count. Fresh images, as
+       the sweeps use, start at none, so any fragment there is this
+       kernel's. An older kernel's leftovers never fail a boot. The boot
+       check would count them as damage only once production is shown
+       clean.
+
+**155 is not started.** Steve, as always: I report before a new batch.
+
 ## The box → CC, 2026-10-10, late night: 150, 151, 152 merged; 153 and 154 are yours
 
 **Merged** (gopher-metal `d0c60e7`, metal-vmm `6120bad`) after a cold

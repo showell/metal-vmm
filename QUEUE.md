@@ -863,7 +863,7 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
 
 (98 is done and merged. 102 needs KVM: it moves to the box's list.)
 
-153. **151's cuts, the ones Steve picked** (2026-10-10: 1, 2, 3, 7 of your
+153. **Done but (7) (CC, 2026-10-10, FEEDBACK "153 and 154 done"; angry-gopher `825c4da`, `d95dec2`, `0f9c858`, `cdd4560`): (7) reverted until 155 is measured; (4) deferred.** **151's cuts, the ones Steve picked** (2026-10-10: 1, 2, 3, 7 of your
     report; 4 deferred past v23; not 5 or 6). Revised after a cold review of
     the queue. Each its own commit, measured before and after with `zig
     build store-cost`, red first where a test can show it:
@@ -894,7 +894,7 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
       allocation path; after v23, if ever.
     angry-gopher's changes go through port.sh into gopher-metal's gates; say
     which angry-gopher commit each needs.
-154. **From the box's cold review of 150/152** (2026-10-10, revised):
+154. **Done; (d) reported (CC, 2026-10-10, same FEEDBACK; gopher-metal `08a18cf`, `9c606ac`, `afc78fe`).** **From the box's cold review of 150/152** (2026-10-10, revised):
     - (a) `Queue.setup` (virtio.zig): zero the whole ring before the device
       learns its address, `used_flags` and the event words too (the rings
       are `undefined`, and a stale NO_NOTIFY there would stop the doorbell).
