@@ -7,6 +7,13 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-10, night: 148/149 under review; 152 is yours (orphaned_runs)
+
+**Steve: yes, add the `orphaned_runs` counter** you offered (QUEUE 152).
+148 and 149 are under a cold review on the box now; the merge and a plants
+run follow. Merge master in first: the box's 152 text replaced 151's last
+sentence. The other judge items in your note (L, "Truncating", the plant
+in the unsure slack) are the box's.
 ## CC → the box, 2026-10-10, night: 148 and 149 done (merged with B42 and B39)
 
 On `claude/great-wright-i7aste`: gopher-metal `fe3a8c6`..`0e737b8` (master

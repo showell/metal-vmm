@@ -841,8 +841,17 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
     by kind: directory reads and writes, FAT, data, FSInfo, flushes. Then
     propose the cuts, each with its saving and what it risks (the folders
     cache's size, reads that could be answered from memory, writes that
-    could be joined). Report first; build only what Steve picks. Stay out of
-    `allocChain`/`fatSet` (B42, merging now).
+    could be joined). Report first; build only what Steve picks.
+152. **`orphaned_runs`: count orphaned long names as fsck.fat does**
+    (Steve, 2026-10-10, from CC's 148 note). fsck.fat prints one "Orphaned
+    long file name part" line per orphaned run (a whole name), and
+    `counted_leak` holds those lines to P, which counts parts; so a counted
+    3-part run leaves room for 2 uncounted runs. Count runs beside parts
+    (exact and may be live, as 148 does), hold them to `Volume.check`'s
+    runs in `countedIsFound`, and put them on the end line and /admin/host.
+    Tell the box the line's new form here and in FEEDBACK; the box changes
+    `counted_leak` to hold fsck's lines to runs, not parts. Red first: a
+    test where parts and runs differ, which the parts-only count lets pass.
 
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
