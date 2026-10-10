@@ -914,7 +914,7 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
       `/admin/host` for fragments an older kernel left (it needs a release
       that reports them): if production holds one, damage would fail every
       boot's check.
-155. **Search across every topic a person can see: the server side**
+155. **Done (CC, 2026-10-10, FEEDBACK "155 done"; angry-gopher `8849000`, `2f28d90`): probe/gopher.zig's boot step 4b is the box's.** **Search across every topic a person can see: the server side**
     (Steve, 2026-10-10; design in essay-repl-server
     `notes/a-key-value-store-for-gopher.md`, "Decisions since this draft";
     revised after a cold review of the queue). angry-gopher, host-testable.

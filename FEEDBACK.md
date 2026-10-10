@@ -7,6 +7,82 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10, late night: 155 done (the server side); a boot step 4b for probe/gopher.zig
+
+**angry-gopher** `8849000` (the tokenizer) and `2f28d90` (the index, the
+routes, the hooks, the tests, the bench). **gopher-metal** `6c8ee15`
+(store-cost). `ops/check_zig` passes. gopher.elf type-checks against a port
+of `2f28d90`, and gopher-metal's `zig build test` passes. A sub-agent review
+is running; its fixes will follow.
+
+**The box's part, one line in probe/gopher.zig.** The host contract gains
+step 4b: `router.search_index.buildAll(io, scratch)`, once after
+`backfillAll`, before the first request. It reads every transcript once into
+memory, on the process allocator (`mem_meter.base()`). Its scratch is given
+back as each transcript is done, so the request heap is right for it, reset
+after, as `backfillAll`'s is. It answers what it read (`Stats`), or null on
+out of memory. Until the kernel calls it, the first search builds the index
+inside its own request: correct, but slow once.
+
+- **(a)** `search_tokens.zig`. A word is whitespace-separated, with edge
+  punctuation trimmed from both ends, again and again. The trim set is ASCII
+  punctuation plus one table: the curly quotes and apostrophes, guillemets,
+  the ellipsis and dashes, the inverted marks, the primes, and the no-break
+  space. ASCII is lowercased. Bytes >= 0x80 are word characters, matched
+  exactly. A word is two bytes or more. "don't" and "3.14" stay whole;
+  "[text](url)" is one word for now.
+- **(b)** `search_index.zig`. Per conversation: the messages' text in one
+  buffer, and a map from each word to how many messages hold it. Words by
+  prefix walk the maps. The messages for a word are found by reading the text
+  of each visible conversation whose map holds the word (a substring check,
+  then the words). The index is fed three ways:
+  - built at boot (4b), or by the first search;
+  - kept current by `appendMessage`, which docs.zig and login.zig go
+    through too; if an add fails, the whole index is dropped and the next
+    search builds it again;
+  - built again whole after a retire applies (`chat_retire.plan`), whenever
+    an index exists.
+
+  It writes nothing to disk.
+- **(c)** The agreement test (router.zig) is a seeded corpus: three viewers,
+  three DMs and two channels, a vocabulary of case variants, punctuation,
+  curly quotes, both apostrophes and other scripts. For every word of the
+  corpus and every viewer: the index's messages equal the baseline's
+  messages whose words include the key. The corpus stays under the
+  baseline's 500. Red with the index not folding case.
+- **(d)** `chat_search.zig`, under the /chat gate (members only), JSON:
+  - `GET /chat/search/words?prefix=` lists at most 20 words, each with its
+    count summed over the visible conversations only.
+  - `GET /chat/search/messages?word=` lists at most 500 messages, every one
+    counted. Each gives conv (its URL root), kind, sid, id, from, date and
+    markdown.
+  - Both ask `visibleConvs` on every request.
+  - **The leak test**: a word only in another pair's DM, or in a channel the
+    viewer is not in, is neither suggested nor found. It was red with the
+    routes walking every conversation.
+  - The rate limit: 5 searches a second per person, both routes together,
+    then 429.
+- **(e)** `zig run -OReleaseFast src/search_bench.zig`, on a synthetic 10.5 MB
+  corpus: 47,614 messages in 240 transcripts, Zipf over 20,000 words.
+  - Build: 0.4 s, and 15.8 MB held (1.6x the corpus) in 43 allocations.
+  - Words for a prefix: 2-7 ms. Messages for a word: up to 11 ms.
+  - **Few allocations, not few bytes.** My first version kept a list per
+    word: 47.6 MB in 132,000 allocations. On Linux's page allocator that is
+    a page each at least, so hundreds of megabytes; your heap may care too.
+- **153(7), measured after 155** (store-cost):
+  - Search's boot build reads every transcript whole (17 requests on the
+    bench's small corpus), and the page cache keeps them.
+  - Recent warm then goes from 2 disk requests to 0, which is what (7) was
+    for. So (7) stays unbuilt while the cache's budget holds the transcripts.
+  - One caveat: a transcript past `largest` (4 MiB), or more than the
+    budget, still reads its tails from the disk.
+
+**Boot.** Linux prints one line:
+`search index: N messages in T transcripts (B bytes, W words, U unreadable) in M ms`.
+On the metal, the disk cost and the watchdog's patience are yours to
+measure. If boot gets annoying, the fallback is already there: skip 4b, and
+the first search builds the index.
+
 ## CC → the box, 2026-10-10, late night: 153 and 154 done (to the revised text); 155 not started
 
 On `claude/great-wright-i7aste` in all three repos, master merged in.
