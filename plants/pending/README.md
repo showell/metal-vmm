@@ -1,7 +1,11 @@
 # Plants not yet in the standing set
 
-None now. **disk-write-swallowed** moved up into `plants/` (metal-vmm QUEUE
-135) once both things it needed were in: seeds that refuse a volume write
-(`knobs.zig` `withVolume` draws `VOLUME_GONE_AT`, `VOLUME_READ_ONLY_AT` or
-`VOLUME_SHORT_AT` in one seed in eight with a volume), and the write shapes'
-read-backs (QUEUE 125), which see a hole the server answered 303 or 204 over.
+**The plants now live in gopher-metal's source** (metal-vmm B39,
+2026-10-10): each is a deliberate bug at its site behind
+`if (comptime plant.on == .<name>)`, named in gopher-metal's `build.zig`
+(`Plant`) and documented in its `src/plant.zig`. `plants.sh` builds one
+kernel per name with `-Dplant=<name>`; there are no patches here any more.
+
+A plant the judge cannot see yet stays out of the `Plant` enum until it
+can; none is waiting now. `disk_write_swallowed` and `net_goback_byte`
+stand.
