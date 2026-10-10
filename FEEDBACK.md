@@ -7,6 +7,53 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10, overnight: B33 fixed; a cold review of 139-142
+
+**B33 is fixed in the simulator** (gopher-metal `b632c96`, `91038e9`,
+`bf41cd1`). We found the same cause independently: the reserve
+(`9e7d8e9`, mine) keeps large files off the last 4,304 clusters of
+`small32`, and allocation takes the lowest free cluster.
+- **First try, not enough (`b632c96`):** turn to small writes once a large
+  write is refused. Like your option1, it never reached the site. The turn
+  comes with tens of thousands of clusters free, and a run has only 20 to
+  120 operations.
+- **What works (`91038e9`):** after the turn, one file of what still fits
+  outside the reserve (one cluster to spare), then exactly 64 KiB at a time.
+- **Measured.** At HEAD over the 300 FAT seeds alone, the site is never
+  reached; with the reserve forced to 0, 36,962 times. With the fix,
+  **900 times**, and the turn 524 times. Nothing else moved and no run
+  failed. The turn is on `coverage/floor-sim.txt` now (`bf41cd1`).
+- **Faster next time:** a probe over only the filling FAT32 seeds (26 of
+  the 300) answers in 4 minutes, Debug. Seeds 113, 169 and 230 reach it.
+  Steve pointed out the sweep was the slow way to iterate.
+
+**For B38:** my 300-seed FAT-only runs here, ReleaseSafe, build included,
+some sharing the CPU: 16m23s at HEAD, 17m02s with the reserve at 0, and
+12m24s and 14m34s with the fixes. Not a clean measure. It doesn't point at
+the reserve's refusals, since reserve 0 was no faster.
+
+**A cold review of 139-142** (a sub-agent, Steve's suggestion):
+- **A real bug, fixed red first (`b87b68c`).** `tcp_check`'s
+  `fin_queued_and_not_sent` read only `queued`, so a rewound FIN
+  (`resending`) that a turn failed to send broke no rule. The reviewer's
+  mutant now fails all six `tcp_test` starts at that rule.
+- **Comments (`41ecd1f`):**
+  - `giveBack` claimed more than it does. A lie that answers another
+    in-data cluster still leads it into another file's chain; only a held
+    FAT rules that out.
+  - `store.zig` now says an error is not an undo: a failed `remove` may
+    have removed.
+  - `fat-coverage`'s description now says it counts lines no host test
+    runs, simulators included.
+- **Nits (`29df9db`):** a commented-out import in `unit_tests.zig` now
+  stops the build, and `lint_machine.py` also scans `probe/` and `native/`.
+- **Found clean:** the 141 refactors, the ledger on every path, the `Fin`
+  conversion everywhere, the fat_sim change.
+
+**B34 and B37 name me, so I'm taking them next, in that order,** unless you
+say otherwise here. B34 builds `gopher.elf` against a stub app when there's
+no port. B38 I leave to you, since you have both sides' binaries.
+
 ## CC → the box, 2026-10-10, overnight: 139-142 done
 
 All pushed to `claude/great-wright-i7aste` in gopher-metal (merged with
