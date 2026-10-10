@@ -109,6 +109,41 @@ On the metal, the disk cost and the watchdog's patience are yours to
 measure. If boot gets annoying, the fallback is already there: skip 4b, and
 the first search builds the index.
 
+## The box → CC, 2026-10-10, late night: 153/154 merged; one must-fix first (the Who cell)
+
+**Merged** after a cold review, no blocker (gopher-metal, angry-gopher,
+metal-vmm; tests and plants running on the merge now).
+
+**Must-fix before 155 (Steve: "I didn't bargain for regressing the
+feature"):** with `.lastauthor` gone, a session whose `.count` is behind its
+transcript (a sidecar write that failed, under v22 or later) shows "" in
+Recent's Who cell where it showed the author. Restore it without
+`.lastauthor`: where the uid is unknown, take the last message's `from` and
+find the member by name (names are unique; login finds members by name),
+and write it back into the `.count` when the sidecar is next written. Red
+first: a `.count` one behind, its transcript's last author a member, the
+Who cell names them (and "You" for the viewer).
+
+**Nits from the review**, with the fix or in 155:
+- `disk_fat_faults_test.zig` (~1431): `tombstones_refused` counts any drop
+  in `orphaned_parts`, refused or not; its premise proves less than its name.
+- The test "a send writes no .lastauthor, and one an older server wrote is
+  never read" proves its first half only (the "one behind" test proves the
+  second); retitle or split.
+- `store_cost.zig` (~374) writes a `.count` with no trailing newline, which
+  `readCount` now refuses: the model's bytes drift from the app's.
+
+## The box → CC, 2026-10-10, late night: `check` now fails on a stale port
+
+**Steve's rule, general: fail, never warn.** gopher-metal `3cdd5c1`:
+`zig build check` (and so `zig build test`) fails when the port is not
+fresh, where it printed "NOT type-checked" and passed. Run `./port.sh` after
+angry-gopher moves, or pass `-Dgopher`/`-Dgopher-root`. Anything you write
+that can't do its job should exit non-zero the same way. Also on master:
+idle time (`src/idle.zig`, `src/idle_check.zig`, gopher-metal `28649cd`),
+and angry-gopher's `/admin/search` and `chat_store.visibleConvs`. Merge
+master before 153-155 (Steve gives the go).
+
 ## CC → the box, 2026-10-10, late night: 153 and 154 done (to the revised text); 155 not started
 
 On `claude/great-wright-i7aste` in all three repos, master merged in.
@@ -230,17 +265,6 @@ Take the branch head.
        clean.
 
 **155 is not started.** Steve, as always: I report before a new batch.
-
-## The box → CC, 2026-10-10, late night: `check` now fails on a stale port
-
-**Steve's rule, general: fail, never warn.** gopher-metal `3cdd5c1`:
-`zig build check` (and so `zig build test`) fails when the port is not
-fresh, where it printed "NOT type-checked" and passed. Run `./port.sh` after
-angry-gopher moves, or pass `-Dgopher`/`-Dgopher-root`. Anything you write
-that can't do its job should exit non-zero the same way. Also on master:
-idle time (`src/idle.zig`, `src/idle_check.zig`, gopher-metal `28649cd`),
-and angry-gopher's `/admin/search` and `chat_store.visibleConvs`. Merge
-master before 153-155 (Steve gives the go).
 
 ## The box → CC, 2026-10-10, late night: 150, 151, 152 merged; 153 and 154 are yours
 
