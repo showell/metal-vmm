@@ -121,6 +121,7 @@ SOUND="${SOUND:-$HERE/sound.sh}"
 # The untouched files' check (tools/untouched.py), with gopher-metal's FAT
 # reader beside the guests unless FAT_READ says where.
 UNTOUCHED="${UNTOUCHED:-$HERE/tools/untouched.py}"
+FAT_TAKEN="${FAT_TAKEN:-$HERE/tools/fat_taken.py}"
 # The site raised to serve a shape's every request (tools/site_requests.py).
 SITE_REQUESTS="${SITE_REQUESTS:-$HERE/tools/site_requests.py}"
 [ -n "${FAT_READ:-}" ] || [ ! -f "$GUESTS/../tools/fat16_read.py" ] || export FAT_READ="$GUESTS/../tools/fat16_read.py"
@@ -354,7 +355,7 @@ PY
 # rightly breaks (QUEUE 128).
 DAMAGE_PROPS=("fat: at boot, a volume has no damage beyond what a stop leaves" "fat: after a request, a volume has no damage beyond what a stop leaves")
 
-# counted_leak <sound output> <run's stdout> <what>: whether everything fsck
+# counted_leak <sound output> <run's stdout> <what> <image>: whether everything fsck
 # complains of on the disk is a leftover the kernel says it left there (its
 # end summary: "<what>: K clusters left a counted leak, P long-name parts
 # left orphaned, F FAT copy writes failed"), each kind held to its count:
@@ -365,13 +366,37 @@ DAMAGE_PROPS=("fat: at boot, a volume has no damage beyond what a stop leaves" "
 # on /admin/host, but fsck still finds them. More than counted fails. The
 # caller still holds every file the request does not touch to survive whole
 # (`untouched`). Echoes what it allowed.
+# **A FLOOR AS WELL AS A CEILING** (148's review): K and P are ceilings,
+# exact plus what may be live (U clusters and V parts, said after F). What
+# the kernel counted exactly landed, so fsck finds at least K - U clusters,
+# and at least one orphaned name where P - V parts are exact (fsck says one
+# line per name, the kernel counts parts: QUEUE 152 makes that exact).
+# Without the floor, an over-count is slack a real leak hides in. The slack
+# left is U: a replace whose commit's landing is unknown counts both the
+# old chain and the new one as may be live, though one of them is live.
+# **A CHAIN PAST ITS SIZE** (148(c)): fsck names the file, says "cluster
+# chain length is > N bytes" and "Truncating file to M bytes", and counts
+# what it would cut neither in use nor reclaimed. So the clusters past every
+# size are exactly the first FAT's taken ones (tools/fat_taken.py) less
+# fsck's in-use count less what it reclaimed: X, held to no more than the
+# kernel's L ("L clusters past a size", exact plus may be live), and to at
+# least one a file. A size past its chain ("chain length is N bytes", no
+# ">") is a file cut short, and fails as before.
 counted_leak() {
-  local n q d k p f rest line
-  rest=$(sed '1d' "$1" | grep -v "^  Reclaimed [0-9]* unused clusters\? (\|^  Orphaned long file name part \|^    Auto-deleting\.$\|^  FATs differ but appear to be intact\.$\|^    Using first FAT\.$\|^  Leaving filesystem unchanged\.$")
+  local n q d k p f u v l t x taken used rest line
+  rest=$(sed '1d' "$1" | awk '
+    { line[NR] = $0 }
+    END {
+      for (i = 1; i <= NR; i++) {
+        if (line[i] ~ /^  \// && line[i+1] ~ /^    File size is [0-9]+ bytes, cluster chain length is > [0-9]+ bytes\.$/ && line[i+2] ~ /^    Truncating file to [0-9]+ bytes\.$/) { i += 2; continue }
+        print line[i]
+      }
+    }' | grep -v "^  Reclaimed [0-9]* unused clusters\? (\|^  Orphaned long file name part \|^    Auto-deleting\.$\|^  FATs differ but appear to be intact\.$\|^    Using first FAT\.$\|^  Leaving filesystem unchanged\.$")
   [ -z "$rest" ] || return 1
   n=$(sed -n -E 's/^  Reclaimed ([0-9]+) unused clusters? \(.*/\1/p' "$1" | head -1)
   q=$(grep -c "^  Orphaned long file name part " "$1")
   d=$(grep -c "^  FATs differ but appear to be intact\.$" "$1")
+  t=$(grep -cE "^    File size is [0-9]+ bytes, cluster chain length is > [0-9]+ bytes\.$" "$1")
   # v22's kernel says no FAT copy count: read as none failed.
   line=$(grep -E "^  $3: [0-9]+ clusters left a counted leak, [0-9]+ long-name parts left orphaned" "$2" | tail -1)
   [ -n "$line" ] || return 1
@@ -379,8 +404,25 @@ counted_leak() {
   p=$(echo "$line" | sed -E 's/.*, ([0-9]+) long-name parts.*/\1/')
   f=0
   case "$line" in *" FAT copy writes failed"*) f=$(echo "$line" | sed -E 's/.*, ([0-9]+) FAT copy writes failed.*/\1/') ;; esac
-  [ "${n:-0}" -le "$k" ] && [ "$q" -le "$p" ] && { [ "$d" = 0 ] || [ "$f" -ge 1 ]; } && [ "${n:-0}$q$d" != "000" ] || return 1
-  echo "${n:-0} of $k clusters, $q of $p parts, FAT copies $( [ "$d" = 0 ] && echo agree || echo "apart ($f writes failed)")"
+  # v22's and B42's kernels count nothing as may be live: U and V are 0.
+  u=0 v=0
+  case "$line" in *" may be live"*)
+    u=$(echo "$line" | sed -E 's/.*of the clusters and parts, ([0-9]+) and [0-9]+ may be live.*/\1/')
+    v=$(echo "$line" | sed -E 's/.*of the clusters and parts, [0-9]+ and ([0-9]+) may be live.*/\1/') ;;
+  esac
+  # Before 148 a kernel counted no chain past its size: L is 0.
+  l=0
+  case "$line" in *" clusters past a size"*) l=$(echo "$line" | sed -E 's/.*; ([0-9]+) clusters past a size.*/\1/') ;; esac
+  x=0
+  if [ "$t" -gt 0 ]; then
+    used=$(sed -n -E '1s/^  [0-9]+ files, ([0-9]+)\/[0-9]+ clusters$/\1/p' "$1")
+    taken=$("$FAT_TAKEN" "$4") && [ -n "$used" ] || return 1
+    x=$((taken - used - ${n:-0}))
+    [ "$x" -ge "$t" ] && [ "$x" -le "$l" ] || return 1
+  fi
+  [ "${n:-0}" -le "$k" ] && [ "${n:-0}" -ge $((k - u)) ] && [ "$q" -le "$p" ] && { [ $((p - v)) = 0 ] || [ "$q" -ge 1 ]; } &&
+    { [ "$d" = 0 ] || [ "$f" -ge 1 ]; } && [ "${n:-0}$q$d$t" != "0000" ] || return 1
+  echo "${n:-0} of $k clusters ($u may be live), $q of $p parts ($v may be live), $x of $l clusters past a size in $t files, FAT copies $( [ "$d" = 0 ] && echo agree || echo "apart ($f writes failed)")"
 }
 
 # lie_lost <disk|volume> <name>: whether that disk's cache lost what it
@@ -548,7 +590,7 @@ verdict() {
     else
       case " $knobs" in
         *" DISK_CACHE=lie"*) [ -n "$disk_cut$exit_cut" ] && lie_lost disk "$name" && unsound="$unsound${unsound:+, }DISK_CACHE=lie (the volume left unsound)" || why="$why, the volume is not sound" ;;
-        *) if c=$(counted_leak "$WORK/$name.sound" "$WORK/$name.out" "the boot disk"); then
+        *) if c=$(counted_leak "$WORK/$name.sound" "$WORK/$name.out" "the boot disk" "$WORK/$name.img"); then
              unsound="$unsound${unsound:+, }a leak the kernel counted (the boot disk: $c)"
              "$UNTOUCHED" "$site" "$WORK/$u.img" "$WORK/$name.img" > "$WORK/$name.untouched" 2>&1 ||
                why="$why, the volume lost a file the request does not touch ($(head -1 "$WORK/$name.untouched" | sed 's/^ *//'))"
@@ -563,7 +605,7 @@ verdict() {
     else
       case " $knobs" in
         *" VOLUME_CACHE=lie"*) [ -n "$volume_cut$exit_cut" ] && lie_lost volume "$name" && unsound="$unsound${unsound:+, }VOLUME_CACHE=lie (the attached volume left unsound)" || why="$why, the attached volume is not sound" ;;
-        *) if c=$(counted_leak "$WORK/$name.vsound" "$WORK/$name.out" "the volume"); then
+        *) if c=$(counted_leak "$WORK/$name.vsound" "$WORK/$name.out" "the volume" "$WORK/$name.vol"); then
              unsound="$unsound${unsound:+, }a leak the kernel counted (the attached volume: $c)"
              "$UNTOUCHED" "$VOLUME_SITE" "$WORK/$u.vol" "$WORK/$name.vol" > "$WORK/$name.vuntouched" 2>&1 ||
                why="$why, the attached volume lost a file the request does not touch ($(head -1 "$WORK/$name.vuntouched" | sed 's/^ *//'))"
