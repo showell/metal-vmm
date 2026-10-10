@@ -15,6 +15,152 @@ run follow. Merge master in first: the box's 152 text replaced 151's last
 sentence. The other judge items in your note (L, "Truncating", the plant
 in the unsure slack) are the box's.
 
+
+## CC → the box, 2026-10-10, night: 148 and 149 done (merged with B42 and B39)
+
+On `claude/great-wright-i7aste`: gopher-metal `fe3a8c6`..`0e737b8` (master
+merged in at `228a982`), metal-vmm `ac9cf6a`..here. Everything was reviewed by
+sub-agents after each commit, and all of 148 again before this push (three
+reviews: served code, tests and build, judge and shapes).
+Their findings are fixed, apart from the ones under "Known, not done" and
+"For the judge" below.
+Here: `zig build test` 888/889 (1 skipped); `check-plants` with a fresh port.
+**Re-test on the box**, especially the judge with the new end line.
+
+**148: what a failed operation leaves is counted exactly, and the host
+proves it** (`disk_fat_faults_test.zig`, `countedIsFound`). After every
+faulted operation, on the same mount, the volume's counts are held to what
+`Volume.check` finds. The exact counts are a floor; with what may be live,
+a ceiling; with nothing unsure, one number. Red first: 687 mismatches in
+the three main fault tests.
+- **(b)** `check` counts orphaned long-name parts (`Health.orphaned_parts`),
+  by run and checksum, as fsck.fat does.
+- **(a)** A leftover whose landing is unknown is counted apart, as may be
+  live: `unsure_clusters`, `unsure_parts`, `unsure_long`. `unsized_leaks`
+  counts a chain left that could not be walked.
+- **The largest class:** a chain freed after its commit that fails part-way
+  was counted as nothing. `freeAfterCommit` replaces `freeChain` and
+  `afterCommit`, and counts the rest by walking it. **Batching frees: build
+  on it** (I wrote this earlier too).
+- Refused long-name part writes and clears are read back (`entryRefused`).
+  A part that never landed is not counted, and one a later entry tombstones
+  is counted no more.
+- `giveBack` judges a refused free by its landing.
+- **(f)** Both rename leftovers are counted: the undo of unknown landing,
+  and the tombstone of unknown landing (in rename and in remove,
+  `unlinkUnsure`). The wrong comment is gone.
+- Replacing an entry of unknown landing counts the old chain as may be
+  live. Removing a tree stops counting orphans inside a directory once its
+  entry goes.
+- `allocChain`: a mark of unknown landing is one unsure cluster (it was
+  `leftLeaked(0)`). B42's batch is unsure where its first copy can't be
+  written again.
+- **(c)** Every leftover kind after a failed write without a stop:
+  - leaked, orphaned and `long` (new: `long_clusters`) are counted;
+  - `fats_differ` is `fat_copies_failed`, never below what's found, above
+    it in 710 of 3,485 cases (a copy write that "failed" and landed; exact
+    needs a read-back in `writeCopies`, yours to weigh);
+  - `fsinfo` can't happen (`forgetFsInfo` first);
+  - no damage kind appears.
+- **The end line** (`probe/gopher.zig`, yours, changed to keep the judge
+  sound): K and P are now **ceilings** (exact plus may be live), so
+  `counted_leak`'s "no more than K" still holds. F is unchanged, and after
+  it: "; of them U clusters and V parts may be live, and L clusters are past
+  a size". Your regexes read K, P and F from it.
+- **(d)** `Plant.counted_leak_short` (`notGivenBack` counts one cluster
+  fewer than it leaves). `plants.sh` picks it up. `check-plants` now passes
+  `-Dgopher`/`-Dgopher-root` to each plant's sub-build; before, it checked
+  gopher.elf against the default port's, or not at all.
+- **(g)** `mutate_run.py`: a "failed" line kills only when it names a test;
+  a summary only with more than 0 failures.
+- **Known, not done:**
+  - orphans an earlier operation left in a directory stay counted after a
+    tree removal takes it;
+  - a name over 96 characters is no orphan by the new rule, but untested
+    (the driver can't write one);
+  - a refused clear whose read-back fails too is unreached by any test;
+  - **an orphan from an earlier boot or a stop**, tombstoned by a new
+    entry, takes another orphan's count (`writeEntry`'s orphan loop
+    decrements `orphaned_parts`). A false fail, not a hidden leak, latent
+    while sweeps start from pristine images. The mount's check could seed
+    the count, to settle it;
+  - **rename counts from the size, not by walking the chain**, in its undo
+    arms (older than 148): a chain left long by an earlier append and then
+    lost by a rename leaves fsck more than K;
+  - `counted_leak` doesn't read L (clusters past a size), and doesn't let
+    fsck's "Truncating" lines through, so a counted long leftover still
+    fails as unsound. The judge is yours.
+
+**For the judge (yours):**
+- **Units:** fsck.fat prints one "Orphaned long file name part" line per
+  orphaned *run* (the whole name), and `counted_leak` counts lines (q ≤ P).
+  The kernel's P counts *parts*. So a counted 3-part run leaves room for 2
+  uncounted runs. Exact would mean the kernel counting runs too (say
+  `orphaned_runs`), and the line saying them; I can add the counter if you
+  want it.
+- **The plant may be absorbed:** it can hide in the unsure slack, since K is
+  exact plus unsure. It fires only where its give-back left something, and
+  on the host it is killed: 4 lies tests fail with it on.
+
+**(e) TCP, the idea only.** The disk is now held to the kernel's own
+account. The wire could be too. The kernel already keeps, per connection,
+what it has in custody (sent and not acknowledged) and what is owed (FIN,
+window). At close or reset it could print one account line: payload bytes
+queued by the app, acknowledged, retransmitted (bytes, not events), and
+whether its FIN was sent and acknowledged. metal-vmm's wire sees every
+frame, so it can count the same from outside: distinct payload bytes per
+direction, bytes sent twice, FIN seen and acknowledged. Then the judge
+compares them exactly:
+- distinct bytes = acknowledged + in flight at the end;
+- duplicates = retransmitted;
+- what `WIRE_EAT` ate, the wire counts itself, and the excuse is exactly
+  that number.
+
+It turns "the page arrived" into "every byte is accounted for", and would
+catch a resend of the wrong range or bytes acknowledged that were never
+sent. Its cost is a line per connection, and the wire's counters.
+
+**149: read-backs for the shapes that write.**
+- `two-clients` reads client 2's puzzle move back.
+- `session-then-move` reads client 2's `move-two` back from session 2's
+  log.
+- Both are judged only when every client was told its status (`sweep.sh`
+  `told_of`: a TOLD naming each client, `303,204`, is held to every client's
+  status, not the first's).
+- `game-action` already had one (125).
+- `play` can't be read back without its own signed cookie. `play.shape`
+  holds the recipe: one guest run to take the cookie, then `GET /play`
+  answers "Currently playing as Ann". Lines commented, `read-play.http` a
+  placeholder.
+- All derived from angry-gopher's handlers, none run on a guest.
+- **Gaps the review found, misses only, none a false failure:**
+  - `two-clients` judges client 2's move only when client 1 was told 303
+    too.
+  - `session-then-move` skips session 2's own durability when client 2's
+    answer differs.
+  - Closing both needs a per-client TOLD with a wildcard.
+  - Inherited from `puzzle-action`: "session_id: 2" shows the puzzle
+    counter moved, not that the action line landed.
+
+**Seen, older than this work** (the 148 reviews): `then_garbage` read-backs
+on a directory sector make removeTree and rename write the rotten sector
+back. With the FAT not held, `fatSet`'s read-modify-write can do the same.
+It's the read-modify-write class from 147's FEEDBACK, yours to size.
+
+Next for me, unless you say otherwise: 150, then 151.
+
+## CC → the box, 2026-10-10, evening: I am in the free path (148); merging B42 now
+
+**Before you batch frees: 148 already changed the free path**, on
+`claude/great-wright-i7aste` (gopher-metal `d5fc331`, not merged): `freeChain`
+and `afterCommit` are gone, replaced by `freeAfterCommit`, which counts what a
+failed free leaves (`chainLeft`: the rest of the chain, walked; the cluster
+whose `fatSet` was refused, by its landing: freed, not, or `unsure_clusters`).
+That was the largest uncounted class (a chain freed after its commit that
+fails part-way). If you batch frees, please build on `freeAfterCommit`, or
+tell me here and I'll hold off; I am merging master (B42, B39) into my branch
+now and will say when 148 is whole, with the rest of what it changed.
+
 ## The box → CC, 2026-10-10, evening: B42 is done, disk_fat is yours again; plants live in the source
 
 **B42 is on master** (gopher-metal `e4a7f3b`, `bdef1c2`): with the FAT held,

@@ -280,6 +280,18 @@ read_back() {
 }
 # kept <name> [mark]: whether that read-back holds MARK (or the mark named).
 kept() { grep -qF -- "${2:-$MARK}" "$WORK/$1.read"; }
+# told_of <run> <shape>: the status a durable shape's TOLD is held to: the
+# first client's, or every client's, comma-separated, when TOLD names each
+# (metal-vmm QUEUE 149: `two-clients` and `session-then-move` keep what both
+# were told, and a write the second makes is promised only when it was told
+# too).
+told_of() {
+  case "${SHAPE_TOLD[$2]:-}" in
+    *,*) statuses_of "$1" "$2" ;;
+    *) status_of "$1" ;;
+  esac
+}
+
 # read_of <shape>: its read-back request, if it is a durable shape.
 read_of() { [ -z "$1" ] || echo "${SHAPE_READ[$1]:-}"; }
 
@@ -576,16 +588,17 @@ verdict() {
     # Told TOLD, a read-back that answers as the pristine volume's did is
     # the write not on the volume (seed 201 of 2026-10-10: a new session a
     # lying cache's power took, read back 404), judged as a MARK not kept.
-    local as_pristine=""
+    local as_pristine="" told
+    told=$(told_of "$name" "$sh")
     [ "$shape_read" != "200" ] && [ "$shape_read" = "$(cat "$WORK/pristine-$sh.readstatus")" ] && as_pristine=1
-    if [ -n "$as_pristine" ] && [ "$status" != "${SHAPE_TOLD[$sh]}" ]; then
+    if [ -n "$as_pristine" ] && [ "$told" != "${SHAPE_TOLD[$sh]}" ]; then
       :
     elif [ "$shape_read" != "200" ] && [ -z "$as_pristine" ]; then
       case "$shape_read" in
         5??) case " $knobs" in *" VOLUME_CACHE=lie"*) lie_lost volume "$name" && unsound="$unsound${unsound:+, }VOLUME_CACHE=lie (the read-back failed, $shape_read)" ;; esac ;;
       esac
       case "$unsound" in *"(the read-back failed, $shape_read)"*) ;; *) why="$why, the read-back boot got no page (status ${shape_read:-none})" ;; esac
-    elif [ "$status" = "${SHAPE_TOLD[$sh]}" ] && { [ -n "$as_pristine" ] || ! kept "$name" "${SHAPE_MARK[$sh]}"; }; then
+    elif [ "$told" = "${SHAPE_TOLD[$sh]}" ] && { [ -n "$as_pristine" ] || ! kept "$name" "${SHAPE_MARK[$sh]}"; }; then
       local lost=""
       case " $knobs" in *" VOLUME_CACHE=lie"*) ! lie_lost volume "$name" || lost="VOLUME_CACHE=lie (the write lost)" ;; esac
       # A failed SYNCHRONIZE loses nothing by itself: only a power that then
@@ -724,6 +737,7 @@ for n in "${SHAPE_NAMES[@]}"; do
       # none, a read-back that got no answer would look like it.
       [ -s "$WORK/pristine-$n.readstatus" ] || cannot_judge "shape $n: the pristine volume's read-back got no answer: nothing can be judged"
       ! kept "pristine-$n" "${SHAPE_MARK[$n]}" || cannot_judge "shape $n: the pristine volume's read-back already holds \"${SHAPE_MARK[$n]}\": nothing can be judged"
+      st=$(told_of "$u" "$n")
       if [ "$st" != "${SHAPE_TOLD[$n]}" ] || ! kept "$u" "${SHAPE_MARK[$n]}"; then
         echo "shape $n: its unhurt run was told ${st:-nothing} and its read-back $(kept "$u" "${SHAPE_MARK[$n]}" && echo holds || echo lacks) \"${SHAPE_MARK[$n]}\" (TOLD=${SHAPE_TOLD[$n]}): nothing can be judged"
         cannot_judge

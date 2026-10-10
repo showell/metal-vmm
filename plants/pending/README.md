@@ -7,5 +7,6 @@
 kernel per name with `-Dplant=<name>`; there are no patches here any more.
 
 A plant the judge cannot see yet stays out of the `Plant` enum until it
-can; none is waiting now. `disk_write_swallowed` and `net_goback_byte`
-stand.
+can; none is waiting now. `disk_write_swallowed`, `net_goback_byte` and
+`counted_leak_short` (CC, QUEUE 148(d): a failed give-back counted one
+cluster short, which `counted_leak` must not excuse) stand.

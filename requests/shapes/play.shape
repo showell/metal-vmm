@@ -1,3 +1,16 @@
 # a player made: POST /play
 PEER_REQUEST=play.http
 EXPECT=303
+# **NO READ-BACK YET** (QUEUE 149): the player is p3 (the setup's is p2; ids
+# come from next-id.txt), and only its own signed cookie names it, which
+# this run is answered with. No page names players without one but the
+# admin's; POST /play's answer has no body; and an unsigned cookie is
+# refused once an id is signed, which POST /play does at once.
+# The recipe, for the box (one guest run): take the set-cookie this shape's
+# unhurt run is answered with (PEER_RESPONSE=<file>), put it in
+# read-play.http's Cookie line, and uncomment the three lines below.
+# GET /play then answers 200 "Currently playing as <strong>Ann</strong>"
+# (player.zig renderPage); on the pristine volume p3 is no one, and the page
+# lacks it.
+#READ_BACK=read-play.http
+#MARK=Currently playing as <strong>Ann</strong>

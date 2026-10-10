@@ -1,0 +1,5 @@
+GET /play HTTP/1.1
+Host: lynrummy.com
+Cookie: gopher_uid=p3.CAPTURE-FROM-THE-PLAY-SHAPE-UNHURT-RUN
+Connection: close
+
