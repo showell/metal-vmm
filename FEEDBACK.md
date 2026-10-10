@@ -7,6 +7,58 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10, overnight: 139-142 done
+
+All pushed to `claude/great-wright-i7aste` in gopher-metal (merged with
+master through `17eb459`). After your `17eb459` lesson I built every target:
+`kernels`, `native`, `droplet` and `gopher` over a fresh `port.sh` port.
+**140 had broken `native`**: `native/serve.zig` named the old `fin` enum.
+Fixed in `1d28d4c`. Nothing else broke.
+
+**140, Fin as a machine (`ccd9f7b`):**
+- `src/machine.zig`: `Machine(name, State, Event, initial, edges)`, with
+  its own tests. It imports only the SDK. `fire` is one inline switch over
+  every cell, so each cell is its own site.
+- `tcp.Fin` is none, queued, sent, **resending**, acknowledged, with 7
+  edges. `fin_ever_sent` is gone, and so is `tcp_check`'s
+  `fin_sent_before_queued`, which can no longer be written.
+- `tools/lint_machine.py` runs in `zig build test`. Four plants are refused.
+- A planted forbidden transition fails all six `tcp_test` starts at its
+  cell.
+- **The sweep's report shows every cell.** One edge is a MISS: `resending
+  --fin_acknowledged--> acknowledged`, the first FIN's ACK after a go-back.
+  It was never reached in about 4000 FINs. A tcp_test drives it now.
+  That's the per-cell report earning its keep on its first run.
+- `mutate_tcp.py`'s three anchors on the old lines are remade, and all
+  three are killed.
+- **Second user:** I looked at `LongName` and `Landing`, and neither fits
+  naturally tonight. LongName's table would be nearly full: every state
+  takes every event. Its value would be the coverage report alone, which
+  isn't nothing (has a damaged run ever been reopened by a new last part?).
+  Landing is a verdict assigned once, not a state that moves. So no SDK
+  move yet.
+
+**141, tcp.zig:** `Revivable.used` became `?Revivable`; `resent_early`
+became `duplicates` (counting, answered); `probe` became (none, owed).
+**Left, and why:**
+- `fin_acknowledged` is a predicate's answer.
+- `peer_done` and `claimed` are read by `probe/gopher.zig` and
+  `ready.check`'s signature, outside tonight's files. **Proposed:**
+  `peer_done` would be the next machine (the peer's half: open, finished),
+  or a two-value enum. Either touches probe/.
+
+**142, one test binary (`a345cd7`):** `src/unit_tests.zig`, with
+build.zig's `unit_files` as the list. The build refuses to configure if
+they differ.
+- Cold, same tests: with `-j2` (your 2 cores), 2m06s to **1m19s** wall
+  and 3m00s to 2m06s CPU. With `-j4` here, 1m26s either way, since one
+  large compile is the long pole.
+- Tests run 808, down from 1157. A file's tests used to run in every
+  binary that imported it.
+- `-Dtest-file` works as before. `fat-coverage` runs over the merged
+  binary: disk_fat.zig is at 98.2%, dirent at 100%.
+- **For B31:** if your 194 s scales like my `-j2`, expect about 120 s.
+
 ## CC → the box, 2026-10-10, overnight: progress (139 done, 141's disk_fat part done)
 
 Pushed to `claude/great-wright-i7aste` in gopher-metal, each step red first
