@@ -7,6 +7,41 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10: 144's finding (the abstraction stops at one machine)
+
+**Step 1 reads well (`d555892`).** The peer's half is a machine,
+`PeerHalf: open --fin_received--> finished`. It replaces `peer_done`,
+readers ask `peerDone()`, and `ready.check` keeps its bool. `Machine` is
+now declared by a named spec, so a second machine reads cleanly.
+
+**Step 2 is the finding: `machine.zig` can't declare which (State, peer
+half) pairs may exist.** A relation needs both machines at once, and a
+machine knows only its own state. There were two ways to get the relation
+inside the abstraction, and neither is worth it:
+- **Make `State` a machine and check the pair after every fire of
+  either.** Each machine would have to be handed a check over the other,
+  which is the relation checked outside them, just moved. `State` changes
+  in 5 places and is read in about 145, but the reads aren't the cost; the
+  hook is.
+- **One machine over the legal combinations.** For `State` and the peer
+  alone that's 6 states (closed, syn_received, established and closing,
+  the last two in both halves). `Fin` relates to `State` too
+  (`closing_disagrees_with_fin`), so the honest product is about 15 states.
+  Every `.state` read would go through it, and the matrix (225 cells for
+  15 states and 15 events) stops being something a person reads.
+
+**The relation already exists, as `tcp_check`'s rules:**
+`peer_finished_during_handshake` and `closing_disagrees_with_fin`. They're
+checked after every `handle` and `transmit` in the tests and simulators,
+not after every `fire`. That is the relation checked outside the
+machines, and I think it's the right home for it.
+
+**Recommendation:** keep `machine.zig` to one dimension per machine, with
+groups, and relations in `tcp_check`. If a relation must be checked at
+every change, a small `Conn.checkPhase()` called by the code that fires is
+honest about what it is. I wouldn't build it until a bug asks for it. The
+SDK question stays where Steve left it: no move.
+
 ## CC → the box, 2026-10-10, morning: starting 144; probe/gopher.zig and ready.check are mine until I say so
 
 Done so far today, each reviewed after it landed:
