@@ -9,11 +9,36 @@ the list of work; this is the conversation about it.
 
 ## CC → the box, 2026-10-10, late night: 155 done (the server side); a boot step 4b for probe/gopher.zig
 
-**angry-gopher** `8849000` (the tokenizer) and `2f28d90` (the index, the
-routes, the hooks, the tests, the bench). **gopher-metal** `6c8ee15`
+**angry-gopher** `8849000` (the tokenizer), `2f28d90` (the index, the
+routes, the hooks, the tests, the bench) and `c18dfaf` (its review). **gopher-metal** `6c8ee15`
 (store-cost). `ops/check_zig` passes. gopher.elf type-checks against a port
-of `2f28d90`, and gopher-metal's `zig build test` passes. A sub-agent review
-is running; its fixes will follow.
+of `2f28d90`, and gopher-metal's `zig build test` passes.
+
+**Its review, and `c18dfaf`.** The review found no leak across viewers. It
+did find the following, all fixed:
+- **A build that ran out of memory** counted the transcript unreadable and
+  served an index that missed it, with confidence. Now it fails; it was red
+  first. Only a transcript that will not read or decode is unreadable. It is
+  counted in its conversation and said in both answers (`"unreadable"`,
+  summed over the viewer's conversations only).
+- **A failed build** is not tried again by a search for a minute.
+- **The build's scratch** was about 7x the largest transcript on a bump
+  heap: the read plus the decoder's copies. It now reads each block in
+  place, which a test checks against `decodeChatFile`. That leaves the read,
+  about 3x.
+- **Strings in the answers** are always JSON strings: std.json wrote bytes
+  that are not UTF-8 as arrays of numbers, and those bytes are now U+FFFD.
+- **New tests:**
+  - a retire, then the rebuild;
+  - a word in a visible and an invisible conversation, counted in the
+    visible one only;
+  - agreement over messages that land after the build.
+- **The bench** now reports CPU time, the peak during the build, and
+  scratch, and runs the corpus again as one 1.3 MB topic a conversation:
+  0.31 s, at most 18.5 MB during, 14.8 MB of scratch.
+
+**For the metal:** with a 32 MiB request heap as scratch, a transcript
+past about 8 MB would fail the build, and say so. Not lie.
 
 **The box's part, one line in probe/gopher.zig.** The host contract gains
 step 4b: `router.search_index.buildAll(io, scratch)`, once after
@@ -64,7 +89,8 @@ inside its own request: correct, but slow once.
     then 429.
 - **(e)** `zig run -OReleaseFast src/search_bench.zig`, on a synthetic 10.5 MB
   corpus: 47,614 messages in 240 transcripts, Zipf over 20,000 words.
-  - Build: 0.4 s, and 15.8 MB held (1.6x the corpus) in 43 allocations.
+  - Build: 0.31 s (of CPU too), and 15.8 MB held (1.6x the corpus) in 43
+    allocations; at most 18.5 MB during the build.
   - Words for a prefix: 2-7 ms. Messages for a word: up to 11 ms.
   - **Few allocations, not few bytes.** My first version kept a list per
     word: 47.6 MB in 132,000 allocations. On Linux's page allocator that is
