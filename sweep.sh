@@ -509,13 +509,11 @@ answer_excuse() {
   # one that fired while this client's request was open (metal-vmm QUEUE
   # 138(d)). A refusal at boot, or during another client's request, is the
   # very bug class a later 5xx would be: an earlier refusal that breaks
-  # later writes.
+  # later writes. Which faults those are is metal-vmm's one list
+  # (reports.zig `During.names`); this keeps none of its own.
   case "$status" in 5??)
-    local during
-    during=$(during_of "$name" "$k")
-    for f in DISK_REFUSE DISK_CUT_AFTER DISK_TEAR DISK_ROT DISK_BAD_SECTOR VOLUME_CUT_AFTER VOLUME_SHORT_AT VOLUME_GONE_AT VOLUME_READ_ONLY_AT; do
-      case "$during" in *" $f "*) excuse="$excuse${excuse:+, }$f (a $status)" ;; esac
-    done ;;
+    local f
+    for f in $(during_of "$name" "$k"); do excuse="$excuse${excuse:+, }$f (a $status)"; done ;;
   esac
   if [ $less = yes ]; then
     # The first client's vanishing excuses the others' lesser answers too:

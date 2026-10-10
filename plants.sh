@@ -46,8 +46,9 @@ mkdir -p "$OUT"
 # gopher-metal's build.zig.zon finds the SDK at ../zig-coverage-sdk, so a
 # worktree here needs it beside it.
 [ -e "$OUT/zig-coverage-sdk" ] || ln -s "${COVERAGE_SDK:-$HOME/showell_repos/zig-coverage-sdk}" "$OUT/zig-coverage-sdk"
-# and its build finds angry-gopher's assets at ../angry-gopher.
-[ -e "$OUT/angry-gopher" ] || ln -s "${ANGRY_GOPHER:-$HOME/showell_repos/angry-gopher}" "$OUT/angry-gopher"
+# The angry-gopher checkout the port was made from, named to the build
+# (-Dgopher-root), which refuses a port that is not of it as it is now.
+ANGRY_GOPHER="${ANGRY_GOPHER:-$HOME/showell_repos/angry-gopher}"
 
 # The plants: PLANTS, or every one gopher-metal's build.zig names (its
 # `Plant` enum, `none` aside). A name is the enum's (disk_write_swallowed);
@@ -80,7 +81,7 @@ build() {
     wt="$OUT/build-$name"
     git -C "$GOPHER" worktree add -q --detach "$wt" "$commit" >&2 || return 2
     building="$wt"
-    (cd "$wt" && zig build gopher -Dcoverage $plant -Dgopher="$PORT") >&2 && cp "$wt/probe/gopher.elf" "$elf"
+    (cd "$wt" && zig build gopher -Dcoverage $plant -Dgopher="$PORT" -Dgopher-root="$ANGRY_GOPHER") >&2 && cp "$wt/probe/gopher.elf" "$elf"
     local ok=$?
     git -C "$GOPHER" worktree remove --force "$wt"
     building=""

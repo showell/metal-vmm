@@ -255,8 +255,8 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
       `search_index.drop`, `game_limits.forgetAll`: a handle to `defer`);
       `chat_chrome.begin`/`end` pairs (a `page(...)` wrapper).
 
-158. **Browsers keep the embedded JS, revalidating each use** (Steve,
-    2026-10-10; with or after 157). Today `chat.zig` `serveAsset` sends each
+158. **THE BOX'S, NOT CC'S (Steve, 2026-10-10 night: the box takes it, for v23; CC does 157).** **Browsers keep the embedded JS, revalidating each use** (Steve,
+    2026-10-10). Today `chat.zig` `serveAsset` sends each
     JS file with no `Cache-Control` and no `ETag`, so every page load downloads
     every file again (`chat_responsive.js` is 5.6 KB). Each embedded asset gets
     an `ETag` hashed from its bytes at compile time, and `Cache-Control:
