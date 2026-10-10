@@ -485,6 +485,15 @@ expect "148's line, a name of 3 exact parts" allowed "$(leak 0 1 0 3 0 0 0)"
 expect "148's line, 2 names of 3 parts" allowed "$(leak 0 2 0 3 0 0 0)"
 expect "148's line, a leak but no name of 3 exact parts" refused "$(leak 1 0 1 3 0 0 0)"
 expect "148's line, a leak and no name of 3 parts may be live" allowed "$(leak 1 0 1 3 0 0 3)"
+# 152's line: fsck's names held to R, not to P.
+runs() { # runs <orphan lines> <P> <R>: counted_leak's verdict
+  { echo "fsck"; for _ in $(seq 1 "$1"); do echo "  Orphaned long file name part \"x\""; echo "    Auto-deleting."; done; } > "$T/leak.sound"
+  echo "  the volume: 0 clusters left a counted leak, $2 long-name parts left orphaned in $3 runs, 0 FAT copy writes failed; of the clusters and parts, 0 and 0 may be live; 0 leaks of a size not known (K no ceiling while any); 0 clusters past a size (0 cleanups failed)" > "$T/leak.out"
+  counted_leak "$T/leak.sound" "$T/leak.out" "the volume" "$T/leak.img" > /dev/null && echo allowed || echo refused
+}
+expect "152's line, a name of 3 parts" allowed "$(runs 1 3 1)"
+expect "152's line, 2 names counted as 1 of 3 parts" refused "$(runs 2 3 1)"
+expect "152's line, 2 names of 3 parts" allowed "$(runs 2 3 2)"
 
 # **A CHAIN PAST ITS SIZE** (148(c)): fsck's in-use count 3, the FAT's taken
 # (a fake tools/fat_taken.py) 7, nothing reclaimed: 4 clusters past the size,

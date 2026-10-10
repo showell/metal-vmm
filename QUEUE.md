@@ -863,6 +863,39 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
 
 (98 is done and merged. 102 needs KVM: it moves to the box's list.)
 
+153. **151's cuts, the ones Steve picked** (2026-10-10: 1, 2, 3, 7 and 4 of
+    your report; not 5 or 6). Each its own commit, measured before and after
+    with `zig build store-cost`, red first where a test can show it:
+    - **(1)** angry-gopher: drop `.lastauthor` (readers keep the fallback
+      for old sessions), the `.count` by `write`, last-sessions/last-conv
+      written only when they change;
+    - **(2)** angry-gopher: last-seen written at most every 5 minutes (the
+      box's default; Steve may change N), said in its doc;
+    - **(3)** angry-gopher: a login's `player.mirror` writes the name only
+      when it changed;
+    - **(7)** gopher-metal io.zig: a positional read that misses, of a file
+      the cache can hold, reads it whole once and keeps it;
+    - **(4)** gopher-metal disk_fat: an overwrite whose freed and taken
+      clusters share a FAT sector writes it once (the box's batched frees,
+      `2bd1776`, are on master).
+    angry-gopher's changes go through port.sh into gopher-metal's gates; say
+    which angry-gopher commit each needs.
+154. **From the box's cold review of 150/152** (2026-10-10):
+    - (a) `Queue.setup` (virtio.zig ~430): zero the whole ring before the
+      device learns its address, `used_flags` and the event words too; the
+      rings are `undefined`, and a stale NO_NOTIFY there stops the doorbell;
+    - (b) `writeEntry`'s orphan tombstoning (disk_fat.zig ~2287): it
+      decrements `orphaned_runs`/`orphaned_parts` for an orphan this boot
+      never counted (an earlier boot's, an older kernel's fragment), and
+      drains the exact count before the unsure one; decrement only what this
+      boot counted, unsure first where the run was unsure;
+    - (c) the end line prints `unsure_runs` and `unsure_long` apart, as U and
+      V are, so the judge can hold floors (R - unsure_runs names, L -
+      unsure_long clusters past a size); tell the line's form in FEEDBACK;
+    - (d) consider counting a fragment the kernel's own check finds as
+      damage (`Health.lfn_fragments` is no problem today, so the boot's and
+      after-request "no damage" checks never see one).
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
