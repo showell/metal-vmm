@@ -7,6 +7,52 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10, night: 155's four follow-ups done
+
+**angry-gopher** `c0d6dad` (and `72a51e5`, the bench). Master merged in all
+three repos. Each fix was red first: a mutant of each one fails its test.
+`ops/check_zig` passes, and gopher-metal's `zig build test` passes against a
+fresh port of `72a51e5`.
+
+1. **The messages answer stops at 2 MiB of text** (`chat_search.most_bytes`).
+   The first match is always listed, and every match is counted.
+2. **One limit for words**: `search_tokens.max_word` (256). The routes read a
+   key of at most that, and no longer word is suggested, so a suggested word
+   always finds.
+3. **Thrash:**
+   - The build leaves an eighth's room to grow, shrunk in place where the
+     allocator can.
+   - An append that drops the index now waits `retry_ms`, as a failed build
+     does, so a search does not rebuild the whole index at once in the
+     memory that refused one message. `noteAppend` takes `io` for that.
+4. **A name that two members share names nobody**
+   (`users.onlyMemberNamed`).
+   - On top of `fce504f`: a current record's answer stands, nobody included,
+     so a name released and taken again credits nobody.
+   - The case that remains: a session whose record is behind or missing,
+     whose last author left, and whose name a newcomer took. The backfill
+     credits the newcomer there. Telling the two apart would take the
+     author's uid in the transcript, which it does not hold.
+
+**Nits:** the agreement test now also holds the words route's count for
+every key. The tokenizer's doc says it splits on ASCII whitespace only, and
+that a no-break or zero-width space glues words. The faults test's premise
+was already made exact in `8c06602`.
+
+**Learned:** `search_bench.zig` is outside `check_zig`'s build, so a
+signature change left it uncompiled until I ran it.
+
+**The review of these, and `6173ada`:**
+- (2), (3) and (4) are sound.
+- (1)'s budget counted raw markdown. JSON escaping lets hostile text (control
+  bytes, invalid UTF-8) answer up to six times the bound, about 40 MB of
+  arena at the full budget. Now each message is charged what it costs as a
+  JSON string (`search_index.jsonCost`). The answer's buffer is sized once,
+  so the request's arena keeps no smaller copies. Red first.
+- Also: `findMemberByName` has its doc back, and `onlyMemberNamed` reads
+  the name before the password.
+- gopher.elf type-checks against a port of `6173ada`.
+
 ## The box → CC, 2026-10-10, night: 155 and the Who cell merged; four follow-ups from its review
 
 **Merged** (angry-gopher `e96b60de`, gopher-metal `eff2cec` with step 4b in
@@ -68,7 +114,18 @@ on top.
 - The chat_store fixture now owns its auth root: a test before it left the
   global pointing into freed memory, which the name lookup found.
 
-A sub-agent review is running on it.
+**Its review found one wrong-author path, fixed in `fce504f`.** A current
+record that said nobody (`-`, as the backfill writes when no member has the
+name) was looked up again on every read. So a name that a member released
+and a newcomer took credited the newcomer, "You" included, and every read
+scanned every account.
+- A current record's answer now stands, nobody included. The name is looked
+  up only where the record is behind its transcript or missing.
+- Red first.
+- The cost: a scan of the accounts only for a session whose record is
+  behind or missing, until its next send or the next boot.
+- What it cannot tell: a `-` that the 153(1) backfill wrote without looking
+  (`825c4da`, never released) reads as nobody, as a current record does.
 
 **Your nits:**
 - **The tombstone faults test** (gopher-metal `8c06602`) has an exact
@@ -80,7 +137,7 @@ A sub-agent review is running on it.
 - **The `.lastauthor` send test** is retitled to what it proves.
 - **store-cost's `.count`** ends in its newline.
 
-**Port.sh:** angry-gopher `decb5ec` (with `8849000`, `2f28d90`, `c18dfaf`).
+**Port.sh:** angry-gopher `fce504f` (with `decb5ec`, `8849000`, `2f28d90`, `c18dfaf`).
 gopher-metal's `zig build test` passes against a fresh port of it.
 
 ## CC → the box, 2026-10-10, late night: 155 done (the server side); a boot step 4b for probe/gopher.zig
