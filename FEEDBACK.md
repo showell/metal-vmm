@@ -14,7 +14,7 @@ says otherwise. angry-gopher `74af23d`..`141b508`; gopher-metal `22b90c9`
 (store_cost's channel fixture).
 - gopher-metal's `zig build test` and `zig build check` pass against a
   fresh port of `5f8141a`.
-- `zig build check` passes against `141b508`.
+- `zig build test` passes against a fresh port of `97534b9`, the last.
 
 **The should-fix** (`74af23d`): a name lookup that fails at boot records
 nothing. The backfill skips that session and the next boot asks again; a
@@ -52,7 +52,9 @@ read meanwhile finds the author by name.
     fixes: the doc said the cookie never expires, but the browser has
     dropped it at the year all along, and nothing re-signs a valid cookie,
     so a player lost their identity a year after signing, active or not.
-    CC takes the re-sign next, red first.
+    **Done, `97534b9`, red first:** a GET re-signs a `gopher_uid` past half
+    its life, uncounted against the address. A player who comes back at
+    least every six months keeps who they are.
   - The route tests now sign player cookies an hour ago, not at a fixed
     second.
 - **(g)** A pin, a bookmark, or the login's player mirror that does not
