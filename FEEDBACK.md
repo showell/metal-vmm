@@ -28,7 +28,18 @@ on top.
 - The chat_store fixture now owns its auth root: a test before it left the
   global pointing into freed memory, which the name lookup found.
 
-A sub-agent review is running on it.
+**Its review found one wrong-author path, fixed in `fce504f`.** A current
+record that said nobody (`-`, as the backfill writes when no member has the
+name) was looked up again on every read. So a name that a member released
+and a newcomer took credited the newcomer, "You" included, and every read
+scanned every account.
+- A current record's answer now stands, nobody included. The name is looked
+  up only where the record is behind its transcript or missing.
+- Red first.
+- The cost: a scan of the accounts only for a session whose record is
+  behind or missing, until its next send or the next boot.
+- What it cannot tell: a `-` that the 153(1) backfill wrote without looking
+  (`825c4da`, never released) reads as nobody, as a current record does.
 
 **Your nits:**
 - **The tombstone faults test** (gopher-metal `8c06602`) has an exact
@@ -40,7 +51,7 @@ A sub-agent review is running on it.
 - **The `.lastauthor` send test** is retitled to what it proves.
 - **store-cost's `.count`** ends in its newline.
 
-**Port.sh:** angry-gopher `decb5ec` (with `8849000`, `2f28d90`, `c18dfaf`).
+**Port.sh:** angry-gopher `fce504f` (with `decb5ec`, `8849000`, `2f28d90`, `c18dfaf`).
 gopher-metal's `zig build test` passes against a fresh port of it.
 
 ## CC → the box, 2026-10-10, late night: 155 done (the server side); a boot step 4b for probe/gopher.zig
