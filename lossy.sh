@@ -15,6 +15,8 @@ set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
 PROBE="${1:-http}"
+. "$HERE/tools/fresh.sh"
+fresh_vmm "$HERE"
 VMM="$HERE/zig-out/bin/metal-vmm"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT

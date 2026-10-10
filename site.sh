@@ -26,6 +26,9 @@ PATH_WANTED="${1:-/}"
 # differ by design.
 ROUTES="/ /driving /tutorial /chess /steve-resume /steve-resume.pdf \
 /safari_download /nope /drivingX /login /login/full /admin"
+. "$HERE/tools/fresh.sh"
+fresh_vmm "$HERE"
+fresh_kernel "$GUESTS/gopher.elf" "$(dirname "$GUESTS")"
 VMM="$HERE/zig-out/bin/metal-vmm"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT

@@ -109,11 +109,18 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # report; a night stops on 2 and goes on after 1.
 cannot_judge() { [ $# = 0 ] || echo "$*"; exit 2; }
 GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
+# shellcheck source=tools/fresh.sh
+. "$HERE/tools/fresh.sh"
+# The kernel and metal-vmm by default are this checkout's and gopher-metal's
+# as they are now, or the sweep says why not (tools/fresh.sh); one handed in
+# (KERNEL=, VMM=: plants.sh, nightly.sh, sweep_test.sh's fakes) is the caller's.
+[ -n "${KERNEL:-}" ] || fresh_kernel "$GUESTS/gopher.elf" "$(dirname "$GUESTS")"
 KERNEL="${KERNEL:-$GUESTS/gopher.elf}"
 SITE="${SITE:-$HOME/build/gopher-metal/probe/gopher/pristine.img}"
 PATH_WANTED="${PATH_WANTED:-/}"
 FIRST="${1:-1}"
 LAST="${2:-100}"
+[ -n "${VMM:-}" ] || fresh_vmm "$HERE"
 VMM="${VMM:-$HERE/zig-out/bin/metal-vmm}"
 COVERAGE_SDK="${COVERAGE_SDK:-$HERE/../zig-coverage-sdk}"
 REPORT="${REPORT:-$COVERAGE_SDK/tools/report.py}"

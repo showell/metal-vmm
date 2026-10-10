@@ -20,6 +20,8 @@ HOW_MANY="${2:-20}"
 # peer makes; a probe brings its own small disk and answers nobody.
 SITE="${SITE:-$HOME/build/gopher-metal/probe/gopher/pristine.img}"
 FETCH=""
+. "$HERE/tools/fresh.sh"
+fresh_vmm "$HERE"
 VMM="$HERE/zig-out/bin/metal-vmm"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT

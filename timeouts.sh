@@ -39,8 +39,11 @@
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
+. "$HERE/tools/fresh.sh"
+[ -n "${KERNEL:-}" ] || fresh_kernel "$GUESTS/gopher.elf" "$(dirname "$GUESTS")"
 KERNEL="${KERNEL:-$GUESTS/gopher.elf}"
 SITE="${SITE:-$HOME/build/gopher-metal/probe/gopher/pristine.img}"
+fresh_vmm "$HERE"
 VMM="$HERE/zig-out/bin/metal-vmm"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT

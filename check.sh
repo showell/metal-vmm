@@ -34,6 +34,8 @@ GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+. "$HERE/tools/fresh.sh"
+fresh_vmm "$HERE"
 VMM="$HERE/zig-out/bin/metal-vmm"
 [ -x "$VMM" ] || { echo "no $VMM; run: zig build"; exit 1; }
 
