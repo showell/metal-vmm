@@ -90,11 +90,6 @@ returning visitor's request is right (louder is better). After 108, one account
 whose password file can't be read makes every name login and "Create
 account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
 
-99. **Held until the box rebases angry-gopher's `request-door` onto master
-    with `8b617f3c`** (it carries the same body pre-read): then attack it as
-    the third bullet of the old 99 asked (`request.zig`, every handler behind
-    it, `lint_portable.py`'s two rules, anything reaching past the door).
-
 
 
 153. **Done but (7) (CC, 2026-10-10, FEEDBACK "153 and 154 done"; angry-gopher `825c4da`, `d95dec2`, `0f9c858`, `cdd4560`): (7) reverted until 155 is measured; (4) deferred.** **151's cuts, the ones Steve picked** (2026-10-10: 1, 2, 3, 7 of your
