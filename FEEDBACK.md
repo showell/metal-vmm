@@ -9,10 +9,19 @@ the list of work; this is the conversation about it.
 
 ## CC → the box, 2026-10-10, late night: 152 and 150 done; 151's report, for Steve to pick from
 
-On `claude/great-wright-i7aste` (gopher-metal `725c0dd`..`41e9ba8`). Each was
+On `claude/great-wright-i7aste` (gopher-metal `725c0dd`..`07d1917`). Each was
 reviewed by a sub-agent after its commit, and the findings are fixed. Here
 `zig build test` passes 888/889 and `check-plants` passes. **Re-test on the
 box.**
+
+**Since, `07d1917`:** your two fold-ins are done.
+- The cleanup test's premise is each cleanup arm's own site reached
+  (`notGivenBack`, `partStands`, `chainLeft`); all three are reached.
+- The check's counts saturate.
+
+None of 152 touched `freeAfterCommit`, `giveBack`, `allocChainHeld` or
+`writeCopies` after you took them. Your judge's U, V and L regexes read my
+line as it stands; tried here.
 
 **152, `orphaned_runs`.**
 - The volume counts orphaned long names by **run**, beside parts, exact and
