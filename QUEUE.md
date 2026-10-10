@@ -863,38 +863,100 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
 
 (98 is done and merged. 102 needs KVM: it moves to the box's list.)
 
-153. **151's cuts, the ones Steve picked** (2026-10-10: 1, 2, 3, 7 and 4 of
-    your report; not 5 or 6). Each its own commit, measured before and after
-    with `zig build store-cost`, red first where a test can show it:
-    - **(1)** angry-gopher: drop `.lastauthor` (readers keep the fallback
-      for old sessions), the `.count` by `write`, last-sessions/last-conv
-      written only when they change;
-    - **(2)** angry-gopher: last-seen written at most every 5 minutes (the
-      box's default; Steve may change N), said in its doc;
+153. **151's cuts, the ones Steve picked** (2026-10-10: 1, 2, 3, 7 of your
+    report; 4 deferred past v23; not 5 or 6). Revised after a cold review of
+    the queue. Each its own commit, measured before and after with `zig
+    build store-cost`, red first where a test can show it:
+    - **(1)** angry-gopher: **drop `.lastauthor`, its writes and its reads.**
+      The boot pass (`backfillSidecars`) already copies it into `.count`'s
+      uid, so no session needs it after one boot. Where `.count` is stale
+      (`number > c.count` in `chat_store.zig`'s last-message path, and
+      recent.zig's same branch), the author is unknown: answer `""`, never
+      an older author (which could show "You" wrongly). The `.count` by
+      `write`, not `replace`: safe because its size check catches a torn
+      sidecar on either host; say so in its doc. `last-sessions/<conv>` and
+      `last-conv` written only when they change: `setUserLastSession` reads
+      the file (free while cached) and compares first.
+    - **(2)** **drop last-seen** (Steve): both files, `users.touchUser`'s
+      `users_root/<id>/last-seen` and player.zig's own, their writes, and
+      their only readers, the admin rosters' "since" columns
+      (`admin.zig`, `admin_lynrummy.zig`).
     - **(3)** angry-gopher: a login's `player.mirror` writes the name only
-      when it changed;
+      when it changed.
     - **(7)** gopher-metal io.zig: a positional read that misses, of a file
-      the cache can hold, reads it whole once and keeps it;
-    - **(4)** gopher-metal disk_fat: an overwrite whose freed and taken
-      clusters share a FAT sector writes it once (the box's batched frees,
-      `2bd1776`, are on master).
+      the cache can hold, reads it whole once and keeps it. **Measure after
+      155**: its boot build reads every transcript whole and may warm the
+      cache already, making this unneeded; build it only if Recent still
+      reads from the disk then. A first Recent visit after boot reads up to
+      the cap per transcript inside one handler: say what that costs.
+    - **(4) deferred** (Steve, after the review): an overwrite whose freed
+      and taken clusters share a FAT sector. ~12 ms a send, in the
+      allocation path; after v23, if ever.
     angry-gopher's changes go through port.sh into gopher-metal's gates; say
     which angry-gopher commit each needs.
-154. **From the box's cold review of 150/152** (2026-10-10):
-    - (a) `Queue.setup` (virtio.zig ~430): zero the whole ring before the
-      device learns its address, `used_flags` and the event words too; the
-      rings are `undefined`, and a stale NO_NOTIFY there stops the doorbell;
-    - (b) `writeEntry`'s orphan tombstoning (disk_fat.zig ~2287): it
-      decrements `orphaned_runs`/`orphaned_parts` for an orphan this boot
-      never counted (an earlier boot's, an older kernel's fragment), and
-      drains the exact count before the unsure one; decrement only what this
-      boot counted, unsure first where the run was unsure;
+154. **From the box's cold review of 150/152** (2026-10-10, revised):
+    - (a) `Queue.setup` (virtio.zig): zero the whole ring before the device
+      learns its address, `used_flags` and the event words too (the rings
+      are `undefined`, and a stale NO_NOTIFY there would stop the doorbell).
+      A margin, not a fix: your 150 report found the old order spec-safe.
+    - (b) `writeEntry`'s orphan tombstoning (find it by name): it decrements
+      `orphaned_runs`/`orphaned_parts` for an orphan this boot may never have
+      counted, and drains the exact count before the unsure one. **No new
+      state**: decrement only when an exact count from this boot covers the
+      run (else leave the counts), unsure first where the run was unsure. The
+      counts are the judge's accounting, never the data: a wrong one fails
+      the judge falsely or passes it leniently.
     - (c) the end line prints `unsure_runs` and `unsure_long` apart, as U and
-      V are, so the judge can hold floors (R - unsure_runs names, L -
-      unsure_long clusters past a size); tell the line's form in FEEDBACK;
-    - (d) consider counting a fragment the kernel's own check finds as
-      damage (`Health.lfn_fragments` is no problem today, so the boot's and
-      after-request "no damage" checks never see one).
+      V are; tell the line's form in FEEDBACK. **The box changes the judge's
+      regexes** (floors: R - unsure_runs names, L - unsure_long clusters).
+    - (d) **report, don't build**: whether a fragment the kernel's own check
+      finds should count as damage. The box first reads production's
+      `/admin/host` for fragments an older kernel left (it needs a release
+      that reports them): if production holds one, damage would fail every
+      boot's check.
+155. **Search across every topic a person can see: the server side**
+    (Steve, 2026-10-10; design in essay-repl-server
+    `notes/a-key-value-store-for-gopher.md`, "Decisions since this draft";
+    revised after a cold review of the queue). angry-gopher, host-testable.
+    **The UI is later** (Steve): `chat_search.js` is untouched by 155.
+    **Small scale**: four people, ~10 MB of chat. Prefer the simplest thing
+    that answers from memory, and measure.
+    - **(a) The tokenizer, the server's alone** (the client will be dumb).
+      Words split on whitespace; ASCII lowercased; any byte >= 0x80 a word
+      character, two bytes or more. **Edge punctuation trimmed**: ASCII
+      punctuation, and the curly quotes and apostrophes phones type
+      (U+2018-U+201D) and others like them (Steve: trim curlies and similar),
+      named in one table. URLs, phone numbers and markdown links are
+      refined later, not now. A pure Zig function with its own tests.
+    - **(b) The index, in memory, derived from the transcripts.** Behaviour,
+      not structure: words by prefix and messages by word, answered from
+      memory with no disk read (hold the message text, ~10 MB, rather than
+      offsets that cost a read each). Any structure: a per-conv map sorted
+      at query time is fine at this size. Built at boot after `backfillAll`,
+      one transcript at a time; updated by `appendMessage` as a message lands
+      (docs.zig and login.zig append through it too). **After a retire
+      applies, rebuild the whole index** (rare, and always right). No disk
+      writes.
+    - **(c) Agreement with the baseline, restated so it can hold:**
+      `/admin/search` matches substrings ("lay" finds "player"), the index
+      whole tokens. For seeded corpora and every key that is a token:
+      index(viewer, k) = the messages of baseline(viewer, k) whose tokens
+      include k. Corpora stay under the baseline's 500-hit cap and its
+      too-large skip, or the comparison says how it treats them.
+    - **(d) Two routes, each filtering by `chat_store.visibleConvs(viewer)`
+      on every request**, never by a list kept from an earlier one: words by
+      prefix (a count each, summed over visible convs only, at most 20
+      words), and messages for a word (conv, sid, id, from, date, markdown;
+      at most 500, every one counted). **Red test**: a word that appears only
+      in another pair's DM is neither suggested nor found. A crude per-user
+      rate limit (Steve): a few searches a second, which debounced typing
+      never meets.
+    - **(e) Measure, on the host:** CPU time and memory to build the index
+      over a synthetic ~10 MB corpus. The box measures the disk cost on
+      metal-vmm with production's request cost, and checks the watchdog's
+      patience with a boot a few seconds longer.
+    If boot gets annoying, say so in FEEDBACK before making it lazy: Steve's
+    fallback is the first search or an idle window.
 
 ## The box: open
 
