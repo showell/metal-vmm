@@ -365,8 +365,16 @@ DAMAGE_PROPS=("fat: at boot, a volume has no damage beyond what a stop leaves" "
 # on /admin/host, but fsck still finds them. More than counted fails. The
 # caller still holds every file the request does not touch to survive whole
 # (`untouched`). Echoes what it allowed.
+# **A FLOOR AS WELL AS A CEILING** (148's review): K and P are ceilings,
+# exact plus what may be live (U clusters and V parts, said after F). What
+# the kernel counted exactly landed, so fsck finds at least K - U clusters,
+# and at least one orphaned name where P - V parts are exact (fsck says one
+# line per name, the kernel counts parts: QUEUE 152 makes that exact).
+# Without the floor, an over-count is slack a real leak hides in. The slack
+# left is U: a replace whose commit's landing is unknown counts both the
+# old chain and the new one as may be live, though one of them is live.
 counted_leak() {
-  local n q d k p f rest line
+  local n q d k p f u v rest line
   rest=$(sed '1d' "$1" | grep -v "^  Reclaimed [0-9]* unused clusters\? (\|^  Orphaned long file name part \|^    Auto-deleting\.$\|^  FATs differ but appear to be intact\.$\|^    Using first FAT\.$\|^  Leaving filesystem unchanged\.$")
   [ -z "$rest" ] || return 1
   n=$(sed -n -E 's/^  Reclaimed ([0-9]+) unused clusters? \(.*/\1/p' "$1" | head -1)
@@ -379,8 +387,15 @@ counted_leak() {
   p=$(echo "$line" | sed -E 's/.*, ([0-9]+) long-name parts.*/\1/')
   f=0
   case "$line" in *" FAT copy writes failed"*) f=$(echo "$line" | sed -E 's/.*, ([0-9]+) FAT copy writes failed.*/\1/') ;; esac
-  [ "${n:-0}" -le "$k" ] && [ "$q" -le "$p" ] && { [ "$d" = 0 ] || [ "$f" -ge 1 ]; } && [ "${n:-0}$q$d" != "000" ] || return 1
-  echo "${n:-0} of $k clusters, $q of $p parts, FAT copies $( [ "$d" = 0 ] && echo agree || echo "apart ($f writes failed)")"
+  # v22's and B42's kernels count nothing as may be live: U and V are 0.
+  u=0 v=0
+  case "$line" in *" may be live"*)
+    u=$(echo "$line" | sed -E 's/.*of the clusters and parts, ([0-9]+) and [0-9]+ may be live.*/\1/')
+    v=$(echo "$line" | sed -E 's/.*of the clusters and parts, [0-9]+ and ([0-9]+) may be live.*/\1/') ;;
+  esac
+  [ "${n:-0}" -le "$k" ] && [ "${n:-0}" -ge $((k - u)) ] && [ "$q" -le "$p" ] && { [ $((p - v)) = 0 ] || [ "$q" -ge 1 ]; } &&
+    { [ "$d" = 0 ] || [ "$f" -ge 1 ]; } && [ "${n:-0}$q$d" != "000" ] || return 1
+  echo "${n:-0} of $k clusters ($u may be live), $q of $p parts ($v may be live), FAT copies $( [ "$d" = 0 ] && echo agree || echo "apart ($f writes failed)")"
 }
 
 # lie_lost <disk|volume> <name>: whether that disk's cache lost what it

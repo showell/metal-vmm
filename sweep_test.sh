@@ -77,7 +77,8 @@ printf 'pristine volume' > "$T/site.img"
 #           (QUEUE 127(c)), and a 500 when the volume holds "CORRUPT".
 #           46: a reset and no answer, nothing written, the read-back a
 #           404 as the pristine volume's: allowed, not told. 47: told 200, nothing written,
-#           a 404: FAIL. 48: told 200, a lying cache lost what it held and
+#           a 404 as the pristine volume's, so the write is not on the
+#           volume (250cc5d): FAIL. 48: told 200, a lying cache lost what it held and
 #           left the volume so the read-back is a 500: allowed (127(f)).
 #   53-55   the kernel's "no damage" property broken (QUEUE 128). 53: by a
 #           DISK_ROT that fired: allowed. 54: the same, and another property
@@ -457,8 +458,33 @@ printf 'READBACK404' > "$T/durable404/r.http"
 printf 'PEER_REQUEST=w.http\nEXPECT=200\nREAD_BACK=r.http\nMARK=written\n' > "$T/durable404/w.shape"
 notfound=$(SHAPES="$T/durable404" VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 46 48 2>&1)
 expect "seed 46" '^46 *w .*differs (allowed: PEER_RESET_AT)  ' "$notfound"
-expect "seed 47" '^47 *w .*FAIL: the read-back boot got no page (status 404)' "$notfound"
+expect "seed 47" '^47 *w .*FAIL: told 200 and the write is not on the volume' "$notfound"
 expect "seed 48" '^48 *w .*allowed: VOLUME_CACHE=lie (the read-back failed, 500)' "$notfound"
+
+# **COUNTED_LEAK, ITS CEILING AND ITS FLOOR** (148's review): fsck finds
+# no more than K clusters and no fewer than K - U, the exact part; an exact
+# orphaned part means at least one orphaned name. Each line of each kind.
+eval "$(sed -n '/^counted_leak() {$/,/^}$/p' "$HERE/sweep.sh")"
+leak() { # leak <reclaimed> <orphan lines> <K> <P> <F> [U V]: counted_leak's verdict
+  { echo "fsck"; [ "$1" = 0 ] || echo "  Reclaimed $1 unused clusters (512 bytes)."
+    for _ in $(seq 1 "$2"); do echo "  Orphaned long file name part \"x\""; echo "    Auto-deleting."; done; } > "$T/leak.sound"
+  if [ $# -ge 7 ]; then
+    echo "  the volume: $3 clusters left a counted leak, $4 long-name parts left orphaned, $5 FAT copy writes failed; of the clusters and parts, $6 and $7 may be live; 0 leaks of a size not known (K no ceiling while any); 0 clusters past a size (0 cleanups failed)"
+  else
+    echo "  the volume: $3 clusters left a counted leak, $4 long-name parts left orphaned, $5 FAT copy writes failed (0 cleanups failed)"
+  fi > "$T/leak.out"
+  counted_leak "$T/leak.sound" "$T/leak.out" "the volume" > /dev/null && echo allowed || echo refused
+}
+expect "B42's line, 2 of 2" allowed "$(leak 2 0 2 0 0)"
+expect "B42's line, 3 of 2" refused "$(leak 3 0 2 0 0)"
+expect "B42's line, 1 of 2 exact" refused "$(leak 1 0 2 0 0)"
+expect "148's line, 1 of 3, 2 may be live" allowed "$(leak 1 0 3 0 0 2 0)"
+expect "148's line, 1 of 3, 1 may be live" refused "$(leak 1 0 3 0 0 1 0)"
+expect "148's line, 4 of 3" refused "$(leak 4 0 3 0 0 3 0)"
+expect "148's line, a name of 3 exact parts" allowed "$(leak 0 1 0 3 0 0 0)"
+expect "148's line, 2 names of 3 parts" allowed "$(leak 0 2 0 3 0 0 0)"
+expect "148's line, a leak but no name of 3 exact parts" refused "$(leak 1 0 1 3 0 0 0)"
+expect "148's line, a leak and no name of 3 parts may be live" allowed "$(leak 1 0 1 3 0 0 3)"
 
 if [ $fail = 0 ]; then echo "sweep_test: every verdict and the summary as told"; fi
 exit $fail
