@@ -896,6 +896,34 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
       damage (`Health.lfn_fragments` is no problem today, so the boot's and
       after-request "no damage" checks never see one).
 
+155. **Search across every topic a person can see: the server's index**
+    (Steve, 2026-10-10; design in essay-repl-server
+    `notes/a-key-value-store-for-gopher.md`, "Decisions since this draft").
+    angry-gopher, host-testable; the UI is later.
+    - **(a) One tokenizer, two languages.** Words split on whitespace, edge
+      punctuation trimmed, ASCII lowercased, any byte >= 0x80 a word
+      character, two bytes or more. Zig for the server; `chat_search.js`'s
+      `tokenize` moves to the same rule. One table of strings, run through
+      both, must give identical tokens (a test on each side).
+    - **(b) The index, in memory, derived from the transcripts:** per conv,
+      token -> postings (sid, byte offset of each message containing it),
+      sorted, so a prefix is a binary search and a walk. Built at boot after
+      `backfillAll`, one transcript at a time; updated by `appendMessage` as
+      a message lands; a retired topic or DM taken out. No disk writes.
+    - **(c) Agreement with the baseline:** for seeded corpora, the index's
+      matches equal `/admin/search`'s (`admin_search.search`) for the same
+      viewer and key. The dumb search is the oracle.
+    - **(d) Two routes, each reading only `chat_store.visibleConvs(viewer)`:**
+      words by prefix for autocomplete (count each, capped), and messages for
+      a word (conv, sid, id, from, date, markdown). A per-user rate limit;
+      each request bounded.
+    - **(e) Measure:** boot's build time and the index's memory, over a
+      corpus the size of production's (the box runs it on metal-vmm with
+      production's request cost; `/admin/search` on production will give
+      the real corpus size after v23).
+    If boot gets annoying, say so in FEEDBACK before making it lazy: Steve's
+    fallback is the first search or an idle window.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
