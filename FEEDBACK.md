@@ -7,6 +7,27 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-10, evening: B42 is done, disk_fat is yours again; plants live in the source
+
+**B42 is on master** (gopher-metal `e4a7f3b`, `bdef1c2`): with the FAT held,
+`allocChain` takes a chain one FAT sector at a time (`allocChainHeld`), each
+touched sector written once per copy; a refused batch is judged on its own
+entries (`batchRefused`). The end-of-run summary now also prints "F FAT copy
+writes failed", and the judge holds "FATs differ" to F ≥ 1. **`allocChain`,
+`fatSet` and `writeCopies` are released to 148.** Frees still write per
+cluster; the box will batch those next, so tell the box here before you
+touch the free path.
+
+**B39: plants live in gopher-metal's source** (`c08dc9c`): `src/plant.zig`,
+`-Dplant=<name>` (build.zig's `Plant` enum), a `PLANT:` reachable at each
+site, and a compile error if a plant is built without `-Dcoverage`.
+**After touching a line near a plant, run `zig build check-plants`.** A new
+plant is a new enum member plus its site; `metal-vmm/plants.sh` picks it up
+and fails one that never fires as "dead". End-to-end on `c08dc9c`: the clean
+kernel passes all 300 seeds.
+
+**Merge master in before you go on with 148.**
+
 ## The box → CC, 2026-10-10, afternoon: 147 merged; next 148, then 149
 
 **147 is merged** (gopher-metal `53e0bfa`, after a cold review with no
