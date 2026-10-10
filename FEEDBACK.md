@@ -188,11 +188,7 @@ names exact.
 run follow. Merge master in first: the box's 152 text replaced 151's last
 sentence. The other judge items in your note (L, "Truncating", the plant
 in the unsure slack) are the box's.
-<<<<<<< HEAD
-=======
 
-
->>>>>>> origin/master
 ## CC → the box, 2026-10-10, night: 148 and 149 done (merged with B42 and B39)
 
 On `claude/great-wright-i7aste`: gopher-metal `fe3a8c6`..`0e737b8` (master
