@@ -593,7 +593,7 @@ master first: the box's last disk_fat commits are `180462b` (NameTaken),
 `e2dbde6` (fatSet's verdict), `e021bed` (copy 0 written again), and the
 Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
 
-139. **P139(a): the ledger for clusters taken before a commit**
+139. **Done (CC, 2026-10-10): gopher-metal `532b748`, `e07eaa6` (two leaks found, red first).** **Was:** **P139(a): the ledger for clusters taken before a commit**
     ([STATE_TRACKING.md](STATE_TRACKING.md)), with the box's notes in
     FEEDBACK. In short:
     - Four endings, not three: committed by the entry's write; **linked
@@ -605,7 +605,7 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
     - Done when every public operation ends on the ledger's `always`, the
       faults tests pass, and both planted bugs fail at it.
 
-140. **P139(b): `tcp.zig`'s `Fin` as a declared machine, with one
+140. **Done (CC, 2026-10-10): gopher-metal `ccd9f7b`, `1d28d4c` (native), `b87b68c` (review).** **Was:** **P139(b): `tcp.zig`'s `Fin` as a declared machine, with one
     `sometimes` per legal cell and an `unreachable` per forbidden one.**
     - **Fold `fin_ever_sent` into the state, and delete the bool**
       (Steve, tonight: "be pretty ruthless about booleans... enums are
@@ -620,7 +620,7 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
       planted forbidden transition fails `tcp_test`, and a deleted test
       shows up as an unhit cell.
 
-141. **The rest of the boolean sweep in disk_fat** (Steve: enums over
+141. **Done (CC, 2026-10-10): gopher-metal `5ab69b8` through `1b60b8a`, `465c194`, `417584d`; `peer_done` and `claimed` left for 144.** **Was:** **The rest of the boolean sweep in disk_fat** (Steve: enums over
     booleans; predicates such as `isEnd`, `inData` and `isDirectory` stay
     bools).
     - Already done by the box: `Mirrors` (`found`, `repair`), grow's
@@ -639,7 +639,7 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
     - Then the same sweep for `tcp.zig`, beyond `fin_ever_sent`.
     - One commit per struct or function, naming each conversion.
 
-142. **Fewer test binaries** (your FEEDBACK `e87788d`; the box gives it to
+142. **Done (CC, 2026-10-10): gopher-metal `a345cd7`; 2m06s to 1m19s wall at -j2 (CC's measure).** **Was:** **Fewer test binaries** (your FEEDBACK `e87788d`; the box gives it to
     you, since nobody else touches `build.zig` tonight).
     - Measure first: a cold-cache `zig build test --summary all`, before
       and after.
@@ -649,6 +649,31 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
       binaries (or point `linecov.py` at the merged one).
     - Check `-Dtest-file` still works, and that one file's unreached site
       can't fail or hide in another's verdict.
+
+143. **P143(a): named groups of states in `machine.zig`** (CC's FEEDBACK
+    `3c751e6`; Steve and the box agree, 2026-10-10). A machine declares its
+    groups beside its edges (`.groups = .{ .owed = &.{ .queued, .resending
+    }, .numbered = &.{ .sent, .resending } }`), callers ask `in(.owed)`, and
+    a comptime check makes every state say which groups it is in, so a new
+    state is placed once. Replace the five `is(.a) or is(.b)` in `tcp.zig`
+    and `tcp_check.zig`. Red first where it finds a miss.
+144. **P143(b): a connection's closing phase as a machine** (CC's FEEDBACK
+    `3c751e6`; agreed 2026-10-10). Declare the peer's half (`open`,
+    `finished`) as a machine in place of `peer_done`, and which (`State`,
+    peer half) pairs may exist, checked after every `fire` of either. **It
+    is the test of the abstraction:** if it reads well, it scales to a
+    combined state; if it needs a product of machines or a relation checked
+    outside them, write that up as the finding and stop. You may touch
+    `probe/gopher.zig` and `ready.check` for it (the box hands them over for
+    this item); say so in FEEDBACK when you start and stop.
+145. **A failed rename keeps its source where the disk says it can**
+    (CC's FEEDBACK `da03f31`; agreed 2026-10-10). When rename's new entry is
+    refused and its read-back says `before`, write `from`'s first byte
+    back, undoing its tombstone; that write can fail too, so the promise
+    becomes "a failed rename may lose `from`" (a crash between the writes
+    still does, as the doc says). Update `store.zig`'s doc and STORE.md to
+    match. Red first: a rename whose new entry is refused, `before`, then
+    `from` still reads back whole.
 
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
