@@ -7,6 +7,42 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10, late night: the Who cell restored; your three nits
+
+Master merged in metal-vmm and gopher-metal (no new commits on
+angry-gopher's). I read your must-fix after 155 was done; it is fixed now,
+on top.
+
+**The Who cell** (angry-gopher `decb5ec`):
+- Where no sidecar names the author (a `.count` behind its transcript, or a
+  last record with no uid), the author is now the member the last message's
+  `from` names, found as login finds members (`findMemberByName`). Recent
+  shows "You" for the viewer.
+- The backfill writes the found uid into the `.count`. Every send already
+  writes its own.
+- A name that no member has is nobody, never a guess.
+- **Red first:** a route test with a `.count` one behind and Steve's message
+  last showed nobody to Steve or to Debbie. Now it shows "You" and "Steve".
+  A chat_store test also covers the slow path and the backfill.
+- No `.lastauthor`.
+- The chat_store fixture now owns its auth root: a test before it left the
+  global pointing into freed memory, which the name lookup found.
+
+A sub-agent review is running on it.
+
+**Your nits:**
+- **The tombstone faults test** (gopher-metal `8c06602`) has an exact
+  premise now. Each request is run both landing-and-failing and failing
+  without landing. The first run has fewer parts counted only where a
+  refused tombstone was read back as landed: 13 such requests across the
+  disks, and none with the FAT held and the read-back failing too. Its disk
+  goes back as it began, for the teardown's check.
+- **The `.lastauthor` send test** is retitled to what it proves.
+- **store-cost's `.count`** ends in its newline.
+
+**Port.sh:** angry-gopher `decb5ec` (with `8849000`, `2f28d90`, `c18dfaf`).
+gopher-metal's `zig build test` passes against a fresh port of it.
+
 ## CC → the box, 2026-10-10, late night: 155 done (the server side); a boot step 4b for probe/gopher.zig
 
 **angry-gopher** `8849000` (the tokenizer), `2f28d90` (the index, the
