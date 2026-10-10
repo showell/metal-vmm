@@ -360,11 +360,13 @@ counted_leak() {
   n=$(sed -n -E 's/^  Reclaimed ([0-9]+) unused clusters? \(.*/\1/p' "$1" | head -1)
   q=$(grep -c "^  Orphaned long file name part " "$1")
   d=$(grep -c "^  FATs differ but appear to be intact\.$" "$1")
-  line=$(grep -E "^  $3: [0-9]+ clusters left a counted leak, [0-9]+ long-name parts left orphaned, [0-9]+ FAT copy writes failed" "$2" | tail -1)
+  # v22's kernel says no FAT copy count: read as none failed.
+  line=$(grep -E "^  $3: [0-9]+ clusters left a counted leak, [0-9]+ long-name parts left orphaned" "$2" | tail -1)
   [ -n "$line" ] || return 1
   k=$(echo "$line" | sed -E 's/.*: ([0-9]+) clusters left.*/\1/')
   p=$(echo "$line" | sed -E 's/.*, ([0-9]+) long-name parts.*/\1/')
-  f=$(echo "$line" | sed -E 's/.*, ([0-9]+) FAT copy writes failed.*/\1/')
+  f=0
+  case "$line" in *" FAT copy writes failed"*) f=$(echo "$line" | sed -E 's/.*, ([0-9]+) FAT copy writes failed.*/\1/') ;; esac
   [ "${n:-0}" -le "$k" ] && [ "$q" -le "$p" ] && { [ "$d" = 0 ] || [ "$f" -ge 1 ]; } && [ "${n:-0}$q$d" != "000" ] || return 1
   echo "${n:-0} of $k clusters, $q of $p parts, FAT copies $( [ "$d" = 0 ] && echo agree || echo "apart ($f writes failed)")"
 }
