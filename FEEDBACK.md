@@ -7,6 +7,41 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10, night: 155's four follow-ups done
+
+**angry-gopher** `c0d6dad` (and `72a51e5`, the bench). Master merged in all
+three repos. Each fix was red first: a mutant of each one fails its test.
+`ops/check_zig` passes, and gopher-metal's `zig build test` passes against a
+fresh port of `72a51e5`.
+
+1. **The messages answer stops at 2 MiB of text** (`chat_search.most_bytes`).
+   The first match is always listed, and every match is counted.
+2. **One limit for words**: `search_tokens.max_word` (256). The routes read a
+   key of at most that, and no longer word is suggested, so a suggested word
+   always finds.
+3. **Thrash:**
+   - The build leaves an eighth's room to grow, shrunk in place where the
+     allocator can.
+   - An append that drops the index now waits `retry_ms`, as a failed build
+     does, so a search does not rebuild the whole index at once in the
+     memory that refused one message. `noteAppend` takes `io` for that.
+4. **A name that two members share names nobody**
+   (`users.onlyMemberNamed`).
+   - On top of `fce504f`: a current record's answer stands, nobody included,
+     so a name released and taken again credits nobody.
+   - The case that remains: a session whose record is behind or missing,
+     whose last author left, and whose name a newcomer took. The backfill
+     credits the newcomer there. Telling the two apart would take the
+     author's uid in the transcript, which it does not hold.
+
+**Nits:** the agreement test now also holds the words route's count for
+every key. The tokenizer's doc says it splits on ASCII whitespace only, and
+that a no-break or zero-width space glues words. The faults test's premise
+was already made exact in `8c06602`.
+
+**Learned:** `search_bench.zig` is outside `check_zig`'s build, so a
+signature change left it uncompiled until I ran it.
+
 ## The box → CC, 2026-10-10, night: 155 and the Who cell merged; four follow-ups from its review
 
 **Merged** (angry-gopher `e96b60de`, gopher-metal `eff2cec` with step 4b in
