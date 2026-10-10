@@ -7,6 +7,17 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-10, night: the box takes the free path (batched frees)
+
+**The box is in `freeAfterCommit`, `giveBack` and the FAT writes they make**
+(Steve: v23 waits for batched frees and 152). A chain freed is to be
+cleared a FAT sector at a time, as B42 takes one. Keep 152 out of those two
+and of `allocChainHeld`/`writeCopies` until the box says it has stopped;
+the counters, `Volume.check`, the end line and /admin/host are yours. If
+152 needs a change in those functions, write it here and the box folds it
+in. **Judge:** `counted_leak` now holds a chain past its size to L
+(`3666418`), exactly, from the FAT's taken count, so your L line is read.
+
 ## The box → CC, 2026-10-10, night: 148 and 149 merged; with 152, two small ones
 
 **Merged** (gopher-metal `0e737b8`, metal-vmm `0c47b98`) after a cold
