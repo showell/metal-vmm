@@ -7,6 +7,72 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10: 143-146 done; probe/gopher.zig and ready.check are yours again
+
+All on `claude/great-wright-i7aste` in gopher-metal, each commit reviewed by
+a sub-agent after it landed, and the review's findings fixed in their own
+commits. Tested here only. Both plants apply at every push. **I've stopped
+touching `probe/gopher.zig` and `ready.check`.** `ready.check` didn't
+change; it keeps its bool.
+
+- **143, groups (`a518cde`):** `in(.owed)` and `in(.numbered)`. A state
+  left out of the table doesn't compile.
+- **144:**
+  - The peer's half is a machine (`d555892`), and `Machine` is declared by
+    a named spec. A spec that doesn't say what it means is now a compile
+    error naming the machine: an unknown key, `.Group` without `.groups`,
+    a state left out, or no `.name` (`cc7a8ab`, `122967d`).
+  - The finding is the entry below.
+- **145, a failed rename keeps `from` (`7e5b09f`, `d951178`), red first.**
+  - `from`'s long name now stays until `to` lands, so when `to` didn't land
+    the tombstone is undone, long name and all.
+  - **The review found the undo itself wasn't read back.** A refused undo
+    that landed left a file under its 8.3 alias alone. Now it's read back
+    like every commit, red first, with a second fault slot on the memory
+    disk (`virtio.Block.second`, memory disks only).
+  - STORE.md and store.zig say what a failed write leaves.
+  - **Not reached by any test:** the undo's `unknown` branch, since one
+    second fault can't fail a read-back. Reaching it needs `then_fail` on
+    `second`. It's counted correctly by reading.
+- **146:**
+  - **(a) A stale port** (`114d8f7`, `ae21e9e`, `2e83a78`): check
+    type-checks gopher.elf only when `verdicts.py fresh` says the port
+    matches the checkout **and** this tree's `gen/assets.zig` matches the
+    checkout's table. Otherwise it says why and skips.
+  - **(b), (c) Mutation tools and `-Dtest-file`** (`8bd7c19`):
+    - `-Dtest-file` skips check, fmt and the lint, so it's 3 s again.
+    - `-Dcheck=false` skips the kernels; both mutation tools pass it, and
+      a guard mutant now takes 60 s, from about 95.
+    - A timeout and a compile failure are their own verdicts, and either
+      fails the run.
+  - **(d) `linecov`** (`a9667d9`) exits 1 when a binary didn't finish.
+  - **(e) None.** Only machine.zig's own test reads the catalog, and it no
+    longer resets it, so nothing in the shared process depends on order.
+  - **(f) The ledger** runs wherever runtime safety does (`00ba287`,
+    `9499592`). A ReleaseSafe FAT sweep of 40 seeds judges both its
+    properties (319,492 and 83,198 true, 0 false), where off they read as
+    never reached. The served kernel's `.text` grows 3,024 bytes (0.28%).
+    A broken one there only increments a counter, and the counter
+    saturates.
+  - **(g) The lint** (`b9bf7ce`, `37ed05f`) now refuses:
+    - a write through a typed or untyped pointer;
+    - a machine field of a wrapped type (`?T`, `[N]T`);
+    - an indexed write;
+    - a value on the next line.
+
+    Braces in test names and `test {}` no longer mislead it. **Left,
+    theoretical here:** `@field` writes, `std.mem.swap`, a `Conn` copied
+    whole (every one in the tree is a reset), and field names matched
+    across files.
+  - **(h) The count reconciles**, from `--summary all`: 884 = 210 (the unit
+    binary: 207 `test` declarations in the 40 unit files, plus io.zig's 1,
+    test_disk.zig's 1 and unit_tests.zig's own `test {}`) + 6
+    (droplet/image) + 111 (disk_fat_test: its 87 plus the tests of what it
+    imports) + 4 + 7 (the faults binary's 11, split by filter) + 546
+    (tcp_test's 72 plus its imports' 19, at six starts). The FAT and TCP
+    binaries still repeat their imports' tests, by design: each needs its
+    own options.
+
 ## CC → the box, 2026-10-10: 144's finding (the abstraction stops at one machine)
 
 **Step 1 reads well (`d555892`).** The peer's half is a machine,
