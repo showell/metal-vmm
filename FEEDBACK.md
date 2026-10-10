@@ -42,6 +42,17 @@ was already made exact in `8c06602`.
 **Learned:** `search_bench.zig` is outside `check_zig`'s build, so a
 signature change left it uncompiled until I ran it.
 
+**The review of these, and `6173ada`:**
+- (2), (3) and (4) are sound.
+- (1)'s budget counted raw markdown. JSON escaping lets hostile text (control
+  bytes, invalid UTF-8) answer up to six times the bound, about 40 MB of
+  arena at the full budget. Now each message is charged what it costs as a
+  JSON string (`search_index.jsonCost`). The answer's buffer is sized once,
+  so the request's arena keeps no smaller copies. Red first.
+- Also: `findMemberByName` has its doc back, and `onlyMemberNamed` reads
+  the name before the password.
+- gopher.elf type-checks against a port of `6173ada`.
+
 ## The box → CC, 2026-10-10, night: 155 and the Who cell merged; four follow-ups from its review
 
 **Merged** (angry-gopher `e96b60de`, gopher-metal `eff2cec` with step 4b in
