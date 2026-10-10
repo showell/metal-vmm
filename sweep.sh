@@ -536,14 +536,19 @@ verdict() {
     # session 2 is made). A 5xx is the volume's state speaking, excused when
     # a lying cache's power took what it held, as a lost write is. Any other
     # read-back without a page fails.
-    if [ "$shape_read" != "200" ] && [ "$status" != "${SHAPE_TOLD[$sh]}" ] && [ "$shape_read" = "$(cat "$WORK/pristine-$sh.readstatus")" ]; then
+    # Told TOLD, a read-back that answers as the pristine volume's did is
+    # the write not on the volume (seed 201 of 2026-10-10: a new session a
+    # lying cache's power took, read back 404), judged as a MARK not kept.
+    local as_pristine=""
+    [ "$shape_read" != "200" ] && [ "$shape_read" = "$(cat "$WORK/pristine-$sh.readstatus")" ] && as_pristine=1
+    if [ -n "$as_pristine" ] && [ "$status" != "${SHAPE_TOLD[$sh]}" ]; then
       :
-    elif [ "$shape_read" != "200" ]; then
+    elif [ "$shape_read" != "200" ] && [ -z "$as_pristine" ]; then
       case "$shape_read" in
         5??) case " $knobs" in *" VOLUME_CACHE=lie"*) lie_lost volume "$name" && unsound="$unsound${unsound:+, }VOLUME_CACHE=lie (the read-back failed, $shape_read)" ;; esac ;;
       esac
       case "$unsound" in *"(the read-back failed, $shape_read)"*) ;; *) why="$why, the read-back boot got no page (status ${shape_read:-none})" ;; esac
-    elif [ "$status" = "${SHAPE_TOLD[$sh]}" ] && ! kept "$name" "${SHAPE_MARK[$sh]}"; then
+    elif [ "$status" = "${SHAPE_TOLD[$sh]}" ] && { [ -n "$as_pristine" ] || ! kept "$name" "${SHAPE_MARK[$sh]}"; }; then
       local lost=""
       case " $knobs" in *" VOLUME_CACHE=lie"*) ! lie_lost volume "$name" || lost="VOLUME_CACHE=lie (the write lost)" ;; esac
       case "$fired" in *" VOLUME_SYNC_FAIL "*) lost="$lost${lost:+, }VOLUME_SYNC_FAIL (the write lost)" ;; esac
@@ -555,14 +560,16 @@ verdict() {
     local read_status
     read_status=$(cat "$WORK/$name.readstatus")
     # Not 200: as a durable shape's (QUEUE 127(c), (f)).
-    if [ "$read_status" != "200" ] && [ "$status" != "$TOLD" ] && [ "$read_status" = "$(cat "$WORK/pristine.readstatus")" ]; then
+    local as_pristine=""
+    [ "$read_status" != "200" ] && [ "$read_status" = "$(cat "$WORK/pristine.readstatus")" ] && as_pristine=1
+    if [ -n "$as_pristine" ] && [ "$status" != "$TOLD" ]; then
       :
-    elif [ "$read_status" != "200" ]; then
+    elif [ "$read_status" != "200" ] && [ -z "$as_pristine" ]; then
       case "$read_status" in
         5??) case " $knobs" in *" VOLUME_CACHE=lie"*) lie_lost volume "$name" && excuse="$excuse${excuse:+, }VOLUME_CACHE=lie (the read-back failed, $read_status)" ;; esac ;;
       esac
       case "$excuse" in *"(the read-back failed, $read_status)"*) ;; *) why="$why, the read-back boot got no page (status ${read_status:-none})" ;; esac
-    elif [ "$status" = "$TOLD" ] && ! kept "$name"; then
+    elif [ "$status" = "$TOLD" ] && { [ -n "$as_pristine" ] || ! kept "$name"; }; then
       # A lie excuses a lost write only when the power took what the cache
       # held; a SYNCHRONIZE failure, only when one failed.
       case " $knobs" in *" VOLUME_CACHE=lie"*) ! lie_lost volume "$name" || excuse="VOLUME_CACHE=lie" ;; esac
