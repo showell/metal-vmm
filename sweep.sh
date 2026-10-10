@@ -766,13 +766,20 @@ verdict() {
 if [ -n "${SHAPES:-}" ] && [ -f "$SHAPES/setup" ]; then
   [ -n "${VOLUME_SITE:-}" ] || cannot_judge "a setup needs VOLUME_SITE=<image>"
   cp "$VOLUME_SITE" "$WORK/setup.vol"
-  while IFS= read -r req; do
-    req="${req%%#*}"; req="${req%"${req##*[![:space:]]}"}"
-    [ -n "$req" ] || continue
+  # Each line is `<request> <status it must answer>`: **A SETUP THAT FAILED
+  # STOPS THE SWEEP** (the normalization hunt): its status was printed and
+  # never checked, and every run then started from a volume without what the
+  # setup was to make (an expired cookie: no player).
+  while IFS= read -r line; do
+    case "$line" in "#"* | "") continue ;; esac
+    read -r req want extra <<< "$line"
+    [ -n "$want" ] && [ -z "$extra" ] || cannot_judge "setup: \"$line\" is not <request> <status>"
     cp "$SITE" "$WORK/setup.img"
     env PEER_REQUEST="$SHAPES/$req" VOLUME="$WORK/setup.vol" \
       timeout "$RUN_TIMEOUT" "$VMM" "$KERNEL" "$WORK/setup.img" "" / > "$WORK/setup.out" 2> "$WORK/setup.err"
-    echo "setup: $req, $(sed -n -E 's/^peer: ([0-9]+)( "|, [0-9]+ bytes$).*/status \1/p' "$WORK/setup.out" | head -1)"
+    got=$(sed -n -E 's/^peer: ([0-9]+)( "|, [0-9]+ bytes$).*/\1/p' "$WORK/setup.out" | head -1)
+    echo "setup: $req, status ${got:-none}"
+    [ "$got" = "$want" ] || cannot_judge "setup: $req answered ${got:-nothing}, not $want: every run would start from a volume without it"
   done < "$SHAPES/setup"
   rm -f "$WORK/setup.img"
   VOLUME_SITE="$WORK/setup.vol"

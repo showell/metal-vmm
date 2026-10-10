@@ -1,4 +1,5 @@
 # Sent first, unhurt, to the volume every run starts from: player p2 (whose
-# cookie the *.http files with one carry), then its game session 1.
-play.http
-new-session.http
+# cookie the *.http files with one carry), then its game session 1. Each line
+# is a request and the status it must answer, or the sweep stops.
+play.http 303
+new-session.http 200

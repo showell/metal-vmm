@@ -363,7 +363,7 @@ printf 'page a' > "$T/shapes/a.http"
 printf 'page b' > "$T/shapes/b.http"
 printf '# a\nPEER_REQUEST=a.http\nEXPECT=200\n' > "$T/shapes/a.shape"
 printf '  # b, a comment on a line of its own\nPEER_REQUEST=b.http\nEXPECT=200\n' > "$T/shapes/b.shape"
-printf 'a.http\n' > "$T/shapes/setup"
+printf 'a.http 200\n' > "$T/shapes/setup"
 shaped=$(SHAPES="$T/shapes" VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 20 21 2>&1)
 [ $? = 0 ] || { echo "FAIL: a sweep of two shapes did not pass:"; echo "$shaped" | sed 's/^/    /'; fail=1; }
 expect "the setup" '^setup: a.http, status 200' "$shaped"
@@ -558,6 +558,14 @@ printf 'X' > "$T/keys/k.http"
 printf 'PEER_REQUEST=k.http\nEXPECT=200\nEXPCT=404\n' > "$T/keys/k.shape"
 keys=$(SHAPES="$T/keys" VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 1 1 2>&1)
 expect "a misspelt shape key stops the sweep" "EXPCT is no shape key and no metal-vmm setting" "$keys"
+
+# **A SETUP THAT FAILED STOPS THE SWEEP** (the normalization hunt): the
+# fake machine answers a.http 200; a setup that wants 303 of it stops.
+mkdir -p "$T/badsetup"
+cp "$T/shapes/a.http" "$T/shapes/a.shape" "$T/badsetup/"
+printf 'a.http 303\n' > "$T/badsetup/setup"
+bad=$(SHAPES="$T/badsetup" VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 1 1 2>&1)
+expect "a setup that answers other than it must stops the sweep" "setup: a.http answered 200, not 303" "$bad"
 
 if [ $fail = 0 ]; then echo "sweep_test: every verdict and the summary as told"; fi
 exit $fail
