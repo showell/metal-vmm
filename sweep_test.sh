@@ -486,5 +486,23 @@ expect "148's line, 2 names of 3 parts" allowed "$(leak 0 2 0 3 0 0 0)"
 expect "148's line, a leak but no name of 3 exact parts" refused "$(leak 1 0 1 3 0 0 0)"
 expect "148's line, a leak and no name of 3 parts may be live" allowed "$(leak 1 0 1 3 0 0 3)"
 
+# **A CHAIN PAST ITS SIZE** (148(c)): fsck's in-use count 3, the FAT's taken
+# (a fake tools/fat_taken.py) 7, nothing reclaimed: 4 clusters past the size,
+# held to the kernel's L.
+printf '#!/bin/bash\necho "$FAKE_TAKEN"\n' > "$T/fat_taken"; chmod +x "$T/fat_taken"
+long() { # long <L> <second line> <third line> [taken]: counted_leak's verdict on one file truncated
+  printf '  1 files, 3/78736 clusters\n  /BIG.BIN\n%s\n%s\n  Leaving filesystem unchanged.\n' "$2" "$3" > "$T/leak.sound"
+  echo "  the volume: 0 clusters left a counted leak, 0 long-name parts left orphaned, 0 FAT copy writes failed; of the clusters and parts, 0 and 0 may be live; 0 leaks of a size not known (K no ceiling while any); $1 clusters past a size (0 cleanups failed)" > "$T/leak.out"
+  FAT_TAKEN="$T/fat_taken" FAKE_TAKEN="${4:-7}" counted_leak "$T/leak.sound" "$T/leak.out" "the volume" "$T/leak.img" > /dev/null && echo allowed || echo refused
+}
+past="    File size is 1000 bytes, cluster chain length is > 1024 bytes."
+cut="    Truncating file to 1000 bytes."
+expect "a chain 4 past its size, L 4" allowed "$(long 4 "$past" "$cut")"
+expect "a chain 4 past its size, L 5" allowed "$(long 5 "$past" "$cut")"
+expect "a chain 4 past its size, L 3" refused "$(long 3 "$past" "$cut")"
+expect "a truncation the FAT does not show, L 4" refused "$(long 4 "$past" "$cut" 3)"
+expect "a size past its chain (a file cut short), L 4" refused "$(long 4 "    File size is 1000 bytes, cluster chain length is 512 bytes." "    Truncating file to 512 bytes.")"
+expect "a chain past its size, no truncation said, L 4" refused "$(long 4 "$past" "    Contains a free cluster (116). Assuming EOF.")"
+
 if [ $fail = 0 ]; then echo "sweep_test: every verdict and the summary as told"; fi
 exit $fail
