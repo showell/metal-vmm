@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""**HOW MANY CLUSTERS THE FIRST FAT MARKS TAKEN**: neither free nor bad.
+"""**HOW MANY CLUSTERS THE FIRST FAT MARKS TAKEN**: every one not free.
 
     tools/fat_taken.py IMAGE
 
@@ -9,7 +9,8 @@ Prints one number.
 Why: fsck.fat -n says a chain longer than its file's size only as "cluster
 chain length is > N bytes", and counts what it would cut neither as in use
 nor as reclaimed. So the clusters past every size are exactly the taken ones
-less fsck's in-use count less what it reclaimed, which `sweep.sh`'s
+less fsck's in-use count less what it reclaimed (a cluster marked bad is
+in fsck's in-use count, so it is taken here too: 3666418's review), which `sweep.sh`'s
 counted_leak holds to the kernel's own count (metal-vmm 148(c)). fsck uses
 the first FAT, so this does too.
 
@@ -35,7 +36,7 @@ def reader():
 
 def taken(fat, image):
     v = fat.load(image)
-    return sum(1 for c in range(2, v.max_cluster + 1) if v.fat(c) not in (0, v.bad))
+    return sum(1 for c in range(2, v.max_cluster + 1) if v.fat(c) != 0)
 
 
 if __name__ == "__main__":
