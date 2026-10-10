@@ -764,6 +764,40 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
       `-Dcoverage`), so it is a check in coverage builds and sweeps, not in
       production; say so in its doc.
 
+148. **Exact accounting, across the kernel/judge boundary** (Steve, 2026-10-10;
+    the essay: https://github.com/showell/essay-repl-server/blob/master/notes/where-the-bugs-are-now.md).
+    The ledger made the kernel's own bookkeeping exact; gopher-metal
+    `9c72d62`, `84e98ea`, `bc459b3` began the same for what it leaves on
+    the disk (`leaked_clusters`, `orphaned_parts`, printed at a run's end),
+    and metal-vmm's judge now holds fsck's findings to them
+    (`counted_leak`, `632dc34`). Its first strict run found one uncounted
+    leftover within the hour. **The goal: zero slack, every leftover
+    counted exactly, and every judge excuse a comparison, never a blanket.**
+    - **(a) Exact counts (absorbs the box's B41).** An `.unknown` verdict now
+      counts its clusters as leaked though the write may have landed
+      (`commitRefused`, grow's and append's `.unknown`), slack an
+      uncounted leak can hide in. Say "left taken, may be live" apart from
+      "lost", or settle unknowns at the next mount's check, so the judge
+      holds fsck to the lost alone.
+    - **(b) Proved on the host, not only on a guest.** In the faults tests,
+      after every faulted operation, compare the volume's counters with
+      what `Volume.check` finds (leaked clusters, orphaned long-name parts,
+      anything else it reports): found must equal counted, not merely be
+      at most. Red first wherever they differ. This is the check you can
+      run; the box runs the judge's side.
+    - **(c) Every leftover kind has a count.** List what `check` (and
+      fsck.fat) can report after a failed write without a stop, and give
+      each one a counter and an end-of-run line, or say why it cannot
+      happen.
+    - **(d) Each judge excuse ships with a plant it must not excuse.** For
+      `counted_leak`: a plant that leaks a cluster without counting it.
+      Write the patch (or, after the box's B39, the in-source plant) and the
+      recipe; the box runs `plants.sh`.
+    - **(e) TCP, as a design note only:** custody and debt are its
+      bookkeeping already. Could the judge hold the wire to the kernel's
+      own account of bytes owed and sent, as it now holds the disk to its
+      counts? Write the idea in FEEDBACK; no code.
+
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
     the third bullet of the old 99 asked (`request.zig`, every handler behind
@@ -778,7 +812,7 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
 
 Each line's full text, with its history, is in the archive under its name.
 
-- **B41 (2026-10-10, a cold review of the box's judge changes): `leaked_clusters` over-counts, which is slack an uncounted leak can hide in.** Every `.unknown` verdict counts its clusters as leaked though the write may have landed: `commitRefused` (~1902-1923), grow's `.unknown => leftLeaked(1)` (~1696), append's `.unknown => leftLeaked(more)` (~2344); on a gone volume the read-back fails and is always unknown. The judge excuses fsck's reclaimed clusters up to that count (`counted_leak`), so a real leak of the same size beside an unknown passes. Make the count exact: say "left taken, may be live" apart from "lost", or have the next mount's check settle what was unknown, and judge only the lost.
+- **B41, moved to CC as 148(a) (2026-10-10).** **Was:** (2026-10-10, a cold review of the box's judge changes): `leaked_clusters` over-counts, which is slack an uncounted leak can hide in.** Every `.unknown` verdict counts its clusters as leaked though the write may have landed: `commitRefused` (~1902-1923), grow's `.unknown => leftLeaked(1)` (~1696), append's `.unknown => leftLeaked(more)` (~2344); on a gone volume the read-back fails and is always unknown. The judge excuses fsck's reclaimed clusters up to that count (`counted_leak`), so a real leak of the same size beside an unknown passes. Make the count exact: say "left taken, may be live" apart from "lost", or have the next mount's check settle what was unknown, and judge only the lost.
 - **B40 (2026-10-10): every shape that writes reads back what it was told it kept.** The first honest full plants run (metal-vmm `aa72cee`, gopher-metal `9c72d62`) caught `disk-write-swallowed` in 1 seed of the 12 runs it fired in: its earlier five "catches" were false alarms (the volume gone or read-only, judged unsound), and `register` had no read-back until `aa72cee`. Give `play`, `game-action`, `session-then-move` and `two-clients` read-backs where they have none (each its pristine answer without the mark), then measure the plant's catch rate again; a swallowed write that answers "saved" should fail wherever its write is one a read-back sees.
 - **B39 (2026-10-10, Steve: provisionally the box's, after v22): plants in the source, switched at compile time**, as FoundationDB's BUGGIFY but decided at build: a plant is a few lines at its site behind `if (comptime plant == .<name>)`, `plant` one build option defaulting to `.none`, so the release binary holds none of it (the gates check it was built `.none`). It ends the patches' staleness (a plant moves with its code; a broken one is a compile error), `zig build check` type-checks every variant, and `plants.sh` builds `-Dplant=<name>` instead of applying `plants/*.patch`. A plant that fires in no run fails as dead, apart from "fired and never caught". **Against:** gopher-metal's source carries deliberate bugs (it reverses "never to merge"), and one more build option; Steve worries CC gets confused by too many, so the box builds it and CC is told only how to run it. **Why:** this week `net-goback-byte` went stale after CC's TCP refactor and `disk-write-swallowed` sat on a path no seed reached (0 of 311 runs), each found only on the box.
 - **B38 (2026-10-10; BLOCKS v22, Steve): the FAT simulator got 67% slower since v21.** **Found (2026-10-10 morning):** not slower code, more work. The binaries run alone (no compile, under a light perf sample): v21 575 s, `b4463a9` 955 s, with the same profile (memset 38%, memcpy 9%, the same order below). `a74cbd7` (QUEUE 136) moved the tape-replay check out of `zig build test` into `properties` and scaled it to the FAT seed count (`@max(fat_seeds, 40)`), and each replay is two runs: 600 more runs at 300 seeds. With that loop removed, `b4463a9`'s sweep is 591 s compile and run together. **Decide (Steve):** the replays check the harness's determinism, not the FAT code; cap them at 40 seeds (what `zig build test` ran before 136) and the long tier gets its ~6 minutes back. Possibly the added instrumentation. The same 300 FAT seeds alone (`zig build properties` with every other seed count 0, ReleaseSafe, build included) took 600 s at v21 and 1,001 s at gopher-metal `b4463a9` (`~/b33/*.log`). Find the commit and the phase (the read-backs, the reserve's 8,304 refusals, the checks), then decide whether it is paid for.
