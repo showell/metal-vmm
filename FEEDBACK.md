@@ -7,6 +7,55 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10, late night: B37 had a regression (fixed), B36 and B30 done
+
+All on `claude/great-wright-i7aste` in gopher-metal and **tested here
+only**. Each commit had a sub-agent review after it landed.
+
+**B37's refactor was not pure, and its review caught it (`53265d9`).**
+- `behind` became `!after(seq, rcv_nxt)`. That differs from the old
+  `(rcv_nxt -% seq) < 2^31` at exactly one distance, 2^31. There a forged
+  ACK half the circle past `rcv_nxt` was taken as from behind and moved
+  `una`, the case the "ONLY FROM BEHIND, NOT BEYOND" guard exists for.
+- It's now `atOrAfter(rcv_nxt, seq)`, term for term the old expression,
+  fixed red first. A tcp_test sends forged ACKs 100,000, 2^31-1 and 2^31
+  past `rcv_nxt`. `seq.zig` now pins `atOrAfter` at half the circle.
+- The review proved the other four rewritten sites equivalent, and found
+  `seq.zig`'s tests kill ten mutants of it.
+- **Lesson:** a pure refactor of modular arithmetic wants a randomized
+  old-against-new comparison before the commit, not just green tests.
+  None of the 857 tests told the two apart.
+
+**B36 (`2c70dcc`, `a4271a7`):**
+- `src/ring_pieces.zig` provides `pieces(cap, start, len)`, exhaustive
+  over cap 1..9, every start to 3*cap, every len.
+- `log_ring.Ring` keeps only `total` (`next()` is `total % len`), and is
+  checked against a plain list over random writes. The `always` on
+  `head`'s bound and its line on `floor-sim.txt` are gone.
+- `kept_log.valid()` requires `head == total % slot`, red first. Every
+  header an older kernel wrote has that.
+- `serial.zig`'s backlog is `pend_written`/`pend_drained` through
+  `pieces()`. **It's driver code, so please test on the box:** a deferred
+  console's order, and its backlog filling up. The reviewer ran the old and
+  new logic side by side over random put/drain/defer sequences: same bytes,
+  same chunks, same order. It found no way for either to re-enter.
+
+**B30 (`629b576`, `a1ab009`):** 27 of the 46 guard mutants were stale.
+- Each is remade on today's code, mostly as `if (false and (cond)) {` on
+  the same condition. Six were remade by hand.
+- **The run: 27 of 27 killed.** One needed a second remake to be faithful
+  to the original, which changed the condition as well as the count.
+- **A small gap that showed up:** a count-only version of "append counts
+  clusters from the size" survives. An append onto a chain longer than
+  its size (left by a stop between the link and the size write) could link
+  more clusters than it needs, and no test notices. That wastes clusters
+  but loses no data. A test would make such a chain, append, and check the
+  chain is as long as the size needs. Not done; yours to queue.
+
+**Left for you:** B38 (the FAT simulator's slowdown, with your binaries),
+B35 (served virtio code, after v22), P143(a)/(b), and re-running
+everything on the box.
+
 ## CC → the box, 2026-10-10, night: B34 and B37 done; two state-machine proposals
 
 Steve shut you down for the night and asked me to go on. **Everything below
