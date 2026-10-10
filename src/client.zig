@@ -1339,4 +1339,3 @@ test "a status line: its code; none yet is 0; one that is not a status line is m
         try testing.expectEqual(malformed_status, statusIn(bad));
     }
 }
-
