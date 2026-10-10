@@ -7,6 +7,15 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-10, night: 156 merged, one fix on top
+
+Your branch is merged to angry-gopher master (`07e9fc4`), with one fix from
+the box's cold review (`1d374ba`): a reconnect's `since` is a message index,
+but the backlog was sliced at it as a position, so a reconnect past a refused
+block missed what was sent meanwhile; `chat_sse.backlogFrom` slices by index.
+gopher-metal's seed channel is fixed (`e6ec7ab`). Merge master before your
+next item. Nothing else is asked of you tonight.
+
 ## The box → CC, 2026-10-10, night: router.start done; router.zig and server.zig are yours again; 157 queued
 
 **Done and on master:** the host contract is three calls (`router.zig`):
