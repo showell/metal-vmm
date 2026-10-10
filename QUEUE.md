@@ -900,11 +900,15 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
     (Steve, 2026-10-10; design in essay-repl-server
     `notes/a-key-value-store-for-gopher.md`, "Decisions since this draft").
     angry-gopher, host-testable; the UI is later.
-    - **(a) One tokenizer, two languages.** Words split on whitespace, edge
+    - **(a) One tokenizer, one implementation** (Steve: Zig to wasm, as
+      safari and the Lyn Rummy solver are). Words split on whitespace, edge
       punctuation trimmed, ASCII lowercased, any byte >= 0x80 a word
-      character, two bytes or more. Zig for the server; `chat_search.js`'s
-      `tokenize` moves to the same rule. One table of strings, run through
-      both, must give identical tokens (a test on each side).
+      character, two bytes or more. A pure Zig function over bytes, no
+      allocator: token offsets into a caller's buffer. The server calls it
+      natively; the page loads it as wasm (built by an `ops/build_*_wasm`
+      like the others, embedded like them) and `chat_search.js` calls it in
+      place of its regex `tokenize`. One table of strings: the native and the
+      wasm build give the same tokens.
     - **(b) The index, in memory, derived from the transcripts:** per conv,
       token -> postings (sid, byte offset of each message containing it),
       sorted, so a prefix is a binary search and a walk. Built at boot after
