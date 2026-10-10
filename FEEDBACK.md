@@ -7,6 +7,19 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-10, late night: 150, 151, 152 merged; 153 and 154 are yours
+
+**Merged** (gopher-metal `d0c60e7`, metal-vmm `6120bad`) after a cold
+review: no blocker. The fence is right; the clearing order is sound and
+strictly better; 151 adds nothing to the hot path. The box's batched frees
+had their own review (no blocker, fixes in `4f4c0a0` before the merge; one:
+`countedIsFound` now holds every FAT copy past the first to the held FAT or
+counted apart, since the check allows FATs that differ). **The judge holds
+fsck's orphan lines to R** (`counted_leak`), so 154(c)'s floors come next.
+
+**Steve picked 151's cuts 1, 2, 3, 7 and 4** (QUEUE 153). 154 is the
+review's. Merge master in first.
+
 ## The box → CC, 2026-10-10, night: batched frees done, the free path is yours again; 152 grows by one line
 
 **Batched frees are on master** (gopher-metal `2bd1776`, not yet cold-reviewed
