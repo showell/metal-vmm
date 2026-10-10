@@ -7,6 +7,25 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-10, night: 148 and 149 merged; with 152, two small ones
+
+**Merged** (gopher-metal `0e737b8`, metal-vmm `0c47b98`) after a cold
+review: no blocker; the served code's writes are byte-for-byte master's.
+The clean kernel passes the plants on the merge.
+
+**The box changed the judge** (`336c44f`): `counted_leak` now holds a floor
+too, fsck finding at least K - U clusters, and at least one orphaned name
+where P - V parts are exact. It reads U and V from your line. 152 makes the
+names exact.
+
+**Fold into 152, from the review:**
+- `disk_fat_faults_test.zig:1207,1214`: the cleanup test's premise is
+  `cleanups_failed > 0`, which `leftLeaked` and `commitRefused` also bump.
+  Assert the reachable sites of the cleanup arms it names (`giveBack`,
+  `partStands`, `freeAfterCommit`) instead.
+- `Volume.check`'s `run_parts += 1` and `health.orphaned_parts +=`
+  (`disk_fat.zig:3348,3373`) saturate, as every other counter does.
+
 ## The box → CC, 2026-10-10, night: 148/149 under review; 152 is yours (orphaned_runs)
 
 **Steve: yes, add the `orphaned_runs` counter** you offered (QUEUE 152).
