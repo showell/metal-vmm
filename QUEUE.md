@@ -650,14 +650,14 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
     - Check `-Dtest-file` still works, and that one file's unreached site
       can't fail or hide in another's verdict.
 
-143. **P143(a): named groups of states in `machine.zig`** (CC's FEEDBACK
+143. **Done (CC, 2026-10-10, gopher-metal `a518cde`).** **Was:** **P143(a): named groups of states in `machine.zig`** (CC's FEEDBACK
     `3c751e6`; Steve and the box agree, 2026-10-10). A machine declares its
     groups beside its edges (`.groups = .{ .owed = &.{ .queued, .resending
     }, .numbered = &.{ .sent, .resending } }`), callers ask `in(.owed)`, and
     a comptime check makes every state say which groups it is in, so a new
     state is placed once. Replace the five `is(.a) or is(.b)` in `tcp.zig`
     and `tcp_check.zig`. Red first where it finds a miss.
-144. **P143(b): a connection's closing phase as a machine** (CC's FEEDBACK
+144. **Done (CC, 2026-10-10, `d555892`; the finding: machine.zig cannot declare a relation between machines, tcp_check's rules are that relation).** **Was:** **P143(b): a connection's closing phase as a machine** (CC's FEEDBACK
     `3c751e6`; agreed 2026-10-10). Declare the peer's half (`open`,
     `finished`) as a machine in place of `peer_done`, and which (`State`,
     peer half) pairs may exist, checked after every `fire` of either. **It
@@ -666,7 +666,7 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
     outside them, write that up as the finding and stop. You may touch
     `probe/gopher.zig` and `ready.check` for it (the box hands them over for
     this item); say so in FEEDBACK when you start and stop.
-145. **A failed rename keeps its source where the disk says it can**
+145. **Done (CC, 2026-10-10, `7e5b09f`, `d951178`; the box's `161ad2a`: an undo when the unlink found nothing wrote the boot sector, red first).** **Was:** **A failed rename keeps its source where the disk says it can**
     (CC's FEEDBACK `da03f31`; agreed 2026-10-10). When rename's new entry is
     refused and its read-back says `before`, write `from`'s first byte
     back, undoing its tombstone; that write can fail too, so the promise
@@ -675,7 +675,7 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
     match. Red first: a rename whose new entry is refused, `before`, then
     `from` still reads back whole.
 
-146. **The cold reviews of the overnight batch (139-142, B30, B33, B34,
+146. **Done (CC, 2026-10-10, except (h); see 147).** **Was:** **The cold reviews of the overnight batch (139-142, B30, B33, B34,
     B36, B37)** (the box, 2026-10-10; merged to master at gopher-metal
     `a4271a7`, no blocker found; served code clean, no format change).
     Each red first where it is a bug:
@@ -719,6 +719,50 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
     - Known, not bugs: `remove` may return `WriteFailed` after the file is
       gone (store.zig says an error is not an undo); `cleanups_failed`
       rises in cases that used to leak silently.
+
+147. **The cold reviews of 143-146** (the box, 2026-10-10; merged to
+    master at gopher-metal `161ad2a`, with the box's fix of the one served
+    bug, a rename's undo of an unlink that found nothing). Each red first
+    where it is a bug:
+    - **(a) `mutate_guards.py` can report every mutant killed with nothing
+      judged:** it never checks the unmutated tree is green first
+      (`mutate_tcp.py` does), so a red test, a dirty untouched file or a
+      lint/fmt failure kills every mutant; its last `else` (:227-228) calls
+      any unrecognised non-zero exit "killed", and :225 calls a compiler
+      killed by a signal (out of memory, 46 fresh `--cache-dir` builds on 8
+      GB) a kill. Check the baseline first; an unrecognised failure is its
+      own verdict and fails the run.
+    - **(b) `mutate_tcp.py:197` knows only a compile error in
+      `src/tcp.zig`:** one in `tcp_check.zig`, `tcp_sim.zig`, a test, the
+      lint or fmt falls to "killed" (:199). The default is "unclassified",
+      never "killed", in both tools.
+    - **(c) The rename-undo test can't fail on its title**
+      (`disk_fat_test.zig:2528`, "keeps exactly one file, under one whole
+      name"): it never asserts `names == 1`, nor `counted > 0` when not; a
+      file lost entirely, or under both names, passes. The test at :2490
+      refuses only "under neither name", never runs `check()`, and never
+      asserts a fault was injected.
+    - **(d) `verdicts.py`'s `fresh` and `pair`/`ids` disagree** on
+      `gen/assets.zig`, and `check`'s "NOT type-checked" line reaches only
+      `test-summary.txt`, which gates.sh greps for `tests passed|error`:
+      make gates.sh show it. gates.sh does not pass `-Dgopher-root`, so with
+      `GOPHER_ROOT` set elsewhere `ids` and `check` judge different
+      checkouts.
+    - **(e) Timeouts in both tools kill only zig's parent:** test binaries
+      may outlive it, and a child holding the pipe blocks `communicate()`.
+      Kill the process group.
+    - **(f) `lint_machine.py` misses** `|*m| m.* = ...`, an array element
+      written by index with no `.` before it (its comment says caught), a
+      type alias (`const FM = tcp.FinMachine`), a machine not declared as
+      `machine.Machine(`.
+    - **(g) A rename's refused tombstone that landed is not undone**
+      (`disk_fat.zig` ~:2598): nothing else was written yet, so the same
+      undo could keep `from`, the 145 promise where the disk says it can.
+    - **(h) 146(h) still open:** reconcile the 808 tests.
+    - **Noted, no change asked:** the ledger in the served kernel breaks
+      only a site counter (`on_broken` is null and the sink unset outside
+      `-Dcoverage`), so it is a check in coverage builds and sweeps, not in
+      production; say so in its doc.
 
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
