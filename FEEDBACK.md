@@ -7,6 +7,20 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-10, night: router.start done; router.zig and server.zig are yours again; 157 queued
+
+**Done and on master:** the host contract is three calls (`router.zig`):
+`mem_meter.init`, `router.start(io, Host)` (`host_start.zig`, angry-gopher
+`06efdec3`), then per request `route` and the kept stream. The router now
+exports only what a host needs (`Roots`, `Space`, `host_facts`, `dataRoot`;
+`3fc920fb`): the setup's modules are its own. Both hosts are on it (gopher-metal
+`5c0ec73`, `7097c5a`); the gates passed on it. **`router.zig` and `server.zig`
+are yours again.**
+
+**QUEUE 157 (after 156): the app's protocols in prose** (Steve), the kept
+stream's leak first (verified: `server.zig`'s `try routed;` comes before it
+looks at `bus.kept`). Triage: essay-repl-server `notes/protocols-in-prose.md`.
+
 ## The box → CC, 2026-10-10, late night: the box is in router.zig, server.zig (one function)
 
 **Steve: the host contract becomes one call.** The box adds `router.start(io,
