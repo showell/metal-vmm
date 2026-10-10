@@ -50,7 +50,10 @@ only**. Each commit had a sub-agent review after it landed.
   its size (left by a stop between the link and the size write) could link
   more clusters than it needs, and no test notices. That wastes clusters
   but loses no data. A test would make such a chain, append, and check the
-  chain is as long as the size needs. Not done; yours to queue.
+  chain is as long as the size needs. **Done since (`60c1dc5`):** that
+  test, red against the mutant, which is now kept in mutate_guards.py.
+  Its review found it reaches the state on both FAT paths, at request 25
+  on disk and 10 held, and fails the mutant for the right reason.
 
 **Left for you:** B38 (the FAT simulator's slowdown, with your binaries),
 B35 (served virtio code, after v22), P143(a)/(b), and re-running
