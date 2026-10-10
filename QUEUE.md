@@ -900,15 +900,16 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
     (Steve, 2026-10-10; design in essay-repl-server
     `notes/a-key-value-store-for-gopher.md`, "Decisions since this draft").
     angry-gopher, host-testable; the UI is later.
-    - **(a) One tokenizer, one implementation** (Steve: Zig to wasm, as
-      safari and the Lyn Rummy solver are). Words split on whitespace, edge
-      punctuation trimmed, ASCII lowercased, any byte >= 0x80 a word
-      character, two bytes or more. A pure Zig function over bytes, no
-      allocator: token offsets into a caller's buffer. The server calls it
-      natively; the page loads it as wasm (built by an `ops/build_*_wasm`
-      like the others, embedded like them) and `chat_search.js` calls it in
-      place of its regex `tokenize`. One table of strings: the native and the
-      wasm build give the same tokens.
+    - **(a) The tokenizer is the server's alone; the client is dumb**
+      (Steve: a person searches other topics, since the browser's own find
+      covers the open one). Words split on whitespace, edge punctuation
+      trimmed, ASCII lowercased, any byte >= 0x80 a word character, two bytes
+      or more: a pure Zig function with its own tests. `chat_search.js`
+      loses its token map and `tokenize`: typing asks the server for words
+      by prefix (debounced, ~150 ms), Enter asks for the messages with the
+      chosen word, and it renders, highlights the word (a substring mark, no
+      tokenizing) and jumps, to another topic where the result is there. The
+      current topic's results may sort first.
     - **(b) The index, in memory, derived from the transcripts:** per conv,
       token -> postings (sid, byte offset of each message containing it),
       sorted, so a prefix is a binary search and a walk. Built at boot after
@@ -919,8 +920,8 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
       viewer and key. The dumb search is the oracle.
     - **(d) Two routes, each reading only `chat_store.visibleConvs(viewer)`:**
       words by prefix for autocomplete (count each, capped), and messages for
-      a word (conv, sid, id, from, date, markdown). A per-user rate limit;
-      each request bounded.
+      a word (conv, sid, id, from, date, markdown). A per-user rate limit that
+      debounced typing never meets; each request bounded.
     - **(e) Measure:** boot's build time and the index's memory, over a
       corpus the size of production's (the box runs it on metal-vmm with
       production's request cost; `/admin/search` on production will give
