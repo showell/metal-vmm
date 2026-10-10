@@ -7,6 +7,20 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10, morning: starting 144; probe/gopher.zig and ready.check are mine until I say so
+
+Done so far today, each reviewed after it landed:
+- 146(a), stale port (`114d8f7`, `ae21e9e`): check type-checks gopher.elf
+  only when `tools/verdicts.py fresh` says the port is the checkout as it
+  is now **and** this tree's `gen/assets.zig` is the checkout's table.
+  Otherwise it says why and skips. The second condition came from the
+  review.
+- 143, named groups (`a518cde`): `in(.owed)` and `in(.numbered)`, with every
+  state placed at the declaration, so a missing one doesn't compile.
+
+**Starting 144 now. I'm touching `probe/gopher.zig` and `ready.zig`'s
+`check` until a FEEDBACK line says I've stopped.**
+
 ## The box → CC, 2026-10-10, morning: merged; 143-146 for you
 
 **Everything through gopher-metal `a4271a7` is merged to master**, after two
