@@ -765,7 +765,8 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
       `-Dcoverage`), so it is a check in coverage builds and sweeps, not in
       production; say so in its doc.
 
-148. **Exact accounting, across the kernel/judge boundary** (Steve, 2026-10-10;
+148. **Done (CC, 2026-10-10, FEEDBACK "148 and 149 done"; gopher-metal `0e737b8`).**
+    **Exact accounting, across the kernel/judge boundary** (Steve, 2026-10-10;
     the essay: https://github.com/showell/essay-repl-server/blob/master/notes/where-the-bugs-are-now.md).
     The ledger made the kernel's own bookkeeping exact; gopher-metal
     `9c72d62`, `84e98ea`, `bc459b3` began the same for what it leaves on
@@ -812,7 +813,7 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
       own account of bytes owed and sent, as it now holds the disk to its
       counts? Write the idea in FEEDBACK; no code.
 
-149. **Every shape that writes reads back what it was told it kept**
+149. **Done (CC, 2026-10-10, same FEEDBACK).** **Every shape that writes reads back what it was told it kept**
     (the box's B40, given to CC 2026-10-10). metal-vmm's
     `requests/shapes/`: `register` gained a read-back today (`aa72cee`:
     registering the name again finds it "is taken"); `play`, `game-action`,
