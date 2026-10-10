@@ -495,8 +495,13 @@ pub fn fired(peer: *const wire.Peer, drive: *const faults.Drive, volume: ?*const
 /// marked with it. A client opened and waiting behind another is marked too:
 /// the guest serves one at a time, so this errs toward excusing, never
 /// toward failing a run its fault did hurt.
+///
+/// **`names` IS THE ONE LIST OF THE FAULTS THAT EXCUSE A 5XX**: sweep.sh
+/// excuses one by whatever this line names, and keeps no list of its own. A
+/// failed SYNCHRONIZE CACHE is not on it: the kernel logs it and answers
+/// anyway (gopher-metal io.durable), so a 5xx after one is unexplained.
 pub const During = struct {
-    pub const names = [_][]const u8{ "DISK_REFUSE", "DISK_CUT_AFTER", "DISK_TEAR", "DISK_ROT", "DISK_BAD_SECTOR", "VOLUME_CUT_AFTER", "VOLUME_SHORT_AT", "VOLUME_GONE_AT", "VOLUME_READ_ONLY_AT", "VOLUME_SYNC_FAIL" };
+    pub const names = [_][]const u8{ "DISK_REFUSE", "DISK_CUT_AFTER", "DISK_TEAR", "DISK_ROT", "DISK_BAD_SECTOR", "VOLUME_CUT_AFTER", "VOLUME_SHORT_AT", "VOLUME_GONE_AT", "VOLUME_READ_ONLY_AT" };
     seen: [names.len]u64 = @splat(0),
     /// Per client, one bit per name.
     marked: [wire.max_clients]u16 = @splat(0),
@@ -515,7 +520,6 @@ pub const During = struct {
             n[6] = v.shortened;
             n[7] = v.gone_answered;
             n[8] = v.protected;
-            n[9] = v.sync_failed;
         }
         return n;
     }
@@ -598,6 +602,21 @@ test "a fault is said during a client's request only if it fired while that requ
         \\metal-vmm: fired during client 2: VOLUME_SHORT_AT
         \\
     , during.say(&buf));
+}
+
+test "a failed SYNCHRONIZE CACHE during a request is not said: the kernel answers anyway, so it excuses no 5xx" {
+    var peer = wire.Peer{};
+    var image: [4 * 512]u8 = undefined;
+    var vol = scsi.Scsi{ .image = &image, .sync_fail_at = 1 };
+    var during = During{};
+    var buf: [512]u8 = undefined;
+    peer.opened = 1;
+    peer.tcp.state = .established;
+    peer.tcp.asks = 1;
+    during.look(&peer, null, &vol);
+    vol.sync_failed = 1;
+    during.look(&peer, null, &vol);
+    try testing.expectEqualStrings("", during.say(&buf));
 }
 
 test "the faults that fired, and only those: a fault drawn and never come excuses nothing (metal-vmm QUEUE 124(e))" {
