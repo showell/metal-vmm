@@ -675,6 +675,51 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
     match. Red first: a rename whose new entry is refused, `before`, then
     `from` still reads back whole.
 
+146. **The cold reviews of the overnight batch (139-142, B30, B33, B34,
+    B36, B37)** (the box, 2026-10-10; merged to master at gopher-metal
+    `a4271a7`, no blocker found; served code clean, no format change).
+    Each red first where it is a bug:
+    - **(a) A stale port turns `zig build test` red** (build.zig:226-240):
+      `check` type-checks gopher.elf whenever a port and a checkout exist,
+      but the asset list is port.sh's `gen/assets.zig` while the files are
+      read from the live checkout, so an angry-gopher asset renamed since
+      the last port fails gopher-metal's tests (and both mutation tools).
+      Check against the port only when it matches the checkout (what
+      `tools/verdicts.py` already asks), else say so and skip, loudly.
+    - **(b) The mutation tools' verdicts can't count against you:**
+      `mutate_tcp.py:186-187` scores a 600 s timeout as killed, and `zig
+      build test` now analyzes every kernel; a mutant that did not compile
+      leaves the exit code alone (`mutate_tcp.py:260`,
+      `mutate_guards.py:216`), and `mutate_guards.py:211` tells killed from
+      not-compiled by the substring "panic", which kernel compile errors
+      can now contain. A timeout or a compile failure is its own verdict,
+      and a not-compiled mutant fails the run. `mutate_guards` builds each
+      of its 46 mutants in a fresh `--cache-dir` (:203), now with
+      native and droplet: measure, and give the mutation runs a way past
+      `check`.
+    - **(c) `-Dtest-file` is no longer seconds:** `test` depends on `check`
+      and the lint even then (build.zig ~284); one file's run should not
+      analyze every kernel. Its comment promises seconds.
+    - **(d) `linecov.py` exits 0 when a binary crashes** ("coverage is
+      short", :120-133); with every file's tests in one binary a crash
+      anywhere cuts the measure short silently. Fail it.
+    - **(e) One process for every file's tests:** machine.zig's test calls
+      `props.reset()` and swaps `on_broken`; a test that reads cumulative
+      catalog hits now depends on order. Find any such test, or say none.
+    - **(f) The ledger's `always` sites in ReleaseSafe:** the SDK exports
+      every site, so a ReleaseSafe or `-Dcoverage` catalog lists `ended` and
+      `balanced` as never evaluated. Does `long.sh`'s ReleaseSafe sweep or
+      report.py call them SILENT or fail? Decide: register them only in
+      Debug, or say why not.
+    - **(g) `lint_machine.py` misses** a write through a pointer (`p.* =`)
+      and a machine field typed other than `Name`/`x.Name`; braces in test
+      strings and an unnamed `test {` give false refusals.
+    - **(h) Reconcile 808 tests** with the ~210 `test` declarations in the
+      unit files, from `--summary all`'s per-binary lines.
+    - Known, not bugs: `remove` may return `WriteFailed` after the file is
+      gone (store.zig says an error is not an undo); `cleanups_failed`
+      rises in cases that used to leak silently.
+
 99. **Held until the box rebases angry-gopher's `request-door` onto master
     with `8b617f3c`** (it carries the same body pre-read): then attack it as
     the third bullet of the old 99 asked (`request.zig`, every handler behind
