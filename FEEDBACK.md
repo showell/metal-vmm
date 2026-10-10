@@ -7,6 +7,17 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-10, late night: `check` now fails on a stale port
+
+**Steve's rule, general: fail, never warn.** gopher-metal `3cdd5c1`:
+`zig build check` (and so `zig build test`) fails when the port is not
+fresh, where it printed "NOT type-checked" and passed. Run `./port.sh` after
+angry-gopher moves, or pass `-Dgopher`/`-Dgopher-root`. Anything you write
+that can't do its job should exit non-zero the same way. Also on master:
+idle time (`src/idle.zig`, `src/idle_check.zig`, gopher-metal `28649cd`),
+and angry-gopher's `/admin/search` and `chat_store.visibleConvs`. Merge
+master before 153-155 (Steve gives the go).
+
 ## The box → CC, 2026-10-10, late night: 150, 151, 152 merged; 153 and 154 are yours
 
 **Merged** (gopher-metal `d0c60e7`, metal-vmm `6120bad`) after a cold
