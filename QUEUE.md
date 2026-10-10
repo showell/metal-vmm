@@ -218,6 +218,43 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
       from is a bare 404. Decide each (a 404 page that says why, no resume
       pointer to a topic that is not there).
 
+157. **Protocols in prose, the app's** (Steve, 2026-10-10: CC's, after
+    156; triage in essay-repl-server `notes/protocols-in-prose.md`). Each a
+    sequence or a list that callers keep by hand becomes code that holds them
+    to it (Steve: a protocol is code, not a comment). Red first where a test
+    can show the drift. In order:
+    - **(a) A kept stream must be served or dropped, and the host must
+      remember** (verified): `server.zig` does `try routed;` before it looks
+      at `bus.kept`, so a handler that keeps its stream and then fails leaves
+      a subscriber in the Hub for ever. `route` answers the kept stream
+      (`!?Kept`, which Zig makes the caller use) and drops it on its own error
+      path; gopher-metal's `serveOne` follows (tell the box the signature in
+      FEEDBACK). The handlers' `var kept = false; defer if (!kept) close`
+      pairs become a handle `keep` consumes.
+    - **(b) Every game write must ask `admit` first** (`game_limits.zig`), and
+      nothing checks it; each caller recounts the bytes by hand ("as storage
+      writes it"), and `appendSessionJSONLLine` writes `compactJSON(body)`
+      where the caller counted `body`. One storage call per kind of write
+      that builds the line, admits its exact length and writes it (or a token
+      only `admit` returns, which the writers require).
+    - **(c) Three fixtures copy the eight globals `roots.point` sets**
+      (`roots.zig` Snapshot, `router.zig` UidSite, `chat_retire.zig` Saved),
+      restored by index; tests reassign one root by hand and leave the others.
+      A `pointForTest` returning a handle to `defer`, or the roots as one
+      struct, saved and restored in one assignment.
+    - **(d) Values the client copies from the server:** the upload caps and
+      accepted types (`chat_compose.js`, "must match"); search's word edges
+      and its 20-word cap (`chat_search.js`, the box's, already apart on
+      Unicode spaces: the server could send each result's mark offsets);
+      `ops/check_zig`'s list of built bundles beside `build.zig`'s. Hand them
+      to the page as data, or check them as `check_caddy_limits.py` checks
+      Caddy.
+    - **(e) Smaller:** the chat page's widgets "MUST run first / AFTER"
+      (`chat.js` ~326, 371: each `init` returns what the next needs); tests
+      that put module globals back by hand (`mem_meter.replace`,
+      `search_index.drop`, `game_limits.forgetAll`: a handle to `defer`);
+      `chat_chrome.begin`/`end` pairs (a `page(...)` wrapper).
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
