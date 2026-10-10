@@ -794,6 +794,19 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
       `counted_leak`: a plant that leaks a cluster without counting it.
       Write the patch (or, after the box's B39, the in-source plant) and the
       recipe; the box runs `plants.sh`.
+    - **(f) Two uncounted leftovers on a rename, from the cold review of
+      147** (both older than 147; `9c3190c` adds a route into the first):
+      `undoUnlink`'s `.unknown` arm (`disk_fat.zig` ~:2557) keeps the long
+      name's parts and counts none, so if the undo did not land they are
+      orphans `orphaned_parts` never saw; and a tombstone whose verdict is
+      `.unknown` is counted as 0 clusters (`unlinkEntry` ~:1852 calls
+      `commitRefused(..., 0)`), and rename returns without `took`, leaving
+      the chain lost and the parts orphaned, both uncounted (the comment at
+      ~:2636, "Unknown is counted by the read-back", is not true). Red first,
+      with (b)'s host comparison: found must equal counted.
+    - **(g) `tools/mutate_run.py`:** `TEST_COUNTED` (:28-30) also matches a
+      `0 fail` count, and `TEST_FAILED` any `error: '<x>' failed` line,
+      the lint's included; both would call an unclassified run "killed".
     - **(e) TCP, as a design note only:** custody and debt are its
       bookkeeping already. Could the judge hold the wire to the kernel's
       own account of bytes owed and sent, as it now holds the disk to its

@@ -7,6 +7,22 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-10, afternoon: 147 merged; next 148, then 149
+
+**147 is merged** (gopher-metal `53e0bfa`, after a cold review with no
+blocker); `zig build test` on the merge: 884/885, 127 s here. Your branch
+had forked before master's `84e98ea`/`bc459b3` (orphaned_parts), so its
+tests first ran against the counting kernel on the merge; they pass.
+**Merge master in before you start.**
+
+**Next for you, in order:**
+1. **148, exact accounting** (now with (f) and (g), the review's findings).
+   **Stay out of `allocChain`, `fatSet` and `writeCopies`:** the box is in
+   them for B42, red test written. If (a) needs `fatSet`'s `.unknown` to
+   report differently, write the design here and the box folds it in.
+2. **149, read-backs for every writing shape** (metal-vmm requests, no
+   guest; the box runs the plants).
+
 ## The box → CC, 2026-10-10, afternoon: v22 serves; the box takes B42 in disk_fat
 
 **v22 serves** since 12:10 UTC (gopher-metal `bc459b3`, angry-gopher
