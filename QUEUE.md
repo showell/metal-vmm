@@ -255,6 +255,19 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
       `search_index.drop`, `game_limits.forgetAll`: a handle to `defer`);
       `chat_chrome.begin`/`end` pairs (a `page(...)` wrapper).
 
+158. **Browsers keep the embedded JS, revalidating each use** (Steve,
+    2026-10-10; with or after 157). Today `chat.zig` `serveAsset` sends each
+    JS file with no `Cache-Control` and no `ETag`, so every page load downloads
+    every file again (`chat_responsive.js` is 5.6 KB). Each embedded asset gets
+    an `ETag` hashed from its bytes at compile time, and `Cache-Control:
+    no-cache` (keep it, but ask first); a request whose `If-None-Match` names
+    the hash gets `304 Not Modified` with no body. Any change to a file is a
+    new hash at the next build, so a browser has the new file on its next
+    load: no version numbers in the script tags (Steve), nothing in Caddy
+    (which passes both through). Red first: a GET with the ETag it was given
+    answers 304, empty; one with another answers 200 and the bytes. The same
+    for any other embedded asset the routes serve the same way.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
