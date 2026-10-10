@@ -7,6 +7,74 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10, night: B34 and B37 done; two state-machine proposals
+
+Steve shut you down for the night and asked me to go on. **Everything below
+is tested here only, so re-test it on the box.** Each commit was reviewed
+by a sub-agent after it landed (Steve's suggestion).
+
+**B34, every kernel type-checked (`13a7a98`, `aaf30bc`):** `zig build test`
+now depends on a new `zig build check`.
+- It runs analysis only on every probe kernel and `gopher.elf`, in Debug,
+  with no binary asked for. `native` and `droplet` are built whole.
+- It takes 21 s cold here, plus about 5 s for `gopher.elf`.
+- **gopher.elf is checked against the real port, not a stub.** The app's
+  surface is too large to stub without drift, and `port.sh` runs here too.
+  With no port or no angry-gopher checkout, `check` says so and doesn't
+  fail. On the box the default port path exists, so check uses it. **A stale
+  port will fail `zig build test` there**; re-run `port.sh`.
+- **Not caught, found by the reviewer:** anything only LLVM or the linker
+  sees. That includes a symbol named only in asm or link.ld, a bad
+  mnemonic, and an extern nothing defines. Code behind
+  `builtin.mode != .Debug` isn't analyzed either. Your gates' real
+  `zig build kernels` still catches those.
+- Planted breaks are caught: 140's `native` break, a bad name in
+  `probe/gopher.zig` and in `probe/block.zig`, and a type renamed in
+  `disk_fat.zig`.
+
+**B37, `src/seq.zig` (`cb34a59`):** `Seq(T)` provides offset, after,
+atOrAfter and within. `tcp.zig` uses `Seq(u32)` in all five places that
+did the arithmetic by hand, and no `-%` of its own is left.
+- The tests are exhaustive over `u8`: every pair, every shift (2^24
+  cases), every base and length. They run in 3 s.
+- mutate_tcp.py's four anchors are remade. Three are killed, and
+  `sample-too-early` survives, as TCP_TESTING.md says it does on purpose.
+- Its reviewer is still running. I'll fix and note what it finds.
+
+**State machines: two proposals, and the SDK decision.** Steve asked for
+these after my account of how `machine.zig` went.
+- **P143(a), named groups of states.** `tcp.zig` and `tcp_check.zig` ask
+  `is(.queued) or is(.resending)` (owed to the wire) and `is(.sent) or
+  is(.resending)` (holds a sequence number) in five places. Adding
+  `resending` meant finding each of them, and I missed one, which the
+  review caught (`b87b68c`). A machine could declare its groups beside its
+  edges: `.groups = .{ .owed = &.{ .queued, .resending }, .numbered =
+  &.{ .sent, .resending } }`, with `in(.owed)`. Then a new state is placed
+  in its groups once, and the compiler or a comptime check makes every
+  state say which groups it is in. Small, all in `machine.zig` and its
+  callers.
+- **P143(b), a small closing machine over `State` and `peer_done`.**
+  `Fin` is the easy part. A connection's real phase is `State` x `Fin` x
+  `peer_done`, and that combination is where a bug would hide.
+  - **The test of the abstraction:** declare the peer's half as a machine
+    (`open`, `finished`) and declare which (State, peer half) pairs may
+    exist, checked after every `fire` of either. Five places change
+    `state`, and one sets `peer_done`.
+  - **If it reads well,** the abstraction scales to a combined state.
+  - **If it needs a product of machines or a relation checked outside
+    them,** that is the finding, and we stop there.
+  - It touches `probe/gopher.zig` and `ready.check` (`peer_done` is read
+    there), so it's yours to schedule.
+- **The SDK: no move.** Steve agrees we need more proof first, and we
+  don't want to differ from Antithesis's SDKs unless it is a clear win.
+  `machine.zig` stays a local helper on top of the standard
+  `reachable`/`unreachable`, so the wire is plain Antithesis either way.
+- **What I learned:** the FAT ledger found more than the matrix did, three
+  real bugs to one coverage gap. It isn't a state machine; it's the same
+  discipline applied to resources (nothing changes except through a named,
+  counted ending). That discipline is what I would spread next, before
+  more matrices.
+
 ## CC → the box, 2026-10-10, overnight: B33 fixed; a cold review of 139-142
 
 **B33 is fixed in the simulator** (gopher-metal `b632c96`, `91038e9`,
