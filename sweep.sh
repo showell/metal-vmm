@@ -342,6 +342,23 @@ PY
 # rightly breaks (QUEUE 128).
 DAMAGE_PROPS=("fat: at boot, a volume has no damage beyond what a stop leaves" "fat: after a request, a volume has no damage beyond what a stop leaves")
 
+# counted_leak <sound output> <run's stdout> <what>: whether the disk's only
+# complaint is clusters fsck reclaims, no more of them than the kernel says
+# it left a counted leak on that disk (its end summary: "<what>: K clusters
+# left a counted leak"). A leak is counted when a write failed and so did
+# giving its clusters back (a volume gone read-only, or gone): honest, and
+# on /admin/host, but fsck still finds them. An uncounted one still fails.
+# Echoes "N of K" when it holds.
+counted_leak() {
+  local n k rest
+  rest=$(sed '1d' "$1" | grep -v "^  Reclaimed [0-9]* unused clusters\? (\|^  Leaving filesystem unchanged\.$")
+  [ -z "$rest" ] || return 1
+  n=$(sed -n -E 's/^  Reclaimed ([0-9]+) unused clusters? \(.*/\1/p' "$1" | head -1)
+  k=$(sed -n -E "s/^  $3: ([0-9]+) clusters left a counted leak.*/\1/p" "$2" | tail -1)
+  [ -n "$n" ] && [ -n "$k" ] && [ "$n" -le "$k" ] || return 1
+  echo "$n of $k"
+}
+
 # lie_lost <disk|volume> <name>: whether that disk's cache lost what it
 # held at the cut (metal-vmm QUEUE 122): a lie that cost nothing excuses
 # nothing, and an unsound disk is then the guest's own doing.
@@ -425,7 +442,7 @@ answer_excuse() {
 # verdict <name>: "ok", "differs (allowed: ...)", or "FAIL: ..." for one run
 # against the unhurt one.
 verdict() {
-  local name="$1" u="${2:-unhurt}" sh="${3:-}" why="" exit status knobs broken excuse="" fired
+  local name="$1" u="${2:-unhurt}" sh="${3:-}" why="" exit status knobs broken excuse="" fired c
   exit=$(cat "$WORK/$name.exit")
   status=$(status_of "$name")
   knobs=$(knobs_of "$name")
@@ -507,7 +524,7 @@ verdict() {
     else
       case " $knobs" in
         *" DISK_CACHE=lie"*) [ -n "$disk_cut$exit_cut" ] && lie_lost disk "$name" && unsound="$unsound${unsound:+, }DISK_CACHE=lie (the volume left unsound)" || why="$why, the volume is not sound" ;;
-        *) why="$why, the volume is not sound" ;;
+        *) if c=$(counted_leak "$WORK/$name.sound" "$WORK/$name.out" "the boot disk"); then unsound="$unsound${unsound:+, }a leak the kernel counted (the boot disk: $c)"; else why="$why, the volume is not sound"; fi ;;
       esac
     fi
   fi
@@ -518,7 +535,7 @@ verdict() {
     else
       case " $knobs" in
         *" VOLUME_CACHE=lie"*) [ -n "$volume_cut$exit_cut" ] && lie_lost volume "$name" && unsound="$unsound${unsound:+, }VOLUME_CACHE=lie (the attached volume left unsound)" || why="$why, the attached volume is not sound" ;;
-        *) why="$why, the attached volume is not sound" ;;
+        *) if c=$(counted_leak "$WORK/$name.vsound" "$WORK/$name.out" "the volume"); then unsound="$unsound${unsound:+, }a leak the kernel counted (the attached volume: $c)"; else why="$why, the attached volume is not sound"; fi ;;
       esac
     fi
   fi
