@@ -1,3 +1,7 @@
 # an account made: name, password hash, a session
 PEER_REQUEST=register.http
 EXPECT=303
+# kept as told: registering the same name again finds it taken (login.zig,
+# "is taken — log in instead"); on the pristine volume it registers anew
+READ_BACK=register.http
+MARK=is taken

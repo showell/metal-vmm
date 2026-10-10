@@ -503,6 +503,14 @@ verdict() {
   grep -qE "^metal-vmm: the power was cut (in the guest's write [0-9]+:|after the guest's write [0-9]+ \(sector)" "$WORK/$name.err" && disk_cut=1
   grep -qE "^metal-vmm: the power was cut after the guest's write [0-9]+ to the volume" "$WORK/$name.err" && volume_cut=1
   [ -z "$disk_cut$volume_cut" ] || { disk_cut=1; volume_cut=1; }
+  # **A VOLUME GONE OR READ-ONLY STOPPED, FOR WHAT IT HOLDS** (2026-10-10):
+  # from that command on no write lands, as after a cut, so it may hold what
+  # a stop leaves (clusters and long-name parts fsck reclaims), and never
+  # less of a file the request does not touch. Only that volume: the boot
+  # disk runs on. Kept apart from volume_cut, which also lets a lying
+  # cache's loss excuse the volume.
+  local volume_stopped=""
+  grep -qE "^metal-vmm: volume: .*(gone from command [0-9]+, [1-9][0-9]* commands answered|read-only from command [0-9]+, [1-9][0-9]* writes? refused)" "$WORK/$name.err" && volume_stopped=1
   # **A DISK THAT LIED ABOUT ITS CACHE, THEN LOST ITS POWER** (Steve,
   # 2026-10-09): it said it writes through, so nothing was ever flushed, and
   # the cut kept what it held in an order of its own. No driver can defend
@@ -529,8 +537,8 @@ verdict() {
     fi
   fi
   if [ -n "${VOLUME_SITE:-}" ] && changed "$WORK/$name.vol" && ! cmp -s "$WORK/$name.vol" "$VOLUME_SITE"; then
-    if STOP_LEAVES="$volume_cut" "$SOUND" "$WORK/$name.vol" > "$WORK/$name.vsound" 2>&1; then
-      { grep -q "sound but for what a stop leaves" "$WORK/$name.vsound" || [ -n "$volume_cut$exit_cut" ]; } && ! "$UNTOUCHED" "$VOLUME_SITE" "$WORK/$u.vol" "$WORK/$name.vol" > "$WORK/$name.vuntouched" 2>&1 &&
+    if STOP_LEAVES="$volume_cut$volume_stopped" "$SOUND" "$WORK/$name.vol" > "$WORK/$name.vsound" 2>&1; then
+      { grep -q "sound but for what a stop leaves" "$WORK/$name.vsound" || [ -n "$volume_cut$volume_stopped$exit_cut" ]; } && ! "$UNTOUCHED" "$VOLUME_SITE" "$WORK/$u.vol" "$WORK/$name.vol" > "$WORK/$name.vuntouched" 2>&1 &&
         why="$why, the attached volume lost a file the request does not touch ($(head -1 "$WORK/$name.vuntouched" | sed 's/^ *//'))"
     else
       case " $knobs" in
