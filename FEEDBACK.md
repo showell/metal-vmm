@@ -7,6 +7,121 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10: 143-146 done; probe/gopher.zig and ready.check are yours again
+
+All on `claude/great-wright-i7aste` in gopher-metal, each commit reviewed by
+a sub-agent after it landed, and the review's findings fixed in their own
+commits. Tested here only. Both plants apply at every push. **I've stopped
+touching `probe/gopher.zig` and `ready.check`.** `ready.check` didn't
+change; it keeps its bool.
+
+- **143, groups (`a518cde`):** `in(.owed)` and `in(.numbered)`. A state
+  left out of the table doesn't compile.
+- **144:**
+  - The peer's half is a machine (`d555892`), and `Machine` is declared by
+    a named spec. A spec that doesn't say what it means is now a compile
+    error naming the machine: an unknown key, `.Group` without `.groups`,
+    a state left out, or no `.name` (`cc7a8ab`, `122967d`).
+  - The finding is the entry below.
+- **145, a failed rename keeps `from` (`7e5b09f`, `d951178`), red first.**
+  - `from`'s long name now stays until `to` lands, so when `to` didn't land
+    the tombstone is undone, long name and all.
+  - **The review found the undo itself wasn't read back.** A refused undo
+    that landed left a file under its 8.3 alias alone. Now it's read back
+    like every commit, red first, with a second fault slot on the memory
+    disk (`virtio.Block.second`, memory disks only).
+  - STORE.md and store.zig say what a failed write leaves.
+  - **Not reached by any test:** the undo's `unknown` branch, since one
+    second fault can't fail a read-back. Reaching it needs `then_fail` on
+    `second`. It's counted correctly by reading.
+- **146:**
+  - **(a) A stale port** (`114d8f7`, `ae21e9e`, `2e83a78`): check
+    type-checks gopher.elf only when `verdicts.py fresh` says the port
+    matches the checkout **and** this tree's `gen/assets.zig` matches the
+    checkout's table. Otherwise it says why and skips.
+  - **(b), (c) Mutation tools and `-Dtest-file`** (`8bd7c19`):
+    - `-Dtest-file` skips check, fmt and the lint, so it's 3 s again.
+    - `-Dcheck=false` skips the kernels; both mutation tools pass it, and
+      a guard mutant now takes 60 s, from about 95.
+    - A timeout and a compile failure are their own verdicts, and either
+      fails the run.
+  - **(d) `linecov`** (`a9667d9`) exits 1 when a binary didn't finish.
+  - **(e) None.** Only machine.zig's own test reads the catalog, and it no
+    longer resets it, so nothing in the shared process depends on order.
+  - **(f) The ledger** runs wherever runtime safety does (`00ba287`,
+    `9499592`). A ReleaseSafe FAT sweep of 40 seeds judges both its
+    properties (319,492 and 83,198 true, 0 false), where off they read as
+    never reached. The served kernel's `.text` grows 3,024 bytes (0.28%).
+    A broken one there only increments a counter, and the counter
+    saturates.
+  - **(g) The lint** (`b9bf7ce`, `37ed05f`) now refuses:
+    - a write through a typed or untyped pointer;
+    - a machine field of a wrapped type (`?T`, `[N]T`);
+    - an indexed write;
+    - a value on the next line.
+
+    Braces in test names and `test {}` no longer mislead it. **Left,
+    theoretical here:** `@field` writes, `std.mem.swap`, a `Conn` copied
+    whole (every one in the tree is a reset), and field names matched
+    across files.
+  - **(h) The count reconciles**, from `--summary all`: 884 = 210 (the unit
+    binary: 207 `test` declarations in the 40 unit files, plus io.zig's 1,
+    test_disk.zig's 1 and unit_tests.zig's own `test {}`) + 6
+    (droplet/image) + 111 (disk_fat_test: its 87 plus the tests of what it
+    imports) + 4 + 7 (the faults binary's 11, split by filter) + 546
+    (tcp_test's 72 plus its imports' 19, at six starts). The FAT and TCP
+    binaries still repeat their imports' tests, by design: each needs its
+    own options.
+
+## CC → the box, 2026-10-10: 144's finding (the abstraction stops at one machine)
+
+**Step 1 reads well (`d555892`).** The peer's half is a machine,
+`PeerHalf: open --fin_received--> finished`. It replaces `peer_done`,
+readers ask `peerDone()`, and `ready.check` keeps its bool. `Machine` is
+now declared by a named spec, so a second machine reads cleanly.
+
+**Step 2 is the finding: `machine.zig` can't declare which (State, peer
+half) pairs may exist.** A relation needs both machines at once, and a
+machine knows only its own state. There were two ways to get the relation
+inside the abstraction, and neither is worth it:
+- **Make `State` a machine and check the pair after every fire of
+  either.** Each machine would have to be handed a check over the other,
+  which is the relation checked outside them, just moved. `State` changes
+  in 5 places and is read in about 145, but the reads aren't the cost; the
+  hook is.
+- **One machine over the legal combinations.** For `State` and the peer
+  alone that's 6 states (closed, syn_received, established and closing,
+  the last two in both halves). `Fin` relates to `State` too
+  (`closing_disagrees_with_fin`), so the honest product is about 15 states.
+  Every `.state` read would go through it, and the matrix (225 cells for
+  15 states and 15 events) stops being something a person reads.
+
+**The relation already exists, as `tcp_check`'s rules:**
+`peer_finished_during_handshake` and `closing_disagrees_with_fin`. They're
+checked after every `handle` and `transmit` in the tests and simulators,
+not after every `fire`. That is the relation checked outside the
+machines, and I think it's the right home for it.
+
+**Recommendation:** keep `machine.zig` to one dimension per machine, with
+groups, and relations in `tcp_check`. If a relation must be checked at
+every change, a small `Conn.checkPhase()` called by the code that fires is
+honest about what it is. I wouldn't build it until a bug asks for it. The
+SDK question stays where Steve left it: no move.
+
+## CC → the box, 2026-10-10, morning: starting 144; probe/gopher.zig and ready.check are mine until I say so
+
+Done so far today, each reviewed after it landed:
+- 146(a), stale port (`114d8f7`, `ae21e9e`): check type-checks gopher.elf
+  only when `tools/verdicts.py fresh` says the port is the checkout as it
+  is now **and** this tree's `gen/assets.zig` is the checkout's table.
+  Otherwise it says why and skips. The second condition came from the
+  review.
+- 143, named groups (`a518cde`): `in(.owed)` and `in(.numbered)`, with every
+  state placed at the declaration, so a missing one doesn't compile.
+
+**Starting 144 now. I'm touching `probe/gopher.zig` and `ready.zig`'s
+`check` until a FEEDBACK line says I've stopped.**
+
 ## The box → CC, 2026-10-10, morning: merged; 143-146 for you
 
 **Everything through gopher-metal `a4271a7` is merged to master**, after two
@@ -40,6 +155,58 @@ shape's unhurt run judged, no seed failed, the clean kernel passed.
 - **A plant is code that anchors on yours:** when you change a line a
   `plants/*.patch` touches, remake the patch in the same push
   (`git apply --check` against your branch).
+
+## CC → the box, 2026-10-10, late night: B37 had a regression (fixed), B36 and B30 done
+
+All on `claude/great-wright-i7aste` in gopher-metal and **tested here
+only**. Each commit had a sub-agent review after it landed.
+
+**B37's refactor was not pure, and its review caught it (`53265d9`).**
+- `behind` became `!after(seq, rcv_nxt)`. That differs from the old
+  `(rcv_nxt -% seq) < 2^31` at exactly one distance, 2^31. There a forged
+  ACK half the circle past `rcv_nxt` was taken as from behind and moved
+  `una`, the case the "ONLY FROM BEHIND, NOT BEYOND" guard exists for.
+- It's now `atOrAfter(rcv_nxt, seq)`, term for term the old expression,
+  fixed red first. A tcp_test sends forged ACKs 100,000, 2^31-1 and 2^31
+  past `rcv_nxt`. `seq.zig` now pins `atOrAfter` at half the circle.
+- The review proved the other four rewritten sites equivalent, and found
+  `seq.zig`'s tests kill ten mutants of it.
+- **Lesson:** a pure refactor of modular arithmetic wants a randomized
+  old-against-new comparison before the commit, not just green tests.
+  None of the 857 tests told the two apart.
+
+**B36 (`2c70dcc`, `a4271a7`):**
+- `src/ring_pieces.zig` provides `pieces(cap, start, len)`, exhaustive
+  over cap 1..9, every start to 3*cap, every len.
+- `log_ring.Ring` keeps only `total` (`next()` is `total % len`), and is
+  checked against a plain list over random writes. The `always` on
+  `head`'s bound and its line on `floor-sim.txt` are gone.
+- `kept_log.valid()` requires `head == total % slot`, red first. Every
+  header an older kernel wrote has that.
+- `serial.zig`'s backlog is `pend_written`/`pend_drained` through
+  `pieces()`. **It's driver code, so please test on the box:** a deferred
+  console's order, and its backlog filling up. The reviewer ran the old and
+  new logic side by side over random put/drain/defer sequences: same bytes,
+  same chunks, same order. It found no way for either to re-enter.
+
+**B30 (`629b576`, `a1ab009`):** 27 of the 46 guard mutants were stale.
+- Each is remade on today's code, mostly as `if (false and (cond)) {` on
+  the same condition. Six were remade by hand.
+- **The run: 27 of 27 killed.** One needed a second remake to be faithful
+  to the original, which changed the condition as well as the count.
+- **A small gap that showed up:** a count-only version of "append counts
+  clusters from the size" survives. An append onto a chain longer than
+  its size (left by a stop between the link and the size write) could link
+  more clusters than it needs, and no test notices. That wastes clusters
+  but loses no data. A test would make such a chain, append, and check the
+  chain is as long as the size needs. **Done since (`60c1dc5`):** that
+  test, red against the mutant, which is now kept in mutate_guards.py.
+  Its review found it reaches the state on both FAT paths, at request 25
+  on disk and 10 held, and fails the mutant for the right reason.
+
+**Left for you:** B38 (the FAT simulator's slowdown, with your binaries),
+B35 (served virtio code, after v22), P143(a)/(b), and re-running
+everything on the box.
 
 ## CC → the box, 2026-10-10, night: B34 and B37 done; two state-machine proposals
 
