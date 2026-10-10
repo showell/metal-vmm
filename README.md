@@ -51,8 +51,9 @@ and the application is in [docs/findings.md](docs/findings.md); reviews are in
 - **the unhurt run**: the same guest and request with no knob set; a sweep
   judges each seed against it.
 - **the judge**: `sweep.sh`'s verdict on a run (its exit, its properties,
-  its volume's soundness, its page). **A plant**: a deliberate bug patched
-  into the guest, which the judge must catch (`plants.sh`).
+  its volume's soundness, its page). **A plant**: a deliberate bug in the
+  guest's own source, off unless built `-Dplant=<name>` (gopher-metal's
+  `src/plant.zig`), which the judge must catch (`plants.sh`).
 - **the box**: the development machine with `/dev/kvm`, where guests boot.
   **CC** is a cloud session with no KVM ([CLOUD_WORK.md](CLOUD_WORK.md)).
 
@@ -89,8 +90,8 @@ there by `zig build kernels`; `gopher.elf` by `./port.sh && zig build gopher`):
 | `./refused.sh` | `mkfs.vfat`; the site volume for `gopher` | which refused disk requests it survives |
 | `./sweep.sh` | the site volume, zig-coverage-sdk, **a `-Dcoverage` gopher.elf** (`KERNEL=`; a release build reports no properties, and the sweep refuses it) | a range of seeds, each a whole fault schedule |
 | `./nightly.sh` | the same | **overnight, detached:** `sweep.sh` with a volume, batch after batch of new seeds for `HOURS` (10), logging as it goes in `~/nightly/<date-time>/` (`progress.log`, `failures.log`, each failing seed's files). `KERNEL_ELF=` a `-Dcoverage` build judges its properties too (through the coverage door, which costs the guest no time); `PEER_REQUEST=requests/post-play.http` sends a write instead of `GET /`, so the volume's faults meet one; `SHAPES=requests/shapes` gives each seed one of ten requests (reads, writes as a player the setup makes, two clients at once), each judged against its own unhurt run |
-| `./plants.sh` | the same, gopher-metal's port | **does the judge still judge**: the same seeds over a clean kernel, which must fail none, and over one kernel per `plants/<name>.patch` (a deliberate bug), each of which must fail a seed where its plant fired. Run after every change to the judge. **Written, not yet run**; one plant stands (`net-goback-byte`) |
-| `./check-cc.sh` | the same | the cloud session's branch, in worktrees: built, swept over every request shape for a few seeds, then `plants.sh` — run before its code is reviewed. **Written, not yet run** |
+| `./plants.sh` | the same, gopher-metal's port | **does the judge still judge**: the same seeds over a clean kernel, which must fail none, and over one kernel per plant (gopher-metal's `-Dplant=<name>`, a deliberate bug in its source), each of which must fire (else it is dead) and fail a seed where it fired. Run after every change to the judge. Two plants stand; the full 300 seeds take ~10 minutes |
+| `./check-cc.sh` | the same | the cloud session's branch, in worktrees: built, swept over every request shape for a few seeds, then `plants.sh` — run before its code is reviewed |
 
 "The site volume" is `SITE`, by default
 `~/build/gopher-metal/probe/gopher/pristine.img`, staged by gopher-metal's
@@ -208,7 +209,7 @@ own repeat runs.
 | the guest's coverage | **works** — its zig-coverage-sdk lines read as printed, a table per run, JSONL for the SDK's report across runs |
 | fuzzing the models | **works** — `zig build fuzz`; nothing may panic and each seed repeats |
 | snapshots | **device side only** — every model's state saved and restored in place (`snapshot.zig`), tested; the vCPU half and branching runs from it are not built |
-| the judge's own check | **written, not yet run** — `plants.sh`: planted bugs the judge must catch, and a clean kernel it must pass |
+| the judge's own check | `plants.sh`: planted bugs the judge must catch, and a clean kernel it must pass; run in full (300 seeds) since 2026-10-10 |
 | the explorer | **not built** |
 
 A probe boots in about a tenth of a second, QEMU's `microvm` in about the

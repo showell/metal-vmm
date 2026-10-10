@@ -2,9 +2,11 @@
 # **THE PLANTS**: does the judge still catch a bug, and still pass a kernel
 # that has none?
 #
-# Each `plants/<name>.patch` is a deliberate bug in gopher-metal, never to be
-# merged. This builds the kernel at gopher-metal's HEAD as it is (the clean
-# one) and once with each patch applied, all `-Dcoverage`, then sweeps the
+# Each plant is a deliberate bug in gopher-metal's own source, behind
+# `if (comptime plant.on == .<name>)` (its src/plant.zig), off unless the
+# kernel is built `-Dplant=<name>`; the names are build.zig's `Plant` enum.
+# This builds the kernel at gopher-metal's HEAD as it is (the clean one)
+# and once with each plant on, all `-Dcoverage`, then sweeps the
 # same seeds with each through this checkout's sweep.sh:
 #
 #   - the clean kernel must fail no seed: a failure there is the judge
@@ -24,7 +26,7 @@
 #   PLANTS="net-goback-byte" ./plants.sh
 #
 # Kernels are kept in `$KERNELS` (default ~/nightly/kernels) by gopher-metal
-# commit and patch, so a second run builds nothing. The port is gopher-metal's
+# commit and plant, so a second run builds nothing. The port is gopher-metal's
 # usual one, `$GOPHER_PORT` (`./port.sh` first, if angry-gopher moved); a
 # kernel's name carries gopher-metal's commit and the port's content hash
 # (`PORTED_FROM`), so a new port builds anew. Exit 0 when every
@@ -47,12 +49,16 @@ mkdir -p "$OUT"
 # and its build finds angry-gopher's assets at ../angry-gopher.
 [ -e "$OUT/angry-gopher" ] || ln -s "${ANGRY_GOPHER:-$HOME/showell_repos/angry-gopher}" "$OUT/angry-gopher"
 
+# The plants: PLANTS, or every one gopher-metal's build.zig names (its
+# `Plant` enum, `none` aside). A name is the enum's (disk_write_swallowed);
+# its "PLANT: <name> fires" property spells it with hyphens.
 names=()
 if [ -n "${PLANTS:-}" ]; then
-  for p in $PLANTS; do names+=("$p"); done
+  for p in $PLANTS; do names+=("${p//-/_}"); done
 else
-  # plants/pending/ holds those the judge cannot see yet (its README).
-  for f in "$HERE"/plants/*.patch; do names+=("$(basename "$f" .patch)"); done
+  enum=$(sed -n 's/^const Plant = enum { \(.*\) };$/\1/p' "$GOPHER/build.zig" | tr -d ' ' | tr ',' ' ')
+  [ -n "$enum" ] || { echo "gopher-metal's build.zig names no Plant enum (src/plant.zig)"; exit 2; }
+  for p in $enum; do [ "$p" = none ] || names+=("$p"); done
 fi
 
 commit=$(git -C "$GOPHER" rev-parse --short HEAD) || exit 2
@@ -64,21 +70,17 @@ ported=$(grep -o 'content-[0-9a-f]*' "$PORT/PORTED_FROM" 2>/dev/null | cut -c9-2
 mkdir -p "$KERNELS"
 
 # build <name>: the kernel for "clean" or a plant, built once per commit and
-# patch, its path on stdout.
+# plant, its path on stdout.
 build() {
-  local name="$1" tag elf wt
+  local name="$1" tag elf wt plant=""
   tag="$commit-ag$ported-sdk$sdk"
-  [ "$name" = clean ] || tag="$tag-$(sha256sum "$HERE/plants/$name.patch" | cut -c1-8)"
+  [ "$name" = clean ] || plant="-Dplant=$name"
   elf="$KERNELS/gopher-coverage-$name-$tag.elf"
   if [ ! -f "$elf" ]; then
     wt="$OUT/build-$name"
     git -C "$GOPHER" worktree add -q --detach "$wt" "$commit" >&2 || return 2
     building="$wt"
-    if [ "$name" != clean ]; then
-      git -C "$wt" apply "$HERE/plants/$name.patch" >&2 ||
-        { echo "plants/$name.patch no longer applies at gopher-metal $commit" >&2; git -C "$GOPHER" worktree remove --force "$wt"; return 2; }
-    fi
-    (cd "$wt" && zig build gopher -Dcoverage -Dgopher="$PORT") >&2 && cp "$wt/probe/gopher.elf" "$elf"
+    (cd "$wt" && zig build gopher -Dcoverage $plant -Dgopher="$PORT") >&2 && cp "$wt/probe/gopher.elf" "$elf"
     local ok=$?
     git -C "$GOPHER" worktree remove --force "$wt"
     building=""
@@ -122,7 +124,7 @@ for name in "${names[@]}"; do
   elf=$(build "$name") || exit 2
   sweep "$name" "$elf"; code=$?
   judged "$name" || { echo "$name: sweep.sh judged nothing (exit $code); see $OUT/$name.log"; exit 2; }
-  fires="PLANT: $name fires"
+  fires="PLANT: ${name//_/-} fires"
   fired=$(grep -F "  $fires  (" "$OUT/$name.log" | sed -n -E 's/.*reached by ([0-9]+) of ([0-9]+) runs.*/\1 of \2 runs/p' | head -1)
   caught=0; stray=""
   for s in $(failed_seeds "$name"); do
@@ -135,8 +137,12 @@ for name in "${names[@]}"; do
   done
   if [ -n "$stray" ]; then
     echo "FAIL  $name: failed where the plant never fired and the clean kernel passed:$stray"; bad=1
+  elif [ -z "$fired" ] || [ "${fired%% *}" = 0 ]; then
+    # **A DEAD PLANT** tests nothing: no seed reaches its code. Apart from
+    # one that fires and is never caught, which is the judge's miss.
+    echo "FAIL  $name: dead: it never fired, so nothing judged it"; bad=1
   elif [ "$caught" = 0 ]; then
-    echo "FAIL  $name: never caught (it fired in ${fired:-0 runs})"; bad=1
+    echo "FAIL  $name: never caught (it fired in $fired)"; bad=1
   else
     echo "ok    $name: caught in $caught seeds; it fired in ${fired:-? runs}"
   fi

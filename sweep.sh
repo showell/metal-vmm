@@ -354,25 +354,33 @@ PY
 # rightly breaks (QUEUE 128).
 DAMAGE_PROPS=("fat: at boot, a volume has no damage beyond what a stop leaves" "fat: after a request, a volume has no damage beyond what a stop leaves")
 
-# counted_leak <sound output> <run's stdout> <what>: whether the disk's only
-# complaints are clusters fsck reclaims and long-name parts it auto-deletes,
-# each no more than the kernel says it left on that disk (its end summary:
-# "<what>: K clusters left a counted leak, P long-name parts left orphaned").
-# Counted when a write failed and so did its cleanup (a volume gone
-# read-only or gone, a refused write): honest, and on /admin/host, but fsck
-# still finds them. More than counted fails. The caller still holds every
-# file the request does not touch to survive whole (`untouched`). Echoes
-# "N of K clusters, Q of P parts" when it holds.
+# counted_leak <sound output> <run's stdout> <what>: whether everything fsck
+# complains of on the disk is a leftover the kernel says it left there (its
+# end summary: "<what>: K clusters left a counted leak, P long-name parts
+# left orphaned, F FAT copy writes failed"), each kind held to its count:
+# reclaimed clusters no more than K, orphaned long-name parts no more than
+# P, FAT copies that differ only where F is at least one (a copy's write
+# failed and the next mount mends it; fsck uses the first). Counted when a
+# write failed and so did its cleanup, or a later copy's write: honest, and
+# on /admin/host, but fsck still finds them. More than counted fails. The
+# caller still holds every file the request does not touch to survive whole
+# (`untouched`). Echoes what it allowed.
 counted_leak() {
-  local n q k p rest
-  rest=$(sed '1d' "$1" | grep -v "^  Reclaimed [0-9]* unused clusters\? (\|^  Orphaned long file name part \|^    Auto-deleting\.$\|^  Leaving filesystem unchanged\.$")
+  local n q d k p f rest line
+  rest=$(sed '1d' "$1" | grep -v "^  Reclaimed [0-9]* unused clusters\? (\|^  Orphaned long file name part \|^    Auto-deleting\.$\|^  FATs differ but appear to be intact\.$\|^    Using first FAT\.$\|^  Leaving filesystem unchanged\.$")
   [ -z "$rest" ] || return 1
   n=$(sed -n -E 's/^  Reclaimed ([0-9]+) unused clusters? \(.*/\1/p' "$1" | head -1)
   q=$(grep -c "^  Orphaned long file name part " "$1")
-  k=$(sed -n -E "s/^  $3: ([0-9]+) clusters left a counted leak, ([0-9]+) long-name parts left orphaned.*/\1/p" "$2" | tail -1)
-  p=$(sed -n -E "s/^  $3: ([0-9]+) clusters left a counted leak, ([0-9]+) long-name parts left orphaned.*/\2/p" "$2" | tail -1)
-  [ -n "$k" ] && [ -n "$p" ] && [ "${n:-0}" -le "$k" ] && [ "$q" -le "$p" ] && [ "${n:-0}$q" != "00" ] || return 1
-  echo "${n:-0} of $k clusters, $q of $p parts"
+  d=$(grep -c "^  FATs differ but appear to be intact\.$" "$1")
+  # v22's kernel says no FAT copy count: read as none failed.
+  line=$(grep -E "^  $3: [0-9]+ clusters left a counted leak, [0-9]+ long-name parts left orphaned" "$2" | tail -1)
+  [ -n "$line" ] || return 1
+  k=$(echo "$line" | sed -E 's/.*: ([0-9]+) clusters left.*/\1/')
+  p=$(echo "$line" | sed -E 's/.*, ([0-9]+) long-name parts.*/\1/')
+  f=0
+  case "$line" in *" FAT copy writes failed"*) f=$(echo "$line" | sed -E 's/.*, ([0-9]+) FAT copy writes failed.*/\1/') ;; esac
+  [ "${n:-0}" -le "$k" ] && [ "$q" -le "$p" ] && { [ "$d" = 0 ] || [ "$f" -ge 1 ]; } && [ "${n:-0}$q$d" != "000" ] || return 1
+  echo "${n:-0} of $k clusters, $q of $p parts, FAT copies $( [ "$d" = 0 ] && echo agree || echo "apart ($f writes failed)")"
 }
 
 # lie_lost <disk|volume> <name>: whether that disk's cache lost what it
