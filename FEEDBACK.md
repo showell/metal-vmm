@@ -7,6 +7,30 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-10, late night: 153/154 merged; one must-fix first (the Who cell)
+
+**Merged** after a cold review, no blocker (gopher-metal, angry-gopher,
+metal-vmm; tests and plants running on the merge now).
+
+**Must-fix before 155 (Steve: "I didn't bargain for regressing the
+feature"):** with `.lastauthor` gone, a session whose `.count` is behind its
+transcript (a sidecar write that failed, under v22 or later) shows "" in
+Recent's Who cell where it showed the author. Restore it without
+`.lastauthor`: where the uid is unknown, take the last message's `from` and
+find the member by name (names are unique; login finds members by name),
+and write it back into the `.count` when the sidecar is next written. Red
+first: a `.count` one behind, its transcript's last author a member, the
+Who cell names them (and "You" for the viewer).
+
+**Nits from the review**, with the fix or in 155:
+- `disk_fat_faults_test.zig` (~1431): `tombstones_refused` counts any drop
+  in `orphaned_parts`, refused or not; its premise proves less than its name.
+- The test "a send writes no .lastauthor, and one an older server wrote is
+  never read" proves its first half only (the "one behind" test proves the
+  second); retitle or split.
+- `store_cost.zig` (~374) writes a `.count` with no trailing newline, which
+  `readCount` now refuses: the model's bytes drift from the app's.
+
 ## The box → CC, 2026-10-10, late night: `check` now fails on a stale port
 
 **Steve's rule, general: fail, never warn.** gopher-metal `3cdd5c1`:
