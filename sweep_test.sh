@@ -362,7 +362,7 @@ mkdir -p "$T/shapes"
 printf 'page a' > "$T/shapes/a.http"
 printf 'page b' > "$T/shapes/b.http"
 printf '# a\nPEER_REQUEST=a.http\nEXPECT=200\n' > "$T/shapes/a.shape"
-printf 'PEER_REQUEST=b.http  # b\nEXPECT=200\n' > "$T/shapes/b.shape"
+printf '  # b, a comment on a line of its own\nPEER_REQUEST=b.http\nEXPECT=200\n' > "$T/shapes/b.shape"
 printf 'a.http\n' > "$T/shapes/setup"
 shaped=$(SHAPES="$T/shapes" VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 20 21 2>&1)
 [ $? = 0 ] || { echo "FAIL: a sweep of two shapes did not pass:"; echo "$shaped" | sed 's/^/    /'; fail=1; }
@@ -541,6 +541,23 @@ expect "a stop beside the kernel's count: 86 clusters, 10 counted" refused "$(st
 expect "a stop beside the kernel's count: two names, one counted" allowed "$(stop 1 2 0 1)"
 printf '#!/bin/bash\nexit 1\n' > "$T/largest_write_fails"; chmod +x "$T/largest_write_fails"
 expect "a stop whose unhurt run cannot be read is refused" refused "$(cp "$T/largest_write_fails" "$T/largest_write"; stop 1 0)"
+
+# **A COVERAGE LINE THAT CANNOT BE READ IS A BREAK** (the normalization
+# hunt): it was skipped, and could hide a break beside one a fault excuses.
+eval "$(sed -n '/^broken_props() {$/,/^}$/p' "$HERE/sweep.sh")"
+mkdir -p "$T/covwork"
+{ echo '{"antithesis_assert":{"hit":true,"must_hit":true,"assert_type":"always","display_type":"Always","message":"m","condition":true,"id":"held"}}'
+  echo '{"antithesis_assert":{"hit":true,"must_h'; } > "$T/covwork/garbled.cov"
+expect "a garbled coverage line is a break of its own" "a coverage line that cannot be read" "$(WORK="$T/covwork" broken_props garbled)"
+
+# **A SHAPE'S VALUE KEEPS ITS #, AND A KEY NO ONE READS STOPS THE SWEEP**
+# (the normalization hunt): `MARK=msg#1` was cut to `MARK=msg`, and a key in
+# no setting's family (a misspelt EXPECT) went to metal-vmm, unread.
+mkdir -p "$T/keys"
+printf 'X' > "$T/keys/k.http"
+printf 'PEER_REQUEST=k.http\nEXPECT=200\nEXPCT=404\n' > "$T/keys/k.shape"
+keys=$(SHAPES="$T/keys" VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 1 1 2>&1)
+expect "a misspelt shape key stops the sweep" "EXPCT is no shape key and no metal-vmm setting" "$keys"
 
 if [ $fail = 0 ]; then echo "sweep_test: every verdict and the summary as told"; fi
 exit $fail

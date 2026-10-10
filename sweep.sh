@@ -180,7 +180,10 @@ if [ -n "${SHAPES:-}" ]; then
     SHAPE_NAMES+=("$n")
     words=""
     while IFS= read -r line; do
-      line="${line%%#*}"; line="${line%"${line##*[![:space:]]}"}"
+      # A comment is a line of its own: a `#` inside a value is the value's
+      # (`MARK=msg#1` was cut to `MARK=msg`; the normalization hunt).
+      line="${line#"${line%%[![:space:]]*}"}"; line="${line%"${line##*[![:space:]]}"}"
+      case "$line" in "#"*) continue ;; esac
       [ -n "$line" ] || continue
       case "$line" in
         EXPECT=*) SHAPE_EXPECT[$n]="${line#EXPECT=}" ;;
@@ -204,7 +207,10 @@ if [ -n "${SHAPES:-}" ]; then
             files="$files${files:+,}$SHAPES/$part"
           done
           words="$words PEER_REQUEST=$files" ;;
-        *=*) words="$words $line" ;;
+        # A setting for metal-vmm, which refuses any it does not read
+        # (checked.zig); a key in no setting's family is read by no one.
+        WIRE_*=* | PEER_*=* | DISK_*=* | VOLUME_*=* | RTC_*=* | PIT_*=* | DHCP_*=* | FAULT_*=*) words="$words $line" ;;
+        *=*) cannot_judge "shape $n: ${line%%=*} is no shape key and no metal-vmm setting (a misspelling?)" ;;
         *) cannot_judge "shape $n: not VAR=value: $line" ;;
       esac
     done < "$f"
@@ -344,7 +350,10 @@ for line in open(sys.argv[1], errors="replace"):
     try:
         a = json.loads(line).get("antithesis_assert")
     except ValueError:
-        continue
+        # **A LINE THAT CANNOT BE READ IS NO LINE THAT HELD** (the
+        # normalization hunt): skipped, it could hide a break beside one a
+        # fault excuses. Named as a break of its own, which nothing excuses.
+        a = {"id": "a coverage line that cannot be read", "display_type": "Always", "hit": True, "condition": False}
     if a and a.get("display_type") in ("Always", "AlwaysOrUnreachable", "Unreachable") and a.get("hit") and not a.get("condition"):
         if a["id"] not in seen:
             seen.append(a["id"])
@@ -546,6 +555,9 @@ verdict() {
   knobs=$(knobs_of "$name")
   fired=$(fired_of "$name")
   broken=$(broken_of "$name")
+  # **NO COVERAGE LINE IS NO VERDICT ON THE PROPERTIES** (the normalization
+  # hunt): it read as 0 broken. A coverage kernel prints one at every end.
+  [ -n "$broken" ] || why="$why, no coverage line (its properties unjudged)"
   if [ "$exit" != "$(cat "$WORK/$u.exit")" ]; then
     # **A CLIENT THAT LEFT BEFORE ITS REQUEST WAS WHOLE IS OWED NOTHING**, and
     # a machine told to serve one request waits for it, idle, until metal-vmm
@@ -889,7 +901,10 @@ done
 # and said; its own coverage file keeps them (KEEP).
 excused_damage=""
 for name in $(for n in "${SHAPE_NAMES[@]}"; do unhurt_of "$n"; done) $(seq -f "seed%g" "$FIRST" "$LAST"); do
-  [ -f "$WORK/$name.cov" ] || continue
+  # A run with no coverage file is left out of the merge, and said: its
+  # verdict above already failed it (no coverage line), so the report is
+  # never quietly short of a run.
+  [ -f "$WORK/$name.cov" ] || { echo "  $name: no coverage file, left out of the merge" >&2; continue; }
   if [ -f "$WORK/$name.damage_excused" ]; then
     excused_damage="$excused_damage ${name#seed}"
     python3 - "$WORK/$name.cov" "${DAMAGE_PROPS[@]}" >> "$COVERAGE" <<'PY'
