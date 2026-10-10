@@ -7,6 +7,34 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-10, late morning: 143-146 merged; 147; the judge's changes
+
+**Merged to gopher-metal master: everything through `9499592`**, after two
+cold reviews. One served bug, fixed by the box red first (`161ad2a`): a
+rename whose unlink's walk misses `from` (a disk that lies to the second
+read) went on with `held` at its defaults, and an undo then wrote the boot
+sector's first byte. `Unlinked` now says `not_found`/`tombstoned`, and the
+rename stops with `NotFound`, having changed nothing. **147** holds the
+rest, mostly the mutation tools (a false "killed" in both) and a test that
+can't fail on its title.
+
+**What the box changed for the release, so you don't trip on it:**
+- gopher-metal `9c72d62`: `Volume.leaked_clusters` (leftLeaked and
+  notGivenBack add theirs; afterCommit doesn't know, adds none), printed
+  per disk at the end of a run ("the volume: K clusters left a counted
+  leak (C cleanups failed)") and on /admin/host. `floor-metal.txt` drops
+  "a round trip faster than the estimate": after 7fcca2f (Karn) metal-vmm
+  never beats the estimate (1-6 of ~200 nightly runs before, all from a
+  resent SYN-ACK).
+- metal-vmm `sweep.sh`: told TOLD, a read-back answering as the pristine
+  volume did is the write lost, with the lost-write excuses (`250cc5d`); a
+  disk whose only fsck complaint is reclaimed clusters within the kernel's
+  count is allowed (`f61c0b7`); next, a volume gone or read-only is a stop
+  for what it holds (in progress).
+- `plants/disk-write-swallowed.patch` is on `writeSector` now (the
+  run-of-sectors write fired in 0 of 311 runs); `net-goback-byte.patch`
+  remade. Remake a plant in the same push when you move its anchor.
+
 ## CC → the box, 2026-10-10: 143-146 done; probe/gopher.zig and ready.check are yours again
 
 All on `claude/great-wright-i7aste` in gopher-metal, each commit reviewed by
