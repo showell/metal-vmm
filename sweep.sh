@@ -343,20 +343,24 @@ PY
 DAMAGE_PROPS=("fat: at boot, a volume has no damage beyond what a stop leaves" "fat: after a request, a volume has no damage beyond what a stop leaves")
 
 # counted_leak <sound output> <run's stdout> <what>: whether the disk's only
-# complaint is clusters fsck reclaims, no more of them than the kernel says
-# it left a counted leak on that disk (its end summary: "<what>: K clusters
-# left a counted leak"). A leak is counted when a write failed and so did
-# giving its clusters back (a volume gone read-only, or gone): honest, and
-# on /admin/host, but fsck still finds them. An uncounted one still fails.
-# Echoes "N of K" when it holds.
+# complaints are clusters fsck reclaims and long-name parts it auto-deletes,
+# each no more than the kernel says it left on that disk (its end summary:
+# "<what>: K clusters left a counted leak, P long-name parts left orphaned").
+# Counted when a write failed and so did its cleanup (a volume gone
+# read-only or gone, a refused write): honest, and on /admin/host, but fsck
+# still finds them. More than counted fails. The caller still holds every
+# file the request does not touch to survive whole (`untouched`). Echoes
+# "N of K clusters, Q of P parts" when it holds.
 counted_leak() {
-  local n k rest
-  rest=$(sed '1d' "$1" | grep -v "^  Reclaimed [0-9]* unused clusters\? (\|^  Leaving filesystem unchanged\.$")
+  local n q k p rest
+  rest=$(sed '1d' "$1" | grep -v "^  Reclaimed [0-9]* unused clusters\? (\|^  Orphaned long file name part \|^    Auto-deleting\.$\|^  Leaving filesystem unchanged\.$")
   [ -z "$rest" ] || return 1
   n=$(sed -n -E 's/^  Reclaimed ([0-9]+) unused clusters? \(.*/\1/p' "$1" | head -1)
-  k=$(sed -n -E "s/^  $3: ([0-9]+) clusters left a counted leak.*/\1/p" "$2" | tail -1)
-  [ -n "$n" ] && [ -n "$k" ] && [ "$n" -le "$k" ] || return 1
-  echo "$n of $k"
+  q=$(grep -c "^  Orphaned long file name part " "$1")
+  k=$(sed -n -E "s/^  $3: ([0-9]+) clusters left a counted leak, ([0-9]+) long-name parts left orphaned.*/\1/p" "$2" | tail -1)
+  p=$(sed -n -E "s/^  $3: ([0-9]+) clusters left a counted leak, ([0-9]+) long-name parts left orphaned.*/\2/p" "$2" | tail -1)
+  [ -n "$k" ] && [ -n "$p" ] && [ "${n:-0}" -le "$k" ] && [ "$q" -le "$p" ] && [ "${n:-0}$q" != "00" ] || return 1
+  echo "${n:-0} of $k clusters, $q of $p parts"
 }
 
 # lie_lost <disk|volume> <name>: whether that disk's cache lost what it
@@ -503,14 +507,6 @@ verdict() {
   grep -qE "^metal-vmm: the power was cut (in the guest's write [0-9]+:|after the guest's write [0-9]+ \(sector)" "$WORK/$name.err" && disk_cut=1
   grep -qE "^metal-vmm: the power was cut after the guest's write [0-9]+ to the volume" "$WORK/$name.err" && volume_cut=1
   [ -z "$disk_cut$volume_cut" ] || { disk_cut=1; volume_cut=1; }
-  # **A VOLUME GONE OR READ-ONLY STOPPED, FOR WHAT IT HOLDS** (2026-10-10):
-  # from that command on no write lands, as after a cut, so it may hold what
-  # a stop leaves (clusters and long-name parts fsck reclaims), and never
-  # less of a file the request does not touch. Only that volume: the boot
-  # disk runs on. Kept apart from volume_cut, which also lets a lying
-  # cache's loss excuse the volume.
-  local volume_stopped=""
-  grep -qE "^metal-vmm: volume: .*(gone from command [0-9]+, [1-9][0-9]* commands answered|read-only from command [0-9]+, [1-9][0-9]* writes? refused)" "$WORK/$name.err" && volume_stopped=1
   # **A DISK THAT LIED ABOUT ITS CACHE, THEN LOST ITS POWER** (Steve,
   # 2026-10-09): it said it writes through, so nothing was ever flushed, and
   # the cut kept what it held in an order of its own. No driver can defend
@@ -532,18 +528,26 @@ verdict() {
     else
       case " $knobs" in
         *" DISK_CACHE=lie"*) [ -n "$disk_cut$exit_cut" ] && lie_lost disk "$name" && unsound="$unsound${unsound:+, }DISK_CACHE=lie (the volume left unsound)" || why="$why, the volume is not sound" ;;
-        *) if c=$(counted_leak "$WORK/$name.sound" "$WORK/$name.out" "the boot disk"); then unsound="$unsound${unsound:+, }a leak the kernel counted (the boot disk: $c)"; else why="$why, the volume is not sound"; fi ;;
+        *) if c=$(counted_leak "$WORK/$name.sound" "$WORK/$name.out" "the boot disk"); then
+             unsound="$unsound${unsound:+, }a leak the kernel counted (the boot disk: $c)"
+             "$UNTOUCHED" "$site" "$WORK/$u.img" "$WORK/$name.img" > "$WORK/$name.untouched" 2>&1 ||
+               why="$why, the volume lost a file the request does not touch ($(head -1 "$WORK/$name.untouched" | sed 's/^ *//'))"
+           else why="$why, the volume is not sound"; fi ;;
       esac
     fi
   fi
   if [ -n "${VOLUME_SITE:-}" ] && changed "$WORK/$name.vol" && ! cmp -s "$WORK/$name.vol" "$VOLUME_SITE"; then
-    if STOP_LEAVES="$volume_cut$volume_stopped" "$SOUND" "$WORK/$name.vol" > "$WORK/$name.vsound" 2>&1; then
-      { grep -q "sound but for what a stop leaves" "$WORK/$name.vsound" || [ -n "$volume_cut$volume_stopped$exit_cut" ]; } && ! "$UNTOUCHED" "$VOLUME_SITE" "$WORK/$u.vol" "$WORK/$name.vol" > "$WORK/$name.vuntouched" 2>&1 &&
+    if STOP_LEAVES="$volume_cut" "$SOUND" "$WORK/$name.vol" > "$WORK/$name.vsound" 2>&1; then
+      { grep -q "sound but for what a stop leaves" "$WORK/$name.vsound" || [ -n "$volume_cut$exit_cut" ]; } && ! "$UNTOUCHED" "$VOLUME_SITE" "$WORK/$u.vol" "$WORK/$name.vol" > "$WORK/$name.vuntouched" 2>&1 &&
         why="$why, the attached volume lost a file the request does not touch ($(head -1 "$WORK/$name.vuntouched" | sed 's/^ *//'))"
     else
       case " $knobs" in
         *" VOLUME_CACHE=lie"*) [ -n "$volume_cut$exit_cut" ] && lie_lost volume "$name" && unsound="$unsound${unsound:+, }VOLUME_CACHE=lie (the attached volume left unsound)" || why="$why, the attached volume is not sound" ;;
-        *) if c=$(counted_leak "$WORK/$name.vsound" "$WORK/$name.out" "the volume"); then unsound="$unsound${unsound:+, }a leak the kernel counted (the attached volume: $c)"; else why="$why, the attached volume is not sound"; fi ;;
+        *) if c=$(counted_leak "$WORK/$name.vsound" "$WORK/$name.out" "the volume"); then
+             unsound="$unsound${unsound:+, }a leak the kernel counted (the attached volume: $c)"
+             "$UNTOUCHED" "$VOLUME_SITE" "$WORK/$u.vol" "$WORK/$name.vol" > "$WORK/$name.vuntouched" 2>&1 ||
+               why="$why, the attached volume lost a file the request does not touch ($(head -1 "$WORK/$name.vuntouched" | sed 's/^ *//'))"
+           else why="$why, the attached volume is not sound"; fi ;;
       esac
     fi
   fi
@@ -576,7 +580,9 @@ verdict() {
     elif [ "$status" = "${SHAPE_TOLD[$sh]}" ] && { [ -n "$as_pristine" ] || ! kept "$name" "${SHAPE_MARK[$sh]}"; }; then
       local lost=""
       case " $knobs" in *" VOLUME_CACHE=lie"*) ! lie_lost volume "$name" || lost="VOLUME_CACHE=lie (the write lost)" ;; esac
-      case "$fired" in *" VOLUME_SYNC_FAIL "*) lost="$lost${lost:+, }VOLUME_SYNC_FAIL (the write lost)" ;; esac
+      # A failed SYNCHRONIZE loses nothing by itself: only a power that then
+      # took what the cache held (lie_lost reads that line, lie or not).
+      case "$fired" in *" VOLUME_SYNC_FAIL "*) ! lie_lost volume "$name" || lost="$lost${lost:+, }VOLUME_SYNC_FAIL (the write lost)" ;; esac
       if [ -n "$lost" ]; then unsound="$unsound${unsound:+, }$lost"
       else why="$why, told ${SHAPE_TOLD[$sh]} and the write is not on the volume"; fi
     fi
@@ -598,7 +604,7 @@ verdict() {
       # A lie excuses a lost write only when the power took what the cache
       # held; a SYNCHRONIZE failure, only when one failed.
       case " $knobs" in *" VOLUME_CACHE=lie"*) ! lie_lost volume "$name" || excuse="VOLUME_CACHE=lie" ;; esac
-      case "$fired" in *" VOLUME_SYNC_FAIL "*) excuse="$excuse${excuse:+, }VOLUME_SYNC_FAIL" ;; esac
+      case "$fired" in *" VOLUME_SYNC_FAIL "*) ! lie_lost volume "$name" || excuse="$excuse${excuse:+, }VOLUME_SYNC_FAIL" ;; esac
       [ -n "$excuse" ] || why="$why, told $TOLD and the write is not on the volume"
     fi
     if [ -n "$why" ]; then echo "FAIL: ${why#, }"
@@ -706,6 +712,9 @@ for n in "${SHAPE_NAMES[@]}"; do
     if [ -n "$(read_of "$n")" ]; then
       read_back "pristine-$n" "$VOLUME_SITE" "${SHAPE_READ[$n]}"
       read_back "$u" "" "${SHAPE_READ[$n]}"
+      # A seed's read-back is compared with the pristine one's status: with
+      # none, a read-back that got no answer would look like it.
+      [ -s "$WORK/pristine-$n.readstatus" ] || cannot_judge "shape $n: the pristine volume's read-back got no answer: nothing can be judged"
       ! kept "pristine-$n" "${SHAPE_MARK[$n]}" || cannot_judge "shape $n: the pristine volume's read-back already holds \"${SHAPE_MARK[$n]}\": nothing can be judged"
       if [ "$st" != "${SHAPE_TOLD[$n]}" ] || ! kept "$u" "${SHAPE_MARK[$n]}"; then
         echo "shape $n: its unhurt run was told ${st:-nothing} and its read-back $(kept "$u" "${SHAPE_MARK[$n]}" && echo holds || echo lacks) \"${SHAPE_MARK[$n]}\" (TOLD=${SHAPE_TOLD[$n]}): nothing can be judged"
@@ -719,6 +728,7 @@ unhurt_status=$(status_of unhurt)
 if [ -n "$DURABLE" ]; then
   read_back pristine "$VOLUME_SITE"
   read_back unhurt
+  [ -s "$WORK/pristine.readstatus" ] || cannot_judge "the pristine volume's read-back got no answer: nothing can be judged"
   ! kept pristine || cannot_judge "the pristine volume already holds MARK: nothing can be judged"
   if [ "$unhurt_status" != "$TOLD" ] || ! kept unhurt; then
     echo "the unhurt post was told ${unhurt_status:-nothing} and its read-back $(kept unhurt && echo holds || echo lacks) MARK: nothing can be judged"
