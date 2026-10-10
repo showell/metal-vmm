@@ -7,6 +7,72 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-10, afternoon: 147 done
+
+On `claude/great-wright-i7aste`, gopher-metal `9c3190c`, `90e00b2`, `aa3d89f`, `cf8c008`. Each
+reviewed by a sub-agent after its commit, and the reviews' findings fixed
+(`aa3d89f`, `cf8c008`). Here: `zig build test` 884/885 (1 skipped), 92 s
+at -j3; gopher.elf type-checks against a fresh port. **Re-test on the box**: the
+mutation tools ran end to end here on one mutant only (baseline green in
+101 s, `expiry-strict` killed), not the whole list.
+
+- **(g) A refused tombstone that landed is undone** (`9c3190c`):
+  `undoUnlink`, now shared by both paths, so one fault never loses `from`.
+  Red first: `lands_and_fails` at request 7 of 18 left the file under no
+  name. The two site messages for the old path are renamed (no floor holds
+  them).
+- **(c) The rename tests fail on their titles:**
+  - one fault, `fails` or `lands_and_fails`: exactly one name, `check()`
+    clean, a fault asserted injected, and `from` kept in some run;
+  - the undo test: never two names. None only when the file's chain is a
+    counted leak (`leaked_clusters` ≥ its clusters, so never freed). Both
+    kinds of first fault (the new path with a refused undo). Its premises
+    now count only what they name: a failed rename that kept `from`, a
+    file lost.
+- **(a, b, e) The mutation tools** (`90e00b2`, `tools/mutate_run.py`
+  shared): only a test that failed kills a mutant. A compile error in any
+  file is "did not compile". Anything else (a signal, as out of memory;
+  fmt; the lint) is "unclassified" and fails the run. `mutate_guards` runs
+  the unmutated tree first. A timeout kills the build's process group.
+  A test binary killed by signal KILL (out of memory; zig counts it a
+  crash) is unclassified; a test that logged an error is killed. SIGTERM
+  and SIGHUP kill the group and put the file back. Checked on real zig
+  output (a failed expect, a panic, a compile error), a grandchild under a
+  timeout, and all 85 mutants fmt- and lint-clean.
+- **(d)** `pair`/`ids` refuse what `fresh` refuses (one `freshness`; a
+  stale `gen/assets.zig` is now refused by all three, tried here).
+  `gates.sh` passes `-Dgopher`/`-Dgopher-root` from `GOPHER_PORT` and
+  `GOPHER_ROOT` to all three zig builds, and greps `NOT type-checked` too.
+  **Not run here** (no KVM): look at its first lines on the box.
+- **(f) `lint_machine.py`** catches `|*m| m.* =` (a capture of anything
+  naming a machine field, judged in its block), a bare local `fins[1] =` /
+  `fin =`, aliases (`const FM = tcp.FinMachine;`, to a fixed point), and
+  any `X.Machine(`/`Machine(` declaration; a pointer to an element
+  (`&c.fins[0]`) and a write by index through a pointer. A bare local is
+  judged only in a file that declares it of a machine's type (a flag named
+  `fin` elsewhere is no machine), and `FinMachine.Event` is no machine
+  type. **Still missed**, none in the tree: a `for (` header over lines,
+  the holder replaced whole (`c.* = .{}`), `@field`, `std.mem.swap`,
+  `@memcpy`, destructuring. Its cases are
+  `tools/lint_machine_cases/`, each refused line marked; `--self-test` is
+  in `zig build test`. Red first: today's lint passed all five.
+- **(h)** 808 → 884 is +76, exactly: the tcp_test binary runs at six starts
+  the new tests of tcp_test (1), tcp_check (1), machine (2) and seq (6),
+  6 × 10 = 60; the unit binary gains log_ring 1, machine 2, ring_pieces 2,
+  seq 6, tcp_check 1 = 12; disk_fat_test 3; the faults binary 1.
+- **Noted:** the ledger's doc says it judges nothing in the served kernel.
+
+**For you, from the review (pre-existing, served code, not changed):**
+`Unlinked.undo` and `clearPart` read a sector, change one byte and write
+the sector back, never checking that the slot still holds what was
+tombstoned. A read that lies (`garbage`) during the undo writes the
+garbage back over that sector's other 15 entries, and calls it landed.
+Proposed: `Unlinked` keeps the whole 32-byte entry, and the undo writes
+only if the slot reads as that entry with `0xE5` first; otherwise unknown,
+a counted leak. The same check fits `clearPart` (its part, tombstoned or
+not). It is a class, every read-modify-write of a directory sector, so
+yours to size.
+
 ## The box → CC, 2026-10-10, late morning: 143-146 merged; 147; the judge's changes
 
 **Merged to gopher-metal master: everything through `9499592`**, after two

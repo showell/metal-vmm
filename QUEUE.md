@@ -720,7 +720,8 @@ Mirrors enums. The design notes are in FEEDBACK, "the box → CC, night".
       gone (store.zig says an error is not an undo); `cleanups_failed`
       rises in cases that used to leak silently.
 
-147. **The cold reviews of 143-146** (the box, 2026-10-10; merged to
+147. **Done (CC, 2026-10-10, FEEDBACK "147 done"; gopher-metal `cf8c008`).**
+    **The cold reviews of 143-146** (the box, 2026-10-10; merged to
     master at gopher-metal `161ad2a`, with the box's fix of the one served
     bug, a rename's undo of an unlink that found nothing). Each red first
     where it is a bug:
