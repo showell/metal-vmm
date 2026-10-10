@@ -16,10 +16,11 @@ requests). A run says on the error stream what each knob did.
 **A value that is not one stops the run** (exit 2, naming it): a word where
 a number goes (`PEER_RESET_AT=30ms`), a flag that is not `1` or `0`, a list
 past what it holds, a number past its most, a volume's knob with no
-`VOLUME`. Nothing is read as "no fault" or cut to fit. A name in these
-families that metal-vmm does not read (a misspelling, or a script's own
-`VOLUME_SITE`) is said on the error stream and ignored. `src/checked.zig`
-holds what each one must be.
+`VOLUME`. Nothing is read as "no fault" or cut to fit. **Nor is a name in
+these families that metal-vmm does not read**: a misspelling stops the run
+too, apart from the scripts' own names (`VOLUME_SITE`, `VOLUME_SEEDS`,
+`VOLUME_LUN`, `VOLUME_TARGET`: `script_names`). `src/checked.zig` holds what
+each one must be.
 
 The source of truth is `src/settings.zig` (the knobs into the faults),
 `src/knobs.zig` (the full list, and what a seed draws), and the module each

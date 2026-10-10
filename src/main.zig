@@ -1006,10 +1006,6 @@ fn mapFile(path: [*:0]const u8) ![]align(std.heap.page_size_min) const u8 {
     return posix.mmap(null, size, .{ .READ = true }, .{ .TYPE = .PRIVATE }, fd, 0);
 }
 
-fn sayUnknown(name: []const u8) void {
-    std.debug.print("metal-vmm: {s} is not a setting metal-vmm reads; ignored (KNOBS.md)\n", .{name});
-}
-
 pub fn main(init: std.process.Init.Minimal) !u8 {
     const argv = init.args.vector;
     if (argv.len < 2) {
@@ -1025,7 +1021,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // (checked.zig): a value that is not one is refused here, before any of
     // them is read, rather than read as no fault.
     var complaint_buf: [512]u8 = undefined;
-    if (checked.complaint(init.environ.block.view().slice, &complaint_buf, sayUnknown)) |why| {
+    if (checked.complaint(init.environ.block.view().slice, &complaint_buf)) |why| {
         std.debug.print("metal-vmm: {s} (KNOBS.md)\n", .{why});
         return 2;
     }

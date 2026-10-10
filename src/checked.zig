@@ -6,10 +6,11 @@
 //! environment: a known setting whose value is not one (`PEER_RESET_AT=30ms`,
 //! a schedule of 40 frames where 32 fit, `PEER_FLOOD` past its most) is
 //! refused, with exit 2, instead of becoming "no fault" or its nearest
-//! legal value; so is a volume's setting with no volume to set. A name in
-//! one of the settings' families that metal-vmm does not read is said on
-//! stderr but does not stop the run: scripts export names of their own
-//! (`VOLUME_SITE`), and a misspelt setting is then one line to notice.
+//! legal value; so is a volume's setting with no volume to set. **So is a name
+//! in one of the settings' families that metal-vmm does not read** (a
+//! misspelling, `PEER_RESETAT`, ran with no fault and was judged ok), apart
+//! from the scripts' own names in a family, `script_names` (Steve,
+//! 2026-10-10: fail, never warn).
 
 const std = @import("std");
 const knobs = @import("knobs.zig");
@@ -130,15 +131,21 @@ pub const table = [_]Setting{
 /// The families a misspelt setting would be in.
 const families = [_][]const u8{ "WIRE_", "PEER_", "DISK_", "VOLUME_", "RTC_", "PIT_", "DHCP_", "FAULT_" };
 
+/// **NAMES IN A FAMILY THAT ARE THE SCRIPTS', NOT METAL-VMM'S**: sweep.sh's
+/// and plants.sh's (`VOLUME_SITE`, `VOLUME_SEEDS`) and gopher-metal's probes'
+/// (`VOLUME_LUN`, `VOLUME_TARGET`), exported beside the settings. Every other
+/// name in a family is a misspelling until it is added here or to `table`.
+const script_names = [_][]const u8{ "VOLUME_SITE", "VOLUME_SEEDS", "VOLUME_LUN", "VOLUME_TARGET" };
+
 fn find(name: []const u8) ?Setting {
     for (table) |s| if (std.mem.eql(u8, s.name, name)) return s;
     return null;
 }
 
 /// The first setting in `entries` (`NAME=value`, as the environment holds
-/// them) that is refused, said in `buf`; null if none is. Names in a family
-/// that metal-vmm does not read go to `unknown`, one line each.
-pub fn complaint(entries: []const [*:0]const u8, buf: []u8, unknown: ?*const fn ([]const u8) void) ?[]const u8 {
+/// them) that is refused, said in `buf`; null if none is. A name in a family
+/// that is neither a setting nor one of `script_names` is refused too.
+pub fn complaint(entries: []const [*:0]const u8, buf: []u8) ?[]const u8 {
     var volume = false;
     for (entries) |entry| {
         const line = std.mem.span(entry);
@@ -150,10 +157,10 @@ pub fn complaint(entries: []const [*:0]const u8, buf: []u8, unknown: ?*const fn 
         const name = line[0..eq];
         const value = line[eq + 1 ..];
         const setting = find(name) orelse {
-            for (families) |f| if (std.mem.startsWith(u8, name, f)) {
-                if (unknown) |say| say(name);
-                break;
-            };
+            for (script_names) |ok| {
+                if (std.mem.eql(u8, ok, name)) break;
+            } else for (families) |f| if (std.mem.startsWith(u8, name, f))
+                return std.fmt.bufPrint(buf, "{s} is not a setting metal-vmm reads (a misspelling?)", .{name}) catch name;
             continue;
         };
         if (setting.needs_volume and !volume)
@@ -263,7 +270,7 @@ fn says(entries: []const [*:0]const u8) ?[]const u8 {
     const Static = struct {
         var buf: [256]u8 = undefined;
     };
-    return complaint(entries, &Static.buf, null);
+    return complaint(entries, &Static.buf);
 }
 
 test "what a setting must be" {
@@ -292,16 +299,14 @@ test "a schedule past what it holds is refused, not cut" {
     try testing.expect(std.mem.endsWith(u8, says(&.{entry}).?, ": more entries than the schedule holds"));
 }
 
-var unknown_seen: usize = 0;
-fn countUnknown(_: []const u8) void {
-    unknown_seen += 1;
-}
-
-test "a name in a family that is not a setting is said, and does not stop the run" {
-    unknown_seen = 0;
+test "a name in a family that is not a setting stops the run, but the scripts' own names" {
+    // **A MISSPELT SETTING IS NO FAULT, SILENTLY** (the normalization hunt,
+    // 2026-10-10; Steve: fail, never warn): `PEER_RESETAT=3` was said on
+    // stderr and the run went on with no reset, judged ok.
     var buf: [256]u8 = undefined;
-    try testing.expectEqual(@as(?[]const u8, null), complaint(&.{ "PEER_RESETAT=3", "VOLUME_SITE=/x", "PATH=/bin" }, &buf, countUnknown));
-    try testing.expectEqual(@as(usize, 2), unknown_seen);
+    try testing.expectEqualStrings("PEER_RESETAT is not a setting metal-vmm reads (a misspelling?)", complaint(&.{ "PEER_RESETAT=3", "PATH=/bin" }, &buf).?);
+    // The scripts' own names in a family are theirs, and pass.
+    try testing.expectEqual(@as(?[]const u8, null), complaint(&.{ "VOLUME_SITE=/x", "VOLUME_SEEDS=3", "VOLUME_LUN=0", "VOLUME_TARGET=1", "PATH=/bin" }, &buf));
 }
 
 test "a time no clock here can hold is refused, not overflowed (metal-vmm QUEUE 103)" {
