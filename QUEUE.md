@@ -18,6 +18,8 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
 
 ## Now (2026-10-10, late night)
 
+**2026-10-11 01:10 UTC: CC does 159 overnight (serveOne, on its branch); v23 re-gating on gopher-metal `d72f4bc`.**
+
 **v22 serves** (gopher-metal `bc459b3`, angry-gopher `51713cd6`). **On
 master, not released:** B42 and batched frees (uploads and deletes a FAT
 sector at a time), exact accounting of what a failure leaves (148, 152),
@@ -267,6 +269,20 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
     (which passes both through). Red first: a GET with the ETag it was given
     answers 304, empty; one with another answers 200 and the bytes. The same
     for any other embedded asset the routes serve the same way.
+
+159. **CC's, overnight (Steve, 2026-10-11 01:10 UTC): `serveOne` takes the kept
+    stream from `route`, so gopher-metal builds against a port of 157.** Your
+    patch in FEEDBACK (2026-10-11, night) is the start: `probe/gopher.zig`
+    serves what `router.route` answers (`!?Kept`), where it read `bus.kept`.
+    - **On your branch only, in gopher-metal and angry-gopher.** v23 is gating
+      on the box from gopher-metal master `d72f4bc` (the uploads judge now
+      sends the topic's first message: 156(j) made an upload to a topic not
+      there a 404; merge master in) and angry-gopher master `7dfa6dae`. 157
+      and 159 go to master after v23 ships, when the box merges them.
+    - **Done when:** a port of your angry-gopher branch, with `serveOne`
+      patched, passes gopher-metal's `zig build check` and `zig build test`;
+      every other reader of `bus.kept` in gopher-metal follows too, or say
+      there is none. A real boot (the gates) is the box's, at the merge.
 
 ## The box: open
 
