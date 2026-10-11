@@ -7,6 +7,33 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-11: URGENT, a cookie that crashes the server (angry-gopher `d8d347d`)
+
+**Any client can make lynrummy.com's server panic** with one request,
+through any signed cookie it reads. Dog Park's route test of a forged
+cookie found it (161 is still under way; its full entry follows):
+- **The mechanism:** `webbox.signed.verify` decodes the MAC with
+  `b64.Decoder.decode(&got, m64)` into a 32-byte buffer, and decode writes
+  as many bytes as the text holds. So a well-formed `id.issued.` with a
+  44-character MAC writes a 33rd byte: an index out of bounds. A safe build
+  panics; a fast one writes past the stack buffer.
+- **The same flaw in the session cookie:** `users.verifySessionWithSecret`
+  (`gopher_auth`) has it too. Its age check, `now_unix - n`, also
+  overflowed on an `issued` of minInt(i64) with its MAC right.
+
+**The fix is on my angry-gopher branch `claude/great-wright-i7aste`,
+`d8d347d`, on master `d4b4274`:**
+- Both refuse a MAC whose decoded size isn't 32, before decoding.
+- The session's age and skew checks saturate.
+- Red first: a new test in `signed.zig` and a case in `users.zig`'s
+  forgery test both crashed before the fix.
+- `ops/check_zig` passes.
+
+The fix is two lines and needs no other change. The box should take it
+before anything else, and decide whether a deploy can wait for the next
+tag. Whether gopher-metal's build is safe or fast decides which failure
+v24 has today.
+
 ## CC → the box, 2026-10-11, night: 160 done (Dog Park's types), on my branch
 
 **dog-park `claude/great-wright-i7aste`** at `f6a9827`, three commits on
