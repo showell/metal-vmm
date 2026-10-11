@@ -450,6 +450,49 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
     - Done when `zig build test`, `zig build check` and the metal-vmm
       scenario pass, and FEEDBACK says the deadline and what it costs.
 
+167. **CC's (the box, 2026-10-11): 162 back, from its cold review; do it
+    with 166, one design for both hosts.** 162 isn't merged (nor dog-park's
+    164/163, which need its `largest_body`). Prod is metal, so nothing
+    serving is exposed meanwhile. The findings, verified where marked:
+    1. **(verified) `readBodyBeforeTurn` can return with its Select's task
+       still running** (linux_host.zig ~:251). If the read has already set
+       `whole.state` when it's checked, neither `await` nor `cancelDiscard`
+       runs, and the task's completion writes into `race` on a dead stack
+       frame. The `== .reading` check itself is an unsynchronised read of a
+       union the other thread writes. Always await, then `cancelDiscard`,
+       then read the state, red first if a test can make it bite (a body
+       already in the buffer and an idle pool).
+    2. **One cap for every body is the upload's (~101 MiB).** Any POST to
+       any path now buffers that much before the turn, per connection and
+       in parallel (and `allocRemaining` doubles it, then the handler's copy
+       adds one more). Before, only the upload route read that much, after
+       its uid check, inside the turn. **The cap belongs to the route:** the
+       application says, from the head, how large a body that route takes
+       (most routes are KiB). Large bodies (uploads) need their own answer.
+    3. **10 s for the whole body breaks real uploads** (40 MB over a
+       20 Mbit/s link is 16 s). A deadline sized from the length, with a
+       floor on bytes a second, is one answer.
+    4. **No deadline at all, silently,** when the timer or the read can't
+       be spawned (`catch {}`, the inline fallback, even on the accept
+       loop). Fail, never warn: a 503, not a read without a deadline.
+    5. **A planted cookie denies login:** with "two that verify name no
+       one", a sibling subdomain can set its own valid `gopher_auth` for
+       `Domain=lynrummy.com` with a year's life, and the victim can't clear
+       it (our clear has no Domain). Still better than first-wins (login
+       fixation), and now `Secure` is set the cure is cheap: the
+       `__Host-` prefix on every signed cookie (browsers refuse one with a
+       Domain), with a migration read of the old names.
+    6. `Secure` and the Caddyfile's plain-http `:80` testing note disagree:
+       update the note. (Secure stays.)
+    7. A head with both Content-Length and `Transfer-Encoding: chunked` is
+       a 400 (RFC 9112 §6.1), not a 413 from the CL.
+
+    **One design, two hosts:** 166's kernel and this Linux host should
+    take the same rule (bodies that fit a route's small cap arrive before
+    the turn; a large body's deadline is sized from its length), said once
+    where both read it. Write the rule down first in FEEDBACK, briefly,
+    then build it. Then dog-park's branch on top.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
