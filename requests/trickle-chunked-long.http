@@ -1,0 +1,17 @@
+POST /nope HTTP/1.1
+Host: lynrummy.com
+Transfer-Encoding: chunked
+Connection: close
+
+4
+aaaa
+4
+bbbb
+4
+cccc
+4
+dddd
+4
+eeee
+0
+

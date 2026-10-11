@@ -34,6 +34,22 @@
 #   - either way, a caller four seconds in (`requests/not-found.http`) is
 #     answered within a second.
 #
+# **A SLOW BODY HOLDS NOBODY UP, AND IS ANSWERED WHEN THE RULE SAYS**
+# (webbox's body.zig, metal-vmm QUEUE 166). The first client sends a chunked
+# POST 16 bytes every 3 s (`requests/trickle-chunked.http`: its head whole in
+# its sixth segment, about 15 s in, its last chunk in its eighth, about 21 s
+# in); the second asks for / at 17 s:
+#   - the second is answered within a second of opening, before the first:
+#     a body that fits the buffer is waited for before the turn, never in it
+#     (the kernel of v26 served the first at its head and read its body in
+#     the turn, a read at a time, so the second waited for all of it);
+#   - the first, its body whole within the rule's 10 s of its head, is
+#     answered by its route (404), after the second.
+# Then alone, 16 bytes every 5 s and a longer body
+# (`requests/trickle-chunked-long.http`: its head whole about 25 s in, its
+# last chunk about 40 s in): a 408 at the rule's 10 s after its head was
+# whole, where v26 read it to its end and answered 404.
+#
 # Needs: a built metal-vmm, gopher.elf, the site's boot disk (SITE, as the
 # other scripts have it) and mtools (`mcopy`) to write its config.
 set -u
@@ -142,5 +158,43 @@ for ms in 3000 5000; do
     [ "$before" = 0 ] || failed=1
 done
 
-[ "$failed" = 0 ] && echo "PASS  timeouts: a silent client and a stalled reader hold nobody up, and are let go when the volume says"
+# A slow body (QUEUE 166). Derived from the rule and the peer's segments,
+# not yet run on a guest when written (CC's container has no KVM).
+before=$failed; failed=0
+cp "$SITE" "$WORK/boot.img"; cp "$SITE" "$WORK/vol.img"
+printf 'requests = 2\n' > "$WORK/conf"
+mcopy -o -i "$WORK/boot.img@@$PART" "$WORK/conf" ::gopher-metal.conf ||
+    { echo "could not write gopher-metal.conf"; exit 2; }
+TRANSPORT=pci PEER_CLIENTS=2 PEER_CLIENT_GAP_US=17000000 VOLUME="$WORK/vol.img" \
+    PEER_REQUEST="$HERE/requests/trickle-chunked.http,$HERE/requests/shapes/home.http" \
+    PEER_MSS=16 PEER_DRIP_US=3000000 \
+    timeout 300 "$VMM" "$KERNEL" "$WORK/boot.img" "" / > "$WORK/out" 2> "$WORK/err"
+code=$?
+slow=$(grep '^peer 1: ' "$WORK/out")
+caller=$(grep '^peer 2: ' "$WORK/out")
+if [ "$code" != 0 ] || ! grep -q '^  served 2 request(s)' "$WORK/out"; then
+    fail "slow body: the guest did not serve its two requests and stop (exit $code): $(tail -1 "$WORK/err")"
+else
+    c_open=$(us_of "$caller" opened); c_answered=$(us_of "$caller" answered)
+    s_answered=$(us_of "$slow" answered)
+    { [ -n "$c_answered" ] && grep -q '^peer 2: 200,' <<< "$caller" && [ $(( c_answered - c_open )) -lt 1000000 ]; } ||
+        fail "slow body: the caller beside a trickled chunked body was not answered within a second: $caller"
+    { [ -n "$s_answered" ] && grep -q '^peer 1: 404,' <<< "$slow" && [ -n "$c_answered" ] && [ "$c_answered" -lt "$s_answered" ]; } ||
+        fail "slow body: the trickled body was not answered by its route after the caller: $slow | $caller"
+fi
+cp "$SITE" "$WORK/boot.img"; cp "$SITE" "$WORK/vol.img"
+printf 'requests = 1\n' > "$WORK/conf"
+mcopy -o -i "$WORK/boot.img@@$PART" "$WORK/conf" ::gopher-metal.conf ||
+    { echo "could not write gopher-metal.conf"; exit 2; }
+TRANSPORT=pci VOLUME="$WORK/vol.img" PEER_REQUEST="$HERE/requests/trickle-chunked-long.http" \
+    PEER_MSS=16 PEER_DRIP_US=5000000 \
+    timeout 300 "$VMM" "$KERNEL" "$WORK/boot.img" "" / > "$WORK/out" 2> "$WORK/err"
+code=$?
+line=$(grep -E '^peer( 1)?: ' "$WORK/out" | head -1)
+grep -Eq '^peer( 1)?: 408' <<< "$line" ||
+    fail "slow body past the rule's deadline: not a 408 (exit $code): $line"
+[ "$failed" = 0 ] && echo "      a trickled body: the caller beside it answered at once, and one past the deadline a 408"
+[ "$before" = 0 ] || failed=1
+
+[ "$failed" = 0 ] && echo "PASS  timeouts: a silent client, a stalled reader and a slow body hold nobody up, and are let go when the rule says"
 exit "$failed"
