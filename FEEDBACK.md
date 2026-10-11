@@ -7,6 +7,139 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-11, night: 161 done (Dog Park for one human, end to end, wrapping)
+
+**dog-park `claude/great-wright-i7aste` at `3a7f135`**, on `main`
+`f6ae7b3`. It needs angry-gopher at my branch's `d8d347d` (master
+`d4b4274` plus the cookie fix in the entry below) as the sibling
+`../angry-gopher`. Gates: `zig build test` passes (68 tests) and
+`ops/smoke` passes in about 0.5 s.
+
+**To see a dog:** `zig build run`, then a browser at `localhost:9101`. It
+needs no config: it uses the checkout's `data/` and `auth/`, and makes
+the secret on first start. Drag the ringed dog. Holding it near an edge
+scrolls forever, across the seam. Reload, and the dog is where you left it.
+
+**The milestones, one commit each, then each one's adversary:**
+
+| Milestone | Commit | Adversary's commit |
+|---|---|---|
+| 0, the wrap | `213623a` | `62d5edf` |
+| 1, the index | `c15ea42` | `36d7319` |
+| 2, placement | `f01002b` | `3a7f135` |
+| 3, the world | `d67bdc7` | `5e922bc` (with 4) |
+| 4, the scene | `f3973cf` | `5e922bc` (with 3) |
+| 5, the app | `8f3b623` | none (findings below, none fixed here) |
+| 6, main and smoke | `e5b3dff` | `71afe8c` |
+| 7, the browser | `87656d2` | `f4bb25a` |
+
+**The order slipped from the brief's.** Milestones 0 and 1 were each
+attacked before the next was committed. I wrote 2 to 7 while those attacks
+ran, and the stop hook wanted no uncommitted work, so 3 to 7 went in as
+their own commits, each passing `zig build test`, before their
+adversaries. Each adversary then ran on its commit, and its fixes are the
+follow-up commits above.
+
+**What each adversary found, and what came of it:**
+- **0, the wrap.**
+  - Sound: pieces partition every rectangle tried, nearestCopy is right,
+    and no overflow is reachable from checked inputs.
+  - Found: a 100-px park under a 10,000-px viewport cut into 10,816
+    pieces. `wire.read` now refuses a scene that would cover more than
+    twice the park on an axis (at most nine pieces).
+  - Found: `onHomeTile` invited a park/plane mix-up. It is now
+    `homeCopy`, documented as seldom the copy meant, and `Piece.toPlane`
+    carries a piece's points.
+- **1, the index.**
+  - Sound: it agrees with the list everywhere, its lists stay whole after
+    5,000 moves in one cell, and `init` is leak-free.
+  - Found: `put` filed a dog outside the park in the wrong cell, or
+    panicked. It now asserts.
+  - Found: the oracle's draws were too uniform. They now lean on cell and
+    park edges and on regions wholly off the park, a cut's dogs are
+    checked distinct, and `checkAllAllocationFailures` runs on `init`.
+- **2, placement.**
+  - Sound: correct on every shape, and agrees with a wrapped-distance
+    oracle.
+  - Found: the spiral ran to the whole longer side, four times the
+    needed steps (2.1 s a request on a 100 by 1,048,500 park). It now
+    stops at half.
+  - Found: "free" now says both axes at once. A test fills eight park
+    shapes, checking each spot is used once.
+- **3, the world.**
+  - **The serious one:** with `next-human` lost or restored behind
+    `dogs/`, a new device got an existing human's id, and their dog.
+    `open` now refuses a counter that isn't past every owner, naming
+    `next-human`, and `newHuman` refuses an id that has a dog.
+  - A record of 25 bytes or more stopped the start as a bare
+    `StreamTooLong`. It now refuses it as `wrong_size`, naming the file.
+  - A leftover temporary is now matched as FAT's 13-character shape, in
+    either case, and a folder of that name is refused, not skipped.
+  - `most_dogs` is now 16,000, by honest FAT arithmetic: a long name and
+    a temporary make four entries a dog.
+- **4, the scene.**
+  - No bugs found.
+  - A new human's first request now stays, whatever it asks: they have
+    not seen their dog yet.
+- **5 and 6, the app and main.**
+  - Sound: no client request I tried reached a 500 except through a bad
+    disk. Hostile JSON is a 400 every way it tried.
+  - Found: `ops/smoke` had no timeouts and blamed `GET /` for a dead
+    server. Every curl now has five seconds, and the wait loop checks the
+    server is alive.
+  - The rest is for the box or Steve, below.
+- **7, the browser.**
+  - Found: a pointer's fractional offsets went out as fractional drags,
+    so every request was a 400 on a zoomed or DPR-2 page. Now only whole
+    units go out, and the fraction is kept.
+  - Found: a request the server applied but the browser saw fail left
+    them apart until a reload. Now every answer puts the own dog at the
+    server's copy plus the drag since. That also stopped a refusal
+    snapping the dog a park away, off screen.
+  - Found: a still window never saw another's dog move. It now sends a
+    stay each second when nothing else is asked, until SSE.
+  - Sound: crossing the seam (4,758 px east, 0 px of jump on screen), an
+    answer after a wrap, pacing (one request in flight, at least 60 ms
+    apart), resize, DPR 2 and the blitter.
+
+**What the brief left open, and what I decided:**
+- **The index is a grid, not a quadtree.** Cells are at least 500 px and
+  at most 256 a side. Dogs start on a lattice and drift; a scene is a
+  viewport-sized question. Its worst case is a crowd in one cell, and a
+  cut answer fills from the region's north-west first.
+- **The first scene's viewport:** the browser asks once at (0, 0), then
+  centres the viewport on its dog and asks again.
+- **A cookie that does not verify is a new device**, whether it is a
+  forgery or past its year. A new device becomes a human only once its
+  request reads, so a 4xx burns no id.
+- **A new human's breed is their id mod 5.**
+- **The browser draws faint dots at the lattice spots**, so a scroll can
+  be seen. Deciding where they go is outside the blitter.
+
+**What the box should look at first:**
+1. **The cookie crash, angry-gopher `d8d347d`** (the URGENT entry below).
+2. **A held-open request body freezes every handler** on webbox's Linux
+   host. A head with `Transfer-Encoding: chunked` and nothing after it,
+   or a Content-Length larger than what was sent, holds `turn` with no
+   deadline. Another client's `GET /` waited 40 s. Dog Park's droplet is
+   exposed. I believe gopher-metal reads the body before the turn
+   (server.zig says so), but that is not checked. The fix is in
+   linux_host: read the body before `turn`, with a deadline.
+3. **Small webbox points:**
+   - The cookie has no `Secure` attribute, so it would also go out over
+     plain http behind Caddy.
+   - With two cookies of the same name, the first wins.
+   - `site_secret.create` checks and then writes, so two processes
+     starting at once could race.
+4. **A decision for Steve:** anyone can fill the park. Cookie-less
+   requests made about 160 dogs a second, which reaches the lattice's
+   2,500 spots in seconds and `most_dogs` in minutes. The options are a
+   limit on new humans per address (`bus.peer`, behind the trusted
+   proxy), or keeping a new human's dog only once a request comes back
+   with its cookie.
+5. **A disk failure burns an id:** `next-human` is bumped before the dog
+   is written. I left it as it is; ids are unique, not dense.
+
 ## CC → the box, 2026-10-11: URGENT, a cookie that crashes the server (angry-gopher `d8d347d`)
 
 **Any client can make lynrummy.com's server panic** with one request,
