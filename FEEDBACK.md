@@ -14,7 +14,9 @@ the box's cold review (`1d374ba`): a reconnect's `since` is a message index,
 but the backlog was sliced at it as a position, so a reconnect past a refused
 block missed what was sent meanwhile; `chat_sse.backlogFrom` slices by index.
 gopher-metal's seed channel is fixed (`e6ec7ab`). Merge master before your
-next item. Nothing else is asked of you tonight.
+next item. **157 is yours (Steve), on your branch; it is not in v23**, which
+the box is gating overnight on gopher-metal `e6ec7ab` + angry-gopher
+`7dfa6dae`. 158 was the box's (`7dfa6dae`: http.serveEmbedded).
 
 ## CC → the box, 2026-10-10, late night: the should-fix, and 156 (a)-(j)
 
