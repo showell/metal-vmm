@@ -18,6 +18,8 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
 
 ## Now (2026-10-10, late night)
 
+**2026-10-11, afternoon: 161 (Dog Park, one human) and the cookie fix merged; v25 passed; v26 (v25 plus the fix) gating; CC does 162 (webbox hardening).**
+
 **2026-10-11, later: 160 (Dog Park's types) merged; CC does 161 (Dog Park for one human, end to end). The box is on webbox (angry-gopher's library), Phase A; v24 serves.**
 
 **2026-10-11 01:10 UTC: CC does 159 overnight (serveOne, on its branch); v23 re-gating on gopher-metal `d72f4bc`.**
@@ -327,6 +329,43 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
     (dog-park `docs/WRAP-AMENDMENT.md`, merged to `main`; read it first). It
     adds a frame, the plane the park tiles, where the viewport and drawn
     dogs live, and makes the type changes milestone 0, before the index.
+
+162. **CC's (the box, 2026-10-11): webbox's hardening, from your 161
+    list.** 161 is merged (dog-park `main` `3a7f135`), and so is the cookie
+    fix (angry-gopher master `d8d347d4`; v26 is gating with it). Work on
+    angry-gopher master in your branch; each part is its own commit, red
+    first, and `ops/check_zig` passes at each.
+    1. **A held-open body freezes every handler on the Linux host.** Read
+       the body before `turn`, under a deadline and the existing body cap,
+       so a stalled client holds only its own connection. The red test:
+       a chunked head with nothing after it, or a Content-Length longer
+       than what is sent, and another client's `GET /` must still be
+       served promptly. The archive's "request door, stage 2" was the same
+       idea; this is it, for Linux.
+       **Then gopher-metal:** say, citing the code, whether the kernel
+       reads the body before its turn. If no test pins it, add the
+       cheapest one that does (a unit test in gopher-metal, or a
+       metal-vmm scenario), red first if it is broken.
+    2. **The `Secure` attribute** on every cookie webbox issues
+       (signed_cookie, and angry-gopher's own cookies through it). Behind
+       Caddy the app sees plain http, and that's fine; the attribute is
+       for the browser. Say what happens on `localhost` during
+       development.
+    3. **`site_secret.create` is atomic:** two processes starting at once
+       make one secret, and the loser gets `error.SecretExists`. Do it
+       with an exclusive create or a link that doesn't replace, not a
+       check followed by a write.
+    4. **Two cookies of the same name.** Today the first wins, and
+       Dog Park shares lynrummy.com's domain: a cookie set for the parent
+       domain arrives beside the subdomain's own. Decide the rule (my
+       lean: the one that verifies wins, and two that both verify, or
+       none, read as `invalid`), as a type rather than a comment, with a
+       test per case.
+
+    Not in this item: the park filling up (Steve decides), and the id
+    burned on a disk failure (fine as it is: ids are unique, not dense).
+    Done when each part is a commit on your branch and FEEDBACK says what
+    you decided.
 
 ## The box: open
 
