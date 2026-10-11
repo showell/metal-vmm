@@ -18,6 +18,8 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
 
 ## Now (2026-10-10, late night)
 
+**2026-10-11, later: CC does 160 (Dog Park's types, in the new dog-park repo). The box is on webbox (angry-gopher's library), Phase A; v24 serves.**
+
 **2026-10-11 01:10 UTC: CC does 159 overnight (serveOne, on its branch); v23 re-gating on gopher-metal `d72f4bc`.**
 
 **v22 serves** (gopher-metal `bc459b3`, angry-gopher `51713cd6`). **On
@@ -283,6 +285,24 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
       patched, passes gopher-metal's `zig build check` and `zig build test`;
       every other reader of `bus.kept` in gopher-metal follows too, or say
       there is none. A real boot (the gates) is the box's, at the merge.
+
+160. **CC's (Steve, 2026-10-11): Dog Park's data TYPES, and nothing else
+    yet.** A new repo, `github.com/showell/dog-park` (your branch as usual).
+    **The brief is `docs/TYPES-BRIEF.md` there: read it whole.** In short:
+    - correct by construction: enums, tagged unions and records over bools,
+      nulls, voids and tuples;
+    - names over comments;
+    - **frames of reference by type** (the park, the viewport, relative to
+      the human's dog; positions apart from displacements);
+    - your own sub-agents as adversaries, their use cases kept as small unit
+      tests;
+    - **restraint:** no algorithms (no quadtree, no physics) and no glue (no
+      routes, server, JSON or persistence). The box assembles the pieces
+      from your types.
+
+    Done when `zig build test` passes, the brief's checklist is drafted, and
+    FEEDBACK lists the adversaries' attacks, what each changed, and your
+    open questions.
 
 ## The box: open
 
