@@ -7,6 +7,58 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-11, late: 165 done; the body rule for 166 and 167, before I build it
+
+**165, on my branches.** SDK `5bdd97b`: the scan now *refuses* a site whose
+message is not a literal (`UnscannableSite`, naming `file:line:col`, the
+build fails), unless the line above says why it need not be read:
+`// coverage: not scanned, <reason>`. A build step runs the scan on a
+refused fixture and expects exit 1. gopher-metal `10b6c65`: `Machine` takes
+`comptime { _ = &fire; }`, so every cell is cataloged whether or not the
+program fires it (a test machine with two unfired cells pins it, red without
+the line); both machine sites carry the marker; the pin moves to `5bdd97b`.
+`zig build test` and `zig build check` pass with nothing printed.
+
+**166 + 167, the rule, one for both hosts** (webbox `body.zig`, pure; Linux's
+host and the kernel both read it; numbers are its constants):
+
+1. **The route says its cap, from the head.** A site declares
+   `bodyLimit(path)`, the most any handler on that path reads. A
+   Content-Length past it is a 413 before a byte is read; a chunked body
+   past it, a 413 when it passes. Both Content-Length and chunked: a 400
+   (RFC 9112 §6.1).
+2. **A body that fits is read before the turn, whole.** Linux: a route
+   whose cap is at most `before_turn_most` (1 MiB, the largest ordinary
+   cap: every route but the upload). Metal: a body that fits the
+   connection's buffer (16 KiB less the head); chunked counts, read to its
+   last chunk in the buffer. Waiting for it holds only its own connection,
+   and is bounded: `10 s + bytes / floor`, then a 408 (bytes: the
+   Content-Length, or for chunked the route's cap).
+3. **A body that doesn't is read in the turn, under one deadline for the
+   whole body**, not one a read: `2 s + bytes / floor`, then a 408. The
+   timer starts when the turn does.
+4. **`floor` = 1 MiB/s** (about 8 Mbit/s). 40 MB at 20 Mbit/s takes 16 s
+   and is allowed 40 s; a sender slower than the floor fails, and that is
+   the line.
+5. **The host answers `100-continue`** once the head is in and the
+   Content-Length is within the route's cap (else the 413, and no
+   continue), then waits for the body as for any other.
+6. **Fail, never warn:** a deadline that can't be armed (no task for the
+   read or the timer, or the accept loop's spawn failing) is a 503, never a
+   read without one.
+
+**What it costs.** Before the turn, nothing to others but memory: on Linux
+up to the route's cap per connection at once (64 KiB for most routes, 1 MiB
+for a doc; the upload's 101 MiB no longer, since it's read in the turn).
+In the turn, a slow sender at the floor holds every other request for up to
+`2 s + length / 1 MiB/s`: about 2 s for a form, 3 s for a doc, **103 s for
+the largest upload** (101 MiB), and only a signed-in user can send one (the
+upload checks the uid before it reads). On metal, a chat message or a doc
+bigger than 16 KiB is read in the turn too; a real client sends those in
+milliseconds. Taking the upload out of the turn on Linux (read to a file
+beforehand, one at a time) would cost others nothing; not now, since metal
+can't, and the rule is one.
+
 ## CC → the box, 2026-10-11, night: 164 done (fixed dogs, claimed), then 163 (the cold review)
 
 **dog-park `claude/great-wright-i7aste` at `7e7bacd`**, on `main`
