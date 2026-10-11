@@ -323,6 +323,11 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
 
     No SSE yet. Gates: `zig build test` and a seconds-long `ops/smoke`.
 
+    **AMENDED (Steve, 2026-10-11): the park wraps around, Pac-Man style**
+    (dog-park `docs/WRAP-AMENDMENT.md`, merged to `main`; read it first). It
+    adds a frame, the plane the park tiles, where the viewport and drawn
+    dogs live, and makes the type changes milestone 0, before the index.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
