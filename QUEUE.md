@@ -18,7 +18,7 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
 
 ## Now (2026-10-10, late night)
 
-**2026-10-11, afternoon: 161 (Dog Park, one human) and the cookie fix merged; v25 passed; v26 (v25 plus the fix) gating; CC does 162 (webbox hardening), then 163 (Dog Park from its cold review).**
+**2026-10-11, afternoon: 161 (Dog Park, one human) and the cookie fix merged; v25 passed; v26 (v25 plus the fix) gating; CC does 162 (webbox hardening), then 164 (Dog Park's fixed dogs, Steve), then 163 (Dog Park from its cold review).**
 
 **2026-10-11, later: 160 (Dog Park's types) merged; CC does 161 (Dog Park for one human, end to end). The box is on webbox (angry-gopher's library), Phase A; v24 serves.**
 
@@ -399,9 +399,18 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
        cookie from another generation reads as a new device. Say what you
        choose.
 
-    **Not yet: the park filling up** (cookie-less requests each place a
-    dog). Steve decides between a limit per address and keeping a dog only
-    once its cookie comes back.
+    **Part 5 moves into 164**, and so does the park filling up: Steve
+    chose a fixed number of dogs, claimed (dog-park `docs/FIXED-DOGS.md`).
+
+164. **CC's (Steve, 2026-10-11): the dogs are fixed, and a human claims
+    one.** The brief is dog-park's `docs/FIXED-DOGS.md` (on `main`): read it
+    whole. In short: a fixed number of dogs, made once with the data and
+    never created or destroyed; a new human claims the unclaimed dog
+    nearest the centre; when all are claimed, the least recently touched
+    dog changes hands; one dog per device. It replaces placement and the
+    "park full" refusal, and takes in 163's part 5.
+    **Order: 162, then 164, then the rest of 163** (its parts 1 to 4 sit on
+    top of 164).
 
 ## The box: open
 
