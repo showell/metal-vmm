@@ -576,7 +576,13 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
        error in the uploader check): a 500 or 503, as in the turn.
     7. **Linux: a read that ended too large or unreadable as the timer
        fired** is told 408; it should be its own refusal.
-    8. **The `__Host-` migration is unfinished:** a session from before the
+    8. **The `__Host-` names were reverted out of v27** (angry-gopher, after
+       7ef17a13): gopher-metal's judges and droplet tools read and send
+       cookies by name (`probe/judge_gopher.py`, `droplet/rotate_secret.py`,
+       `cutover_drill.py`, `compare_hosts.py`, `load.py`, `fuzz_requests.py`)
+       and v27's gates failed six ways on it. Bring the rename back whole:
+       the judges and tools moved to the new names in the same change, and
+       the migration below finished. **The migration was unfinished:** a session from before the
        deploy keeps its legacy `gopher_auth` for up to a year and is never
        moved, so it stays plantable. A planted legacy cookie can sign a
        signed-out victim in as the planter, and a planted legacy
