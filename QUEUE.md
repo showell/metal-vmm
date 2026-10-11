@@ -597,6 +597,30 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
        In dev over plain http, a legacy `gopher_uid` loops 303s forever:
        stop that.
 
+171. **CC's (Steve, 2026-10-11): the kernel's body drains as pure
+    functions, tested directly.** Your 170 note: `stepDrain`, `pauseClocks`,
+    the takeover and the slot waits live in `probe/gopher.zig`'s loop state
+    and only `timeouts.sh` judges them. Pull the decisions into a module of
+    pure functions over the bytes seen, the clock and the slots (what to do
+    next: wait, read more, take a slot, hand over, refuse with which status),
+    the loop keeping only the I/O. Then:
+    - **unit tests at every edge**, both sides of each boundary in one test
+      (Steve's rule from the off-by-one hunt): a deadline at its last ms and
+      the next, a body exactly the cap and one past, a stall at 29,999 and
+      30,000 ms, a takeover with and without a slot free, a budget charged to
+      exactly 64 MiB and one byte more, a chunk ending at the buffer's edge;
+    - **a seeded simulator** if the shape invites it (the decisions against
+      a model of slots and budget over random arrivals), on the pattern of
+      `ready_sim`;
+    - `timeouts.sh` unchanged and still the end-to-end judge (the box runs
+      it).
+
+    One long run: the seam, the tests, the simulator, an adversary pass.
+    Note: Phase B (the box's) is reshaping how the kernel imports the
+    application (`app` and `webbox` modules, `host_io`); keep this to
+    `probe/gopher.zig`'s loop and a new `src/` module, and the box will
+    rebase.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
