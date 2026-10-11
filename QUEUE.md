@@ -621,6 +621,38 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
     `probe/gopher.zig`'s loop and a new `src/` module, and the box will
     rebase.
 
+**After 171, in order (Steve, 2026-10-11: cleanup and quality for
+angry-gopher and gopher-metal; no Dog Park).** Each is one long run, on your
+branch, cold-reviewed by your own adversary before you report. Phase B (the
+box's) is reshaping how the kernel takes the application (imports, `host_io`,
+the build, the port); stay off those, and merge master in as it lands.
+
+172. **A class hunt: errors swallowed, or sent the wrong way.** The largest
+    class in the last 52 fixes (12 of them: a write's failure answered
+    success, a catch-continue that skipped work, OOM counted as "unreadable",
+    an error closing a connection with no answer). Hunt it across
+    angry-gopher's handlers and stores and gopher-metal's `src/` (not
+    `probe/gopher.zig`'s drain loop, which is 171's). For each site: what
+    the caller is told, whether that is true, and whether a test pins it.
+    **Red first** for every bug; a site that is right but unpinned gets its
+    test. Report the sites checked, the bugs, and the questions where the
+    intended answer is unclear.
+
+173. **`src/disk_fat.zig` (4,146 lines) split by the ~1,000-line rule**, and
+    `src/disk_fat_test.zig` (3,102) along the same seams. No behaviour
+    change: cohesive modules (mount and layout, the FAT and its chains,
+    directories and names, the write paths and their commits, the check),
+    each with its tests beside it or in its own test file. Every existing
+    test, fault test, plant and coverage property is kept, with the same
+    message (the catalog and floors read them); new files join the coverage
+    catalog's list. `zig build test`, `check`, and a small `properties` build
+    pass; the box runs the guests.
+
+174. **angry-gopher's `chat_store.zig` (1,896 lines) and `users.zig` (1,061)
+    split** the same way, no behaviour change, `ops/check_zig` and
+    `ops/check_chat` passing. `router.zig` (2,262) waits: it is Phase B's
+    application root.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
