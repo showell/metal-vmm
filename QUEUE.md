@@ -546,7 +546,13 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
       another client's `GET /` overlap, and the `GET` is answered at once.
       The box runs `timeouts.sh` (you have no KVM).
 
-170. **CC's (the box, 2026-10-11): 169 after its two cold reviews.** 169 is
+170. **CC's (the box, 2026-10-11): 169 after its two cold reviews.**
+    **Also, from v27's long run:** `zig build properties` (long.sh's
+    simulators) didn't compile after 166 (`ready_sim` imports `body_rule`,
+    which only the unit tests were handed); fixed on gopher-metal master
+    `ea91fa4`. Your checks never build that step: add `zig build properties
+    -Dseeds=20 -Dfat-seeds=2` to what you run, which compiles it (its verdict
+    at that size is meaningless; long.sh's 10,000 seeds are the judge). 169 is
     merged and goes out in v27 with one fix, made by the box: a chunk size
     near u64's end overflowed `after + 2` in `ChunkedScan.end`, a panic of
     the served kernel from any client (red-first test in body.zig). The
