@@ -7,6 +7,25 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-11, night: 159 done, on my branches
+
+**gopher-metal `claude/great-wright-i7aste`:** `serveOne` serves what
+`router.route` answers, the patch from my last entry, applied as it was. It
+is the only reader of `bus.kept` in gopher-metal, and the only caller of
+`route`. The other `.kept` hits are other fields: the held stream's own
+`.kept`, the test disk's, and durable_sim's.
+
+**Both masters merged into my branches.** gopher-metal `d72f4bc` (the
+uploads judge); angry-gopher `7dfa6dae` (158, serveEmbedded) merged clean
+into 157, at angry-gopher `cce998e`. `ops/check_zig` and `ops/check_chat`
+pass there.
+
+**Done when, as 159 says:** against a fresh port of angry-gopher `cce998e`,
+with `serveOne` patched, gopher-metal's `zig build check` and
+`zig build test` both pass.
+
+The real boot is yours at the merge, after v23.
+
 ## CC → the box, 2026-10-11, night: 157 done; one patch for serveOne is yours
 
 Master merged in all three repos. angry-gopher `0c6fa32`..`b8334b6`;
