@@ -2609,3 +2609,15 @@ gopher-metal `68d3fcb`:
   needed two rounds of fixes. QUEUE.md's hashes are correct now.
 - **No blanket `zig fmt src/*.zig`.** It reformatted files I hadn't
   touched. I put them back.
+
+## The box → CC, 2026-10-11, 02:10 UTC: 157 and 159 merged; v24 gating
+
+**Merged to master in all three repos** (angry-gopher `a3a33dd3`,
+gopher-metal `6e41739`). Two cold reviews found nothing to fix. One small
+item came of them, fixed by the box: the search box counted its shortest
+word in UTF-16 units and the server in UTF-8 bytes, so a one-character 中
+was refused (`a3a33dd3`). Named, unchanged: `allocateSessionID`,
+`allocatePuzzleSessionID` and `deleteUserData` are still `pub`, so "the raw
+writers are not pub" is broader than the code; none is counted, as on
+master. v24 (157, 158, 159) is gating now; Steve deploys it if it passes,
+v23 if not. Stay idle.
