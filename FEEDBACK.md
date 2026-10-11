@@ -7,6 +7,73 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-11, late: 168 done (Dog Park's claims, v1); with 166 and 167 below, one run
+
+**dog-park `claude/great-wright-i7aste` at `45b5557`** (on `main`'s
+`aaa8d67`, and on angry-gopher's branch). `zig build test` and
+`ops/smoke` pass, and the node check passes its 14 checks, among them the
+read-only page, a pan across an answer, and the switch to a dog.
+
+**Step 1 (`25ecb3d`): humans are 128 random bits.**
+- A cookie carries exactly 32 lowercase hex digits, so each id has one
+  spelling.
+- New ids are drawn with `io.randomSecure`, which has no fallback seed.
+- The counter, `reserveThrough` and `handedOut` are gone, and a first visit
+  writes nothing.
+- An old counter cookie (digits) names no one, so its device is treated as
+  new.
+
+**Step 2 (`5ac7233`, then `45b5557`): the claims.**
+- **The claim type** is `unclaimed`, `provisional {by, until}` or
+  `held {by}`. Expiry is `Claim.at(now)`, tested at 119 s and 120 s.
+- **Holding a dog:**
+  - A dog is given provisionally and kept in memory only.
+  - Its first drag makes it held, and writes it.
+  - A stay, or a refused drag, writes nothing and doesn't extend the claim.
+  - The takeover and `touched` are gone.
+- **No dog free:** the scene's own dog is `no_dog_free`, and the scene still
+  comes with every dog. The browser has no ring and nothing to drag;
+  dragging the background pans, wrapping. It keeps asking at the idle
+  pace, and centres on a dog when one comes.
+
+**Decisions:**
+- **Store format 3** is 32 bytes and holds held claims only.
+  - A format 2 record is read with its claim let go: its claimant was a
+    counter number, which no cookie names now. So Steve's test data loses
+    its claims when this lands, and keeps its dogs where they stand.
+  - A folder that holds only some of the park's dogs, any of them format 2,
+    is refused rather than refilled.
+- **Provisional claims use the monotonic clock**, since they live in memory
+  only, so a stepped wall clock can't stretch them or end them all at once.
+  The cookie keeps the wall clock.
+- **A first visit's claim is now real**, though provisional, as the brief
+  says ("the same idea, made exact"). So a loop of requests without cookies
+  also takes a dog each, for 120 s. That is the brief's accepted v1 risk,
+  without even keeping a cookie.
+- **A tab left open keeps its dog**, in effect. After its 120 s, its next
+  idle ask (each second) is given the nearest free dog, which is usually
+  the same one. The attack noticed this; it is the brief's known case,
+  reached by an ordinary tab.
+- **Panning works only on the read-only page.** With a dog, a press off the
+  dog still does nothing, as before.
+
+**Attacks, one a step:**
+- **Step 1:** nothing serious. Fixed from it: dead code, stale comments,
+  `io.random`'s fallback replaced by `randomSecure`, a test that would have
+  weakened with time, a format 2 folder refilled by mistake, and an
+  unclaimed record naming a human, now refused. FIXED-DOGS.md and
+  BUILD-BRIEF.md now point to CLAIMS-V1.md.
+- **Step 2:** the server held up; the attack checked the holders map (at
+  most one entry a dog) through every order of given, ended and moved.
+  Fixed from it:
+  - an answer ended a pan in the middle of it;
+  - a dog arriving as `same_dog` after a read-only spell (its `new_dog`
+    answer lost) wasn't centred on;
+  - claims moved to the monotonic clock;
+  - a stale wire comment.
+
+Per QUEUE, no more Dog Park work from me until Steve says.
+
 ## CC → the box, 2026-10-11, late: 166 and 167 done, on my branches
 
 **Hashes:** angry-gopher `7ef17a1`, gopher-metal `eda42e4`, dog-park
