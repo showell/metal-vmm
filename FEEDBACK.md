@@ -7,6 +7,124 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-11, night: 160 done (Dog Park's types), on my branch
+
+**dog-park `claude/great-wright-i7aste`** at `f6a9827`, three commits on
+`d2c429e`. `zig build test` passes: 34 tests. One module a concept, each
+named in `src/dog_park.zig`: frames, park, humans, dogs, population, scene,
+outcomes, stored, wire.
+
+**The checklist, by its types:**
+- **Frames:** `Point(frame)`, whose `x` and `y` are `Coordinate(frame)`
+  (a distinct `enum(i32)` for each frame), plus `ParkPoint`,
+  `ViewportPoint`, `OwnDogPoint` and `Displacement`. Point plus
+  displacement, and point minus point, are the only arithmetic. The
+  conversions are `Viewport` (origin and size) and `OwnDogFrame` (made by
+  `Dog.frame`). **One scale:** a park unit is a CSS pixel at zoom 1, so
+  one `Displacement` serves every frame.
+- **Park:** `Park.of(size)` returns park, too_small or too_large.
+  `ParkRect` is half-open. `holds` returns `Containment`, either inside or
+  outside by an `Overhang`. `clamp` returns `Clamped`, either inside or
+  clamped with what was asked and what was kept. The lattice is a fixed
+  `lattice_spacing` of 100, with `LatticeSpot` (column, row) and
+  `pointOf(spot)` returning on (an `InParkPoint`) or off_park.
+- **Humans:** `HumanId` (`enum(u64)`, made by `of` in one place) and
+  `Visitor`, either known or new_device. **"Owns exactly one dog"
+  is the key:** a dog is known by its owner. There is no DogId, and the
+  population is keyed by owner.
+- **Dogs:** `Dog { owner, at: InParkPoint, breed }`. `Breed` is an
+  `enum(u8)` with stored numbers and an `emoji()`. `Drawn { at, breed }`
+  is a dog with its owner left out.
+- **Population (interface only):** `Near { region, except: HumanId }`.
+  `Found { count, completeness }`, where the caller's slice length is the
+  cap. `Lookup` is found or no_dog, and `Put` is added, replaced (with
+  where the dog stood) or refused_full. Its tests run a small list
+  population as the contract's reference.
+- **Frame request:** `SceneRequest { viewport, move }`, where
+  `Move` is stay or drag, and `Move.of` turns a drag of nothing into a
+  stay. I named it "Scene" because here a "frame" is always a frame of
+  reference.
+- **Frame to render:** `Scene { viewport, own: Drawn, others,
+  others_completeness, park_size, move }`, with `covers()` worked out from
+  the viewport. **The dogs are in the park's frame**, because the browser
+  scrolls inside the margin without asking. `SceneAnswer` is a scene or
+  no_room.
+- **Outcomes:** `MoveOutcome` is stayed, moved (`Clamped`, so clamped or
+  not is in the type) or refused (`too_far_at_once`). It is made by
+  `decide(park, was, move)`, the only path from a drag to a dog.
+  `Placement` is placed (a `LatticeSpot`) or refused (park_full or
+  population_full).
+- **Persisted:** `StoredDog`, an extern struct of 24 bytes with the format
+  first. `read(park)` returns dog, unknown_format, unknown_breed or
+  outside_park.
+- **Wire:** `WireSceneRequest` (`viewport_park_x`, …,
+  `drag.own_dog_dx`/`own_dog_dy`), whose `read(park)` returns request or
+  refused (viewport_empty, viewport_too_large or viewport_off_park).
+  `WireDog { park_x, park_y, emoji }`. `WireScene` (`covers_park_*`,
+  `park_*`, `own`, `others`, `others_complete`, `move`) and `WireAnswer`
+  are each made by `of`.
+
+**The adversaries:** four sub-agents, three on the first draft (frames;
+identity and population; requests, outcomes and wire) and one cold on the
+revision. Every attack that compiled changed something, except those
+marked "kept".
+
+What the first draft already refused: a viewport point for a park point, a
+point plus a point, a point used as a displacement, conversions run
+backwards, a dog with no owner, `HumanId + 1`, a `u64` where a `HumanId` is
+wanted, and a negative size.
+
+| Attack that compiled | What changed |
+|---|---|
+| `ParkPoint{ .x = seen.x }`: a viewport point's numbers relabelled as park numbers. This was the biggest hole; the frame was in the point's type but not in its fields. The same hole let a displacement be built from mixed coordinates, or a point be passed as a displacement. | Each coordinate is `Coordinate(frame)`. A raw number enters only through `Point.at`. |
+| A dog standing outside the park (`Dog.at = target(5000-px drag)`), or an "inside" outcome holding an outside point. | `InParkPoint`, made by `Park.clamp` or `pointOf`, is what a dog stands on and what outcomes hold. |
+| A drag of `Displacement.none`: no move and a move at once. | `Move.of` turns it into a stay, and so does `decide`. |
+| A `.stayed` outcome at another point; `.refused` on a stay; a 1e9-px drag applied without its length check. | `stayed` carries nothing. Outcomes come from `decide`, which checks length and then clamps. `Move.target` is gone. |
+| `Placed { spot, at }` with the two disagreeing; a spot off the park; a bigger park's spot giving an "in-park" point outside this one. | `placed` is a bare spot. `pointOf` checks the spot against this park and returns on or off_park. |
+| A lattice spacing of 0: division by zero, and a spot on the edge. | One `lattice_spacing` constant. `Park.of` refuses a park smaller than one spot. |
+| A zero-size park: `clamp` kept a point that `holds` called outside. | The same `Park.of`. |
+| Overflow panics: `holds` at the coordinate's edge, `grownBy(maxInt)`, and `pointOf` at the largest column. Silent saturation: a viewport at `maxInt`. | `holds` works in i64 and `Overhang` is u64. `grownBy` saturates. `Park.of` refuses a side past 1<<20, and `WireSceneRequest.read` refuses an empty viewport, one past 10,000 px, and one far off the park. So nothing a request makes gets near saturating. |
+| A Scene whose `own` is someone else's dog, `others` that include the own dog, and a `covers` that doesn't match its viewport. | `own` is `Drawn` (it has no owner). `Near.except` leaves the asker's dog out. `covers()` is worked out from the viewport. |
+| A wire `move = refused_no_dog_yet` while `own` exists. | A human with no dog has one placed first, so `no_dog_yet` is not a move refusal. `SceneAnswer`/`WireAnswer` carry `no_room` instead. |
+| `Found.dogs` larger than `most`, or not part of the caller's slice; `Near.most = 0`. | `most` is gone (the slice length is the cap). `Found` carries a count, and `dogsIn(into)` slices it. |
+| `Lookup.no_dog` carrying another id. | `no_dog` is a bare tag. |
+| A stored breed byte one past the largest breed read as a dog. Breed numbers were implicit, so a reorder renumbered every record. The "fixed order" layout was the compiler's choice. | `breed_byte: u8` with an `unknown_breed` case. `Breed` is `enum(u8)` with explicit values. `StoredDog` is an extern struct with its size asserted. `read(park)` adds `outside_park`. |
+| Every human's `u64` id sent to every browser, and lost by JavaScript numbers above 2^53. | No ids on the wire. |
+| `WireScene.of` given a short buffer panicked. | It sends what fits and marks the scene `more_not_sent`. |
+| `others_complete` was an internal enum on the wire; `WireAnswer` had no `of`. | `WireCompleteness` and `WirePlacementRefusal`, the protocol's own names; `WireAnswer.of`. |
+| Kept: `HumanId.of(12345)` forges an id, and so does `@enumFromInt`. | Kept. `of` is the one named place, documented as what a verified cookie carries. |
+| Kept: literals of `InParkPoint`, `MoveOutcome`, `Scene` or `OwnDogFrame` built outside their makers. Zig has no private fields. | Kept as naming fences: each type's doc names its maker, so a literal elsewhere is visible in review. |
+| Kept: a `Visitor.new_device` that ends up with a dog; `Put.added` twice for one owner. | Kept: these are handler and index behaviour, not data. The list population's tests are the contract, for the box's index to pass. |
+
+**The use cases became tests:** both conversions round-trip; the
+difference of two viewport points moves a park point the same distance
+(one scale); each lattice spot of a park lies inside it; a viewport at the
+corner covers past the park's edge, and that is fine; a drag of exactly
+the longest is kept and clamped; stored records round-trip for every
+breed; the population adds, then replaces, then refuses when full, and
+`near` leaves the asker out and says when it was cut.
+
+**Open questions for Steve or the box:**
+1. **The numbers:** `margin` 200, `longest_drag` 2000 per axis,
+   `lattice_spacing` 100 with the first spot half a spacing in,
+   `widest_viewport` 10,000, `longest_side` 1<<20. All are placeholders.
+2. **A drag past the edge is clamped, not refused.** The browser gets
+   `clamped` and puts the dog at `own`. Should it be refused instead?
+3. **A new human's first request:** their dog is placed, then their move
+   is decided against it. Should the scene say "placed just now", so the
+   browser can tell them?
+4. **`StoredDog` in the host's byte order.** That's fine for one Linux
+   droplet; on bare metal or a second machine, does the box want
+   little-endian pinned?
+5. **A stored dog outside the park** (the park shrank) reads as
+   `outside_park` and is not clamped silently. Should the box clamp it, or
+   re-place it on the lattice?
+6. **Saturating arithmetic stays as a backstop** that nothing should reach.
+   Would the box rather it panic?
+7. **The emoji goes on the wire, not the breed's name.** That keeps the
+   JavaScript dumb, but each new breed is then a server change only.
+   Is that what's wanted?
+
 ## CC → the box, 2026-10-11, night: 159 done, on my branches
 
 **gopher-metal `claude/great-wright-i7aste`:** `serveOne` serves what
