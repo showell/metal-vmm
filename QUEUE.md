@@ -546,6 +546,45 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
       another client's `GET /` overlap, and the `GET` is answered at once.
       The box runs `timeouts.sh` (you have no KVM).
 
+170. **CC's (the box, 2026-10-11): 169 after its two cold reviews.** 169 is
+    merged and goes out in v27 with one fix, made by the box: a chunk size
+    near u64's end overflowed `after + 2` in `ChunkedScan.end`, a panic of
+    the served kernel from any client (red-first test in body.zig). The
+    rest, one run, red first where a test can bite:
+    1. **The dropped phone (both hosts):** a phone that loses its network
+       mid-upload sends no FIN or RST, so its slot is held for the full 5
+       minutes, and the same human's retry waits 30 s, then gets "busy".
+       That's Apoorva's case. A human's new upload should take over their
+       own stalled one (the old connection closed), or a slot should free
+       after a stretch with no bytes. Say which, and why.
+    2. **Kernel: body drains stop during a turn, but their deadlines run on**
+       (`streamTurn` moves streams and response drains, not body drains). A
+       turn longer than ~10 s (a 100 MiB upload written to disk) makes an
+       honest small body a 408. Drain during turns too, or stop the clock
+       while a turn holds the loop.
+    3. **Kernel: strangers can fill the 64 MiB small-body budget** (~64
+       silent `POST /chat/x/docs` with a 1 MiB Content-Length, renewable
+       every 26 s). Charge as bytes arrive, or give a stranger the small
+       form's cap, or a per-peer share. Linux has no total bound at all
+       for small bodies (the Linux review's #2): the same rule there.
+    4. **Kernel: an upload with an `Expect` other than 100-continue** is
+       drained whole, then fails in std. Refuse it from the head.
+    5. **Linux: an upload is in memory twice** (the host's read, then the
+       handler's `readLimitedBody` copy), so 3 slots are ~404 MiB plus
+       arena slack, not ~303. Hand the handler the bytes already read.
+    6. **Linux: an error before the turn closes with no answer** (an I/O
+       error in the uploader check): a 500 or 503, as in the turn.
+    7. **Linux: a read that ended too large or unreadable as the timer
+       fired** is told 408; it should be its own refusal.
+    8. **The `__Host-` migration is unfinished:** a session from before the
+       deploy keeps its legacy `gopher_auth` for up to a year and is never
+       moved, so it stays plantable. A planted legacy cookie can sign a
+       signed-out victim in as the planter, and a planted legacy
+       `gopher_uid` is promoted to `__Host-`. Move the session on its next
+       verified request too, and set an end date for reading legacy names.
+       In dev over plain http, a legacy `gopher_uid` loops 303s forever:
+       stop that.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
