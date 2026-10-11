@@ -18,7 +18,7 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
 
 ## Now (2026-10-10, late night)
 
-**2026-10-11, later: CC does 160 (Dog Park's types, in the new dog-park repo). The box is on webbox (angry-gopher's library), Phase A; v24 serves.**
+**2026-10-11, later: 160 (Dog Park's types) merged; CC does 161 (Dog Park for one human, end to end). The box is on webbox (angry-gopher's library), Phase A; v24 serves.**
 
 **2026-10-11 01:10 UTC: CC does 159 overnight (serveOne, on its branch); v23 re-gating on gopher-metal `d72f4bc`.**
 
@@ -303,6 +303,25 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
     Done when `zig build test` passes, the brief's checklist is drafted, and
     FEEDBACK lists the adversaries' attacks, what each changed, and your
     open questions.
+
+161. **CC's (Steve, 2026-10-11): Dog Park for one human, end to end.**
+    160 is merged to dog-park `main`, with the box's nits and a working
+    dependency on webbox; **merge `main` into your branch first.**
+    **The brief is dog-park's `docs/BUILD-BRIEF.md`: read it whole.** It
+    holds the answers to your open questions, then seven milestones, each a
+    commit with its tests and one adversary pass before the next:
+    1. the index (a quadtree against your ListPopulation, seeded);
+    2. placement (a spiral from the centre);
+    3. the world over webbox's store and counter;
+    4. the scene, a pure function;
+    5. the application (Site(App): `/`, `/park.js`, `POST /scene`, the
+       device cookie through `signed_cookie`, the secret created at first
+       setup);
+    6. the Linux main (`DOGPARK_*`) and `ops/smoke`;
+    7. the browser in plain JS, structured by the same frame names, with a
+       dumb blitter in the safari screensaver's spirit, written fresh.
+
+    No SSE yet. Gates: `zig build test` and a seconds-long `ops/smoke`.
 
 ## The box: open
 
