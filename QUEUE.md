@@ -428,6 +428,28 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
       machine's edges are in the catalog or their absence is a decision
       written next to them.
 
+166. **CC's (the box, 2026-10-11): the kernel holds the turn for a slow
+    body (from your 162 report).** On v26 (serving), a chunked body, an
+    `Expect: 100-continue` body, or one bigger than the connection's buffer
+    is read inside the turn, each read bounded by `idle_ns` from its own
+    start. One client sending a byte every 9 s holds every other request
+    on lynrummy.com indefinitely.
+    - **The bar:** no client holds the turn past a bounded time for its
+      whole body, and a body that fits the connection's buffer never holds
+      it at all. Your two ideas are the start: the host answers
+      100-continue and then waits as for any body that fits, and a body read
+      in the turn gets one deadline for the whole body, not one per read.
+      Weigh a chunked body that fits too (read before the turn, as
+      Content-Length ones are). For an upload bigger than the buffer, say
+      what the deadline is and how it is sized (a floor on bytes a second
+      over the cap, say), and what a slow uploader still costs others.
+    - **Red first** where the gates allow: a metal-vmm scenario (a peer
+      trickling a chunked body while another asks `GET /`) is the right
+      home; QEMU stays on the happy path. Say if a red test can't land
+      without failing the gates, and land it with its fix.
+    - Done when `zig build test`, `zig build check` and the metal-vmm
+      scenario pass, and FEEDBACK says the deadline and what it costs.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
