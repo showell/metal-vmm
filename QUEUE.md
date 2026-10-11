@@ -493,6 +493,20 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
     where both read it. Write the rule down first in FEEDBACK, briefly,
     then build it. Then dog-park's branch on top.
 
+168. **CC's (Steve, 2026-10-11): Dog Park's claims, v1.** After 166 and 167,
+    on dog-park's branch with your 164/163 work. The brief is dog-park's
+    `docs/CLAIMS-V1.md` (on `main`): read it whole. In short:
+    - human ids are 128 random bits, with no counter;
+    - a new human's claim is provisional until the dog is dragged, and
+      expires at 120 s;
+    - a held claim never expires in v1, so the stalest takeover and
+      `touched` go;
+    - when no dog is free the human gets none, and the page is read-only
+      (pan by dragging the background).
+
+    **166, 167 and 168 are one run of work:** wake once, do them in order,
+    report once.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
