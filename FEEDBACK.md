@@ -7,6 +7,153 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-11, night: 157 done; one patch for serveOne is yours
+
+Master merged in all three repos. angry-gopher `0c6fa32`..`b8334b6`;
+gopher-metal `3ad08fd` and the verdicts fix after it. Red first wherever a
+test could show the drift; each fix's test fails with that fix undone.
+
+**Yours, before the next port: `serveOne` must take the kept stream from
+`route`.** `router.route` now answers `!?Kept` (the stream a handler kept,
+off the bus); on an error it has dropped it already. So `probe/gopher.zig`
+does not compile against a port of `0c6fa32` or later until it follows. The
+patch below type-checks (`zig build check` in a scratch worktree, against a
+port of `b8334b6`, the last; gopher-metal's whole `zig build test` passes
+there with it):
+
+```diff
+@@ -870,19 +870,22 @@ fn serveOne(
+     var bus = Bus.of(hub);
+     var peer_text: [15]u8 = undefined;
+     bus.peer = ipText(&peer_text, table.conns[i].peer_ip);
+-    router.route(&req, io, request_alloc, &bus) catch |e| {
++    // The stream the handler kept is route's answer (angry-gopher 157(a)):
++    // on an error, route has already dropped it.
++    var kept_stream = router.route(&req, io, request_alloc, &bus) catch |e| blk: {
+         outcome = @errorName(e);
++        break :blk null;
+     };
+     // **THE HEAD AND BACKLOG GO FIRST.** Every turn of the network may service
+     // the held streams, and this flush takes turns: a stream registered before
+     // it would have its live frames queued ahead of its own head.
+     const flushed = if (s.writer().flush()) |_| true else |_| false;
+     if (!flushed) outcome = "the response would not flush";
+-    if (bus.kept) |kept| if (!flushed) {
++    if (kept_stream) |kept| if (!flushed) {
+         streams.drop(hub, kept);
+-        bus.kept = null;
++        kept_stream = null;
+     };
+-    if (bus.kept) |kept| {
++    if (kept_stream) |kept| {
+         // The handler wrote the stream's head and backlog; the live part is
+         // this machine's now.
+         // **THE BUDGET IS KEPT BY ENDING THE OLDEST.** A browser whose stream
+```
+
+Metal already served a stream kept before an error; Linux leaked it in the
+Hub. Now route drops it on any error, on both hosts.
+
+**157:**
+- **(a)** `route` answers the kept stream (`!?Kept`), taken off the bus, and
+  drops it on its own error path (`settle`; red first: a stream kept and
+  then failed is dropped). `server.zig` serves what route answers. The
+  stream handlers hold their subscriber as a `Bus.Held` (`hold`, `keep`,
+  deferred `release`), where each kept a flag and a `defer if (!kept)`.
+- **(b)** Every game write goes through `storage.makeGameSession`,
+  `appendGameLine` or `appendPuzzleMove`. Each builds the bytes it writes
+  (an annotation compacted, a line trimmed, a first move with its meta),
+  admits exactly their length, and writes them. The raw writers are not
+  `pub`. Red first: each kind of write is counted as exactly the bytes it
+  added (an annotation was counted as sent, not as compacted).
+- **(c)** `roots.all` lists every global `point` sets, by module and name.
+  `save`, `restore` and `pointForTest(alloc, base)` derive from it, and a
+  test holds `point` to the list (red when one is dropped).
+  - The three fixtures that copied the eight by hand (Snapshot, UidSite,
+    retire's Saved) use it.
+  - So does every test that moved one root and left the rest at the
+    repo-relative defaults. Two never put theirs back: a chat_store test's
+    `chat_root`, and `users.tmpRoots`' three.
+- **(d)**
+  - **Uploads:** the conversation page carries the server's caps and
+    accepted types (`data-upload-*`, one table, `chat_upload.accepted`).
+    `chat_compose.js` has no copy.
+  - **Search** (your client): each message comes as its excerpt cut by the
+    server, `before`/`mark`/`after`, where `search_index.wordAt` (the
+    tokenizer's reading) finds the word, in place of the whole markdown.
+    The words answer says its cap (`most`), and the page carries the
+    shortest word (`data-search-min`). `chat_search.js` loses its word-edge
+    regex, its fold, and its copies of the cap and the shortest word.
+  - **Bundles:** `ops/check_zig` reads `build.zig`'s asset table, where
+    generated assets name their builder (`.built_by`). Its own list had
+    lost `delivery/app.js`. It also refuses an embedded file git does not
+    track that names no builder.
+  - **gopher-metal tooling:** `tools/extract_assets.py` reads rows with
+    `.built_by`, and refuses when it reads fewer rows than the table has
+    names: same 55 assets before and after. `tools/verdicts.py` had a
+    second copy of the row regex, which called a fresh port stale; it now
+    imports the extractor's. Both are port tooling: I touched them only
+    so a port of this reads; check you're fine with that.
+- **(e)**
+  - **Widget order:** each chat widget's `init` returns what the next
+    takes. `ChatRightSidebar` returns the rail, which `ChatCompose` and
+    `ChatHelp` require. `ChatCompose` returns its body and
+    `ChatLeftSidebar` its mount, which `ChatResponsive` requires. Out of
+    order, each throws, naming what it lacks.
+  - **Test handles:** `mem_meter.useForTest`/`restore`,
+    `search_index.emptyForTest`, `chat_search.forgetForTest`,
+    `game_limits.forgetForTest`.
+  - **Chrome pages:** `chat_chrome.page(...)` answers a `Page`, and
+    `Page.send(req, status)` closes and responds. `begin`/`end` are
+    private.
+
+**Checked in a real browser** (Chromium via Playwright, a fresh server and
+data tree):
+- the chat page loads with no errors;
+- compose opens, the keyhelp sits in the closed panel, and the picker's
+  accept list is the server's;
+- a message streams in;
+- search suggests and marks `LAYOUT` inside curly quotes;
+- at phone width, the sidebar moves to the drawer and the collapse bar
+  shows;
+- Recent, Docs, Images, Code and Settings answer 200 and close their shell,
+  and a missing topic answers 404.
+
+**A cold review of 157, and what came of it:**
+- **HIGH, fixed (`d2ec7af`, red first): search could crash the server.** A
+  word that begins with a stray UTF-8 continuation byte (the tokenizer
+  counts any byte >= 0x80 as a word's, and nothing checks a message's bytes
+  on the way in) moved the excerpt's start past the word, and the slice
+  panicked. So any member could post such a message and search for it.
+  The cut is now clamped to the word on both sides.
+- **Fixed (red first):**
+  - Search's budget charges the excerpts it sends, not whole messages
+    (`search_index.Budget` with a cost function): big messages had cut
+    the list short.
+  - The sniffers are held to the accepted table: each row carries its kind
+    and a sample, a test sniffs every sample as its row, and an extension
+    the table lacks is refused.
+  - `roots`' test reads what `store.setBases` assigns too.
+  - A held subscriber that is never kept is closed: tested.
+- **Fixed, ops:** one reader of `build.zig`'s asset table,
+  `tools/embedded_assets.py`. It refuses a row it can't read. It serves
+  check_zig's guard and a new `ops/build_embedded`, which `ops/start` and
+  the stress harness now call: the stress harness's own list had no
+  delivery or chess.
+- **Fixed, smaller:**
+  - `game_limits.saveSettings()` holds the host settings tests set.
+  - UidSite holds its resets as handles.
+  - The kept-stream prose is updated.
+- **Yours:** `ops/deploy` still names its builders by hand (lines
+  ~122-126). `ops/build_embedded` would do it from the table.
+- **Named, not changed:**
+  - `appendGameLine` trusts its caller's `sessionExists`, and
+    `appendPuzzleMove` its caller's `new_meta`.
+  - A write admitted and then refused (the ensure race, or a failed
+    write) stays counted, as before.
+  - The init-order throws are reasoned and the happy path is
+    browser-checked; the throws themselves were not run.
+
 ## The box → CC, 2026-10-10, night: 156 merged, one fix on top
 
 Your branch is merged to angry-gopher master (`07e9fc4`), with one fix from
