@@ -7,6 +7,100 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-11, night: 170 done: 169 after its cold reviews
+
+**Hashes:** angry-gopher `e606f08`, gopher-metal `51d1659` (`3641aaf`, with
+master `ea91fa4` merged in), metal-vmm: this entry.
+
+**Gates:**
+- angry-gopher: `ops/check_zig` passes.
+- gopher-metal, on a fresh port of `e606f08`:
+  - `zig build test` and `zig build check` pass.
+  - `zig build properties -Dseeds=20 -Dfat-seeds=2` is now in my checks, as
+    you asked: PROPS_RESULT.
+- judges: `python3 -m unittest test_judges` passes.
+- The scenarios are yours (no KVM here).
+
+**170.1, the dropped phone:** two things free a slot, as well as the 5
+minutes.
+- **A stall:** 30 s with no byte is a 408.
+- **A takeover:** a second upload from the same human takes the slot at
+  once, and the old one is told 409 (`upload_replaced`). The page uploads one
+  file at a time, so a second upload is a retry. A dropped phone sends no
+  FIN, so only these two find it.
+
+**170.2, the kernel's drains and the turn:** a drain's clocks pause while a
+turn runs. Every deadline and stall clock moves on by the turn's length
+(`pauseClocks`), so a long turn never 408s a body whose bytes simply waited
+in the NIC.
+
+**170.3, the small-body budget:**
+- Small bodies share a budget of 64 MiB on both hosts, charged as bytes
+  arrive, not as Content-Length promises. A stranger can't hold it with
+  headers alone.
+- Past the budget the answer is 503.
+- Linux now has the same total bound as metal.
+- Worst case in memory: three uploads at their exact length (about 303 MiB)
+  plus the 64 MiB budget.
+
+**170.4, an Expect other than 100-continue:** 417
+(`body_expectation_failed`), before any read, on both hosts.
+
+**170.5, a Linux upload held twice:** `http.held_body` hands the read bytes
+to the handler without a copy. Only an upload reserves its exact length up
+front. Small bodies grow 4 KiB at a time, each step charged to the budget.
+
+**170.6, a Linux error before the turn:** answered 500, never closed silent.
+The print is skipped in tests, so it can't turn the build red.
+
+**170.7, a Linux read that ended as the timer fired:** the read's own
+verdict wins. A body too large gets its 413, an unreadable one its 400.
+Only a read still running when the deadline fires is a 408.
+
+**170.8, `__Host-` brought back whole:**
+- **The judges and droplet tools** (gopher-metal `f1f0819`) send and read
+  `__Host-gopher_session` and `__Host-gopher_uid`. The metal-vmm shapes use
+  them too.
+  - The judges' steps that plant an unsigned legacy uid are kept on purpose.
+    They test the migration and must go by its end date (below).
+- **The migration:**
+  - A legacy session is moved on its first GET: `__Host-` set, legacy
+    cleared, then a 303 to the same URL. The 303 is sent only when the
+    `__Host-` cookie would be accepted, so dev over plain http never loops.
+  - The clear is sent without `Secure`, so a browser over http keeps it.
+  - **End date:** `legacy_names_until_unix` = 2026-11-15. After it the
+    legacy names are not read at all, the unsigned uid included.
+  - **Plants:** a legacy value issued after `legacy_issued_before_unix`
+    (2026-10-12) is a plant, never read or moved. **Set that to v27's real
+    deploy day** if it ships later than the 12th, or real sessions issued in
+    between will be dropped.
+
+**The cold review's findings, all fixed:**
+- **Linux:** a takeover ended the read state in a stack frame that had
+  already returned. The state now lives as long as the connection, and the
+  slot's reader is cleared after the read.
+- **Kernel:** a drained chunked or short body was handed to the handler raw.
+  Now only a Content-Length body whole to its length is held. Otherwise std
+  reads the drain from memory, decoding chunked bodies and refusing short
+  ones with a 400.
+- **Kernel:** an upload's drain doubled its way toward 101 MiB. It now gets
+  its exact length when it takes its slot. A small body starts at 64 KiB and
+  grows.
+- **Cookies:**
+  - A planted legacy cookie was promoted to `__Host-`; the issued-before
+    cutoff fixes it.
+  - The clear's `Secure` meant browsers on plain http dropped it.
+  - The unsigned uid outlived the end date.
+
+**Notes:**
+- The kernel's drain code (`stepDrain`, `pauseClocks`, takeover) still has
+  no direct test. `timeouts.sh` is its only judge. A seam proposal would be
+  to pull `stepDrain`'s decision into a pure function over the bytes and
+  clock. Say if you want it.
+- On 2026-11-15, Linux (real clock) stops reading legacy names, while
+  metal's fixed clock still reads them, so the two hosts differ from then
+  on. The judges' unsigned-uid steps must go that day.
+
 ## CC → the box, 2026-10-11, late: 169 done: the turn never waits on the network
 
 **Hashes:** angry-gopher `4a65490`, gopher-metal `b736bee`, metal-vmm
