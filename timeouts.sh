@@ -47,8 +47,19 @@
 #     answered by its route (404), after the second.
 # Then alone, 16 bytes every 5 s and a longer body
 # (`requests/trickle-chunked-long.http`: its head whole about 25 s in, its
-# last chunk about 40 s in): a 408 at the rule's 10 s after its head was
+# last chunk about 40 s in): a 408 at the rule's 11 s (10 s and its route's 64 KiB at 64 KiB/s) after its head was
 # whole, where v26 read it to its end and answered 404.
+#
+# **A SLOW UPLOADER HOLDS NOBODY UP** (metal-vmm QUEUE 169: the turn never
+# waits on the network). The first client sends a 64,000-byte form to
+# `POST /login/full` (whose route reads its body for anyone) at about
+# 64 KB/s, 1460 bytes every 22 ms, about a second in all: a body too big for
+# a connection's 16 KiB buffer, which the kernel now drains into memory
+# before the turn. The second asks for / 300 ms in:
+#   - the second is answered within 100 ms of opening, before the first (v26
+#     served the first at its head and read its body in the turn, so the
+#     second waited most of a second);
+#   - the first is answered by its route, not a 408.
 #
 # Needs: a built metal-vmm, gopher.elf, the site's boot disk (SITE, as the
 # other scripts have it) and mtools (`mcopy`) to write its config.
@@ -194,6 +205,37 @@ line=$(grep -E '^peer( 1)?: ' "$WORK/out" | head -1)
 grep -Eq '^peer( 1)?: 408' <<< "$line" ||
     fail "slow body past the rule's deadline: not a 408 (exit $code): $line"
 [ "$failed" = 0 ] && echo "      a trickled body: the caller beside it answered at once, and one past the deadline a 408"
+[ "$before" = 0 ] || failed=1
+
+# A slow uploader (QUEUE 169). Derived, not yet run on a guest when written
+# (CC's container has no KVM).
+before=$failed; failed=0
+{ printf 'POST /login/full HTTP/1.1\r\nHost: lynrummy.com\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 64000\r\nConnection: close\r\n\r\nname=x&password='
+  head -c 63984 /dev/zero | tr '\0' 'a'; } > "$WORK/slow-form.http"
+cp "$SITE" "$WORK/boot.img"; cp "$SITE" "$WORK/vol.img"
+printf 'requests = 2\n' > "$WORK/conf"
+mcopy -o -i "$WORK/boot.img@@$PART" "$WORK/conf" ::gopher-metal.conf ||
+    { echo "could not write gopher-metal.conf"; exit 2; }
+TRANSPORT=pci PEER_CLIENTS=2 PEER_CLIENT_GAP_US=300000 VOLUME="$WORK/vol.img" \
+    PEER_REQUEST="$WORK/slow-form.http,$HERE/requests/shapes/home.http" \
+    PEER_MSS=1460 PEER_DRIP_US=22000 \
+    timeout 300 "$VMM" "$KERNEL" "$WORK/boot.img" "" / > "$WORK/out" 2> "$WORK/err"
+code=$?
+slow=$(grep '^peer 1: ' "$WORK/out")
+caller=$(grep '^peer 2: ' "$WORK/out")
+if [ "$code" != 0 ] || ! grep -q '^  served 2 request(s)' "$WORK/out"; then
+    fail "slow uploader: the guest did not serve its two requests and stop (exit $code): $(tail -1 "$WORK/err")"
+else
+    c_open=$(us_of "$caller" opened); c_answered=$(us_of "$caller" answered)
+    s_answered=$(us_of "$slow" answered)
+    { [ -n "$c_answered" ] && grep -q '^peer 2: 200,' <<< "$caller" && [ $(( c_answered - c_open )) -lt 100000 ]; } ||
+        fail "slow uploader: the caller beside a 64 KB/s body was not answered within 100 ms: $caller"
+    { [ -n "$s_answered" ] && ! grep -q '^peer 1: 408,' <<< "$slow" && [ -n "$c_answered" ] && [ "$c_answered" -lt "$s_answered" ]; } ||
+        fail "slow uploader: the slow body was not answered by its route after the caller: $slow | $caller"
+    grep -q '^    body: 64000 bytes, arrived in ' "$WORK/out" ||
+        fail "slow uploader: the log does not say the body's size and arrival time"
+fi
+[ "$failed" = 0 ] && echo "      a 64 KB/s body: the caller beside it answered at once"
 [ "$before" = 0 ] || failed=1
 
 [ "$failed" = 0 ] && echo "PASS  timeouts: a silent client, a stalled reader and a slow body hold nobody up, and are let go when the rule says"
