@@ -510,6 +510,39 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
     (Steve, 2026-10-11): he is testing it now, and the box takes Dog Park
     from here.
 
+169. **CC's (Steve, 2026-10-11): 166's rule redone: THE TURN NEVER WAITS ON
+    THE NETWORK.** 166/167 aren't merged. Their in-turn read (`2 s + bytes /
+    1 MiB/s`) fails real uploads: prod today, a 1.8 MB photo from India
+    arrived at ~65 KB/s in 27.7 s (0.18 s of it disk), and a retry waited 7 s
+    for the turn behind it. Under 166 it would be a 408 every time, and no
+    floor is both kind to that link and short enough to hold everyone behind
+    it.
+    - **An upload is read whole into memory BEFORE the turn,** under one
+      patient deadline: 5 minutes (the page now waits that long, angry-gopher
+      `fd2c7ab5`). It then takes the turn like any request; its save is
+      milliseconds.
+    - **Three upload slots per host, at most one per human.** A fourth
+      uploader (or a second from the same human) waits on its own
+      connection, holding no one else; say what it is told if it waits
+      too long.
+    - **Who is asking is checked before a slot is given:** the upload's
+      sign-in moves before the body is read (the cookie's check is pure,
+      the secret is in memory). A stranger never holds a slot.
+    - **Memory:** at most 3 x the upload cap (~303 MiB); metal has 997 MB
+      and peaks ~170 MB today. Say the number on both hosts.
+    - **The rest of 166 stays:** small bodies before the turn under their
+      deadlines, the route's cap, `100-continue`, chunked, and the head's
+      whole deadline. The in-turn branch and `floor` go: nothing is read in
+      the turn.
+    - **167 rebased onto it** (the race fix, the 503, `__Host-` cookies,
+      CL with chunked a 400, the Caddyfile note).
+    - **Not in this item:** the Linux turn held by a client that never
+      reads its answer. Same principle (answer into memory, send after the
+      turn), but later.
+    - Red first: a metal-vmm scenario where a slow uploader (at 64 KB/s) and
+      another client's `GET /` overlap, and the `GET` is answered at once.
+      The box runs `timeouts.sh` (you have no KVM).
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
