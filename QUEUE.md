@@ -506,6 +506,9 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
 
     **166, 167 and 168 are one run of work:** wake once, do them in order,
     report once.
+    **After 168, no more Dog Park work for CC until Steve says otherwise**
+    (Steve, 2026-10-11): he is testing it now, and the box takes Dog Park
+    from here.
 
 ## The box: open
 
