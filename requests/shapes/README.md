@@ -4,7 +4,7 @@ Each `*.shape` is one kind of request, and seed s sends shape (s mod n).
 `setup` runs first, unhurt, on the volume every run starts from: it makes
 player p2 and that player's game session 1.
 
-The cookie in the `.http` files that carry one (`gopher_uid=p2.…`) is the
+The cookie in the `.http` files that carry one (`__Host-gopher_uid=p2.…`, named so since metal-vmm QUEUE 167.5; the signature is the same under either name) is the
 one the setup's `POST /play` is answered with. It holds only while the kernel
 and the site volume answer that request with that cookie, since runs are
 deterministic. If either changes it, those shapes' unhurt runs answer 303,
