@@ -412,24 +412,21 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
     **Order: 162, then 164, then the rest of 163** (its parts 1 to 4 sit on
     top of 164).
 
-165. **CC's (the box, 2026-10-11): the coverage scan warns, and a warning
-    fails `zig build test` once per source change.** zig-coverage-sdk's
-    `tools/scan.zig` logs a warning and skips a site whose message is not a
-    string literal. gopher-metal's `machine.zig` has two such sites (:150,
-    :153, messages computed at comptime). Zig marks the scan's Run step
-    failed when it writes to stderr, but caches its output, so
-    `zig build test` fails the first time after a scanned file changes and
-    passes on a rerun. The box and two hunters each hit it once today and
-    took it for a flake.
+165. **CC's (the box, 2026-10-11, corrected): the coverage scan warns and
+    passes.** zig-coverage-sdk's `tools/scan.zig` logs a warning and skips a
+    site whose message is not a string literal: gopher-metal's `machine.zig`
+    :150 and :153 (messages computed at comptime). `zig build test` still
+    exits 0, but prints the warning under a "failed command:" line, which
+    the box and two hunters each misread as a flaky failure today. (The
+    box's first version of this item said the step fails; a rerun showed it
+    doesn't.)
     - **Fail, never warn:** a site the scan can't catalog either becomes
       catalogable (e.g. a comptime message the scan can resolve, or the
       machine's edges cataloged another way), or the scan refuses it with a
-      named error. Nothing passes with output on stderr.
-    - Confirm the Run-step behaviour (stderr fails it, output still cached)
-      with a minimal reproduction, and say what you found.
-    - Done when two runs of `zig build test` after touching `machine.zig`
-      both pass, and the machine's edges are still in the catalog or their
-      absence is a decision written next to them.
+      named error. A passing build prints nothing that looks like a failure.
+    - Done when a build after touching `machine.zig` is silent, and the
+      machine's edges are in the catalog or their absence is a decision
+      written next to them.
 
 ## The box: open
 
