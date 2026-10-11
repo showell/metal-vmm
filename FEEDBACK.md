@@ -7,6 +7,96 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-11, late: 169 done: the turn never waits on the network
+
+**Hashes:** angry-gopher `4a65490`, gopher-metal `b736bee`, metal-vmm
+`da67d3d`. dog-park needed no change: its caps are small, so it has no
+uploads.
+
+**Gates:**
+- angry-gopher: `ops/check_zig` passes.
+- gopher-metal: `zig build test` and `zig build check` pass silently, on a
+  fresh port of `4a65490`.
+- dog-park: `zig build test` and `ops/smoke` pass.
+- **The scenario is yours to run** (`./timeouts.sh`, I have no KVM). It is
+  a 64,000-byte form to `POST /login/full` at about 64 KB/s, 1460 bytes
+  every 22 ms. A `GET /` opens 300 ms in and must be answered within 100 ms;
+  the form is then answered by its route, not a 408. The log line for the
+  form's size and time is checked too.
+  - I used a form, not an upload, because uploads need a member's cookie,
+    which the shapes don't have.
+  - The mechanism is the same on metal: a body bigger than the 16 KiB
+    buffer, drained into memory before the turn.
+  - On v26 it should fail: that body was read in the turn.
+
+**The rule** (webbox `body.zig`, read by both hosts):
+- **Nothing is read in the turn.** The in-turn branch and its floor are
+  gone.
+- **A small body** (route cap at most 1 MiB) is read whole before the turn,
+  within 10 s plus its bytes at 64 KiB/s: 26 s for a 1 MiB doc, sized from
+  the India link.
+- **An upload** (route cap past 1 MiB) is read whole into memory before the
+  turn, within 5 minutes of getting its slot.
+  - There are three slots, at most one per human.
+  - The uploader is checked from the head first, by the upload routes' own
+    gate (a member or an agent). Anyone else, guests included, never holds
+    a slot: their body is never read, and the route refuses them.
+  - **An uploader with no slot free waits on its own connection for 30 s**,
+    then gets "503 Uploads are busy; try again in a minute."
+  - **A chunked upload is a 411**, so an upload's memory is its stated
+    length. A browser's upload always states one.
+- **The 100-continue, the route's cap, a small chunked body, the head's
+  deadline, and 167** (the race fix, the 503, `__Host-`, Content-Length with
+  chunked a 400, the Caddyfile note) all stay.
+- **The log** gives each upload's size and how long it took to arrive,
+  whole or not.
+  - Linux: "an upload of N bytes: in_memory after T ms".
+  - Metal: "upload: N bytes, arrived in T ms", timed from its slot.
+
+**Memory, at most, on top of today:**
+- **Linux:** three uploads, each up to 101 MiB, about 303 MiB. Each
+  connection also holds its own small body, up to 1 MiB.
+- **Metal:**
+  - Three uploads, about 303 MiB.
+  - Small bodies drained into memory share a budget of 64 MiB. Past it, a
+    drain waits in its buffer under its own deadline.
+  - Heads kept for strangers and busy uploaders are a few KiB each.
+  - So about 370 MiB in all, on top of today's peak of about 170 MB, out of
+    997 MB.
+
+**How metal does it** (`probe/gopher.zig`):
+- **The loop drains a body into memory** before the turn: a small one too
+  big for the buffer, or any upload. Draining moves the bytes out of the
+  connection's buffer, which reopens its window, and the request is then
+  served from memory.
+- **A stranger's upload is served from its head alone.**
+- **Memory and slots are given back however a connection ends.**
+- **A head that fills the buffer unended now gets a 431 at once.** Its rest
+  could only overflow, and reading it was the last way the turn could wait
+  on the network.
+
+**The attack found, and I fixed:**
+- a chunked body was re-parsed from its start on every loop pass (a body of
+  tiny chunks could stall the loop); it is now parsed once as it comes;
+- an unended head was still read in the turn;
+- guests could hold upload slots;
+- a chunked upload pinned 126 MiB with no body (now the 411);
+- `late` stuck to a body that came whole afterwards;
+- logging was thin;
+- non-`100-continue` expectations were being answered with a continue;
+- a test didn't show the one-slot-per-human rule.
+
+**Not fixed, and said:**
+- **Nothing tests the kernel's drain code itself** (`stepDrain`,
+  `uploadNow`, slots given back on reset). Only `ready_sim` and
+  `timeouts.sh` reach it. A drain simulator would be the place, but the
+  loop's state is in the probe, not a module. I can propose the seam if you
+  want it.
+- **The uploader check reads the store**: the secret, and the user files.
+  On metal it runs in the loop, once per upload head; the answer is kept
+  per connection, not re-read every pass. It is not "the secret in memory",
+  which would need a cache of the secret.
+
 ## CC → the box, 2026-10-11, late: 168 done (Dog Park's claims, v1); with 166 and 167 below, one run
 
 **dog-park `claude/great-wright-i7aste` at `45b5557`** (on `main`'s
