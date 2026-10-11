@@ -7,6 +7,196 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-11, night: 164 done (fixed dogs, claimed), then 163 (the cold review)
+
+**dog-park `claude/great-wright-i7aste` at `7e7bacd`**, on `main`
+`762a916` and on angry-gopher's 162 (my branch, `f5ef863`). `zig build
+test` passes (74 tests), and so does `ops/smoke` (now with a node check
+first).
+
+**164, in two steps, each attacked:**
+- **Step 1 (`35e2783`), the types and the world:**
+  - `DogId` is `0 ..< count`. `Claim` is `unclaimed`, or
+    `claimed {by: HumanId, touched: Instant}`; **`Instant` is the wall
+    clock's Unix seconds**, so staleness compares across restarts.
+  - The population is keyed by dog.
+  - `claiming.zig` replaces placement:
+    - `makeDogs` takes 400 of the 5,000 park's 2,500 lattice spots, and
+      their breeds, from a seeded shuffle (`dogs_seed`), with a test that
+      pins the first four dogs.
+    - `claimFor` picks the unclaimed dog nearest the centre (wrapped
+      distance, ties to the lower id). With every dog claimed, the
+      stalest claim changes hands and the dog keeps where it stands.
+  - The record is format 2, 32 bytes. The world makes the dogs when
+    `dogs/` holds none; otherwise it loads and checks all of them.
+  - Who holds which is an index derived at load.
+  - A stay's touch is written at most once an hour per dog.
+  - `Refused` says by type what it names: a dog record, the dogs folder,
+    or the dog count. That is 163.3, done here.
+- **Step 2 (`2d01324`), a first visit's claim is shown, not kept.** This
+  is the brief's lean, as `answering.Standing` (`returning` or
+  `first_visit`). Twenty cookie-less requests leave every dog unclaimed;
+  the adversary sent 550 and no dog file changed.
+
+**163.5, a restored `data/`:** no data generation. **The id counter lives
+beside the secret, in `auth/next-human`.** A cookie is an id signed with
+the secret in `auth/`, so the counter that hands ids out belongs there
+too.
+- A `data/` that is restored or wiped doesn't take the counter back, so no
+  live id is handed out again.
+- **This differs from the brief's fresh-park rule:** a fresh park is
+  `dogs/` holding no dog, whatever the counter says.
+- A generation in `data/` would have covered a wipe, but not a restore: a
+  restore brings back the backup's generation along with the stale
+  counter.
+- **`auth/` restored from an older backup with the same secret** is
+  covered only partly (from step 1's adversary). A cookie naming an id the
+  counter hasn't reached moves the counter past it
+  (`World.reserveThrough`) and keeps its human. A device whose cookie
+  returns only after a new device was handed its id is still aliased. So
+  **restoring an older `auth/` should rotate the secret**, which ends
+  every cookie: say so in the runbook.
+
+**The attacks, and what came of them:**
+- **Step 1.** Sound: one dog per device held through 3,000 random steps,
+  the grid, `all` and `holders` always agreed, and `World.open` leaks
+  nothing. The holes, each fixed in `d9ab419` with a test:
+  - A stored touch of minInt crashed the next stay, and one in the future
+    made its dog never the stalest. A touch outside [1, now + a day] now
+    stops the load, and the hour arithmetic saturates.
+  - A claim by human 0 now stops the load.
+  - A fresh park whose writing was cut short stopped every later start.
+    When every dog there is unclaimed and is exactly the dog the seed
+    makes, the rest are now written.
+  - A clock gone back starved the touch write. A touch earlier than the
+    last write is now written.
+  - The `auth/`-restore case above.
+  - The temporary-file name is now matched exactly.
+- **Step 2.** Sound: no eviction and no write from cookie-less or forged
+  requests. The browser's second request claims the dog it was shown,
+  80 ms later. Found:
+  - **The dog jumped off screen** when the dog it was shown was claimed by
+    someone else first, or when a returning human's dog had been taken
+    over. Fixed in `b66ae7f`: the scene says whether its own dog is the
+    one held or one newly theirs (`own_is`: `same_dog` or `new_dog` on the
+    wire), and the browser centres on a new one.
+  - **Open:** each cookie-less request still burns an id and writes
+    `auth/next-human`, about 17 ms against 1.5 ms for a returning one.
+    Ids are u64, so it's a write load, not exhaustion. The cure is a
+    first visit that takes no id until its cookie comes back (a signed
+    random nonce in the cookie). That is a cookie format change, so I
+    left it for you or Steve.
+
+**163's other parts:**
+- **163.1 (`4a57db5`):** the ask loop is one value: idle (wanting a scene
+  or not), asking, backing_off until a time, retrying, or asking_again.
+  `askAfter` is its pure transition function. A failure backs off,
+  doubling from 0.5 s to 30 s, so a page that can't be answered no longer
+  asks 12 times a second.
+- **163.2 (`a7998a6`):** a sprite's `kind` is `own`, `other` or
+  `lattice_spot`, and `sprite_styles` gives each kind's look, once.
+- **163.4 (`7e7bacd`):** `ops/park_js_check.js` runs in node with no
+  packages, from `ops/smoke`, in milliseconds.
+  - It checks `nearestCopy` and `homeShift` against park.zig's own
+    numbers, `take()`'s reconciliation, and the ask loop's transitions
+    and backoff.
+  - It found `homeShift` answering -0 for 0 (harmless, now 0).
+  - Three planted bugs (the tie, the backoff, the drag since) each fail
+    it.
+
+**Smaller decisions:**
+- A first claim's request stays, so a returning device's claim ignores its
+  drag.
+- With every dog touched in the same second, the tie goes to the lower
+  id, which can be a dog claimed that second. Nothing is at stake in that.
+- Losing `auth/` while claims exist stops every start
+  (`claim_past_next_human`). Recovery is restoring `auth/`, or wiping
+  `data/` for a fresh park.
+
+## CC → the box, 2026-10-11, night: 162 done (webbox's hardening), on my branch
+
+**angry-gopher `claude/great-wright-i7aste`**, four commits on master
+`d8d347d`, each red first with `ops/check_zig` passing:
+- **162.1, the held body (`eb48957`).** The Linux host reads every body
+  before the turn now, whole:
+  - It is raced against `body_deadline_ms` (10 s) with `Io.Select`. Past
+    the deadline the socket is shut, the request is a 408 (edge's new
+    `body_too_slow`), and the connection closes.
+  - It is capped at the new required `Options.largest_body`: a body past
+    it is a 413 before a byte is read. angry-gopher's is
+    `limits.body.upload_any`, Dog Park's 1 KiB.
+  - The handler then reads it from memory, under a plain Content-Length,
+    the head copied out and parsed again. Handlers are unchanged.
+  - Red tests, which held up the other client before the fix: a chunked
+    head with nothing after, a body short of its Content-Length, and a
+    body waiting on 100-continue, each with another client's `GET /`
+    served within 2 s. Also tested: the 408, every framing reaching its
+    handler whole, and the 413.
+  - Socket timeouts (SO_RCVTIMEO) were not usable: std's threaded io
+    treats EAGAIN from a read as a bug.
+  - **The cost:** an upload near the cap is in memory twice for the life
+    of its request, once read here and once in the handler's copy.
+  - **A per-read wait was never the bar:** a client trickling a byte every
+    9 s would beat one. The deadline is on the whole body.
+- **162.2, `Secure` (`b70adda`).** `http.cookie_attributes` is
+  `HttpOnly; Secure; SameSite=Lax`, written once. It is used by
+  `signed_cookie`'s header (`gopher_uid`, `dogpark_human`) and by login's
+  `gopher_auth` and its two clears.
+  - **On `http://localhost`:** Chrome and Firefox treat the page as secure
+    and keep the cookie. Older Safari drops it, so each page there is a
+    new visitor.
+  - curl keeps and sends it to 127.0.0.1 over plain http: Dog Park's
+    smoke still passes.
+  - The judges and the stress harness read `name=value` only, so nothing
+    else changes.
+- **162.3, an atomic secret (`982faa6`).** `store.createNew` writes the
+  data whole to a temporary file with a random name, then renames it onto
+  the name without replacing (`renamePreserve`). The loser gets
+  `PathAlreadyExists`, which `site_secret.create` turns into `SecretExists`.
+  - Red first: eight threads racing, and 4 to 7 of them made a secret.
+  - A stop part-way leaves only the temporary.
+  - **It is Linux only:** gopher-metal's io has no rename that doesn't
+    replace. Nothing it serves calls this, and Zig compiles only what is
+    called.
+- **162.4, two cookies of one name (`f5ef863`).** Your lean, as a type:
+  - `http.cookie` now answers `CookieValues` (none, one, or several), so
+    no caller is handed "the first".
+  - `signed_cookie.read` takes the one that verifies, under either secret.
+    `Reading.invalid` is now `Invalid`: `does_not_verify` or
+    `more_than_one_verifies`.
+  - `gopher_auth` follows the same rule. A legacy unsigned `gopher_uid` is
+    honoured only when it is alone.
+  - Red first: a junk cookie ahead of a good one read as invalid. Tests
+    cover the good one first, last, and in a second Cookie header; two
+    good; two bad; one bad; none.
+
+**gopher-metal against it:** `zig build check` and `zig build test` both
+pass on a fresh port of `f5ef863`. One trap for anyone else porting:
+`port.sh` defaults to `~/showell_repos/angry-gopher`, so set
+`GOPHER_SRC` and `GOPHER_ROOT`.
+
+**Does the kernel read the body before its turn?** Only when it can wait
+for it, by the code:
+- `src/ready.zig`'s `check` waits for a body of known length that fits the
+  connection's buffer. Three kinds are served at their head, with the
+  handler reading the rest inside the turn: `Expect: 100-continue`, a
+  chunked body, and a body too big for the buffer.
+- Three tests pin that today: "a body too big for the buffer is served at
+  its head", "a client waiting to be told to send its body is served at
+  once", and "a chunked body is served at its head".
+- Each read inside the turn is bounded by `src/stream.zig`'s
+  `waitForBytes`, `idle_ns` (10 s) from the start of that read. So **a
+  stalled chunked body holds every other request for 10 s, and a client
+  sending a byte every 9 s holds the turn indefinitely.**
+- That is the kernel's, so yours. Two ideas: answer 100-continue from the
+  host and then wait, as for any body that fits; and give a body read in
+  the turn one deadline for the whole body, not one per read.
+- I added no red test: the three tests above already pin the behaviour,
+  and a red one would fail your gates.
+
+**Dog Park** (`0c61cf4`) passes `.largest_body = app.longest_body` and
+merges `main`. Its tests and smoke pass on the new webbox.
+
 ## CC → the box, 2026-10-11, night: 161 done (Dog Park for one human, end to end, wrapping)
 
 **dog-park `claude/great-wright-i7aste` at `3a7f135`**, on `main`
