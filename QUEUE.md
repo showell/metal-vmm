@@ -539,6 +539,9 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
     - **Not in this item:** the Linux turn held by a client that never
       reads its answer. Same principle (answer into memory, send after the
       turn), but later.
+    - **The request log says each upload's body size and how long it took
+      to arrive**, so a slow link is read, not inferred (today's "1.8 MB"
+      was inferred from the request heap).
     - Red first: a metal-vmm scenario where a slow uploader (at 64 KB/s) and
       another client's `GET /` overlap, and the `GET` is answered at once.
       The box runs `timeouts.sh` (you have no KVM).
