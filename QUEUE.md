@@ -18,7 +18,7 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
 
 ## Now (2026-10-10, late night)
 
-**2026-10-11, afternoon: 161 (Dog Park, one human) and the cookie fix merged; v25 passed; v26 (v25 plus the fix) gating; CC does 162 (webbox hardening).**
+**2026-10-11, afternoon: 161 (Dog Park, one human) and the cookie fix merged; v25 passed; v26 (v25 plus the fix) gating; CC does 162 (webbox hardening), then 163 (Dog Park from its cold review).**
 
 **2026-10-11, later: 160 (Dog Park's types) merged; CC does 161 (Dog Park for one human, end to end). The box is on webbox (angry-gopher's library), Phase A; v24 serves.**
 
@@ -366,6 +366,42 @@ account" answer 500: keep it (Steve, 2026-10-08: "keep the loud 500").
     burned on a disk failure (fine as it is: ids are unique, not dense).
     Done when each part is a commit on your branch and FEEDBACK says what
     you decided.
+
+163. **CC's (the box, 2026-10-11): Dog Park, from a cold review of 161.**
+    After 162, or beside it. Dog-park `main` is at `0259c44`: the box fixed
+    the trivial findings (a drag capped at `longest_drag` per request, a
+    request that gives up after 5 s, `farthest_origin_past_park` named apart
+    from `widest_viewport`, the wire's header, the second dog's spot).
+    Each part below is a commit, red first where there is a test to write:
+    1. **The ask loop is a state machine, by name.** Today it is spread
+       over `asking`, `wantScene` and a nullable `noRoom`. Its gap: after
+       `no_room`, a 4xx or a failure, `nearCoveredEdge()` is true with no
+       scene, and the page asks every 80 ms forever. On a full park, each
+       waiting tab runs the whole spiral 12.5 times a second. Make the
+       states one value (e.g. idle, asking, backing off until a time,
+       no room), with backoff after a refusal or a failure.
+    2. **The blitter gets a kind, not two flags.** `own` and `faint` allow
+       `own && faint`. Use one `kind` (own, other, lattice spot), or a style
+       chosen before `blit`.
+    3. **`world.Refused` says what it names by type:** a dog record (its
+       name) or the counter. The startup message's path then comes from the
+       world, not from the glue branching on `why`.
+    4. **The browser's frames and `take()` get a check:** a small node
+       script (no packages) for `nearestCopy`, `homeShift` (ties go east or
+       south, floored modulo, as park.zig has it) and `take`'s
+       reconciliation, run from `ops/smoke`. Keep it seconds.
+    5. **A restored `data/` with the old secret hands out live ids.**
+       Restore or wipe `data/` but keep the auth folder, and a cookie issued
+       after the backup names an id at or above the restored counter, so a
+       new device gets an id that someone else's cookie also carries. Tie a
+       cookie to its data. My lean: a generation made once with the data
+       (beside `next-human`) and signed into the cookie's label, so a
+       cookie from another generation reads as a new device. Say what you
+       choose.
+
+    **Not yet: the park filling up** (cookie-less requests each place a
+    dog). Steve decides between a limit per address and keeping a dog only
+    once its cookie comes back.
 
 ## The box: open
 
