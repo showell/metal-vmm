@@ -7,6 +7,112 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-11, night: 164 done (fixed dogs, claimed), then 163 (the cold review)
+
+**dog-park `claude/great-wright-i7aste` at `7e7bacd`**, on `main`
+`762a916` and on angry-gopher's 162 (my branch, `f5ef863`). `zig build
+test` passes (74 tests), and so does `ops/smoke` (now with a node check
+first).
+
+**164, in two steps, each attacked:**
+- **Step 1 (`35e2783`), the types and the world:**
+  - `DogId` is `0 ..< count`. `Claim` is `unclaimed`, or
+    `claimed {by: HumanId, touched: Instant}`; **`Instant` is the wall
+    clock's Unix seconds**, so staleness compares across restarts.
+  - The population is keyed by dog.
+  - `claiming.zig` replaces placement:
+    - `makeDogs` takes 400 of the 5,000 park's 2,500 lattice spots, and
+      their breeds, from a seeded shuffle (`dogs_seed`), with a test that
+      pins the first four dogs.
+    - `claimFor` picks the unclaimed dog nearest the centre (wrapped
+      distance, ties to the lower id). With every dog claimed, the
+      stalest claim changes hands and the dog keeps where it stands.
+  - The record is format 2, 32 bytes. The world makes the dogs when
+    `dogs/` holds none; otherwise it loads and checks all of them.
+  - Who holds which is an index derived at load.
+  - A stay's touch is written at most once an hour per dog.
+  - `Refused` says by type what it names: a dog record, the dogs folder,
+    or the dog count. That is 163.3, done here.
+- **Step 2 (`2d01324`), a first visit's claim is shown, not kept.** This
+  is the brief's lean, as `answering.Standing` (`returning` or
+  `first_visit`). Twenty cookie-less requests leave every dog unclaimed;
+  the adversary sent 550 and no dog file changed.
+
+**163.5, a restored `data/`:** no data generation. **The id counter lives
+beside the secret, in `auth/next-human`.** A cookie is an id signed with
+the secret in `auth/`, so the counter that hands ids out belongs there
+too.
+- A `data/` that is restored or wiped doesn't take the counter back, so no
+  live id is handed out again.
+- **This differs from the brief's fresh-park rule:** a fresh park is
+  `dogs/` holding no dog, whatever the counter says.
+- A generation in `data/` would have covered a wipe, but not a restore: a
+  restore brings back the backup's generation along with the stale
+  counter.
+- **`auth/` restored from an older backup with the same secret** is
+  covered only partly (from step 1's adversary). A cookie naming an id the
+  counter hasn't reached moves the counter past it
+  (`World.reserveThrough`) and keeps its human. A device whose cookie
+  returns only after a new device was handed its id is still aliased. So
+  **restoring an older `auth/` should rotate the secret**, which ends
+  every cookie: say so in the runbook.
+
+**The attacks, and what came of them:**
+- **Step 1.** Sound: one dog per device held through 3,000 random steps,
+  the grid, `all` and `holders` always agreed, and `World.open` leaks
+  nothing. The holes, each fixed in `d9ab419` with a test:
+  - A stored touch of minInt crashed the next stay, and one in the future
+    made its dog never the stalest. A touch outside [1, now + a day] now
+    stops the load, and the hour arithmetic saturates.
+  - A claim by human 0 now stops the load.
+  - A fresh park whose writing was cut short stopped every later start.
+    When every dog there is unclaimed and is exactly the dog the seed
+    makes, the rest are now written.
+  - A clock gone back starved the touch write. A touch earlier than the
+    last write is now written.
+  - The `auth/`-restore case above.
+  - The temporary-file name is now matched exactly.
+- **Step 2.** Sound: no eviction and no write from cookie-less or forged
+  requests. The browser's second request claims the dog it was shown,
+  80 ms later. Found:
+  - **The dog jumped off screen** when the dog it was shown was claimed by
+    someone else first, or when a returning human's dog had been taken
+    over. Fixed in `b66ae7f`: the scene says whether its own dog is the
+    one held or one newly theirs (`own_is`: `same_dog` or `new_dog` on the
+    wire), and the browser centres on a new one.
+  - **Open:** each cookie-less request still burns an id and writes
+    `auth/next-human`, about 17 ms against 1.5 ms for a returning one.
+    Ids are u64, so it's a write load, not exhaustion. The cure is a
+    first visit that takes no id until its cookie comes back (a signed
+    random nonce in the cookie). That is a cookie format change, so I
+    left it for you or Steve.
+
+**163's other parts:**
+- **163.1 (`4a57db5`):** the ask loop is one value: idle (wanting a scene
+  or not), asking, backing_off until a time, retrying, or asking_again.
+  `askAfter` is its pure transition function. A failure backs off,
+  doubling from 0.5 s to 30 s, so a page that can't be answered no longer
+  asks 12 times a second.
+- **163.2 (`a7998a6`):** a sprite's `kind` is `own`, `other` or
+  `lattice_spot`, and `sprite_styles` gives each kind's look, once.
+- **163.4 (`7e7bacd`):** `ops/park_js_check.js` runs in node with no
+  packages, from `ops/smoke`, in milliseconds.
+  - It checks `nearestCopy` and `homeShift` against park.zig's own
+    numbers, `take()`'s reconciliation, and the ask loop's transitions
+    and backoff.
+  - It found `homeShift` answering -0 for 0 (harmless, now 0).
+  - Three planted bugs (the tie, the backoff, the drag since) each fail
+    it.
+
+**Smaller decisions:**
+- A first claim's request stays, so a returning device's claim ignores its
+  drag.
+- With every dog touched in the same second, the tie goes to the lower
+  id, which can be a dog claimed that second. Nothing is at stake in that.
+- Losing `auth/` while claims exist stops every start
+  (`claim_past_next_human`). Recovery is restoring `auth/`, or wiping
+  `data/` for a fresh park.
+
 ## CC → the box, 2026-10-11, night: 162 done (webbox's hardening), on my branch
 
 **angry-gopher `claude/great-wright-i7aste`**, four commits on master
