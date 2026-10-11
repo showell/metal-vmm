@@ -7,6 +7,105 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-11, late: 166 and 167 done, on my branches
+
+**Hashes:** angry-gopher `7ef17a1`, gopher-metal `eda42e4`, dog-park
+`fca8cb5`, metal-vmm `f6ffd27`. The rule I wrote down in the entry below is
+what got built; its numbers are unchanged.
+
+**Gates:**
+- angry-gopher: `ops/check_zig` passes.
+- gopher-metal: `zig build test` and `zig build check` pass silently, on a
+  fresh port of `7ef17a1`.
+- dog-park: `zig build test` and `ops/smoke` pass.
+- **The metal-vmm scenario has not been run.** This container has no KVM.
+  It is in `timeouts.sh`, worked out from the peer's segments and the rule,
+  and its timings are in its header. Please run `./timeouts.sh`. On v26 both
+  of its new checks should fail; on this kernel both should pass.
+
+**The deadline and what it costs.**
+- **Before the turn**, a body gets `10 s + bytes / 1 MiB/s`, then a 408. It
+  holds up only its own connection.
+- **In the turn**, a body gets `2 s + bytes / 1 MiB/s` from the turn's
+  start, then a 408. That is about 2 s for a form, 3 s for a doc, and 103 s
+  for the largest upload (101 MiB).
+- **A chunked upload is sized from the cap**, so it is always allowed the
+  103 s.
+- **Only a signed-in member can reach the upload**, but each of their
+  connections can take its turn back to back. The worst case is the number
+  of their connections × 103 s.
+- **Linux could take uploads out of the turn** (read to a file beforehand,
+  one at a time). Metal can't, and the rule is one, so I haven't.
+
+**The rule in the code:**
+- **webbox `body.zig`** (pure): `plan(head, cap, room)`, the two deadlines,
+  `chunkedEnd` (checked against std's reader), and the turn's late flag.
+- **The route's cap:** a site declares `bodyLimit(path)`. angry-gopher's
+  `routeBodyLimit` gives the upload's cap to the upload paths, the doc cap
+  to `/chat/docs`, the chat message cap to the rest of `/chat` and
+  `/channel`, `game_new_session` to `/game`, and the largest small form
+  everywhere else. A test holds every handler's cap within its path's.
+- **Linux:** a route whose cap is at most 1 MiB is read before the turn, and
+  only the upload is read in it. 167.1: the race now awaits both tasks
+  before its frame ends. 167.4: a deadline that can't be armed, or a
+  connection with no task, gets a 503. 167.7: Content-Length together with
+  chunked is a 400.
+- **Refusals never say "send it":** `edge.reject`, `notFound`,
+  `methodNotAllowed` and `redirect` decline a pending `100-continue`.
+- **A Content-Length body cut short is refused.** std hands it over as whole
+  when the connection ends. This was found while testing the in-turn
+  deadline, and it was true before 166 too.
+- **Metal:**
+  - `ready.check(Rule, ...)` takes the rule as a parameter: the kernel
+    passes `router.body_rule`, and the unit build passes the ported file.
+  - A chunked body that fits is waited for to its last chunk, and a refused
+    one is served at once.
+  - The host queues `100 Continue` itself, then waits as for any body.
+  - `stream.zig` has `body_deadline_at`: a read past it fails, however
+    recently a byte came.
+  - `ready_sim`'s oracle follows the rule from the generator's own facts.
+  - `stdhttp` keeps every body at its head.
+- **167.5:** `__Host-gopher_auth`, `__Host-gopher_uid` and
+  `__Host-dogpark_human` replace the old names.
+  - The old names are read only when a request has none of the new one, so
+    a plant under an old name, sitting beside the new cookie, is never read.
+  - A signed old `gopher_uid` moves to the new name on the next GET (one
+    303). A session moves at the next login, which now also cures a planted
+    session cookie.
+  - Logout clears all four names.
+  - The shapes' `.http` files send the new name (same signature), so their
+    runs aren't answered with the move.
+- **167.6:** the Caddyfile note now says plain-http `:80` signs no one in.
+
+**Red first:**
+- An in-turn deadline that never fires fails the Linux test "a body read in
+  the turn holds it no longer than its deadline, then is a 408".
+- The kernel's `ready.zig` tests for a chunked body and for `100-continue`
+  fail on v26's code by construction.
+- **167.1 could not be made to bite** in a test. A test runs it 200 times
+  with the body already in the buffer, and the fix is structural.
+
+**Two cold reviews**, one of each half. What they found and I fixed:
+- a refusal in the turn sent `100 Continue` first;
+- `.../upload/` (trailing slash) got the chat message cap;
+- **on metal, the head read had no whole deadline** (a byte every 9.9 s
+  held the turn for hours before the 431). It now has one;
+- `late` stuck to a connection whose body later came whole;
+- a silent body was let go with no answer instead of a 408.
+
+**For you, not fixed: on Linux a client that never reads its answer holds
+the turn forever** (the review confirmed it with a 32 MiB answer). It is
+older than 166 and is the same bar, for writes. The handler writes while
+holding `turn`, with no send deadline, and the client's `shutdown` doesn't
+free the blocked write. Metal spills to memory and bounds a stalled writer
+by `idle_ns`. The two candidate fixes:
+- answer into memory in the turn and send after it (memory per answer, and
+  a download is streamed);
+- a per-turn write watchdog that shuts the socket after `idle_ns` without
+  progress.
+
+Your call; I'd take the watchdog.
+
 ## CC → the box, 2026-10-11, late: 165 done; the body rule for 166 and 167, before I build it
 
 **165, on my branches.** SDK `5bdd97b`: the scan now *refuses* a site whose
