@@ -1,0 +1,44 @@
+1/6 disk_fat_test.test_0...OK
+2/6 rev181_exp.test.EXP181 1: one lie to copy 0's FAT write of a 20 MB upload...
+EXP181 writes of the 20MB upload (FAT ones):
+  req 25 copy 0 lba 32 sectors 321
+  req 26 copy 1 lba 579 sectors 321
+EXP181 copy-0 FAT writes: 1; targets 25 25
+EXP181 lie lands_nothing at req 25: write=ok mount=weighed trusted=1 repaired=321 mount_reqs=381
+    check: [problems 0, damage 0, leaked 0]
+    file: whole; next 4MB: whole; file after: whole
+    check after: [problems 0, damage 0, leaked 0]
+EXP181 lie torn at req 25: write=ok mount=weighed trusted=1 repaired=161 mount_reqs=221
+    check: [problems 0, damage 0, leaked 0]
+    file: whole; next 4MB: whole; file after: whole
+    check after: [problems 0, damage 0, leaked 0]
+EXP181 lie lands_nothing at req 25: write=ok mount=weighed trusted=1 repaired=321 mount_reqs=381
+    check: [problems 0, damage 0, leaked 0]
+    file: whole; next 4MB: whole; file after: whole
+    check after: [problems 0, damage 0, leaked 0]
+EXP181 lie torn at req 25: write=ok mount=weighed trusted=1 repaired=161 mount_reqs=221
+    check: [problems 0, damage 0, leaked 0]
+    file: whole; next 4MB: whole; file after: whole
+    check after: [problems 0, damage 0, leaked 0]
+EXP181 torn+cut at req 25 (free before 68873): write=WriteFailed mount=weighed trusted=1 repaired=160 mount_reqs=220
+    check: [problems 0, damage 0, leaked 0]
+    file: -; next 4MB: whole; file after: -
+    check after: [problems 0, damage 0, leaked 0]
+EXP181 cut after copy0 landed, req 25 (free before 68873): write=WriteFailed mount=weighed trusted=1 repaired=321 mount_reqs=381
+    check: [problems 0, damage 0, leaked 0]
+    file: -; next 4MB: whole; file after: -
+    check after: [problems 0, damage 0, leaked 0]
+OK
+3/6 rev181_exp.test.EXP181 2: sweep a 10 MB write on an empty volume...EXP181 write10 lands_nothing at +18/19: op=ok mount=agree trusted=0 repaired=0: leaked('' c3 n20480) [problems 1, damage 0, leaked 20480]; file NotFound
+EXP181 sweep write10: 19 requests, 95 runs, 1 bad, 20 data-write lies (wrong bytes, chain sound), 5 mounts trusted copy 1
+OK
+4/6 rev181_exp.test.EXP181 3: sweep a 10 MB overwrite of a 10 MB file...EXP181 overwrite10 lands_nothing at +12/335: op=ok mount=agree trusted=0 repaired=0: !broken('/f.bin' c3 n0) leaked('' c20483 n20480) [problems 2, damage 1, leaked 20480]; file BadChain
+EXP181 sweep overwrite10: 335 requests, 1675 runs, 1 bad, 20 data-write lies (wrong bytes, chain sound), 166 mounts trusted copy 1
+OK
+5/6 rev181_exp.test.EXP181 4: sweep a remove of a 10 MB file...EXP181 sweep remove10: 324 requests, 1620 runs, 0 bad, 0 data-write lies (wrong bytes, chain sound), 161 mounts trusted copy 1
+OK
+6/6 rev181_exp.test.EXP181 5: sweep a 10 MB write on fragmented free space...EXP181 fragwrite10 lands_nothing at +42/43: op=ok mount=agree trusted=0 repaired=0: leaked('' c3 n80) leaked('' c163 n80) leaked('' c323 n80) leaked('' c483 n80) leaked('' c644 n80) leaked('' c804 n80) leaked('' c964 n80) leaked('' c1124 n80) [problems 31, damage 0, leaked 20480]; file NotFound
+EXP181 sweep fragwrite10: 43 requests, 215 runs, 1 bad, 78 data-write lies (wrong bytes, chain sound), 5 mounts trusted copy 1
+OK
+All 6 tests passed.
+rc=0

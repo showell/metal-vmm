@@ -839,6 +839,44 @@ the build, the port); stay off those, and merge master in as it lands.
        took" now also fires when nothing was written: if the floor should
        tell those apart, split the message.
 
+187. **The box's (Steve, 2026-10-13): the cold reviews of 181 and of 180/182's
+    kernel half, as CC's own adversary passes, FIRST (before 186).** The box
+    began both and stopped them (Steve: no more running at once than the
+    policy allows; reviews that need no KVM go to the cloud). Neither is
+    merged to master until these pass. Each: findings ranked, a concrete
+    scenario, file:line, CONFIRMED by experiment where it can be, a verdict.
+    1. **181 (`ecb467b`), by experiment.** The box's reviewer had built one:
+       `docs/box-rev181/` (rev181_exp.zig, a test file that sweeps a lying
+       `lands_nothing`/`torn` request at every request of a 10 MB write,
+       overwrite, remove, and a write on fragmented space, on small FAT32;
+       apply.sh wires it into a worktree; outputs from 179 and 181 beside
+       it). Its partial result: on 179, `overwrite10` has 3 bad of 335
+       (mount `past_weighing` trusts copy 0 -> broken `/f.bin`, BadChain);
+       on 181 all six sweeps pass ("1 bad" in fragwrite10 is a leak of
+       80 clusters at the last request, no damage). `out_ecb.txt`, an
+       earlier run on 181, FAILED one assertion ("expected 31, found 16")
+       after a series of `WRONG BYTES` with no damage in fragwrite10: find
+       out which (the experiment's expectation or the code), and say.
+       Finish it on 178 as the baseline. Then hunt what 181 might break:
+       can a legitimately newer copy 0 lose to an older copy 1 (a cut after
+       copy 0 landed whole, before copy 1)? the cost of weighing whole at
+       mount on a 16 GiB volume; the idle check; do fat_sim's tears land a
+       PREFIX of a request's sectors?
+    2. **180 + 182, the kernel half (`da1ec5f`).** Prod's chat data is on a
+       DigitalOcean volume over virtio-scsi, its boot disk virtio-blk, and
+       requests just grew to 1 MiB: a mistake stops the site booting, or a
+       silently cut request corrupts. INQUIRY EVPD B0h (the CDB; MAXIMUM
+       TRANSFER LENGTH bytes 8..11 in LOGICAL BLOCKS: a block size not 512;
+       no page, a CHECK CONDITION, page 00h not listing B0h, a short answer,
+       a page length under 12); the least of disk/controller/2,048 used
+       EVERYWHERE a request is built (data and FAT runs, the page cache, the
+       idle check). virtio-blk chains: descriptor count against free
+       descriptors and the chain limit, `seg_max`/`size_max` per the spec,
+       physical contiguity, u32 lens, an uneven split, completion freeing
+       every descriptor of a chain, a chain larger than the queue. 182's
+       four: each red test at its edge, both sides; a normal disk still
+       mounts. And anything that changes a normal boot.
+
 186. **The box's (2026-10-13): 180.6/180.7/182's and 180.1-device's cold
     review. Before 183.** The box fixed the one blocker on branch
     `cc-merge-2` (angry-gopher `86eeae60`, on your `d1beb64e`): a bodiless
