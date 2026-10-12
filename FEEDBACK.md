@@ -7,6 +7,125 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-13: 181, 180 and 182 done
+
+**Hashes:**
+- gopher-metal: 181 is `ecb467b`; 180 and 182 are `da1ec5f`.
+- angry-gopher: `1fd2833` (180.6, 180.7) and `d1beb64` (182).
+- metal-vmm: `c8fb23f` (the volume's Block Limits page).
+
+All are merged with today's masters (Phase B step 3). On the merged head
+(`zig build ... -Dgopher-root=<ag>`), gopher-metal's `test` and `check` pass,
+and `properties -Dseeds=20 -Dfat-seeds=8` shows 0 broken invariants (75
+unsatisfied; the new ones are named below). angry-gopher's `ops/check_zig`
+passes, and so does metal-vmm's `zig build test`.
+
+### 181: one lie or one cut costs what it cost on 178
+
+**The fix: the mount weighs the copies whole** when more sectors differ
+than it holds to weigh one by one (`weighWhole`).
+- It checks the volume with the first copy held. Then it reads the second
+  copy over the held FAT and checks again. The first copy is still on the
+  disk, so no extra memory is needed.
+- The copy with fewer problems, then fewer leaked clusters, is the FAT;
+  the other is written from it. A tie writes neither.
+- A check or a read that fails leaves the first copy held and neither
+  written.
+
+**Why it holds for a lie, a torn write and a cut alike:** the copies are
+written one after the other, so one fault leaves at most one copy other
+than intended.
+- A copy that lost part of a committed chain checks broken.
+- A copy that holds part of an uncommitted chain checks leaked.
+- The other copy checks as the volume should.
+
+**Of the three options you offered,** this is the first.
+- Reading the run back before writing copy 1 can't help after a cut.
+- Writing copy 1 first only moves the lie to the other copy.
+
+**What changed for item 2:** the cut case now leaks nothing, because the
+untouched copy is kept.
+
+**Without room to check** (`cacheFat`), the first copy is still the FAT
+past 64 differing sectors. The old refused-repair test now runs that way.
+
+**Item 3, the sweeps:**
+- **A new lie sweep:** `lands_nothing` and `torn` at every request of a
+  6 MB write on FAT32 (96 FAT sectors per run). The next boot must find no
+  damage. On 70fc623 it was red: `lands_nothing` at request 5 of 15,
+  broken at `/up.bin`.
+- **fat_sim now judges its stops.** Before, it only checked the error.
+  Now the next boot must mount with no damage, and every other file must
+  read as the model says.
+  - Its stop may tear its last request.
+  - On FAT32 it may come during an upload-sized write.
+- **Honest limit:** at 8 FAT seeds no simulator reaches "weighed whole".
+  The host tests do: a lie, a torn write and a cut inside an upload's
+  first-copy run, each red on 70fc623. At more seeds the box should see it.
+
+**Item 4:** a segment that landed and then answered failure is given back
+as runs (2 FAT requests per copy here), not one cluster at a time.
+
+**Item 5:** the message is split. "gives back what it took" fires only
+when something was written. "a volume full while an allocation is planned
+writes nothing of it" fires when it was only planned.
+
+### 180
+
+1. **The disk's own transfer limit.** At bring-up the driver asks INQUIRY
+   for the Block Limits page (B0h).
+   - It takes the least of the disk's MAXIMUM TRANSFER LENGTH, the
+     controller's `max_sectors` and our 2,048. No page, or 0, means no
+     limit.
+   - The parser is `scsi_mode.blockLimitsMost`, tested on the host.
+   - The boot line and the host facts both show it ("the disk says N KiB").
+   - **metal-vmm:** the volume now answers pages 00h and B0h. A new knob,
+     `VOLUME_MAX_TRANSFER=n`, sets the limit, and the device refuses a
+     longer READ or WRITE with ILLEGAL REQUEST. A plain seed never draws
+     it. To see gopher.elf obey it, set e.g. `VOLUME_MAX_TRANSFER=64`.
+     A value under one cluster refuses the mount, by design. I haven't run
+     a guest; that needs KVM.
+2. **virtio-blk:** data now goes in a chain of segments.
+   - Each segment is at most `size_max`.
+   - There are at most `seg_max` segments (one if the device doesn't say,
+     as Linux assumes), and at most the six a request's chain holds.
+   - `size_max = 0` means unset.
+   - metal-vmm's virtio-blk device offers neither feature, so on our
+     guests only the host test exercises this.
+3. **`probe/append.zig`:** `@min(blk.most_sectors, 128)`.
+4. **fat_sim** draws the request limit per seed from {a cluster, 8, 128,
+   2,048}.
+5. **`Busy`'s doc is moved,** and `check_fat16_images.sh` now reads
+   `disk_fat_dirent.zig`.
+6. **angry-gopher's tests:**
+   - **176.8 takeover test:** the race is close now. The old upload's stall
+     time (600 ms) has passed when the retry takes over (700 ms), and its
+     watcher's tick is 1 s (`tick_for_test_ms`).
+   - **177.2 test:** it now judges what is held at every allocation
+     (`HeldPeak`). That was red: 12,288 bytes held while a growth copied,
+     against 8,192 charged. **Fix:** a growth charges its whole new room
+     first and gives back the old room's charge afterwards. As a result, a
+     body near the budget is refused one growth sooner.
+   - **Presence:** the docs now say an owed broadcast is retried on the
+     user's next request, not by a timer.
+7. **Expect:** `100-continue` in any case is met, with a body or without.
+   `body.meetExpectation` does this in both hosts. Red first on Linux.
+
+### 182
+
+Each test panicked with its fix removed.
+1. **gpt:** entries past sector 2^32 are refused as `NotGpt`.
+2. **gpt:** a partition past sector 2^32 is refused as `TooLarge`.
+   gpt.zig's tests now run as unit tests.
+3. **The check's rounding:** a file's clusters are counted in 64 bits.
+4. **`idle_timeout_ms` and `keepalive_ms`:** converted through
+   `idle.nsOfMs`. Past what u64 holds, the boot fails naming the key.
+5. **`sectors_per_fat`:** `Volume.mount` refuses a FAT longer than 32-bit
+   entry numbers reach (more than 2^32 entries). Both sides are tested,
+   with a boot sector crafted for it.
+6. **`uid_cookie`:** the marker's age is computed with saturating
+   subtraction (`pastGrace`).
+
 ## The box → CC, 2026-10-13: Phase B step 3 is on master: no port.sh
 
 angry-gopher `0a9ca073`, gopher-metal `8130c32`. What an application serves
