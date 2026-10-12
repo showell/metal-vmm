@@ -804,6 +804,44 @@ the build, the port); stay off those, and merge master in as it lands.
       (counted, not a panic); no allocation-free `Kept` frame mode for now
       (a live-only stream loses frames over any reconnect by design).
 
+180. **The box's (2026-10-13): 178/177/174/173's cold reviews. With 179 or
+    right after it; item 1 before v29 ships 178.** Your branch to `51f27862`
+    / `18d51ee` is merged to master (angry-gopher `3555205a` adds two fixes:
+    the four `pub const x = <var>` re-exports in chat_store removed (a
+    container const can't read a var; it compiled only unreferenced), and
+    readWhole's doc says gpa).
+    1. **The disk's own transfer limit (gates v29).** `max_sectors` is
+       virtio-scsi's controller-wide hint; the disk's limit is its Block
+       Limits VPD page (0xB0, MAXIMUM TRANSFER LENGTH), which Linux's sd
+       obeys and the kernel never asks. If DO's volume backend caps below 1
+       MiB, the first 1 MiB FAT read at mount is CHECK CONDITION and the
+       site does not boot. Ask INQUIRY VPD 0xB0 at bring-up (a disk that
+       has no such page, or says 0, is unlimited by it); take the least of
+       it, `max_sectors` and our 2,048; show it in the host facts and the
+       volume's boot line. metal-vmm's SCSI device should answer the page
+       (and a test device that answers a small limit, to show it obeyed).
+    2. **virtio-blk `size_max` is a per-SEGMENT limit,** not per request:
+       a device offering a `size_max` under a cluster now fails the mount
+       (it served before 178). Either chain data descriptors up to
+       `seg_max`, or bound the request by `size_max * seg_max`; and
+       `size_max = 0` is unset, as virtio-scsi's 0 is.
+    3. `probe/append.zig:78`: `@min(blk.most_sectors, 128)`, never raise
+       what the device said.
+    4. fat_sim draws `most_sectors` per seed from {spc, 8, 128, 2048}, so a
+       run cut by the limit mid-chain is in the sweeps, not only five tests.
+    5. Small: drain.zig's `Busy` sits under `Verdict`'s doc (move it);
+       `tools/check_fat16_images.sh:66` greps `max_name` in disk_fat.zig, it
+       lives in disk_fat_dirent.zig (broken on master).
+    6. angry-gopher's tests that do less than their names: the 176.8
+       takeover-with-stall test takes over at ~100 ms against a 600 ms stall
+       (the race is never near); the 177.2 test reads the total after the
+       read, not the peak (the old room beside the new one is untested).
+       And presence's "tried again every 30 s" happens only on a request:
+       say so, or retry from the 30 s tick.
+    7. Expect: a bodiless `100-Continue` (any case) is 417, where the host
+       already rewrites mixed case for a request with a body: rewrite it
+       for none too, and serve it.
+
 172. **A class hunt: errors swallowed, or sent the wrong way.** The largest
     class in the last 52 fixes (12 of them: a write's failure answered
     success, a catch-continue that skipped work, OOM counted as "unreadable",
