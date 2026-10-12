@@ -839,6 +839,44 @@ the build, the port); stay off those, and merge master in as it lands.
        took" now also fires when nothing was written: if the floor should
        tell those apart, split the message.
 
+183. **The box's (Steve, 2026-10-13): a mechanical guard for the class that
+    hit prod twice. After 180 and 182.** Twice a ReleaseSafe panic in the
+    served kernel came from arithmetic on a number the client chose (v26:
+    a forged cookie's MAC length; v28: `Last-Event-ID` + 1, fixed on master
+    `3d5a5f3d`). Each read as right; an off-by-one sweep passed over the
+    second. A reading hunt found it in one pass, but the class needs a
+    guard that runs every time:
+    - **A request harness over angry-gopher's Linux build in Debug** (every
+      safety check panics, in seconds, no QEMU): for every place the
+      application parses a number from a request (a header, a query key, a
+      path segment, a form field, a cookie, a message's markdown: grep
+      `parseInt(` in zig-server/src for the list, and make the harness
+      refuse to pass if a request-reachable call site is not covered), send
+      each of the type edges (0, -1, 2^31±1, 2^32±1, 2^63±1, 2^64-1, 2^64, a
+      30-digit number, a sign, leading zeros, whitespace) as a signed-in
+      member. Fail if the server dies or logs a panic, naming the request.
+    - **Red first:** it must catch the sse.zig overflow on `v28` (tag),
+      then pass on master. In `ops/check_zig` or its own fast gate.
+    - If the shape invites it, the same over webbox's headers for dog-park's
+      play server (no Dog Park feature work: only the harness pointed at it).
+
+184. **The box's (2026-10-13): the next class hunt, slow exhaustion.**
+    Anything a request (a stranger's, or a member's) can make grow without
+    bound, on either host: a map keyed by request data (sessions, throttles,
+    presence, per-human tables, caches, the bus's subscribers), files a
+    request creates per call, connection- or stream-table slots held by a
+    client that does little, an allocation sized by a header. For each:
+    the bound, or a red test that shows there is none, then the bound (its
+    edge, both sides, in one test). The kernel's fixed heap makes this a
+    crash class there. Cold adversary before you report.
+
+185. **The box's (2026-10-13): small, from the crash hunt.** angry-gopher:
+    an `<img` tag in a message can carry `images_sep` inside the tag, which
+    plants a fake entry header (a spoofed source / from line) in each
+    member's images.md: escape or refuse it where it is written, red first.
+    And an upload file name that is not UTF-8 comes back in JSON as an
+    array of numbers: answer a string (replace what does not decode).
+
 182. **The box's (2026-10-13): four panics at boot, from the crash-class
     hunt. After 181, with 180.** A hunt for every ReleaseSafe panic outside
     input can reach found none from the network in the kernel, and these
