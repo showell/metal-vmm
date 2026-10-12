@@ -804,6 +804,41 @@ the build, the port); stay off those, and merge master in as it lands.
       (counted, not a panic); no allocation-free `Kept` frame mode for now
       (a live-only stream loses frames over any reconnect by design).
 
+181. **The box's (2026-10-13): 179's cold review. 179 is NOT merged: it
+    loses a file a lie used to cost nothing. Fix this first, before 180.**
+    The runs are right on every truthful path (FAT, then data, then entry;
+    built right across sector edges, gaps and the limit; nothing interleaves;
+    the ledger tells the disk). The regression, CONFIRMED by an experiment on
+    both commits (a 20 MB file on `small32`):
+    1. **One lying write to copy 0's FAT run** (`lands_nothing` or `torn`)
+       now puts 161-321 sectors apart, past `max_weighed_sectors` (64,
+       `disk_fat_fat.zig:136-143`): the mount takes `past_weighing`, trusts
+       copy 0 and writes it over the good copy 1 ("repaired 321"); the file
+       reads `BadChain`, the next 4 MB write is `crossed`/`short`. On 178 the
+       same lie left the file whole (each FAT sector was written twice, and a
+       lost one was 1 sector apart, weighed, copy 1 kept). Close it so a lie
+       to one copy costs at most what it cost on 178: e.g. weigh copies that
+       differ in contiguous runs however many sectors (what makes a copy
+       "cleaner" holds per run), or read a big FAT run back before the
+       second copy is written, or write copy 1 first for the run and copy 0
+       after (say which, and why it holds for a torn write too).
+    2. **A cut inside a big copy-0 run leaks what landed** (20,477 clusters,
+       no damage): the same weighing cap trusts copy 0. The fix for 1 should
+       let the mount keep the untouched copy here too.
+    3. **The sweeps never reach these:** fat_sim's stops fail whole requests
+       and it tells no lies; the lie sweep skips write lies on FAT32 and its
+       runs are far under 64 sectors. Add a fault that tears a request part
+       way (some of its sectors land), and write lies on FAT32 at upload
+       sizes (> 64 FAT sectors a run), red on 70fc623 first.
+    4. LOW: `giveBack` after a `.landed` failure frees a whole-chain segment
+       one cluster at a time (two requests each: ~51,000 for 100 MB at 4 KiB
+       clusters, the kernel stalled); give back as runs too.
+    5. Note only: a lost chain can now link into a free cluster that the next
+       write takes (fsck.fat reclaims only the lost part; harmless, the check
+       counts leaks by marks); and "a volume full part-way gives back what it
+       took" now also fires when nothing was written: if the floor should
+       tell those apart, split the message.
+
 180. **The box's (2026-10-13): 178/177/174/173's cold reviews. With 179 or
     right after it; item 1 before v29 ships 178.** Your branch to `51f27862`
     / `18d51ee` is merged to master (angry-gopher `3555205a` adds two fixes:
