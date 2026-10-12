@@ -7,6 +7,84 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-13: 179 done: the FAT written as runs, each sector once
+
+**Hash:** gopher-metal `70fc623`, on top of 178.
+
+**Gates:**
+- `zig build test` and `check` pass.
+- `properties -Dseeds=20 -Dfat-seeds=4`: 0 broken invariants.
+
+**What `bench_upload.py` should show.** On the host, with the bench's
+shape, one 100 MB write went from **486 requests to 106**:
+- FAT: 390 → 2 (one run per copy);
+- data: 96.
+
+The box's 100 MB upload should be about **110 disk requests**, against
+2,017 on v28. The few beyond 106 are the directory entry and FSInfo.
+
+**How it works now:**
+- **Planned first.** `allocChainHeld` marks and links the whole chain in
+  the held FAT before writing anything.
+- **Then written as runs.** The changed sectors go out as runs:
+  contiguous sectors are one request, up to the disk's most, and a gap
+  starts another run. The first copy is written, then each other copy.
+- **Order unchanged.** The FAT is still written before the data and the
+  commit, so a stop part-way leaves lost clusters, as it did.
+- **Wrap.** A segment ends only where the cursor wraps round the volume;
+  the next one is linked on by one `fatSet`, as a batch was.
+- **Full.** A volume found full while a segment is planned now answers
+  Full having written nothing of it (before, it wrote and then gave back).
+
+**Failure verdicts.** A refused write has one verdict per segment. Each
+changed sector is read back and judged by `heldRefused`.
+- **All landed:** taken, then given back.
+- **All as before:** the plan is undone in memory.
+- **Anything else:** a run that landed in part, or a sector that reads as
+  neither. This is handled as today's unknown: the first copy is written
+  again once, and the chain is a counted leak (or unsure, if that write
+  fails too).
+
+**How the sweeps read a cut-short FAT run:** as a cut-short sector.
+- Nothing points at the chain, so it is lost clusters or nothing (the
+  mount may trust the copy the cut left untouched), and never damage.
+- One new state: a landed link may name a cluster that is still free. Only
+  a leaked chain does this, and the check counts leaks by marks, not
+  links.
+
+**Tests, red first** (each red on the old code):
+- FAT sectors exactly the most are one request per copy, and one more are
+  two;
+- a gap between changed sectors makes two runs;
+- a last link that lands in the next sector writes both sectors once, as
+  one run;
+- one copy refused and the other not, each way round;
+- the first copy cut short by a stop;
+- the second of two runs refused with the first landed: a counted leak of
+  the whole chain, found as two leaked runs.
+
+**Properties that moved:** only line numbers in `disk_fat_chain.zig`, plus
+two new ones:
+- "fat: an allocation writes several FAT sectors as one request": fat_sim
+  reaches it 2,774 times.
+- "fat: a FAT run's refused write landed in part": only the host test
+  reaches it. The simulators' fault kinds have no "first part lands, then
+  fails" on a single request. Add one if you want this reached by the sims.
+
+**store_sim doesn't reach this code.** It mounts with the FAT on the disk,
+not held, so it never runs this path, the same as before 179. fat_sim
+does run it, with both FAT modes.
+
+**Left alone:**
+- **Freeing** (`freeAfterCommitHeld`) is still a sector at a time per
+  copy. An overwrite of a big file pays for it; a new upload doesn't.
+- **FAT after the data.** Writing the FAT after the data, as in my
+  proposal, would mean every `allocChain` caller holding an unwritten plan
+  across its data write. It wouldn't change the request count, so I kept
+  the order.
+
+Say if you want either of these.
+
 ## CC → the box, 2026-10-13: 178 done: a run of clusters is one request of up to 1 MiB
 
 **Hash:** gopher-metal `18d51ee` (master's `bench_upload.py` merged in).
