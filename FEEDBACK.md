@@ -7,6 +7,145 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-13, early: 172's rest, 173, 174, 176.8's gaps, and 177 done (178 next)
+
+**Hashes:** angry-gopher `51f2786`, gopher-metal `45fe656`. Master merged
+into both (Phase B), and into metal-vmm.
+
+**Gates:**
+- angry-gopher: `ops/check_zig` and `ops/check_chat` pass.
+- gopher-metal, on a fresh port:
+  - `zig build test` and `check` pass;
+  - `properties -Dseeds=20 -Dfat-seeds=2`: 0 broken invariants, the same
+    68 unsatisfied as before the split;
+  - `-Ddrain-seeds=100`: every oracle holds.
+
+### The merge
+
+- angry-gopher's conflicts were build.zig's test list and the import
+  lines of `chat_store.zig` and `users.zig`. The split files take master's
+  convention throughout (`host_io`, `@import("webbox").store` and the
+  rest).
+- The merge's timing showed a race in my own 176.3 test. The route flushes
+  the stream's head before it returns, so the head arriving does not mean
+  the charge is back yet. The test now waits for it, at most 2 s, with the
+  stream open.
+
+### 172's rest
+
+- **DHCP: a NAK is `Refused`**, never NoOffer or NoAck. `Refused` was
+  declared and named by the probes, but nothing ever answered it.
+  - The datagram's classification is pulled out (`replyKind`) and tested
+    red first.
+  - The exchange itself needs a NIC, so B18's lying peer is what would show
+    it on a guest.
+- **No bug, recorded:**
+  - CheckRun's `ReadFailed`: a step can fail only with ReadFailed, and the
+    existing test pins the repeat.
+  - disk_fat's `writeInto` on a directory answers BadName, which io would
+    map to NameTooLong. It is unreachable: createFile refuses a directory
+    first. Now pinned IsDir at io's level.
+- **idle_check, a question:** `begin`'s only error is TooBig (marks shorter
+  than `checkBytes`, the caller's mistake), and it is counted as "a read
+  that failed", every hour. The kernel sizes the marks right, so it can't
+  happen. A panic would be truthful but untestable. Leave it, or panic?
+
+### 173: disk_fat split
+
+- **disk_fat.zig is now 904 lines:** the types, `Volume`'s fields, the
+  mount and the sector primitives.
+- **Six new files:**
+  - `_fat`: the FAT's copies and entries (436 lines);
+  - `_chain`: chains and the ledger (571);
+  - `_dir`: directories and names (710);
+  - `_file`: entry commits, writes and reads (943);
+  - `_remove`: renames and removes (339);
+  - `_check` (588).
+- **How the members moved:** each is now a top-level function taking
+  `self: *Volume`. `Volume` names each one
+  (`pub const fatSet = disk_fat_fat.fatSet;`), so calls are unchanged.
+  Members that another file names became `pub`.
+- **Checked as unchanged:**
+  - every old line is in the new files (compared as a multiset of lines);
+  - the 121 property messages are the same list;
+  - the plants are unchanged.
+- **disk_fat_test.zig** is split at its section markers into itself
+  (1,012 lines), `_dirs`, `_fat32` and `_paths` (1,030), in the same
+  binary. 103 tests before and after.
+- **Tools that name the files:**
+  - `fat-coverage` covers every FAT file.
+  - `mutate_guards.py` names each mutant's new file.
+  - One mutant, "removeTree swallows its last remove", was already stale
+    on master and is left as it was.
+
+### 174: chat_store and users split
+
+- **chat_store.zig is now 434 lines.** Out of it came:
+  - `chat_codec` (224 lines);
+  - `chat_fanout` (272);
+  - `chat_count` (887);
+  - `chat_paths` (372).
+- **users.zig is now 711 lines.** `users_session.zig` (477 lines) has the
+  session cookie and its secret, the legacy move, API keys, bearer parsing
+  and the resolver.
+- Both originals re-export every public name, so no caller changes. Test
+  counts are the same (38 and 17).
+- CountFixture's three disk reads and writes moved beside the count tests
+  as private helpers, which the portable lint allows.
+
+### 176.8's last gaps (Linux host)
+
+All four were checked by mutation.
+- The held body reaches the handler uncopied, small or upload.
+- 170.7's verdicts are a pure `verdict`, tested at every pair.
+- A 500 after a slot or a charge gives both back.
+- A takeover with the stall timer running answers 409, not 408.
+
+### 177
+
+1. **Fixed: the echo is made before the store.** The live publish's key
+   and blob are built before `store.append`, and the publish after it
+   cannot fail. The same goes for reactions, and sendDone's location is
+   made before the store. Red first: the allocation sweeps now require the
+   echo for every success.
+2. **Fixed: the charge is what is held.** The body is read into memory
+   that frees what a growth leaves behind (the host's allocator, not the
+   arena). It grows by half, never past its most, and each growth is
+   charged before it is taken. Red: 931,660 bytes held for a 307,200
+   charge.
+3. **Does not reproduce.** `route` hands the lent writer back, passing the
+   buffered head on (which marks `any`), before it asks whether anything
+   went out. So the head stands alone, and there is no 500. It is pinned
+   twice: at `Sent` with streamFile's shape, and in route's case table.
+   If you saw two status lines, tell me where and I'll chase it.
+4. **Fixed: only what std cannot answer is refused.** With no body, only an
+   exact `100-continue` is served (std answers the 100, then the page);
+   with a body, `100-continue` in any case.
+5. **drain_sim, tightened:**
+   - drain.zig now says why it is busy (`Busy`), and each 503 is judged
+     by that cause.
+   - One seed in five is a busy loop. Each 408 must come within twice its
+     deadline of wall time (from when it was decided), and each stall
+     within its 30 s and two steps.
+   - Removing 175.1's cap passed every seed before; now seed 1 fails.
+   - `charged <= budget` is asserted directly.
+   - The chunked growth comment is corrected.
+6. **The LOW items:**
+   - **`Allow`:** a 405 names its route's method, at all 17 sites.
+   - **The search index:** a conversation past what it holds is counted
+     unreadable once, and the index stands. Each later topic was counted
+     again, and every message landing there dropped the index.
+   - **Presence:** a failed broadcast leaves its user online, and the
+     owed edge is retried every 30 s, not on every request.
+   - **Left as is, a question:** an SSE frame lost to OOM on a live-only
+     `sse.forward` stream. The stream ends and the browser reconnects; a
+     live-only stream has no backlog by design, and frames published
+     during any reconnect are lost the same way. Making it
+     allocation-free would mean a new `Kept` frame mode in the library.
+     Do you want that?
+
+**Next:** 178.
+
 ## CC → the box, 2026-10-12, morning: 175 and 176 done (176.8 in part)
 
 **Hashes:** angry-gopher `20657f6`, gopher-metal `420616c`.
