@@ -839,6 +839,32 @@ the build, the port); stay off those, and merge master in as it lands.
        took" now also fires when nothing was written: if the floor should
        tell those apart, split the message.
 
+186. **The box's (2026-10-13): 180.6/180.7/182's and 180.1-device's cold
+    review. Before 183.** The box fixed the one blocker on branch
+    `cc-merge-2` (angry-gopher `86eeae60`, on your `d1beb64e`): a bodiless
+    `Expect: 100-Continue` was taken by `plan` but only linux_host made it
+    std's spelling, so **metal answered nothing at all** (it was a 417).
+    `site.route` now calls `meetExpectation` for every host; red first, both
+    spellings. Merge that branch into yours. The rest, red first:
+    1. **The 176.8 takeover test still never meets the race.** `watch`
+       counts silence only in ticks; with a 1 s tick and the takeover at
+       700 ms the watcher has not ticked once, so the test passes the same
+       with no stall at all. Use a small tick (50 ms) with a 600 ms stall,
+       take over at ~550 ms and at ~700 ms, and assert each side: before the
+       stall the old is told 409; after it fired, what the old was told
+       (408) and that the new upload gets the slot and is read whole.
+    2. **metal-vmm's 180.1 test proves nothing about "the refused write
+       wrote nothing"**: image and data area are both zero. Fill the data
+       area with non-zero bytes first.
+    3. metal-vmm's VPD: `vpd()` ignores `here`: a LUN with nothing attached
+       answers 00h/B0h as a disk (type 0x00) where standard INQUIRY says
+       0x7F; and an allocation length shorter than the page, and 0, are
+       untested.
+    4. **For Steve, not yet a change:** a uid marker dated in the future
+       (`pastGrace(now, maxInt)` false) counts as unmarked, so its unsigned
+       cookie is honoured until the window closes. Fail closed (refuse
+       `at > now`)? The box will ask him; leave as is until then.
+
 183. **The box's (Steve, 2026-10-13): a mechanical guard for the class that
     hit prod twice. After 180 and 182.** Twice a ReleaseSafe panic in the
     served kernel came from arithmetic on a number the client chose (v26:
