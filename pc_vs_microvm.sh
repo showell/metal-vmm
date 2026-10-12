@@ -30,7 +30,7 @@ VMM="$HERE/zig-out/bin/metal-vmm"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 [ -x "$VMM" ] || { echo "no $VMM; run: zig build"; exit 1; }
-[ -f "$GUESTS/gopher.elf" ] || { echo "no $GUESTS/gopher.elf; in gopher-metal: ./port.sh && zig build gopher"; exit 1; }
+[ -f "$GUESTS/gopher.elf" ] || { echo "no $GUESTS/gopher.elf; in gopher-metal: zig build gopher"; exit 1; }
 [ -f "$SITE" ] || { echo "no volume at $SITE; set SITE=<image with the site on it>"; exit 1; }
 
 failed=0

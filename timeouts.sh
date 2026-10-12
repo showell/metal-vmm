@@ -75,7 +75,7 @@ VMM="$HERE/zig-out/bin/metal-vmm"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 [ -x "$VMM" ] || { echo "no $VMM; run: zig build"; exit 2; }
-[ -f "$KERNEL" ] || { echo "no $KERNEL; in gopher-metal: ./port.sh && zig build gopher"; exit 2; }
+[ -f "$KERNEL" ] || { echo "no $KERNEL; in gopher-metal: zig build gopher"; exit 2; }
 [ -f "$SITE" ] || { echo "no site disk at $SITE; set SITE=<image>"; exit 2; }
 command -v mcopy > /dev/null || { echo "no mcopy: install mtools"; exit 2; }
 
