@@ -7,6 +7,207 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-13: 187, 186, 183, 184, 185
+
+**Hashes:**
+- gopher-metal `eab6b22`: 187.2's fixes and `torn_tail`.
+- angry-gopher, up to `14fbd30`:
+  - 186.1 `6932d23`, with cc-merge-2 merged;
+  - 185 `59a1fda`;
+  - 183 `c635f49`;
+  - 184 `35bc656`, `d00e069`, `c9252fa`, `14fbd30`.
+- metal-vmm `fc337ed` (186.2, 186.3).
+
+**Gates, on the merged heads:** gopher-metal `test`, `check` and
+`properties -Dseeds=20 -Dfat-seeds=8` pass, with 0 broken invariants (77
+unsatisfied, the new properties among them). angry-gopher's
+`ops/check_zig` passes, and so does metal-vmm's `zig build test`.
+
+### 187.1: 181 by experiment. Verdict: merge
+
+I ran the box's `docs/box-rev181` experiment on 178, 179 and 181, each in
+its own worktree. This was the whole experiment, finished on 178 too.
+Sweeps report bad runs out of all runs; a bad run is damage, a file lost,
+or a leak.
+
+| Sweep | 178 | 179 | 181 |
+|---|---|---|---|
+| write10 | 1 | 3 | 1 |
+| overwrite10 | 1 | 3 | 1 |
+| remove10 | 0 | 0 | 0 |
+| fragwrite10 | 1 | 3 | 1 |
+| append10 | 1 | 3 | 1 |
+
+**181 is 178 on every sweep.** 179's extra bad runs are 181.1's
+regression: a lie to the first copy's run, taken by the mount. On 181,
+the 20 MB upload's lies (`lands_nothing`, torn) and its cuts all mount
+with `trusted=1`, and the file reads whole.
+
+**The one bad run that stays, on 178 and 181 alike:**
+- **What:** `overwrite10` with `lands_nothing` on the commit (the
+  directory entry's write): +652 of 975 requests on 178, +12 of 335 on
+  181.
+- **Why:** the entry keeps pointing at the old chain, and then the old
+  chain is freed. The result is `broken /f.bin` with both copies agreeing.
+- **Not 181's:** it is a lie no FAT-copy rule can see.
+- **A fix:** read the commit's sector back, bypassing the directory cache,
+  before freeing the old chain. That costs one read per overwrite. Want it?
+
+The write10, fragwrite10 and append10 bad runs are a leak at the last
+request, with no damage.
+
+**`out_ecb.txt`'s "expected 31, found 16" was the experiment's harness,
+not the code.** `test_disk.Report` keeps 16 findings, and `Disk.check()`
+asserts every finding fit. fragwrite10's last request left 31 leaked runs
+(no damage), so the assertion failed. The later version counts findings
+itself and passes.
+
+**Test 7 on 181 is a real hole, and an old one.** The sequence:
+1. A lie to copy 0's run.
+2. The mount's weighing then fails part way, so it is "unweighed": copy 0
+   is held and neither copy is written.
+3. The next write allocates from copy 0, where the lost file's clusters
+   read free.
+4. That write's FAT runs go to both copies, so the good copy 1 is lost.
+   The check finds `short /up.bin` and `crossed /next.bin`.
+
+178 skips test 7 (it has no run over 64 sectors). But 178's unweighed
+path is the same, for one sector apart, and the kernel serves writes
+after an unweighed mount (`gopher.zig:1573` only says so). It needs two
+faults: a lie, then a failed read during the mount. This is a design
+choice for you. Two ways I see:
+- **(a) Refuse writes** to the volume until a weighing succeeds: retry it
+  at the next mount, or from the idle check.
+- **(b) Allocate only clusters free in both copies,** with a bitmap of
+  copy 1 read at an unweighed mount (about `checkBytes()`), and write
+  only copy 0 until the copies are weighed. Even with this, the data a
+  next write overwrites is gone. So (a) is the safe one.
+
+**My own questions on 181:**
+- **Can a newer copy 0 lose to an older copy 1? No case found.**
+  - A cut after copy 0 landed whole and before copy 1 keeps copy 1. That
+    is right: copy 0's chain is not committed yet, and checks leaked.
+  - Freeing after the commit leaves copy 1 leaked, so copy 0 wins.
+  - An append's link leaves copy 0 `long` and copy 1 leaked, so copy 0
+    wins on leaks.
+  - Copy 1 lags copy 0 by at most one operation's FAT writes.
+- **Weighing whole on a 16 GiB volume** (4 KiB clusters: a 16 MiB FAT,
+  32,768 sectors), and only after a fault:
+  - two full checks;
+  - reading copy 1 (16 requests);
+  - reading copy 0 again if it wins (16 requests);
+  - mirroring: 512 reads of 64 sectors, and one write per differing sector.
+  At about 2 ms a request, roughly a second or two at that boot. On
+  small32 the experiment measured 381 mount requests for a 321-sector
+  repair. Low priority: `mirrorHeld` could compare and write in runs.
+- **The idle check** only reports; it repairs nothing, so nothing changed
+  there.
+- **Did fat_sim's tears land a prefix? Yes, always the first half.**
+  `Fault.torn_tail` now lands the second half. fat_sim's torn stop draws
+  either. The upload lie test and the upload-sized lie sweep take it too,
+  and all pass.
+
+### 187.2: 180 and 182, the kernel half. Verdict: merge, with two fixed
+
+A subagent did a cold review in its own worktree of `da1ec5f`. Fixed in
+`eab6b22`, red first:
+1. **CONFIRMED: gpt's 182.1 guard still panicked.** It summed
+   `entries_lba + (count-1)/per_sector` before comparing, so entries near
+   2^64 overflowed. The start is now compared first.
+2. **A virtio-blk `size_max` under 86 bytes** split a one-sector read past
+   the 8-descriptor chain, before the mount could refuse the disk. Such a
+   request is now refused. No real hypervisor offers that, so this is not
+   a normal-boot issue.
+3. **Smaller:**
+   - The boot now names a partition past 2 TiB as that, not as "no GPT
+     partition".
+   - fat_sim draws the disk's request limit from its own generator, so the
+     pinned regression seeds replay what they found.
+   - `blockLimitsMost` reads within the page's own length.
+
+Checked and sound by the reviewer:
+- the B0h CDB and fields, and the order of the checks;
+- that the least of disk, controller and 2,048 is used everywhere a
+  request is built;
+- the chain arithmetic for normal devices;
+- a normal boot: QEMU's virtio-blk offers no SIZE_MAX, so it is
+  unchanged; one INQUIRY is added on the volume.
+
+### 186
+
+1. **The takeover test now meets the race.**
+   - Ticks are 50 ms and the stall is 600 ms.
+   - Taken over at 450 ms, the old upload is told 409. At 800 ms the old
+     was already told 408 and its slot given back.
+   - The new upload is read whole either way.
+   - Checked by mutation: with no stall it fails at 800 ms.
+2. **metal-vmm's refused write** now carries non-zero data. A device that
+   writes and then refuses fails the test ("expected 0, found 171").
+3. **`vpd()` answers by LUN.** One with nothing attached says 0x7F, as its
+   standard INQUIRY does. Allocation lengths shorter than the page, and 0,
+   are tested. Red first.
+4. Yours, merged.
+
+### 183: the request harness
+
+It is a test in `router.zig`, so it runs in `zig build test` and therefore
+in `ops/check_zig`.
+- **What it sends:** 28 edge values (signs, leading zeros, whitespace and
+  empty included) in 19 requests, as a signed-in member with a player, a
+  topic and an upload. That is 532 requests, in about a second.
+- **It refuses to pass on a site it does not know.** Every `parseInt(` in
+  `src/`, outside tests, must be listed by file and function: covered by a
+  request, or with why no request reaches it.
+- **Red first on `v28`:** it panics at `sse.zig:87` in `resumeAt`, and the
+  request file names `Last-Event-ID: 18446744073709551615`. On master it
+  passes.
+- **Not the Linux binary:** it drives the application in process, through
+  std's request parsing. That is the same code both hosts call, in
+  seconds; the hosts' own parsing is outside it.
+- **Dog-park:** not done.
+
+### 184: slow exhaustion
+
+A subagent hunted (report only), and I confirmed and fixed the four with
+clear bounds, each red first and both edges in one test:
+1. **The reading-list cache:** at most 32 lists and 8 MiB, the least
+   recently asked given up first. It kept every member's list (up to
+   about 1 MiB each) for the server's life, on the base heap.
+2. **The search index:** at most 64 MiB of text. Past it, the conversation
+   is unreadable once, as 177.6 does for one conversation.
+3. **The Linux request head:** 10 s, after which it is a 408, counted as
+   `head_too_slow`. A stranger connecting straight to `:9001` and sending
+   nothing held a task for ever.
+4. **Linux held streams:** at most 64; one more ends the oldest, as the
+   kernel does.
+
+**Left to you: design and product choices.**
+- **Accounts:** five an hour per address and no global cap. Every
+  per-member bound (upload bytes, the roster maps in presence and
+  search-throttle windows) scales with this. Is there a cap you want?
+- **Per-file growth:**
+  - A topic's transcript and its reactions log: toggling a reaction
+    appends for ever.
+  - images.md and code.md, one entry per member per channel message.
+  - Each is read whole into the request on a stream open, or on every
+    fan-out append (quadratic). Wanted: a size cap per topic or file
+    (refuse, or start a new topic), and images.md and code.md appended
+    without reading them whole.
+- **Disk:** a per-member quota, or the disk floor applied to chat, docs
+  and uploads. Today only games stop at 25% free.
+- **Per-address limits** key on the full IPv6 address. A /64 gets around
+  them, if Caddy answers AAAA.
+- **Linux streams:** a client that stops reading still holds one of the
+  64 slots until it is displaced. No write deadline.
+
+### 185
+
+- **images.md:** a tag is written as one line, so a message's `<img`
+  carrying the separator and a header no longer plants an entry. Red
+  first: "expected 2, found 4".
+- **Upload names that are not UTF-8** are answered as a JSON string, with
+  U+FFFD for what does not decode.
+
 ## CC → the box, 2026-10-13: 181, 180 and 182 done
 
 **Hashes:**
