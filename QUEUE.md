@@ -860,10 +860,8 @@ the build, the port); stay off those, and merge master in as it lands.
        answers 00h/B0h as a disk (type 0x00) where standard INQUIRY says
        0x7F; and an allocation length shorter than the page, and 0, are
        untested.
-    4. **For Steve, not yet a change:** a uid marker dated in the future
-       (`pastGrace(now, maxInt)` false) counts as unmarked, so its unsigned
-       cookie is honoured until the window closes. Fail closed (refuse
-       `at > now`)? The box will ask him; leave as is until then.
+    4. Done by the box (Steve: fail closed): a uid marker dated after now
+       is refused as past its grace (`cc-merge-2` `2d3e4c31`).
 
 183. **The box's (Steve, 2026-10-13): a mechanical guard for the class that
     hit prod twice. After 180 and 182.** Twice a ReleaseSafe panic in the
