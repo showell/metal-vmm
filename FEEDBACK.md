@@ -7,6 +7,87 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-12, morning: 175 and 176 done (176.8 in part)
+
+**Hashes:** angry-gopher `20657f6`, gopher-metal `420616c`.
+
+**Gates:**
+- angry-gopher: `ops/check_zig` passes.
+- gopher-metal:
+  - `zig build test` passed on `42a1fdd`, the last code commit; `420616c`
+    only changes the judges, whose `test_judges` pass (121, 6 skipped).
+  - `check` passes on a fresh port of `20657f6`.
+  - `properties -Dseeds=20 -Dfat-seeds=2 -Ddrain-seeds=30` (run before the
+    last angry-gopher commits): 0 broken invariants; ready_sim and
+    drain_sim hold.
+- `timeouts.sh` is yours. Expect two changes: a full small-body budget is
+  now 503 at once, and a turn moves a clock on by at most its own length.
+
+### 175: the kernel half, red first on drain.zig
+
+1. **The pause's credit is capped.** Each wait may be moved on by turns by
+   at most its own length in all (`credit_left`). A stall clock is never
+   moved: a drain always takes what is buffered, so it never has bytes
+   waiting that it cannot take, and a dropped phone sends none.
+   - Test: turns of 10 s back to back. A silent upload goes at its 30 s
+     stall; a silent small body by twice its deadline.
+   - drain_sim now judges each clock as the module counts it.
+2. **A full budget is 503 at once**, at a drain's beginning or at its
+   growth, as Linux answers. The tests that pinned the wait (and its 408)
+   now pin the 503.
+3. **The memory bound:** a head kept to answer from is held to the budget
+   too (past it, 503, nothing kept). The module doc states the real bound:
+   three uploads at their length, plus the budget, plus at most one old
+   room beside its new one while a drain grows. The budget is
+   `Rule.small_budget`; no second constant is left.
+4. **An Expect on a request with no body is 417 from the head**, whatever
+   it asks (body.zig, so both hosts). Linux meets a mixed-case
+   `100-Continue` as metal does; std's own check is exact.
+
+A property no longer reached: "a small drain waits for the budget" (now
+the 503). It is on no floor.
+
+### 176: the Linux and cookie half
+
+1. **A clock seam** (`http.namesNow`, `names_clock_for_test`):
+   - in the tests it is a fixed day before the end date, so the migration
+     tests no longer go red on 11-15;
+   - one dated test (`the legacy names have ended…`) fails that day, naming
+     what to delete;
+   - new route tests set the seam past the end date and show nothing legacy
+     is read.
+2. **The judges:**
+   - `set_uid` matches either name and wants `__Host-` for the positive
+     checks, so a host that set a legacy-named identity fails the "set no
+     cookie" checks;
+   - `test_judges.py` fails on 2026-11-15, naming the legacy steps to
+     delete.
+3. **A kept stream gives its body's charge back when the route returns.**
+   The stream routes (`sse.forward`, `streamTranscript`) refuse anything
+   but GET with a 405, on both hosts.
+4. **Done in 172:** out of memory in the read is the host's. I answer it
+   503, busy, since the client may retry; say if you want 500.
+5. **The read grows exactly** (`ensureTotalCapacityPrecise`, the arena's
+   last allocation growing in place), so the charge is the memory.
+6. **Done in 171:** the retry that asked last wins, by a sequence number per
+   ask, on both hosts.
+7. **A read counts bytes as they arrive** (`readVec`). Test: 10 bytes every
+   50 ms under a 200 ms stall is read whole.
+8. **Test gaps, in part.** Added:
+   - a legacy session read on a POST (the old title's promise);
+   - a post-cutoff session and uid neither read nor moved;
+   - nothing legacy read past the end date;
+   - a 408's refund of a charge taken as bytes came.
+   Still open:
+   - `held_body` reaching the handler uncopied, at host level;
+   - 170.7's separate verdicts as the timer fires;
+   - a 500 after a slot or a charge exists;
+   - the takeover test with the stall timer running.
+9. **The accepted pre-cutoff plant** is said in `legacy_issued_before_unix`'s
+   doc.
+
+**Next:** 172's rest, then 173 and 174.
+
 ## CC → the box, 2026-10-12, early: 171 done; 172 most of the way (175, 176 next)
 
 **Hashes:** angry-gopher `27acb29`, gopher-metal `fe17b05` (both with
