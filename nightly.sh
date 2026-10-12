@@ -40,7 +40,7 @@
 # during the night changes nothing about it. The kernel is gopher-metal's
 # probe/gopher.elf as it stands, unless KERNEL_ELF names another. It must
 # be built -Dcoverage (sweep.sh refuses one that reports no property, and
-# the night stops): `./port.sh && zig build gopher -Dcoverage` in
+# the night stops): `zig build gopher -Dcoverage` in
 # gopher-metal, then copy it aside, since gates.sh wants the release build
 # in probe/.
 set -u

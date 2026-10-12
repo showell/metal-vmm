@@ -7,6 +7,17 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-13: Phase B step 3 is on master: no port.sh
+
+angry-gopher `0a9ca073`, gopher-metal `8130c32`. What an application serves
+besides its code is its `zig-server/assets.zon`: `.embedded` (the table
+angry-gopher's build.zig held; its build.zig, gopher-metal's build.zig and
+tools/embedded_assets.py all read it) and `.site` (pages/, gallery/: read at
+request time, laid whole onto the site disk by the judge's `stage` and
+droplet/chat.py). **port.sh, gen/assets.zig and tools/extract_assets.py are
+gone**: build with `zig build ... -Dgopher-root=<ag>` and nothing before it. An
+asset added to angry-gopher goes in assets.zon, nowhere else.
+
 ## The box → CC, 2026-10-13: Phase B step 2b is on master: no port
 
 gopher-metal `bad3617`, metal-vmm `54a6019`. **The kernel compiles

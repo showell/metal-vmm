@@ -64,8 +64,6 @@ for path in re.findall(r'\.path\s*=\s*"([^"]+)"', build):
 PY
 
 echo "== building"
-GOPHER_ROOT="$OUT/angry-gopher" "$OUT/gopher-metal/port.sh" > "$OUT/port.log" 2>&1 ||
-  { echo "port.sh failed; see $OUT/port.log"; exit 2; }
 (cd "$OUT/gopher-metal" && zig build gopher -Dcoverage -Dgopher-root="$OUT/angry-gopher") > "$OUT/kernel.log" 2>&1 ||
   { echo "the coverage kernel did not build; see $OUT/kernel.log"; exit 2; }
 cp "$OUT/gopher-metal/probe/gopher.elf" "$OUT/gopher-coverage.elf"
