@@ -839,6 +839,33 @@ the build, the port); stay off those, and merge master in as it lands.
        took" now also fires when nothing was written: if the floor should
        tell those apart, split the message.
 
+188. **The box's (Steve, 2026-10-13): your two FAT design questions from
+    187.1, answered. Both on master's gopher-metal (`689880c` or later: your
+    179/181/180/182/187.2 are merged onto Phase B step 4).** Red first, both
+    sides of each edge, fat_sim and the fault sweeps taking each.
+    1. **An overwrite reads its commit back (Steve: yes).** Before the old
+       chain is freed, the directory entry's sector is read from the disk,
+       past the directory cache, and must hold the new entry; if not, the
+       old chain is not freed and the write fails (the file keeps its old
+       contents, nothing is lost). One read per overwrite. The red: your
+       `overwrite10` `lands_nothing`-on-the-commit run (`broken /f.bin`,
+       both copies agreeing), which must end with the old file whole or the
+       new one, never broken. Say what it costs a 10 MB overwrite in
+       requests.
+    2. **An unweighed mount refuses writes (Steve: option (a)).** When the
+       mount's weighing of the two FAT copies fails part way, the volume
+       serves reads and refuses every write until a weighing succeeds: retry
+       it at the next mount and from the idle check (say which, and how
+       often), and the refusal is an error the application answers (a 503
+       on an upload or a post), never a panic, and is visible on
+       `/admin/host` and the boot log, not only `gopher.zig:1573`'s line.
+       The red: your test 7 (a lie to copy 0's run, then a failed read in
+       the mount), which must end with copy 1 intact and no write landed,
+       and then, once a weighing succeeds, the volume writable again. 178's
+       one-sector form of the same case too. Check every write path (data,
+       FAT runs, directory, the store's rename, games, docs, uploads,
+       backups) goes through the one refusal.
+
 187. **The box's (Steve, 2026-10-13): the cold reviews of 181 and of 180/182's
     kernel half, as CC's own adversary passes, FIRST (before 186).** The box
     began both and stopped them (Steve: no more running at once than the
