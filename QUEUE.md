@@ -784,6 +784,26 @@ the build, the port); stay off those, and merge master in as it lands.
       leave runnable, no KVM there): the 100 MB upload's disk requests should
       fall from 2,017 to ~100-150. Say what you expect.
 
+179. **The box's (Steve, 2026-10-13): the FAT written as runs, each sector
+    once, so a 100 MB upload is ~100 disk requests.** Your 178 proposal, as
+    you put it: an allocation writes its changed FAT sectors as runs, one
+    request per copy, after the data and before the entry commit, and each
+    sector once (not once when its clusters are taken and again when the
+    chain is linked).
+    - Red first, both sides of each edge in one test: a run of FAT sectors
+      exactly the most and one more; changed sectors with a gap (two runs);
+      a chain whose last link lands in the next sector; one copy's write
+      failing and the other's not.
+    - `allocChainHeld`'s verdicts and the ledger on a failed write move with
+      it; the stop and lie sweeps (fat_sim, floor_sim, store_sim, metal-vmm
+      `sweep.sh` via the box) must read a cut-short FAT run as they read a
+      cut-short sector today. Say which properties moved, and why.
+    - Say the count you expect from `probe/bench_upload.py` for the 100 MB
+      upload; the box runs it on your branch.
+    - Your two questions, answered: the idle check's TooBig stays as it is
+      (counted, not a panic); no allocation-free `Kept` frame mode for now
+      (a live-only stream loses frames over any reconnect by design).
+
 172. **A class hunt: errors swallowed, or sent the wrong way.** The largest
     class in the last 52 fixes (12 of them: a write's failure answered
     success, a catch-continue that skipped work, OOM counted as "unreadable",
