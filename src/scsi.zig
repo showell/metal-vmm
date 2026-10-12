@@ -11,7 +11,9 @@
 //! response it writes (sense length, residual, status, the device's own
 //! outcome, sense data), then any data it writes (virtio 1.2 §5.6.6).
 //!
-//! **SIX COMMANDS AND TEST UNIT READY**: INQUIRY, READ CAPACITY(10), MODE
+//! **SIX COMMANDS AND TEST UNIT READY**: INQUIRY (with the VPD pages 00h
+//! and B0h, Block Limits, whose MAXIMUM TRANSFER LENGTH `VOLUME_MAX_TRANSFER`
+//! sets and the device enforces), READ CAPACITY(10), MODE
 //! SENSE(10) for the caching page, READ(10), WRITE(10), SYNCHRONIZE
 //! CACHE(10) (SPC-4, SBC-3). Anything else is ILLEGAL REQUEST. A target
 //! with no disk is BAD_TARGET, as QEMU answers, and the first command after
@@ -155,6 +157,11 @@ pub const Scsi = struct {
     /// driver that does not read the residual takes it as whole: a read's
     /// buffer keeps its old bytes past the half, a write's are never written.
     short_at: ?u64 = null,
+    /// **THE MOST ONE COMMAND CARRIES, IN SECTORS** (`VOLUME_MAX_TRANSFER`,
+    /// metal-vmm QUEUE 180.1): said in INQUIRY's Block Limits page (B0h) as
+    /// MAXIMUM TRANSFER LENGTH, and a READ or WRITE past it is ILLEGAL
+    /// REQUEST, as a disk with that limit answers. 0 is no limit.
+    max_transfer: u32 = 0,
     transfers: u64 = 0,
     shortened: u64 = 0,
     /// **WHAT READ CAPACITY SAYS A SECTOR IS** (`VOLUME_SECTOR=n`): 512
@@ -383,7 +390,7 @@ pub const Scsi = struct {
     }
 
     fn inquiry(self: *Scsi, cdb: *const [cdb_size]u8, in: ?[]u8, here: bool) Answer {
-        if (cdb[1] & 1 != 0) return self.check(key_illegal_request, asc_invalid_field); // no VPD pages
+        if (cdb[1] & 1 != 0) return self.vpd(cdb, in);
         var data: [36]u8 = @splat(' ');
         // A disk, or a LUN with nothing connected (qualifier 3, type 1Fh).
         data[0] = if (here) 0x00 else 0x7F;
@@ -399,6 +406,27 @@ pub const Scsi = struct {
         @memcpy(data[32..36], "0001");
         const allocated = std.mem.readInt(u16, cdb[3..5], .big);
         return .{ .data = give(in, &data, allocated) };
+    }
+
+    /// **TWO VPD PAGES** (SPC-4 7.8, SBC-3 6.6.3): the list of pages (00h),
+    /// and Block Limits (B0h), whose MAXIMUM TRANSFER LENGTH is
+    /// `max_transfer`. Any other is ILLEGAL REQUEST.
+    fn vpd(self: *Scsi, cdb: *const [cdb_size]u8, in: ?[]u8) Answer {
+        const allocated = std.mem.readInt(u16, cdb[3..5], .big);
+        switch (cdb[2]) {
+            0x00 => {
+                const data = [_]u8{ 0x00, 0x00, 0, 2, 0x00, 0xB0 };
+                return .{ .data = give(in, &data, allocated) };
+            },
+            0xB0 => {
+                var data: [64]u8 = @splat(0);
+                data[1] = 0xB0;
+                std.mem.writeInt(u16, data[2..4], 0x3C, .big);
+                std.mem.writeInt(u32, data[8..12], self.max_transfer, .big);
+                return .{ .data = give(in, &data, allocated) };
+            },
+            else => return self.check(key_illegal_request, asc_invalid_field),
+        }
     }
 
     fn capacity(self: *Scsi, in: ?[]u8) Answer {
@@ -490,6 +518,7 @@ pub const Scsi = struct {
         const lba: u64 = std.mem.readInt(u32, cdb[2..6], .big);
         const n: u64 = std.mem.readInt(u16, cdb[7..9], .big);
         if (lba + n > self.image.len / sector_bytes) return self.check(key_illegal_request, asc_lba_out_of_range);
+        if (self.max_transfer != 0 and n > self.max_transfer) return self.check(key_illegal_request, asc_invalid_field);
         if (n == 0) return .{};
         const whole_bytes = n * sector_bytes;
         const at: usize = @intCast(lba * sector_bytes);
@@ -1208,4 +1237,33 @@ test "the volume's line fits its buffer with every clause said" {
     const got = vol.line(&buf);
     try testing.expect(std.mem.indexOf(u8, got, "did not fit") == null);
     try testing.expect(std.mem.indexOf(u8, got, "lost sectors never synchronized") != null);
+}
+
+test "VOLUME_MAX_TRANSFER: INQUIRY's Block Limits page says the most one command carries, and a READ or WRITE past it is ILLEGAL REQUEST (metal-vmm QUEUE 180.1)" {
+    var image: [16 * 512]u8 = @splat(0);
+    for ([_]u32{ 0, 4 }) |most| {
+        var vol = Scsi{ .image = &image, .attention = null, .max_transfer = most };
+        var d = vol.device();
+        var g = FakeDriver{};
+        g.open(&d);
+        // The pages there are: 00h and B0h.
+        const pages = g.send(&d, 0, 0, &[6]u8{ op_inquiry, 1, 0x00, 0, 64, 0 }, .from_disk, 64);
+        try testing.expect(FakeDriver.good(pages));
+        try testing.expectEqual(@as(u8, 0x00), g.ram[FakeDriver.data_at + 1]);
+        try testing.expectEqualSlices(u8, &.{ 0x00, 0xB0 }, g.ram[FakeDriver.data_at + 4 ..][0..2]);
+        const limits = g.send(&d, 0, 0, &[6]u8{ op_inquiry, 1, 0xB0, 0, 64, 0 }, .from_disk, 64);
+        try testing.expect(FakeDriver.good(limits));
+        try testing.expectEqual(@as(u8, 0xB0), g.ram[FakeDriver.data_at + 1]);
+        try testing.expectEqual(@as(u16, 0x3C), std.mem.readInt(u16, g.ram[FakeDriver.data_at + 2 ..][0..2], .big));
+        try testing.expectEqual(most, std.mem.readInt(u32, g.ram[FakeDriver.data_at + 8 ..][0..4], .big));
+        // A page it has not: ILLEGAL REQUEST.
+        try testing.expectEqual(key_illegal_request, g.send(&d, 0, 0, &[6]u8{ op_inquiry, 1, 0x83, 0, 64, 0 }, .from_disk, 64).key);
+        // Up to the most, served; one sector more, refused (0 is no limit).
+        try testing.expect(FakeDriver.good(g.rw(&d, false, 0, 4)));
+        const past = g.rw(&d, true, 0, 5);
+        if (most == 0) try testing.expect(FakeDriver.good(past)) else {
+            try testing.expectEqual(key_illegal_request, past.key);
+            try testing.expectEqual(@as(u8, 0), image[0]);
+        }
+    }
 }

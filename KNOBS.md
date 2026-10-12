@@ -193,6 +193,7 @@ disk's does. Nothing below changes anything unless `VOLUME` is set.
 | `VOLUME_MODE_PAGES=none` | MODE SENSE answers with its header alone, no caching page | the caching page |
 | `VOLUME_WCE_FIXED=1` or `=ignore` | a write cache (`VOLUME_CACHE=1`) that cannot be turned off: MODE SENSE's changeable values say WCE is not changeable, and a MODE SELECT setting WCE=0 is refused (INVALID FIELD IN PARAMETER LIST). With `=ignore` (metal-vmm QUEUE 119) WCE is said to be changeable, the MODE SELECT answers GOOD, and the cache stays on: only the page read back shows it. Without it, MODE SELECT turns the cache off and later writes go through | the cache can be turned off |
 | `VOLUME_SHORT_AT=n` | the nth READ or WRITE moves the first half of its bytes and answers GOOD with the rest as its residual, a legal underrun: a driver that ignores the residual serves a read's stale half, or calls a half-written write done | none |
+| `VOLUME_MAX_TRANSFER=n` | INQUIRY's Block Limits page (B0h) says the disk carries at most n sectors in one command, and a READ or WRITE past it is ILLEGAL REQUEST: gopher-metal must ask the page and keep its requests within it (QUEUE 180.1; fewer than a cluster refuses the mount) | none |
 | `VOLUME_READ_ONLY_AT=n` | read-only from the nth command: MODE SENSE says WP and every WRITE is DATA PROTECT, while reads and SYNCHRONIZE CACHE still answer, as a DO volume the host has made read-only after an I/O error | none |
 
 The run ends with `metal-vmm: volume: ...`: its reads, writes, SYNCHRONIZE

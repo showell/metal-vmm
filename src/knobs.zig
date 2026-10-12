@@ -59,7 +59,9 @@
 //! `VOLUME_GONE_AT`, `VOLUME_READ_ONLY_AT` and `VOLUME_SHORT_AT` (a write
 //! refused, QUEUE 135); it never draws `VOLUME_LATENCY_US`,
 //! `VOLUME_SYNC_US`, `VOLUME_CUT_AT_EXIT`, `VOLUME_SECTOR`,
-//! `VOLUME_MODE_PAGES`, `VOLUME_WCE_FIXED` (a cache gopher-metal cannot turn
+//! `VOLUME_MODE_PAGES`, `VOLUME_MAX_TRANSFER` (a disk that takes less in a
+//! command; one smaller than a cluster is refused at mount, by design),
+//! `VOLUME_WCE_FIXED` (a cache gopher-metal cannot turn
 //! off, which leaves FAT's order to the cache: the damage is known, and said
 //! at boot). Nor are
 //! `RTC_ABSENT`, `RTC_STUCK` or `PIT_FROZEN`: each stops a boot, which a
@@ -85,7 +87,7 @@ pub const names = [_][]const u8{
     "VOLUME_ATTENTION_AT", "VOLUME_GONE_AT",     "VOLUME_READ_ONLY_AT", "VOLUME_SYNC_US",
     "VOLUME_CUT_AT_EXIT",  "VOLUME_CACHE_KEEPS", "VOLUME_SECTOR",       "VOLUME_MODE_PAGES",
     "RTC_ABSENT",          "RTC_STUCK",          "PIT_FROZEN",          "VOLUME_SHORT_AT",
-    "VOLUME_WCE_FIXED",    "VOLUME_RESET_AT",
+    "VOLUME_WCE_FIXED",    "VOLUME_RESET_AT",    "VOLUME_MAX_TRANSFER",
 };
 
 fn index(comptime name: []const u8) usize {
@@ -319,7 +321,7 @@ test "different seeds turn different knobs, and every knob is turned by some see
             !std.mem.eql(u8, n, "VOLUME_MODE_PAGES") and !std.mem.eql(u8, n, "RTC_ABSENT") and
             !std.mem.eql(u8, n, "RTC_STUCK") and !std.mem.eql(u8, n, "PIT_FROZEN") and
             !std.mem.eql(u8, n, "VOLUME_SHORT_AT") and !std.mem.eql(u8, n, "VOLUME_WCE_FIXED") and
-            !std.mem.eql(u8, n, "VOLUME_RESET_AT"))
+            !std.mem.eql(u8, n, "VOLUME_RESET_AT") and !std.mem.eql(u8, n, "VOLUME_MAX_TRANSFER"))
         {
             std.debug.print("never turned: {s}\n", .{n});
             return error.TestUnexpectedResult;
