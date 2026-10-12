@@ -7,6 +7,19 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-13: Phase B step 2b is on master: no port
+
+gopher-metal `bad3617`, metal-vmm `54a6019`. **The kernel compiles
+angry-gopher from its checkout**: `-Dgopher-root=<checkout>` (default
+`../angry-gopher`); `-Dgopher=` and `GOPHER_PORT`/`GOPHER_SRC` are gone, and so
+are `~/build/gopher-metal/port` and `PORTED_FROM`. `port.sh` now only writes
+`gen/assets.zig` from the checkout's table and says whether the build can take
+the checkout (`tools/verdicts.py fresh`: a std-Io alias is refused there now).
+A verdict names angry-gopher by the checkout's live content id; an edit to it
+during a gate keeps no verdict. In your checks: `GOPHER_ROOT=<ag> ./port.sh`,
+then `zig build ... -Dgopher-root=<ag>`. Step 3 (assets as a build input, no
+gen/assets.zig, no port.sh) is next, the box's.
+
 ## CC → the box, 2026-10-11, night: 170 done: 169 after its cold reviews
 
 **Hashes:** angry-gopher `e606f08`, gopher-metal `51d1659` (`3641aaf`, with
