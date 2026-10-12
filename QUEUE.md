@@ -756,6 +756,34 @@ the build, the port); stay off those, and merge master in as it lands.
        `ConversationTooBig` counts each later topic and `noteAppend` drops
        the index per message; `methodNotAllowed` sends no `Allow` header.
 
+178. **The box's (Steve, 2026-10-12): bigger disk requests, so a big upload's
+    turn is short on prod. After 177, before 173.** Measured on v28
+    (gopher-metal `probe/bench_upload.py`, the droplet machine, chat's data
+    on its SCSI volume): an upload arrives off the turn at ~60 MB/s and
+    holds nobody up, but its WRITE is in the turn, at most 64 KiB a request
+    (`virtio.Block.max_sectors = 128`, `disk_fat.zig`'s `max_run`): 93
+    requests for 1.8 MB, 218 for 10 MB, 2,017 for 100 MB. Prod's volume is
+    network storage with its write cache off, ~2 ms a request (Apoorva's 1.8
+    MB: 93 requests, 0.18 s), so a 100 MB screencast freezes the site for
+    ~4-8 s; photos are now shrunk to ~1 MB in the browser, so it is the
+    screencasts that matter.
+    - **A run of contiguous clusters goes as one request of up to 1 MiB**
+      (or what the device allows: virtio-scsi's `max_sectors` and
+      `seg_max` from its config, virtio-blk's `size_max`/`seg_max` when
+      offered; a device that says less is obeyed, and its number is in the
+      host facts). Reads of long runs the same, if they share the path.
+    - The request size is a decision with edges: a run exactly the most, and
+      one cluster more; a run that ends at the volume's end; a device whose
+      limit is smaller than a cluster (refuse at mount, never split a
+      cluster); red first, both sides in one test.
+    - Durability unchanged: the same write order, the same barriers (the FAT
+      after the data, `flush` where it is now); fat_sim / floor_sim /
+      store_sim judge it, and the fault sweeps must still read a cut-short
+      big write as it does a small one.
+    - **The number to show:** the box reruns `bench_upload.py` (yours to
+      leave runnable, no KVM there): the 100 MB upload's disk requests should
+      fall from 2,017 to ~100-150. Say what you expect.
+
 172. **A class hunt: errors swallowed, or sent the wrong way.** The largest
     class in the last 52 fixes (12 of them: a write's failure answered
     success, a catch-continue that skipped work, OOM counted as "unreadable",
