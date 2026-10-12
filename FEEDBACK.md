@@ -7,6 +7,326 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-13: 187, 186, 183, 184, 185
+
+**Hashes:**
+- gopher-metal `eab6b22`: 187.2's fixes and `torn_tail`.
+- angry-gopher, up to `14fbd30`:
+  - 186.1 `6932d23`, with cc-merge-2 merged;
+  - 185 `59a1fda`;
+  - 183 `c635f49`;
+  - 184 `35bc656`, `d00e069`, `c9252fa`, `14fbd30`.
+- metal-vmm `fc337ed` (186.2, 186.3).
+
+**Gates, on the merged heads:** gopher-metal `test`, `check` and
+`properties -Dseeds=20 -Dfat-seeds=8` pass, with 0 broken invariants (77
+unsatisfied, the new properties among them). angry-gopher's
+`ops/check_zig` passes, and so does metal-vmm's `zig build test`.
+
+### 187.1: 181 by experiment. Verdict: merge
+
+I ran the box's `docs/box-rev181` experiment on 178, 179 and 181, each in
+its own worktree. This was the whole experiment, finished on 178 too.
+Sweeps report bad runs out of all runs; a bad run is damage, a file lost,
+or a leak.
+
+| Sweep | 178 | 179 | 181 |
+|---|---|---|---|
+| write10 | 1 | 3 | 1 |
+| overwrite10 | 1 | 3 | 1 |
+| remove10 | 0 | 0 | 0 |
+| fragwrite10 | 1 | 3 | 1 |
+| append10 | 1 | 3 | 1 |
+
+**181 is 178 on every sweep.** 179's extra bad runs are 181.1's
+regression: a lie to the first copy's run, taken by the mount. On 181,
+the 20 MB upload's lies (`lands_nothing`, torn) and its cuts all mount
+with `trusted=1`, and the file reads whole.
+
+**The one bad run that stays, on 178 and 181 alike:**
+- **What:** `overwrite10` with `lands_nothing` on the commit (the
+  directory entry's write): +652 of 975 requests on 178, +12 of 335 on
+  181.
+- **Why:** the entry keeps pointing at the old chain, and then the old
+  chain is freed. The result is `broken /f.bin` with both copies agreeing.
+- **Not 181's:** it is a lie no FAT-copy rule can see.
+- **A fix:** read the commit's sector back, bypassing the directory cache,
+  before freeing the old chain. That costs one read per overwrite. Want it?
+
+The write10, fragwrite10 and append10 bad runs are a leak at the last
+request, with no damage.
+
+**`out_ecb.txt`'s "expected 31, found 16" was the experiment's harness,
+not the code.** `test_disk.Report` keeps 16 findings, and `Disk.check()`
+asserts every finding fit. fragwrite10's last request left 31 leaked runs
+(no damage), so the assertion failed. The later version counts findings
+itself and passes.
+
+**Test 7 on 181 is a real hole, and an old one.** The sequence:
+1. A lie to copy 0's run.
+2. The mount's weighing then fails part way, so it is "unweighed": copy 0
+   is held and neither copy is written.
+3. The next write allocates from copy 0, where the lost file's clusters
+   read free.
+4. That write's FAT runs go to both copies, so the good copy 1 is lost.
+   The check finds `short /up.bin` and `crossed /next.bin`.
+
+178 skips test 7 (it has no run over 64 sectors). But 178's unweighed
+path is the same, for one sector apart, and the kernel serves writes
+after an unweighed mount (`gopher.zig:1573` only says so). It needs two
+faults: a lie, then a failed read during the mount. This is a design
+choice for you. Two ways I see:
+- **(a) Refuse writes** to the volume until a weighing succeeds: retry it
+  at the next mount, or from the idle check.
+- **(b) Allocate only clusters free in both copies,** with a bitmap of
+  copy 1 read at an unweighed mount (about `checkBytes()`), and write
+  only copy 0 until the copies are weighed. Even with this, the data a
+  next write overwrites is gone. So (a) is the safe one.
+
+**My own questions on 181:**
+- **Can a newer copy 0 lose to an older copy 1? No case found.**
+  - A cut after copy 0 landed whole and before copy 1 keeps copy 1. That
+    is right: copy 0's chain is not committed yet, and checks leaked.
+  - Freeing after the commit leaves copy 1 leaked, so copy 0 wins.
+  - An append's link leaves copy 0 `long` and copy 1 leaked, so copy 0
+    wins on leaks.
+  - Copy 1 lags copy 0 by at most one operation's FAT writes.
+- **Weighing whole on a 16 GiB volume** (4 KiB clusters: a 16 MiB FAT,
+  32,768 sectors), and only after a fault:
+  - two full checks;
+  - reading copy 1 (16 requests);
+  - reading copy 0 again if it wins (16 requests);
+  - mirroring: 512 reads of 64 sectors, and one write per differing sector.
+  At about 2 ms a request, roughly a second or two at that boot. On
+  small32 the experiment measured 381 mount requests for a 321-sector
+  repair. Low priority: `mirrorHeld` could compare and write in runs.
+- **The idle check** only reports; it repairs nothing, so nothing changed
+  there.
+- **Did fat_sim's tears land a prefix? Yes, always the first half.**
+  `Fault.torn_tail` now lands the second half. fat_sim's torn stop draws
+  either. The upload lie test and the upload-sized lie sweep take it too,
+  and all pass.
+
+### 187.2: 180 and 182, the kernel half. Verdict: merge, with two fixed
+
+A subagent did a cold review in its own worktree of `da1ec5f`. Fixed in
+`eab6b22`, red first:
+1. **CONFIRMED: gpt's 182.1 guard still panicked.** It summed
+   `entries_lba + (count-1)/per_sector` before comparing, so entries near
+   2^64 overflowed. The start is now compared first.
+2. **A virtio-blk `size_max` under 86 bytes** split a one-sector read past
+   the 8-descriptor chain, before the mount could refuse the disk. Such a
+   request is now refused. No real hypervisor offers that, so this is not
+   a normal-boot issue.
+3. **Smaller:**
+   - The boot now names a partition past 2 TiB as that, not as "no GPT
+     partition".
+   - fat_sim draws the disk's request limit from its own generator, so the
+     pinned regression seeds replay what they found.
+   - `blockLimitsMost` reads within the page's own length.
+
+Checked and sound by the reviewer:
+- the B0h CDB and fields, and the order of the checks;
+- that the least of disk, controller and 2,048 is used everywhere a
+  request is built;
+- the chain arithmetic for normal devices;
+- a normal boot: QEMU's virtio-blk offers no SIZE_MAX, so it is
+  unchanged; one INQUIRY is added on the volume.
+
+### 186
+
+1. **The takeover test now meets the race.**
+   - Ticks are 50 ms and the stall is 600 ms.
+   - Taken over at 450 ms, the old upload is told 409. At 800 ms the old
+     was already told 408 and its slot given back.
+   - The new upload is read whole either way.
+   - Checked by mutation: with no stall it fails at 800 ms.
+2. **metal-vmm's refused write** now carries non-zero data. A device that
+   writes and then refuses fails the test ("expected 0, found 171").
+3. **`vpd()` answers by LUN.** One with nothing attached says 0x7F, as its
+   standard INQUIRY does. Allocation lengths shorter than the page, and 0,
+   are tested. Red first.
+4. Yours, merged.
+
+### 183: the request harness
+
+It is a test in `router.zig`, so it runs in `zig build test` and therefore
+in `ops/check_zig`.
+- **What it sends:** 28 edge values (signs, leading zeros, whitespace and
+  empty included) in 19 requests, as a signed-in member with a player, a
+  topic and an upload. That is 532 requests, in about a second.
+- **It refuses to pass on a site it does not know.** Every `parseInt(` in
+  `src/`, outside tests, must be listed by file and function: covered by a
+  request, or with why no request reaches it.
+- **Red first on `v28`:** it panics at `sse.zig:87` in `resumeAt`, and the
+  request file names `Last-Event-ID: 18446744073709551615`. On master it
+  passes.
+- **Not the Linux binary:** it drives the application in process, through
+  std's request parsing. That is the same code both hosts call, in
+  seconds; the hosts' own parsing is outside it.
+- **Dog-park:** not done.
+
+### 184: slow exhaustion
+
+A subagent hunted (report only), and I confirmed and fixed the four with
+clear bounds, each red first and both edges in one test:
+1. **The reading-list cache:** at most 32 lists and 8 MiB, the least
+   recently asked given up first. It kept every member's list (up to
+   about 1 MiB each) for the server's life, on the base heap.
+2. **The search index:** at most 64 MiB of text. Past it, the conversation
+   is unreadable once, as 177.6 does for one conversation.
+3. **The Linux request head:** 10 s, after which it is a 408, counted as
+   `head_too_slow`. A stranger connecting straight to `:9001` and sending
+   nothing held a task for ever.
+4. **Linux held streams:** at most 64; one more ends the oldest, as the
+   kernel does.
+
+**Left to you: design and product choices.**
+- **Accounts:** five an hour per address and no global cap. Every
+  per-member bound (upload bytes, the roster maps in presence and
+  search-throttle windows) scales with this. Is there a cap you want?
+- **Per-file growth:**
+  - A topic's transcript and its reactions log: toggling a reaction
+    appends for ever.
+  - images.md and code.md, one entry per member per channel message.
+  - Each is read whole into the request on a stream open, or on every
+    fan-out append (quadratic). Wanted: a size cap per topic or file
+    (refuse, or start a new topic), and images.md and code.md appended
+    without reading them whole.
+- **Disk:** a per-member quota, or the disk floor applied to chat, docs
+  and uploads. Today only games stop at 25% free.
+- **Per-address limits** key on the full IPv6 address. A /64 gets around
+  them, if Caddy answers AAAA.
+- **Linux streams:** a client that stops reading still holds one of the
+  64 slots until it is displaced. No write deadline.
+
+### 185
+
+- **images.md:** a tag is written as one line, so a message's `<img`
+  carrying the separator and a header no longer plants an entry. Red
+  first: "expected 2, found 4".
+- **Upload names that are not UTF-8** are answered as a JSON string, with
+  U+FFFD for what does not decode.
+
+## CC → the box, 2026-10-13: 181, 180 and 182 done
+
+**Hashes:**
+- gopher-metal: 181 is `ecb467b`; 180 and 182 are `da1ec5f`.
+- angry-gopher: `1fd2833` (180.6, 180.7) and `d1beb64` (182).
+- metal-vmm: `c8fb23f` (the volume's Block Limits page).
+
+All are merged with today's masters (Phase B step 3). On the merged head
+(`zig build ... -Dgopher-root=<ag>`), gopher-metal's `test` and `check` pass,
+and `properties -Dseeds=20 -Dfat-seeds=8` shows 0 broken invariants (75
+unsatisfied; the new ones are named below). angry-gopher's `ops/check_zig`
+passes, and so does metal-vmm's `zig build test`.
+
+### 181: one lie or one cut costs what it cost on 178
+
+**The fix: the mount weighs the copies whole** when more sectors differ
+than it holds to weigh one by one (`weighWhole`).
+- It checks the volume with the first copy held. Then it reads the second
+  copy over the held FAT and checks again. The first copy is still on the
+  disk, so no extra memory is needed.
+- The copy with fewer problems, then fewer leaked clusters, is the FAT;
+  the other is written from it. A tie writes neither.
+- A check or a read that fails leaves the first copy held and neither
+  written.
+
+**Why it holds for a lie, a torn write and a cut alike:** the copies are
+written one after the other, so one fault leaves at most one copy other
+than intended.
+- A copy that lost part of a committed chain checks broken.
+- A copy that holds part of an uncommitted chain checks leaked.
+- The other copy checks as the volume should.
+
+**Of the three options you offered,** this is the first.
+- Reading the run back before writing copy 1 can't help after a cut.
+- Writing copy 1 first only moves the lie to the other copy.
+
+**What changed for item 2:** the cut case now leaks nothing, because the
+untouched copy is kept.
+
+**Without room to check** (`cacheFat`), the first copy is still the FAT
+past 64 differing sectors. The old refused-repair test now runs that way.
+
+**Item 3, the sweeps:**
+- **A new lie sweep:** `lands_nothing` and `torn` at every request of a
+  6 MB write on FAT32 (96 FAT sectors per run). The next boot must find no
+  damage. On 70fc623 it was red: `lands_nothing` at request 5 of 15,
+  broken at `/up.bin`.
+- **fat_sim now judges its stops.** Before, it only checked the error.
+  Now the next boot must mount with no damage, and every other file must
+  read as the model says.
+  - Its stop may tear its last request.
+  - On FAT32 it may come during an upload-sized write.
+- **Honest limit:** at 8 FAT seeds no simulator reaches "weighed whole".
+  The host tests do: a lie, a torn write and a cut inside an upload's
+  first-copy run, each red on 70fc623. At more seeds the box should see it.
+
+**Item 4:** a segment that landed and then answered failure is given back
+as runs (2 FAT requests per copy here), not one cluster at a time.
+
+**Item 5:** the message is split. "gives back what it took" fires only
+when something was written. "a volume full while an allocation is planned
+writes nothing of it" fires when it was only planned.
+
+### 180
+
+1. **The disk's own transfer limit.** At bring-up the driver asks INQUIRY
+   for the Block Limits page (B0h).
+   - It takes the least of the disk's MAXIMUM TRANSFER LENGTH, the
+     controller's `max_sectors` and our 2,048. No page, or 0, means no
+     limit.
+   - The parser is `scsi_mode.blockLimitsMost`, tested on the host.
+   - The boot line and the host facts both show it ("the disk says N KiB").
+   - **metal-vmm:** the volume now answers pages 00h and B0h. A new knob,
+     `VOLUME_MAX_TRANSFER=n`, sets the limit, and the device refuses a
+     longer READ or WRITE with ILLEGAL REQUEST. A plain seed never draws
+     it. To see gopher.elf obey it, set e.g. `VOLUME_MAX_TRANSFER=64`.
+     A value under one cluster refuses the mount, by design. I haven't run
+     a guest; that needs KVM.
+2. **virtio-blk:** data now goes in a chain of segments.
+   - Each segment is at most `size_max`.
+   - There are at most `seg_max` segments (one if the device doesn't say,
+     as Linux assumes), and at most the six a request's chain holds.
+   - `size_max = 0` means unset.
+   - metal-vmm's virtio-blk device offers neither feature, so on our
+     guests only the host test exercises this.
+3. **`probe/append.zig`:** `@min(blk.most_sectors, 128)`.
+4. **fat_sim** draws the request limit per seed from {a cluster, 8, 128,
+   2,048}.
+5. **`Busy`'s doc is moved,** and `check_fat16_images.sh` now reads
+   `disk_fat_dirent.zig`.
+6. **angry-gopher's tests:**
+   - **176.8 takeover test:** the race is close now. The old upload's stall
+     time (600 ms) has passed when the retry takes over (700 ms), and its
+     watcher's tick is 1 s (`tick_for_test_ms`).
+   - **177.2 test:** it now judges what is held at every allocation
+     (`HeldPeak`). That was red: 12,288 bytes held while a growth copied,
+     against 8,192 charged. **Fix:** a growth charges its whole new room
+     first and gives back the old room's charge afterwards. As a result, a
+     body near the budget is refused one growth sooner.
+   - **Presence:** the docs now say an owed broadcast is retried on the
+     user's next request, not by a timer.
+7. **Expect:** `100-continue` in any case is met, with a body or without.
+   `body.meetExpectation` does this in both hosts. Red first on Linux.
+
+### 182
+
+Each test panicked with its fix removed.
+1. **gpt:** entries past sector 2^32 are refused as `NotGpt`.
+2. **gpt:** a partition past sector 2^32 is refused as `TooLarge`.
+   gpt.zig's tests now run as unit tests.
+3. **The check's rounding:** a file's clusters are counted in 64 bits.
+4. **`idle_timeout_ms` and `keepalive_ms`:** converted through
+   `idle.nsOfMs`. Past what u64 holds, the boot fails naming the key.
+5. **`sectors_per_fat`:** `Volume.mount` refuses a FAT longer than 32-bit
+   entry numbers reach (more than 2^32 entries). Both sides are tested,
+   with a boot sector crafted for it.
+6. **`uid_cookie`:** the marker's age is computed with saturating
+   subtraction (`pastGrace`).
+
 ## The box → CC, 2026-10-13: Phase B step 3 is on master: no port.sh
 
 angry-gopher `0a9ca073`, gopher-metal `8130c32`. What an application serves
@@ -30,6 +350,495 @@ A verdict names angry-gopher by the checkout's live content id; an edit to it
 during a gate keeps no verdict. In your checks: `GOPHER_ROOT=<ag> ./port.sh`,
 then `zig build ... -Dgopher-root=<ag>`. Step 3 (assets as a build input, no
 gen/assets.zig, no port.sh) is next, the box's.
+
+## CC → the box, 2026-10-13: 179 done: the FAT written as runs, each sector once
+
+**Hash:** gopher-metal `70fc623`, on top of 178.
+
+**Gates:**
+- `zig build test` and `check` pass.
+- `properties -Dseeds=20 -Dfat-seeds=4`: 0 broken invariants.
+
+**What `bench_upload.py` should show.** On the host, with the bench's
+shape, one 100 MB write went from **486 requests to 106**:
+- FAT: 390 → 2 (one run per copy);
+- data: 96.
+
+The box's 100 MB upload should be about **110 disk requests**, against
+2,017 on v28. The few beyond 106 are the directory entry and FSInfo.
+
+**How it works now:**
+- **Planned first.** `allocChainHeld` marks and links the whole chain in
+  the held FAT before writing anything.
+- **Then written as runs.** The changed sectors go out as runs:
+  contiguous sectors are one request, up to the disk's most, and a gap
+  starts another run. The first copy is written, then each other copy.
+- **Order unchanged.** The FAT is still written before the data and the
+  commit, so a stop part-way leaves lost clusters, as it did.
+- **Wrap.** A segment ends only where the cursor wraps round the volume;
+  the next one is linked on by one `fatSet`, as a batch was.
+- **Full.** A volume found full while a segment is planned now answers
+  Full having written nothing of it (before, it wrote and then gave back).
+
+**Failure verdicts.** A refused write has one verdict per segment. Each
+changed sector is read back and judged by `heldRefused`.
+- **All landed:** taken, then given back.
+- **All as before:** the plan is undone in memory.
+- **Anything else:** a run that landed in part, or a sector that reads as
+  neither. This is handled as today's unknown: the first copy is written
+  again once, and the chain is a counted leak (or unsure, if that write
+  fails too).
+
+**How the sweeps read a cut-short FAT run:** as a cut-short sector.
+- Nothing points at the chain, so it is lost clusters or nothing (the
+  mount may trust the copy the cut left untouched), and never damage.
+- One new state: a landed link may name a cluster that is still free. Only
+  a leaked chain does this, and the check counts leaks by marks, not
+  links.
+
+**Tests, red first** (each red on the old code):
+- FAT sectors exactly the most are one request per copy, and one more are
+  two;
+- a gap between changed sectors makes two runs;
+- a last link that lands in the next sector writes both sectors once, as
+  one run;
+- one copy refused and the other not, each way round;
+- the first copy cut short by a stop;
+- the second of two runs refused with the first landed: a counted leak of
+  the whole chain, found as two leaked runs.
+
+**Properties that moved:** only line numbers in `disk_fat_chain.zig`, plus
+two new ones:
+- "fat: an allocation writes several FAT sectors as one request": fat_sim
+  reaches it 2,774 times.
+- "fat: a FAT run's refused write landed in part": only the host test
+  reaches it. The simulators' fault kinds have no "first part lands, then
+  fails" on a single request. Add one if you want this reached by the sims.
+
+**store_sim doesn't reach this code.** It mounts with the FAT on the disk,
+not held, so it never runs this path, the same as before 179. fat_sim
+does run it, with both FAT modes.
+
+**Left alone:**
+- **Freeing** (`freeAfterCommitHeld`) is still a sector at a time per
+  copy. An overwrite of a big file pays for it; a new upload doesn't.
+- **FAT after the data.** Writing the FAT after the data, as in my
+  proposal, would mean every `allocChain` caller holding an unwritten plan
+  across its data write. It wouldn't change the request count, so I kept
+  the order.
+
+Say if you want either of these.
+
+## CC → the box, 2026-10-13: 178 done: a run of clusters is one request of up to 1 MiB
+
+**Hash:** gopher-metal `18d51ee` (master's `bench_upload.py` merged in).
+
+**Gates:**
+- `zig build test` and `check` pass on a fresh port.
+- `properties -Dseeds=20 -Dfat-seeds=4`: 0 broken invariants. One more
+  property is unsatisfied: the new mount refusal, which only a host test
+  reaches.
+
+**What changed:**
+- **Each disk has its own `most_sectors`.** Ours is 2,048 (1 MiB). It is
+  lowered where the device says less:
+  - virtio-blk's `size_max`, with `VIRTIO_BLK_F_SIZE_MAX` taken when
+    offered (a new `negotiateWith` for optional features);
+  - virtio-scsi's `max_sectors`, where 0 counts as not said.
+- **Where it shows:** the host facts ("disk request most") and the
+  volume's boot line.
+- **disk_fat:** reads and writes runs of up to that limit, and refuses at
+  mount a disk that takes less than a cluster (`RequestSmallerThanCluster`).
+- **Unchanged:** the write order and the flushes.
+- **Tests, red first** (each fails at the old 128 sectors):
+  - a run exactly the most is 1 request, and a cluster more is 2;
+  - a 1 MiB run is 1 write and 1 read;
+  - a run ending at the volume's last cluster is written and read whole;
+  - a device smaller than a cluster is refused at mount;
+  - `mostSectors` at its edges.
+- **`probe/append.zig`** holds its disk to 64 KiB requests. It tests runs
+  split across requests on a small volume.
+
+**What to expect from `bench_upload.py`.** I measured on the host, with
+the bench's shape (1 GiB FAT32, 8 KiB clusters, the FAT held), one 100 MB
+`writeFile`:
+- requests in all: **1,916 → 486**;
+- data requests: **1,526 → 96**.
+
+So the box's 2,017 should fall to about **590**, not the 100-150 hoped
+for. The ~390 left are the FAT:
+- it is written one sector a request, to each copy;
+- each sector is written about twice (once when its clusters are taken,
+  once when the chain is linked into the next sector);
+- 96 FAT sectors × 2 copies × 2 ≈ 390.
+
+At ~2 ms a request on prod, that is ~1.2 s for the 100 MB turn instead of
+~4 s.
+
+**Proposed: getting to ~100.**
+- The allocation would write its changed FAT sectors as runs, one request
+  for each copy, after the data (still before the entry commit).
+- Writing each sector once would remove the doubling.
+- Both change `allocChainHeld`'s per-sector verdicts (`heldRefused`) and
+  what the ledger counts on a failed write, which the fault sweeps judge.
+  That's why I didn't fold it into 178. Queue it and I'll take it, red
+  first, against the stop and lie sweeps.
+
+## CC → the box, 2026-10-13, early: 172's rest, 173, 174, 176.8's gaps, and 177 done (178 next)
+
+**Hashes:** angry-gopher `51f2786`, gopher-metal `45fe656`. Master merged
+into both (Phase B), and into metal-vmm.
+
+**Gates:**
+- angry-gopher: `ops/check_zig` and `ops/check_chat` pass.
+- gopher-metal, on a fresh port:
+  - `zig build test` and `check` pass;
+  - `properties -Dseeds=20 -Dfat-seeds=2`: 0 broken invariants, the same
+    68 unsatisfied as before the split;
+  - `-Ddrain-seeds=100`: every oracle holds.
+
+### The merge
+
+- angry-gopher's conflicts were build.zig's test list and the import
+  lines of `chat_store.zig` and `users.zig`. The split files take master's
+  convention throughout (`host_io`, `@import("webbox").store` and the
+  rest).
+- The merge's timing showed a race in my own 176.3 test. The route flushes
+  the stream's head before it returns, so the head arriving does not mean
+  the charge is back yet. The test now waits for it, at most 2 s, with the
+  stream open.
+
+### 172's rest
+
+- **DHCP: a NAK is `Refused`**, never NoOffer or NoAck. `Refused` was
+  declared and named by the probes, but nothing ever answered it.
+  - The datagram's classification is pulled out (`replyKind`) and tested
+    red first.
+  - The exchange itself needs a NIC, so B18's lying peer is what would show
+    it on a guest.
+- **No bug, recorded:**
+  - CheckRun's `ReadFailed`: a step can fail only with ReadFailed, and the
+    existing test pins the repeat.
+  - disk_fat's `writeInto` on a directory answers BadName, which io would
+    map to NameTooLong. It is unreachable: createFile refuses a directory
+    first. Now pinned IsDir at io's level.
+- **idle_check, a question:** `begin`'s only error is TooBig (marks shorter
+  than `checkBytes`, the caller's mistake), and it is counted as "a read
+  that failed", every hour. The kernel sizes the marks right, so it can't
+  happen. A panic would be truthful but untestable. Leave it, or panic?
+
+### 173: disk_fat split
+
+- **disk_fat.zig is now 904 lines:** the types, `Volume`'s fields, the
+  mount and the sector primitives.
+- **Six new files:**
+  - `_fat`: the FAT's copies and entries (436 lines);
+  - `_chain`: chains and the ledger (571);
+  - `_dir`: directories and names (710);
+  - `_file`: entry commits, writes and reads (943);
+  - `_remove`: renames and removes (339);
+  - `_check` (588).
+- **How the members moved:** each is now a top-level function taking
+  `self: *Volume`. `Volume` names each one
+  (`pub const fatSet = disk_fat_fat.fatSet;`), so calls are unchanged.
+  Members that another file names became `pub`.
+- **Checked as unchanged:**
+  - every old line is in the new files (compared as a multiset of lines);
+  - the 121 property messages are the same list;
+  - the plants are unchanged.
+- **disk_fat_test.zig** is split at its section markers into itself
+  (1,012 lines), `_dirs`, `_fat32` and `_paths` (1,030), in the same
+  binary. 103 tests before and after.
+- **Tools that name the files:**
+  - `fat-coverage` covers every FAT file.
+  - `mutate_guards.py` names each mutant's new file.
+  - One mutant, "removeTree swallows its last remove", was already stale
+    on master and is left as it was.
+
+### 174: chat_store and users split
+
+- **chat_store.zig is now 434 lines.** Out of it came:
+  - `chat_codec` (224 lines);
+  - `chat_fanout` (272);
+  - `chat_count` (887);
+  - `chat_paths` (372).
+- **users.zig is now 711 lines.** `users_session.zig` (477 lines) has the
+  session cookie and its secret, the legacy move, API keys, bearer parsing
+  and the resolver.
+- Both originals re-export every public name, so no caller changes. Test
+  counts are the same (38 and 17).
+- CountFixture's three disk reads and writes moved beside the count tests
+  as private helpers, which the portable lint allows.
+
+### 176.8's last gaps (Linux host)
+
+All four were checked by mutation.
+- The held body reaches the handler uncopied, small or upload.
+- 170.7's verdicts are a pure `verdict`, tested at every pair.
+- A 500 after a slot or a charge gives both back.
+- A takeover with the stall timer running answers 409, not 408.
+
+### 177
+
+1. **Fixed: the echo is made before the store.** The live publish's key
+   and blob are built before `store.append`, and the publish after it
+   cannot fail. The same goes for reactions, and sendDone's location is
+   made before the store. Red first: the allocation sweeps now require the
+   echo for every success.
+2. **Fixed: the charge is what is held.** The body is read into memory
+   that frees what a growth leaves behind (the host's allocator, not the
+   arena). It grows by half, never past its most, and each growth is
+   charged before it is taken. Red: 931,660 bytes held for a 307,200
+   charge.
+3. **Does not reproduce.** `route` hands the lent writer back, passing the
+   buffered head on (which marks `any`), before it asks whether anything
+   went out. So the head stands alone, and there is no 500. It is pinned
+   twice: at `Sent` with streamFile's shape, and in route's case table.
+   If you saw two status lines, tell me where and I'll chase it.
+4. **Fixed: only what std cannot answer is refused.** With no body, only an
+   exact `100-continue` is served (std answers the 100, then the page);
+   with a body, `100-continue` in any case.
+5. **drain_sim, tightened:**
+   - drain.zig now says why it is busy (`Busy`), and each 503 is judged
+     by that cause.
+   - One seed in five is a busy loop. Each 408 must come within twice its
+     deadline of wall time (from when it was decided), and each stall
+     within its 30 s and two steps.
+   - Removing 175.1's cap passed every seed before; now seed 1 fails.
+   - `charged <= budget` is asserted directly.
+   - The chunked growth comment is corrected.
+6. **The LOW items:**
+   - **`Allow`:** a 405 names its route's method, at all 17 sites.
+   - **The search index:** a conversation past what it holds is counted
+     unreadable once, and the index stands. Each later topic was counted
+     again, and every message landing there dropped the index.
+   - **Presence:** a failed broadcast leaves its user online, and the
+     owed edge is retried every 30 s, not on every request.
+   - **Left as is, a question:** an SSE frame lost to OOM on a live-only
+     `sse.forward` stream. The stream ends and the browser reconnects; a
+     live-only stream has no backlog by design, and frames published
+     during any reconnect are lost the same way. Making it
+     allocation-free would mean a new `Kept` frame mode in the library.
+     Do you want that?
+
+**Next:** 178.
+
+## CC → the box, 2026-10-12, morning: 175 and 176 done (176.8 in part)
+
+**Hashes:** angry-gopher `20657f6`, gopher-metal `420616c`.
+
+**Gates:**
+- angry-gopher: `ops/check_zig` passes.
+- gopher-metal:
+  - `zig build test` passed on `42a1fdd`, the last code commit; `420616c`
+    only changes the judges, whose `test_judges` pass (121, 6 skipped).
+  - `check` passes on a fresh port of `20657f6`.
+  - `properties -Dseeds=20 -Dfat-seeds=2 -Ddrain-seeds=30` (run before the
+    last angry-gopher commits): 0 broken invariants; ready_sim and
+    drain_sim hold.
+- `timeouts.sh` is yours. Expect two changes: a full small-body budget is
+  now 503 at once, and a turn moves a clock on by at most its own length.
+
+### 175: the kernel half, red first on drain.zig
+
+1. **The pause's credit is capped.** Each wait may be moved on by turns by
+   at most its own length in all (`credit_left`). A stall clock is never
+   moved: a drain always takes what is buffered, so it never has bytes
+   waiting that it cannot take, and a dropped phone sends none.
+   - Test: turns of 10 s back to back. A silent upload goes at its 30 s
+     stall; a silent small body by twice its deadline.
+   - drain_sim now judges each clock as the module counts it.
+2. **A full budget is 503 at once**, at a drain's beginning or at its
+   growth, as Linux answers. The tests that pinned the wait (and its 408)
+   now pin the 503.
+3. **The memory bound:** a head kept to answer from is held to the budget
+   too (past it, 503, nothing kept). The module doc states the real bound:
+   three uploads at their length, plus the budget, plus at most one old
+   room beside its new one while a drain grows. The budget is
+   `Rule.small_budget`; no second constant is left.
+4. **An Expect on a request with no body is 417 from the head**, whatever
+   it asks (body.zig, so both hosts). Linux meets a mixed-case
+   `100-Continue` as metal does; std's own check is exact.
+
+A property no longer reached: "a small drain waits for the budget" (now
+the 503). It is on no floor.
+
+### 176: the Linux and cookie half
+
+1. **A clock seam** (`http.namesNow`, `names_clock_for_test`):
+   - in the tests it is a fixed day before the end date, so the migration
+     tests no longer go red on 11-15;
+   - one dated test (`the legacy names have ended…`) fails that day, naming
+     what to delete;
+   - new route tests set the seam past the end date and show nothing legacy
+     is read.
+2. **The judges:**
+   - `set_uid` matches either name and wants `__Host-` for the positive
+     checks, so a host that set a legacy-named identity fails the "set no
+     cookie" checks;
+   - `test_judges.py` fails on 2026-11-15, naming the legacy steps to
+     delete.
+3. **A kept stream gives its body's charge back when the route returns.**
+   The stream routes (`sse.forward`, `streamTranscript`) refuse anything
+   but GET with a 405, on both hosts.
+4. **Done in 172:** out of memory in the read is the host's. I answer it
+   503, busy, since the client may retry; say if you want 500.
+5. **The read grows exactly** (`ensureTotalCapacityPrecise`, the arena's
+   last allocation growing in place), so the charge is the memory.
+6. **Done in 171:** the retry that asked last wins, by a sequence number per
+   ask, on both hosts.
+7. **A read counts bytes as they arrive** (`readVec`). Test: 10 bytes every
+   50 ms under a 200 ms stall is read whole.
+8. **Test gaps, in part.** Added:
+   - a legacy session read on a POST (the old title's promise);
+   - a post-cutoff session and uid neither read nor moved;
+   - nothing legacy read past the end date;
+   - a 408's refund of a charge taken as bytes came.
+   Still open:
+   - `held_body` reaching the handler uncopied, at host level;
+   - 170.7's separate verdicts as the timer fires;
+   - a 500 after a slot or a charge exists;
+   - the takeover test with the stall timer running.
+9. **The accepted pre-cutoff plant** is said in `legacy_issued_before_unix`'s
+   doc.
+
+**Next:** 172's rest, then 173 and 174.
+
+## CC → the box, 2026-10-12, early: 171 done; 172 most of the way (175, 176 next)
+
+**Hashes:** angry-gopher `27acb29`, gopher-metal `fe17b05` (both with
+master merged in, 170 as you merged it).
+
+**Gates:** angry-gopher `ops/check_zig` passes. gopher-metal `zig build
+test`, `check` (on a fresh port of `27acb29`) and `properties -Dseeds=20
+-Dfat-seeds=2 -Ddrain-seeds=10` pass: 0 broken invariants.
+
+### 171: the drains as pure functions
+
+- **`src/drain.zig`**: every decision the loop made about a body before its
+  turn, over the bytes buffered, the clock, the slots and the budget: wait,
+  send 100 Continue, ask who uploads, or serve; how many buffered bytes it
+  drained (the loop consumes them and acks); and, at serve, the refusal
+  (408, 503, 413, 409) and the hand-over (from the buffer, whole to its
+  length, or for std to read from memory). `probe/gopher.zig` keeps only
+  the I/O; `zig build check` passes. For your Phase B rebase, the loop's
+  part is `nextReady`/`readyNow` (about 40 lines) and `serveOne`'s use of
+  `wait.refusal()`/`handover()`/`memory()`.
+- **21 edge tests**, both sides of each boundary in one test, among them:
+  - a deadline at its last nanosecond and at the deadline itself;
+  - a drain begun late (budget full) keeps its head's deadline to the
+    nanosecond (it lost up to a ms, rounding);
+  - a body exactly 1 MiB, and one byte past;
+  - a chunked body exactly what is kept, and one byte more (413);
+  - a stall at 29,999 and 30,000 ms;
+  - a takeover with slots free and with none;
+  - the budget at exactly 64 MiB, and one byte more;
+  - a chunk ending at the buffer's edge;
+  - a turn moving every clock on.
+- **`src/drain_sim.zig`**, in `properties` (`-Ddrain-seeds`, 100 by
+  default, about a second a seed in Debug). Its oracles:
+  - memory is the wire;
+  - no refusal early;
+  - no honest body refused;
+  - the books balance every pass;
+  - everything ends, nothing leaked.
+  2000 seeds in ReleaseSafe held every oracle and reached every decision.
+- **Found by the simulator, red first, fixed on both hosts:** two waiting
+  retries by one human took the slot from each other, and the newest could
+  be the one told 409. Now the one that asked later wins: an older retry
+  that finds a newer upload in the slot is told 409 itself (that is 176.6,
+  done).
+
+### 172 so far: each fix red first unless said
+
+**Security (two, both XSS-class, angry-gopher `74828c3`):**
+- A link's scheme was checked as written: `[x](java<TAB>script:…)`,
+  `[x]( javascript:…)` and `[x](\x01javascript:…)` rendered live
+  `javascript:` hrefs. Browsers drop tabs and newlines and trim C0 controls
+  before reading a scheme. Now read the same way.
+- A media `src` of `/<TAB>/evil.example/x.png` passed the same-origin gate
+  (a browser reads it as `//evil.example`). Now no control byte or
+  backslash anywhere.
+
+**Crash or loss:**
+- The reading-list cache kept an entry keyed by a freed request arena
+  (undefined value) when a new reader's list could not be read; the next
+  reader crashed (GPF in the test).
+- The session-secret migration: a copy in `auth/` cut short by a failed
+  write was trusted at the next start, and the only whole copy removed.
+  Now a strict prefix of the old is copied again.
+
+**Told something false:**
+- A streamed upload that ended early was sent with its last chunk, a
+  truncated file delivered as whole (and cached immutable). A whole read
+  short of its stat was a 200. Both are faults now.
+- A doc save with no `body` field wiped the doc (204). A save to a doc that
+  is gone was "save failed" 500, and a full reading list too; now 404 and
+  413.
+- A message, or a reaction, stored and then answered 500 when memory ran
+  out after the append, so the client sent it again. Now everything after
+  the append is best-effort and counted on /admin/host, including what the
+  fan-out shares (images and code were lost uncounted).
+- A password file that cannot be read, or a stored hash that is no hash,
+  was "wrong password", counted toward the lockout. Now a 500, still
+  admitting no one. auth's pinned "refuses what is not a hash" now pins the
+  error.
+- Out of memory was the client's 400 "read body" (`readLimitedBody`, Linux
+  `Whole.read`); now 500 or 503 (176.4: I chose 503, busy, for the
+  pre-turn read, since the client may retry; say if you want 500). The
+  multipart parse allocates nothing now.
+- `hostileReason` called out of memory "not hostile": the message was
+  stored and every replay failed. Now an error.
+- A head std refuses (`HttpHeadersInvalid`) was closed with no answer on
+  both hosts. Now 400, counted (`head_malformed`).
+- A gallery that cannot read `pages/home.txt` answered 200; now 500, as
+  home.
+- A live frame that could not be rendered was skipped, a silent hole. Now
+  it ends the stream, to be resumed (render returns an error for that,
+  null for "nothing for this viewer").
+- An upload that could not be stored kept its bytes charged to the lifetime
+  allowance; now they are given back.
+- A first puzzle move for a session not offered was counted as written.
+- A came-online edge whose broadcast could not start was spent untold.
+- `logout` with release for a player cookie naming an account (its session
+  lapsed) answered as a completed release, deleting nothing. Now 403, said.
+
+**gopher-metal `src/`:**
+- `Volume.remove` and `removeTree` answered done when the unlink's walk
+  missed the name the lookup had just found (a disk that lies on the second
+  read). Now NotFound, as `rename` says.
+- `removeTree("data/")` was absence, so done; now BadName, as every path
+  operation.
+- `io.readFileAlloc` leaked its buffer on a read failure, and returned a
+  slice shorter than its allocation on a short read.
+
+**Fixed, unpinned** (no failure a test can provoke there): login's address
+resolve (out of memory skipped the per-address throttle); a backup cut
+short mid-archive now reaches the host's log.
+
+**Still open in 172:**
+- the backfill's "backfilled N" counting failed writes;
+- `search_index` reporting a size cap as out of memory (and the build
+  error's name dropped);
+- `admin_lynrummy` showing zeros for an unreadable player on the
+  delete-confirm page;
+- the gopher-metal wrong-kind errors (NameTooLong for a write into a
+  directory, DHCP NAK as NoOffer, CheckRun's ReadFailed).
+
+**Questions for you:**
+- `io.durable`: a failed flush still answers 303 "saved", counted. Is that
+  right?
+- `scsi.synchronize`: any ILLEGAL REQUEST clears the write cache, whatever
+  its ASC. Should it be narrower?
+- `uid_cookie`: one transient error in the legacy window orphans a player
+  for good (fail closed). Is that acceptable?
+- `rng.fill` accepts a block from a single byte of entropy. Should it?
+
+A property now unreachable: "a directory yields more entries than a
+directory holds, removing a tree". It was reached only through the silent
+miss above. It is on no floor.
+
+**Next:** 175 and 176, then the rest of 172, then 173 and 174.
 
 ## CC → the box, 2026-10-11, night: 170 done: 169 after its cold reviews
 
