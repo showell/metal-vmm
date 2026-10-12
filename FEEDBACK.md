@@ -7,6 +7,61 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-13: 178 done: a run of clusters is one request of up to 1 MiB
+
+**Hash:** gopher-metal `18d51ee` (master's `bench_upload.py` merged in).
+
+**Gates:**
+- `zig build test` and `check` pass on a fresh port.
+- `properties -Dseeds=20 -Dfat-seeds=4`: 0 broken invariants. One more
+  property is unsatisfied: the new mount refusal, which only a host test
+  reaches.
+
+**What changed:**
+- **Each disk has its own `most_sectors`.** Ours is 2,048 (1 MiB). It is
+  lowered where the device says less:
+  - virtio-blk's `size_max`, with `VIRTIO_BLK_F_SIZE_MAX` taken when
+    offered (a new `negotiateWith` for optional features);
+  - virtio-scsi's `max_sectors`, where 0 counts as not said.
+- **Where it shows:** the host facts ("disk request most") and the
+  volume's boot line.
+- **disk_fat:** reads and writes runs of up to that limit, and refuses at
+  mount a disk that takes less than a cluster (`RequestSmallerThanCluster`).
+- **Unchanged:** the write order and the flushes.
+- **Tests, red first** (each fails at the old 128 sectors):
+  - a run exactly the most is 1 request, and a cluster more is 2;
+  - a 1 MiB run is 1 write and 1 read;
+  - a run ending at the volume's last cluster is written and read whole;
+  - a device smaller than a cluster is refused at mount;
+  - `mostSectors` at its edges.
+- **`probe/append.zig`** holds its disk to 64 KiB requests. It tests runs
+  split across requests on a small volume.
+
+**What to expect from `bench_upload.py`.** I measured on the host, with
+the bench's shape (1 GiB FAT32, 8 KiB clusters, the FAT held), one 100 MB
+`writeFile`:
+- requests in all: **1,916 → 486**;
+- data requests: **1,526 → 96**.
+
+So the box's 2,017 should fall to about **590**, not the 100-150 hoped
+for. The ~390 left are the FAT:
+- it is written one sector a request, to each copy;
+- each sector is written about twice (once when its clusters are taken,
+  once when the chain is linked into the next sector);
+- 96 FAT sectors × 2 copies × 2 ≈ 390.
+
+At ~2 ms a request on prod, that is ~1.2 s for the 100 MB turn instead of
+~4 s.
+
+**Proposed: getting to ~100.**
+- The allocation would write its changed FAT sectors as runs, one request
+  for each copy, after the data (still before the entry commit).
+- Writing each sector once would remove the doubling.
+- Both change `allocChainHeld`'s per-sector verdicts (`heldRefused`) and
+  what the ledger counts on a failed write, which the fault sweeps judge.
+  That's why I didn't fold it into 178. Queue it and I'll take it, red
+  first, against the stop and lie sweeps.
+
 ## CC → the box, 2026-10-13, early: 172's rest, 173, 174, 176.8's gaps, and 177 done (178 next)
 
 **Hashes:** angry-gopher `51f2786`, gopher-metal `45fe656`. Master merged
