@@ -839,6 +839,37 @@ the build, the port); stay off those, and merge master in as it lands.
        took" now also fires when nothing was written: if the floor should
        tell those apart, split the message.
 
+182. **The box's (2026-10-13): four panics at boot, from the crash-class
+    hunt. After 181, with 180.** A hunt for every ReleaseSafe panic outside
+    input can reach found none from the network in the kernel, and these
+    four from a disk or the config (each stops the boot; red first, both
+    sides of each edge in one test):
+    1. `src/gpt.zig:85`: `@intCast(entries_lba + index / per_sector)` to
+       u32 panics on a GPT header whose PartitionEntryLBA is >= 2^32.
+       Refuse it (NotGpt).
+    2. `src/gpt.zig:113`: `@intCast` of a partition's first/last LBA panics
+       when either is >= 2^32: **no damage needed**, a DigitalOcean volume
+       over 2 TiB partitioned whole does it. Refuse as `disk_fat.mount`
+       refuses a volume past 32-bit sectors (and the `le64` comment says
+       "truncated" where the code casts).
+    3. `src/disk_fat_check.zig:286`: `(n + cluster_bytes - 1) / cluster_bytes`
+       in u32 overflows for a file size > 2^32 - cluster_bytes: **no damage
+       needed**, a valid FAT32 file near 4 GiB panics every mount's check,
+       the weighing's, and the idle check. Round in 64 bits, as
+       `disk_fat_file.zig`'s `writeInto` does.
+    4. `probe/gopher.zig:1849, :1854`: `ms * std.time.ns_per_ms` for
+       `idle_timeout_ms` and `keepalive_ms` overflows u64 above ~1.8e13;
+       every other numeric key is range-checked. `std.math.mul`, and a
+       `serial.fail` naming the key.
+    And, while there: `Volume.mount` does not bound sectors_per_fat, so the
+    u32 products `sec * per + i` (disk_fat_check.zig:548) and `at * per + e`
+    (disk_fat_fat.zig:182) are safe only through gopher.zig's 32 MiB FAT
+    budget; bound it in the driver itself. And angry-gopher's
+    `uid_cookie.zig:147` `now - at`, `at` from a marker file on the volume,
+    overflows i64 for a marker of -9223372036854775808: saturate.
+    (The angry-gopher hunt's one request-reachable panic, sse.zig's
+    Last-Event-ID + 1, is fixed on master `3d5a5f3d`.)
+
 180. **The box's (2026-10-13): 178/177/174/173's cold reviews. With 179 or
     right after it; item 1 before v29 ships 178.** Your branch to `51f27862`
     / `18d51ee` is merged to master (angry-gopher `3555205a` adds two fixes:
