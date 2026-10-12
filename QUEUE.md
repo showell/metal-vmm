@@ -711,6 +711,51 @@ the build, the port); stay off those, and merge master in as it lands.
     Note: the session cookie is `__Host-gopher_auth` (my brief said
     `_session`; the code is right).
 
+177. **The box's (2026-10-12): 171/175/176/172's cold reviews. After 172's
+    rest, before 173.** Your work to `4c2ea322` / `420616c` is merged onto
+    Phase B (angry-gopher master `9f37827d`, gopher-metal `49b5a2e`) and goes
+    out in v28. **Merge master into your branch before you go on:** Phase B
+    moved the application behind modules: a host reaches `app.site.*`,
+    `app.hosting.*` and `webbox.*`, never the router; an application file
+    imports a library file by name (`@import("webbox").bus`), never by path
+    (the lints say so); test locals named `site` shadow the router's export
+    (use `uid_site`). The box fixed in the merge: linux_host's `sse.zig`,
+    presence's `bus.zig` and router's `mem_meter.zig` by path; the kernel's
+    start report back through `describeStart` (the merge had taken 171's
+    `started.app.backfilled`); and a release that releases nothing is still
+    a logout (its 403 now clears the cookies; 172 had dropped that).
+    The rest, red first:
+    1. **MEDIUM: a stored message whose live publish fails still ends in a
+       resend.** The 204 comes, no SSE echo, `hostDown` after 3 s, the user
+       resends: a duplicate. Build the publish's key and blob before
+       `store.append`, so nothing can fail between the append and the
+       (void) publish. The no-JS `sendDone` path still `allocPrint`s after
+       the store (500 for a stored message): same.
+    2. **176.5's "the charge is the memory" is false** under std 0.16's
+       arena: resize/free work only on the newest allocation in a node, so
+       an outgrown list leaves its old copy (1.5-4.5x the charge). Read into
+       one allocation of the body's length when it is known, or charge what
+       the arena holds; fix the comment either way.
+    3. **An error before a streamed answer's first byte sends two status
+       lines** (`chat_upload.streamFile`'s first `readAt`, `admin_backup`'s
+       `archive`): `respondStreaming` buffers the head, `Sent.any` is false,
+       `answerFailure` appends a 500. Either flush-or-discard the buffered
+       head before a failure answer, or close with nothing more.
+    4. **Expect: 100-continue on a bodiless request is now 417** (175.4);
+       std answered an exact `100-continue` GET before. Refuse only what std
+       can't answer (not exactly `100-continue`), serve the rest.
+    5. **drain_sim excuses too much:** every 503 in tight-budget seeds (a
+       slot wait's early 503 included: excuse only the budget's); "everything
+       ends" in free time, so 175.1's wall-clock bound (a deadline plus at
+       most its own length) is never judged there; assert `charged <=
+       budget` directly (175.3's claim). And drain.zig's "1 MiB past the
+       budget" understates a chunked drain's last growth (~16h + 1 MiB).
+    6. LOW: an SSE frame lost to OOM on a live-only `sse.forward` stream is
+       gone (no backlog); presence's `unmark` on a lasting read failure
+       shows an active user offline and re-reads the user list per request;
+       `ConversationTooBig` counts each later topic and `noteAppend` drops
+       the index per message; `methodNotAllowed` sends no `Allow` header.
+
 172. **A class hunt: errors swallowed, or sent the wrong way.** The largest
     class in the last 52 fixes (12 of them: a write's failure answered
     success, a catch-continue that skipped work, OOM counted as "unreadable",
