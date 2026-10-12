@@ -64,9 +64,9 @@ for path in re.findall(r'\.path\s*=\s*"([^"]+)"', build):
 PY
 
 echo "== building"
-GOPHER_SRC="$OUT/angry-gopher/zig-server/src" GOPHER_PORT="$OUT/port" "$OUT/gopher-metal/port.sh" > "$OUT/port.log" 2>&1 ||
+GOPHER_ROOT="$OUT/angry-gopher" "$OUT/gopher-metal/port.sh" > "$OUT/port.log" 2>&1 ||
   { echo "port.sh failed; see $OUT/port.log"; exit 2; }
-(cd "$OUT/gopher-metal" && zig build gopher -Dcoverage -Dgopher="$OUT/port") > "$OUT/kernel.log" 2>&1 ||
+(cd "$OUT/gopher-metal" && zig build gopher -Dcoverage -Dgopher-root="$OUT/angry-gopher") > "$OUT/kernel.log" 2>&1 ||
   { echo "the coverage kernel did not build; see $OUT/kernel.log"; exit 2; }
 cp "$OUT/gopher-metal/probe/gopher.elf" "$OUT/gopher-coverage.elf"
 (cd "$OUT/metal-vmm" && zig build) > "$OUT/vmm.log" 2>&1 ||
@@ -89,7 +89,7 @@ case $code in
 esac
 
 echo "== the plants"
-GOPHER="$OUT/gopher-metal" GOPHER_PORT="$OUT/port" COVERAGE_SDK="$SDK" GUESTS="$OUT/gopher-metal/probe" \
+GOPHER="$OUT/gopher-metal" COVERAGE_SDK="$SDK" GUESTS="$OUT/gopher-metal/probe" \
   ANGRY_GOPHER="$OUT/angry-gopher" VOLUME_SITE="$VOLUME_SITE" LAST="$PLANT_SEEDS" \
   KERNELS="$OUT/kernels" OUT="$OUT/plants" "$OUT/metal-vmm/plants.sh"
 case $? in 0) ;; 1) bad=1 ;; *) echo "plants.sh could not run"; bad=2 ;; esac

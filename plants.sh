@@ -26,17 +26,16 @@
 #   PLANTS="net-goback-byte" ./plants.sh
 #
 # Kernels are kept in `$KERNELS` (default ~/nightly/kernels) by gopher-metal
-# commit and plant, so a second run builds nothing. The port is gopher-metal's
-# usual one, `$GOPHER_PORT` (`./port.sh` first, if angry-gopher moved); a
-# kernel's name carries gopher-metal's commit and the port's content hash
-# (`PORTED_FROM`), so a new port builds anew. Exit 0 when every
+# commit and plant, so a second run builds nothing. The application is
+# angry-gopher's checkout, `$ANGRY_GOPHER`, compiled as it is; a kernel's name
+# carries gopher-metal's commit and the checkout's content id (gopher-metal's
+# tools/verdicts.py), so an edit to angry-gopher builds anew. Exit 0 when every
 # check holds, 1 when one doesn't, 2 when something could not be built or
 # judged at all.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GOPHER="${GOPHER:-$HOME/showell_repos/gopher-metal}"
 KERNELS="${KERNELS:-$HOME/nightly/kernels}"
-PORT="${GOPHER_PORT:-$HOME/build/gopher-metal/port}"
 SHAPES="${SHAPES:-$HERE/requests/shapes}"
 VOLUME_SITE="${VOLUME_SITE:-$HOME/build/gopher-metal/probe/gopher/pristine.img}"
 FIRST="${FIRST:-1}"
@@ -46,8 +45,8 @@ mkdir -p "$OUT"
 # gopher-metal's build.zig.zon finds the SDK at ../zig-coverage-sdk, so a
 # worktree here needs it beside it.
 [ -e "$OUT/zig-coverage-sdk" ] || ln -s "${COVERAGE_SDK:-$HOME/showell_repos/zig-coverage-sdk}" "$OUT/zig-coverage-sdk"
-# The angry-gopher checkout the port was made from, named to the build
-# (-Dgopher-root), which refuses a port that is not of it as it is now.
+# The angry-gopher checkout the kernel is compiled from (-Dgopher-root; no
+# copy since gopher-metal's Phase B step 2b), named by its content id.
 ANGRY_GOPHER="${ANGRY_GOPHER:-$HOME/showell_repos/angry-gopher}"
 
 # The plants: PLANTS, or every one gopher-metal's build.zig names (its
@@ -66,8 +65,8 @@ commit=$(git -C "$GOPHER" rev-parse --short HEAD) || exit 2
 [ -z "$(git -C "$GOPHER" status --porcelain --untracked-files=no)" ] ||
   { echo "gopher-metal has uncommitted changes; plants build from a commit"; exit 2; }
 sdk=$(git -C "${COVERAGE_SDK:-$HOME/showell_repos/zig-coverage-sdk}" rev-parse --short HEAD) || exit 2
-ported=$(grep -o 'content-[0-9a-f]*' "$PORT/PORTED_FROM" 2>/dev/null | cut -c9-20)
-[ -n "$ported" ] || { echo "no port at $PORT (gopher-metal's ./port.sh)"; exit 2; }
+ported=$(GOPHER_ROOT="$ANGRY_GOPHER" python3 "$GOPHER/tools/verdicts.py" ids | awk '{print $2}' | cut -c9-20)
+[ -n "$ported" ] || { echo "gopher-metal cannot build angry-gopher at $ANGRY_GOPHER as it is (its tools/verdicts.py fresh says why)"; exit 2; }
 mkdir -p "$KERNELS"
 
 # build <name>: the kernel for "clean" or a plant, built once per commit and
@@ -81,7 +80,7 @@ build() {
     wt="$OUT/build-$name"
     git -C "$GOPHER" worktree add -q --detach "$wt" "$commit" >&2 || return 2
     building="$wt"
-    (cd "$wt" && zig build gopher -Dcoverage $plant -Dgopher="$PORT" -Dgopher-root="$ANGRY_GOPHER") >&2 && cp "$wt/probe/gopher.elf" "$elf"
+    (cd "$wt" && zig build gopher -Dcoverage $plant -Dgopher-root="$ANGRY_GOPHER") >&2 && cp "$wt/probe/gopher.elf" "$elf"
     local ok=$?
     git -C "$GOPHER" worktree remove --force "$wt"
     building=""
