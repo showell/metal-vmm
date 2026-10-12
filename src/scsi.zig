@@ -390,7 +390,7 @@ pub const Scsi = struct {
     }
 
     fn inquiry(self: *Scsi, cdb: *const [cdb_size]u8, in: ?[]u8, here: bool) Answer {
-        if (cdb[1] & 1 != 0) return self.vpd(cdb, in);
+        if (cdb[1] & 1 != 0) return self.vpd(cdb, in, here);
         var data: [36]u8 = @splat(' ');
         // A disk, or a LUN with nothing connected (qualifier 3, type 1Fh).
         data[0] = if (here) 0x00 else 0x7F;
@@ -411,15 +411,19 @@ pub const Scsi = struct {
     /// **TWO VPD PAGES** (SPC-4 7.8, SBC-3 6.6.3): the list of pages (00h),
     /// and Block Limits (B0h), whose MAXIMUM TRANSFER LENGTH is
     /// `max_transfer`. Any other is ILLEGAL REQUEST.
-    fn vpd(self: *Scsi, cdb: *const [cdb_size]u8, in: ?[]u8) Answer {
+    /// A LUN with nothing attached says so in byte 0 (qualifier 3, type
+    /// 1Fh), as its standard INQUIRY does (metal-vmm QUEUE 186.3).
+    fn vpd(self: *Scsi, cdb: *const [cdb_size]u8, in: ?[]u8, here: bool) Answer {
         const allocated = std.mem.readInt(u16, cdb[3..5], .big);
+        const kind: u8 = if (here) 0x00 else 0x7F;
         switch (cdb[2]) {
             0x00 => {
-                const data = [_]u8{ 0x00, 0x00, 0, 2, 0x00, 0xB0 };
+                const data = [_]u8{ kind, 0x00, 0, 2, 0x00, 0xB0 };
                 return .{ .data = give(in, &data, allocated) };
             },
             0xB0 => {
                 var data: [64]u8 = @splat(0);
+                data[0] = kind;
                 data[1] = 0xB0;
                 std.mem.writeInt(u16, data[2..4], 0x3C, .big);
                 std.mem.writeInt(u32, data[8..12], self.max_transfer, .big);
@@ -1259,11 +1263,41 @@ test "VOLUME_MAX_TRANSFER: INQUIRY's Block Limits page says the most one command
         // A page it has not: ILLEGAL REQUEST.
         try testing.expectEqual(key_illegal_request, g.send(&d, 0, 0, &[6]u8{ op_inquiry, 1, 0x83, 0, 64, 0 }, .from_disk, 64).key);
         // Up to the most, served; one sector more, refused (0 is no limit).
+        // The write's data is not zero, so a refused one that wrote shows
+        // (metal-vmm QUEUE 186.2: data and image were both zero).
         try testing.expect(FakeDriver.good(g.rw(&d, false, 0, 4)));
+        @memset(g.ram[FakeDriver.data_at..][0 .. 5 * 512], 0xAB);
         const past = g.rw(&d, true, 0, 5);
-        if (most == 0) try testing.expect(FakeDriver.good(past)) else {
+        if (most == 0) {
+            try testing.expect(FakeDriver.good(past));
+            try testing.expectEqual(@as(u8, 0xAB), image[0]);
+            @memset(&image, 0);
+        } else {
             try testing.expectEqual(key_illegal_request, past.key);
-            try testing.expectEqual(@as(u8, 0), image[0]);
+            for (image[0 .. 5 * 512]) |x| try testing.expectEqual(@as(u8, 0), x);
         }
+    }
+}
+
+test "VPD pages: a LUN with nothing attached says so as standard INQUIRY does, and the allocation length bounds the answer, 0 included (metal-vmm QUEUE 186.3)" {
+    var image: [16 * 512]u8 = @splat(0);
+    var vol = Scsi{ .image = &image, .attention = null, .max_transfer = 4 };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    for ([_]u8{ 0x00, 0xB0 }) |page| {
+        // LUN 1 has nothing: qualifier 3, type 1Fh, as its standard INQUIRY.
+        try testing.expect(FakeDriver.good(g.send(&d, 0, 1, &[6]u8{ op_inquiry, 1, page, 0, 64, 0 }, .from_disk, 64)));
+        try testing.expectEqual(@as(u8, 0x7F), g.ram[FakeDriver.data_at]);
+        try testing.expect(FakeDriver.good(g.send(&d, 0, 0, &[6]u8{ op_inquiry, 1, page, 0, 64, 0 }, .from_disk, 64)));
+        try testing.expectEqual(@as(u8, 0x00), g.ram[FakeDriver.data_at]);
+        // An allocation shorter than the page: that much, and no more.
+        const short = g.send(&d, 0, 0, &[6]u8{ op_inquiry, 1, page, 0, 4, 0 }, .from_disk, 64);
+        try testing.expect(FakeDriver.good(short));
+        try testing.expectEqual(@as(u32, response_len + 4), short.used);
+        // An allocation of 0: nothing, and GOOD.
+        const none = g.send(&d, 0, 0, &[6]u8{ op_inquiry, 1, page, 0, 0, 0 }, .from_disk, 64);
+        try testing.expect(FakeDriver.good(none));
+        try testing.expectEqual(@as(u32, response_len), none.used);
     }
 }
