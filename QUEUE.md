@@ -839,6 +839,106 @@ the build, the port); stay off those, and merge master in as it lands.
        took" now also fires when nothing was written: if the floor should
        tell those apart, split the message.
 
+187. **The box's (Steve, 2026-10-13): the cold reviews of 181 and of 180/182's
+    kernel half, as CC's own adversary passes, FIRST (before 186).** The box
+    began both and stopped them (Steve: no more running at once than the
+    policy allows; reviews that need no KVM go to the cloud). Neither is
+    merged to master until these pass. Each: findings ranked, a concrete
+    scenario, file:line, CONFIRMED by experiment where it can be, a verdict.
+    1. **181 (`ecb467b`), by experiment.** The box's reviewer had built one:
+       `docs/box-rev181/` (rev181_exp.zig, a test file that sweeps a lying
+       `lands_nothing`/`torn` request at every request of a 10 MB write,
+       overwrite, remove, and a write on fragmented space, on small FAT32;
+       apply.sh wires it into a worktree; outputs from 179 and 181 beside
+       it). Its partial result: on 179, `overwrite10` has 3 bad of 335
+       (mount `past_weighing` trusts copy 0 -> broken `/f.bin`, BadChain);
+       on 181 all six sweeps pass ("1 bad" in fragwrite10 is a leak of
+       80 clusters at the last request, no damage). `out_ecb.txt`, an
+       earlier run on 181, FAILED one assertion ("expected 31, found 16")
+       after a series of `WRONG BYTES` with no damage in fragwrite10: find
+       out which (the experiment's expectation or the code), and say.
+       Finish it on 178 as the baseline. Then hunt what 181 might break:
+       can a legitimately newer copy 0 lose to an older copy 1 (a cut after
+       copy 0 landed whole, before copy 1)? the cost of weighing whole at
+       mount on a 16 GiB volume; the idle check; do fat_sim's tears land a
+       PREFIX of a request's sectors?
+    2. **180 + 182, the kernel half (`da1ec5f`).** Prod's chat data is on a
+       DigitalOcean volume over virtio-scsi, its boot disk virtio-blk, and
+       requests just grew to 1 MiB: a mistake stops the site booting, or a
+       silently cut request corrupts. INQUIRY EVPD B0h (the CDB; MAXIMUM
+       TRANSFER LENGTH bytes 8..11 in LOGICAL BLOCKS: a block size not 512;
+       no page, a CHECK CONDITION, page 00h not listing B0h, a short answer,
+       a page length under 12); the least of disk/controller/2,048 used
+       EVERYWHERE a request is built (data and FAT runs, the page cache, the
+       idle check). virtio-blk chains: descriptor count against free
+       descriptors and the chain limit, `seg_max`/`size_max` per the spec,
+       physical contiguity, u32 lens, an uneven split, completion freeing
+       every descriptor of a chain, a chain larger than the queue. 182's
+       four: each red test at its edge, both sides; a normal disk still
+       mounts. And anything that changes a normal boot.
+
+186. **The box's (2026-10-13): 180.6/180.7/182's and 180.1-device's cold
+    review. Before 183.** The box fixed the one blocker on branch
+    `cc-merge-2` (angry-gopher `86eeae60`, on your `d1beb64e`): a bodiless
+    `Expect: 100-Continue` was taken by `plan` but only linux_host made it
+    std's spelling, so **metal answered nothing at all** (it was a 417).
+    `site.route` now calls `meetExpectation` for every host; red first, both
+    spellings. Merge that branch into yours. The rest, red first:
+    1. **The 176.8 takeover test still never meets the race.** `watch`
+       counts silence only in ticks; with a 1 s tick and the takeover at
+       700 ms the watcher has not ticked once, so the test passes the same
+       with no stall at all. Use a small tick (50 ms) with a 600 ms stall,
+       take over at ~550 ms and at ~700 ms, and assert each side: before the
+       stall the old is told 409; after it fired, what the old was told
+       (408) and that the new upload gets the slot and is read whole.
+    2. **metal-vmm's 180.1 test proves nothing about "the refused write
+       wrote nothing"**: image and data area are both zero. Fill the data
+       area with non-zero bytes first.
+    3. metal-vmm's VPD: `vpd()` ignores `here`: a LUN with nothing attached
+       answers 00h/B0h as a disk (type 0x00) where standard INQUIRY says
+       0x7F; and an allocation length shorter than the page, and 0, are
+       untested.
+    4. Done by the box (Steve: fail closed): a uid marker dated after now
+       is refused as past its grace (`cc-merge-2` `2d3e4c31`).
+
+183. **The box's (Steve, 2026-10-13): a mechanical guard for the class that
+    hit prod twice. After 180 and 182.** Twice a ReleaseSafe panic in the
+    served kernel came from arithmetic on a number the client chose (v26:
+    a forged cookie's MAC length; v28: `Last-Event-ID` + 1, fixed on master
+    `3d5a5f3d`). Each read as right; an off-by-one sweep passed over the
+    second. A reading hunt found it in one pass, but the class needs a
+    guard that runs every time:
+    - **A request harness over angry-gopher's Linux build in Debug** (every
+      safety check panics, in seconds, no QEMU): for every place the
+      application parses a number from a request (a header, a query key, a
+      path segment, a form field, a cookie, a message's markdown: grep
+      `parseInt(` in zig-server/src for the list, and make the harness
+      refuse to pass if a request-reachable call site is not covered), send
+      each of the type edges (0, -1, 2^31±1, 2^32±1, 2^63±1, 2^64-1, 2^64, a
+      30-digit number, a sign, leading zeros, whitespace) as a signed-in
+      member. Fail if the server dies or logs a panic, naming the request.
+    - **Red first:** it must catch the sse.zig overflow on `v28` (tag),
+      then pass on master. In `ops/check_zig` or its own fast gate.
+    - If the shape invites it, the same over webbox's headers for dog-park's
+      play server (no Dog Park feature work: only the harness pointed at it).
+
+184. **The box's (2026-10-13): the next class hunt, slow exhaustion.**
+    Anything a request (a stranger's, or a member's) can make grow without
+    bound, on either host: a map keyed by request data (sessions, throttles,
+    presence, per-human tables, caches, the bus's subscribers), files a
+    request creates per call, connection- or stream-table slots held by a
+    client that does little, an allocation sized by a header. For each:
+    the bound, or a red test that shows there is none, then the bound (its
+    edge, both sides, in one test). The kernel's fixed heap makes this a
+    crash class there. Cold adversary before you report.
+
+185. **The box's (2026-10-13): small, from the crash hunt.** angry-gopher:
+    an `<img` tag in a message can carry `images_sep` inside the tag, which
+    plants a fake entry header (a spoofed source / from line) in each
+    member's images.md: escape or refuse it where it is written, red first.
+    And an upload file name that is not UTF-8 comes back in JSON as an
+    array of numbers: answer a string (replace what does not decode).
+
 182. **The box's (2026-10-13): four panics at boot, from the crash-class
     hunt. After 181, with 180.** A hunt for every ReleaseSafe panic outside
     input can reach found none from the network in the kernel, and these
