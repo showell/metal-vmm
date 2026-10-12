@@ -7,6 +7,142 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-12, early: 171 done; 172 most of the way (175, 176 next)
+
+**Hashes:** angry-gopher `27acb29`, gopher-metal `fe17b05` (both with
+master merged in, 170 as you merged it).
+
+**Gates:** angry-gopher `ops/check_zig` passes. gopher-metal `zig build
+test`, `check` (on a fresh port of `27acb29`) and `properties -Dseeds=20
+-Dfat-seeds=2 -Ddrain-seeds=10` pass: 0 broken invariants.
+
+### 171: the drains as pure functions
+
+- **`src/drain.zig`**: every decision the loop made about a body before its
+  turn, over the bytes buffered, the clock, the slots and the budget: wait,
+  send 100 Continue, ask who uploads, or serve; how many buffered bytes it
+  drained (the loop consumes them and acks); and, at serve, the refusal
+  (408, 503, 413, 409) and the hand-over (from the buffer, whole to its
+  length, or for std to read from memory). `probe/gopher.zig` keeps only
+  the I/O; `zig build check` passes. For your Phase B rebase, the loop's
+  part is `nextReady`/`readyNow` (about 40 lines) and `serveOne`'s use of
+  `wait.refusal()`/`handover()`/`memory()`.
+- **21 edge tests**, both sides of each boundary in one test, among them:
+  - a deadline at its last nanosecond and at the deadline itself;
+  - a drain begun late (budget full) keeps its head's deadline to the
+    nanosecond (it lost up to a ms, rounding);
+  - a body exactly 1 MiB, and one byte past;
+  - a chunked body exactly what is kept, and one byte more (413);
+  - a stall at 29,999 and 30,000 ms;
+  - a takeover with slots free and with none;
+  - the budget at exactly 64 MiB, and one byte more;
+  - a chunk ending at the buffer's edge;
+  - a turn moving every clock on.
+- **`src/drain_sim.zig`**, in `properties` (`-Ddrain-seeds`, 100 by
+  default, about a second a seed in Debug). Its oracles:
+  - memory is the wire;
+  - no refusal early;
+  - no honest body refused;
+  - the books balance every pass;
+  - everything ends, nothing leaked.
+  2000 seeds in ReleaseSafe held every oracle and reached every decision.
+- **Found by the simulator, red first, fixed on both hosts:** two waiting
+  retries by one human took the slot from each other, and the newest could
+  be the one told 409. Now the one that asked later wins: an older retry
+  that finds a newer upload in the slot is told 409 itself (that is 176.6,
+  done).
+
+### 172 so far: each fix red first unless said
+
+**Security (two, both XSS-class, angry-gopher `74828c3`):**
+- A link's scheme was checked as written: `[x](java<TAB>script:…)`,
+  `[x]( javascript:…)` and `[x](\x01javascript:…)` rendered live
+  `javascript:` hrefs. Browsers drop tabs and newlines and trim C0 controls
+  before reading a scheme. Now read the same way.
+- A media `src` of `/<TAB>/evil.example/x.png` passed the same-origin gate
+  (a browser reads it as `//evil.example`). Now no control byte or
+  backslash anywhere.
+
+**Crash or loss:**
+- The reading-list cache kept an entry keyed by a freed request arena
+  (undefined value) when a new reader's list could not be read; the next
+  reader crashed (GPF in the test).
+- The session-secret migration: a copy in `auth/` cut short by a failed
+  write was trusted at the next start, and the only whole copy removed.
+  Now a strict prefix of the old is copied again.
+
+**Told something false:**
+- A streamed upload that ended early was sent with its last chunk, a
+  truncated file delivered as whole (and cached immutable). A whole read
+  short of its stat was a 200. Both are faults now.
+- A doc save with no `body` field wiped the doc (204). A save to a doc that
+  is gone was "save failed" 500, and a full reading list too; now 404 and
+  413.
+- A message, or a reaction, stored and then answered 500 when memory ran
+  out after the append, so the client sent it again. Now everything after
+  the append is best-effort and counted on /admin/host, including what the
+  fan-out shares (images and code were lost uncounted).
+- A password file that cannot be read, or a stored hash that is no hash,
+  was "wrong password", counted toward the lockout. Now a 500, still
+  admitting no one. auth's pinned "refuses what is not a hash" now pins the
+  error.
+- Out of memory was the client's 400 "read body" (`readLimitedBody`, Linux
+  `Whole.read`); now 500 or 503 (176.4: I chose 503, busy, for the
+  pre-turn read, since the client may retry; say if you want 500). The
+  multipart parse allocates nothing now.
+- `hostileReason` called out of memory "not hostile": the message was
+  stored and every replay failed. Now an error.
+- A head std refuses (`HttpHeadersInvalid`) was closed with no answer on
+  both hosts. Now 400, counted (`head_malformed`).
+- A gallery that cannot read `pages/home.txt` answered 200; now 500, as
+  home.
+- A live frame that could not be rendered was skipped, a silent hole. Now
+  it ends the stream, to be resumed (render returns an error for that,
+  null for "nothing for this viewer").
+- An upload that could not be stored kept its bytes charged to the lifetime
+  allowance; now they are given back.
+- A first puzzle move for a session not offered was counted as written.
+- A came-online edge whose broadcast could not start was spent untold.
+- `logout` with release for a player cookie naming an account (its session
+  lapsed) answered as a completed release, deleting nothing. Now 403, said.
+
+**gopher-metal `src/`:**
+- `Volume.remove` and `removeTree` answered done when the unlink's walk
+  missed the name the lookup had just found (a disk that lies on the second
+  read). Now NotFound, as `rename` says.
+- `removeTree("data/")` was absence, so done; now BadName, as every path
+  operation.
+- `io.readFileAlloc` leaked its buffer on a read failure, and returned a
+  slice shorter than its allocation on a short read.
+
+**Fixed, unpinned** (no failure a test can provoke there): login's address
+resolve (out of memory skipped the per-address throttle); a backup cut
+short mid-archive now reaches the host's log.
+
+**Still open in 172:**
+- the backfill's "backfilled N" counting failed writes;
+- `search_index` reporting a size cap as out of memory (and the build
+  error's name dropped);
+- `admin_lynrummy` showing zeros for an unreadable player on the
+  delete-confirm page;
+- the gopher-metal wrong-kind errors (NameTooLong for a write into a
+  directory, DHCP NAK as NoOffer, CheckRun's ReadFailed).
+
+**Questions for you:**
+- `io.durable`: a failed flush still answers 303 "saved", counted. Is that
+  right?
+- `scsi.synchronize`: any ILLEGAL REQUEST clears the write cache, whatever
+  its ASC. Should it be narrower?
+- `uid_cookie`: one transient error in the legacy window orphans a player
+  for good (fail closed). Is that acceptable?
+- `rng.fill` accepts a block from a single byte of entropy. Should it?
+
+A property now unreachable: "a directory yields more entries than a
+directory holds, removing a tree". It was reached only through the silent
+miss above. It is on no floor.
+
+**Next:** 175 and 176, then the rest of 172, then 173 and 174.
+
 ## CC → the box, 2026-10-11, night: 170 done: 169 after its cold reviews
 
 **Hashes:** angry-gopher `e606f08`, gopher-metal `51d1659` (`3641aaf`, with
