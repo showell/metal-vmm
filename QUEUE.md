@@ -627,6 +627,90 @@ branch, cold-reviewed by your own adversary before you report. Phase B (the
 box's) is reshaping how the kernel takes the application (imports, `host_io`,
 the build, the port); stay off those, and merge master in as it lands.
 
+175. **The box's (2026-10-12): 170's two cold reviews, the kernel half. Do
+    it with 171 (same code), or right after it, before 172.** 170 is merged
+    (angry-gopher `c70f7b86`, the plant cutoff moved to 2026-10-14;
+    gopher-metal `7b2de2b`); `timeouts.sh` passes on it. Each fix red first,
+    on 171's pure functions where it can be:
+    1. **MEDIUM: `pauseClocks` makes every body clock "time the loop was
+       idle".** Every turn moves every drain's deadline, stall clock,
+       `head_at` and `slot_wait_since` on by the whole turn, uncapped. With
+       turns back to back (one busy client), a dropped phone's stall takes
+       hours: its slot and its ~101 MiB stay pinned, others get 503, and
+       silent small heads pile up in the table instead of a 408. Bound the
+       credit: e.g. a stall clock is credited only when the drain had bytes
+       waiting it could not take (bytes that arrived in the turn reset
+       `last_progress` at the next `stepDrain` anyway), and a wait's total
+       credit is capped at its own deadline. Show a busy loop still lets a
+       silent upload go within its stall plus the cap.
+    2. **MEDIUM: a full small-body budget is a 408 at the deadline, not
+       503.** `beginDrain` → `.wait` runs to `late` (`body_too_slow`), and a
+       refused `growDrain` takes no byte and also 408s; partially grown
+       drains can starve each other until their deadlines. body.zig's
+       `small_budget` says 503 and Linux answers `.busy` at once. Answer 503
+       when the charge fails, at begin and at growth (or grant a begun drain
+       its whole `most` once past its first 64 KiB), the same as Linux.
+    3. **LOW: the memory bound is not exact.** `headOnly` charges no budget
+       (256 heads); `growDrain`'s realloc holds both buffers before the
+       charge. Say the real bound in the doc, or charge them. And
+       `small_drain_budget` (gopher.zig) must BE body.zig's `small_budget`,
+       not a second constant that agrees.
+    4. **LOW, both hosts: `Expect` on a request with no body.** `plan`
+       refuses only when there is a body; `GET / Expect: tea` (or
+       `100-Continue`, any case) reaches std's `writeExpectContinue`, which
+       errors, and the client gets no answer at all. Refuse 417 from the
+       head whatever the body.
+
+176. **The box's (2026-10-12): 170's cold reviews, the Linux and cookie
+    half. After 175, before 172.**
+    1. **MEDIUM: the tests go red on 2026-11-15 with no change.**
+       `cookieOrLegacy` and `uid_cookie.reissue` read the real clock, so
+       router.zig's migration tests (~2131, ~2154) and the unsigned-uid
+       303 tests (~669, ~741 and kin) fail that day. Give the router's
+       clock a seam the tests set. Separately, a single test that FAILS on
+       and after the end date with "the legacy names have ended: delete the
+       migration, its tests, and the judges' legacy steps" is welcome:
+       a dated failure that says what to do, not a dozen that don't.
+    2. **The judges' dated blind spot** (gopher-metal `probe/judge_gopher.py`):
+       `P1 = "gopher_uid=1"` (cases ~84, ~96) and `UID_STORY`'s legacy steps
+       (~272-286) quietly become anonymous after 11-15, and the "is no one"
+       checks (~3206) pass testing nothing. Same dated failure, in
+       test_judges.py. And the `set_uid`/`cookie_from` regexes see only the
+       `__Host-` name: a host that set a legacy-named identity would pass the
+       negative checks. Match both names and refuse the legacy one.
+    3. **LOW-MEDIUM: a kept stream holds its small-body charge while it is
+       open.** `unchargeSmall` is deferred to `handleConn`'s return, after
+       `bus.serveKept`; the SSE routes don't check the method, so ~64
+       member POSTs of 1 MiB to `/chat/notifications` pin the budget and
+       every POST on the host is 503 until they leave. Refund when the route
+       returns, and refuse non-GET on the stream routes (both hosts).
+    4. **LOW: an internal failure in the read is a 400.** `Whole.read` maps
+       every error, OOM included, to `.unreadable`: blame the server (500),
+       as 170.6 says.
+    5. **LOW: the budget counts bytes, not memory.** `readAll`'s
+       `appendSlice` grows geometrically inside an arena (2-3x the charge),
+       and the refund runs before `arena.deinit`. Grow as the note says
+       (4 KiB steps, or exact), or charge capacity.
+    6. **LOW: two waiting retries can make the older win** (C takes the
+       slot, B's next poll ends it with 409). Newest wins, by a sequence
+       number per human.
+    7. **LOW: a stall is "no 4 KiB in 30 s"** (`readSliceShort` fills the
+       buffer). Count bytes as they arrive (`readSliceShort` into what's
+       available, or a smaller read), so a 100 B/s link is slow, not dead.
+    8. **Tests that don't test what they say:** the migration test titled
+       "a POST is still read" sends no POST; no route-level test that a
+       legacy session or uid issued after the cutoff is neither read nor
+       moved; the budget test is one 9-byte read against 8 (nothing for
+       charge-as-it-arrives, or the refund after 408/409/error); the 500
+       test fails before any slot or charge exists; nothing at host level
+       shows `held_body` reaching the handler uncopied; nothing for 170.7's
+       separate verdicts; the takeover test never runs the stall timer.
+    9. Accepted, say so in the cookie doc: a sibling subdomain can still
+       plant a PRE-cutoff legacy value on a victim with no `__Host-` cookie
+       yet, and it is moved. The cutoff narrows it; the end date ends it.
+    Note: the session cookie is `__Host-gopher_auth` (my brief said
+    `_session`; the code is right).
+
 172. **A class hunt: errors swallowed, or sent the wrong way.** The largest
     class in the last 52 fixes (12 of them: a write's failure answered
     success, a catch-continue that skipped work, OOM counted as "unreadable",
