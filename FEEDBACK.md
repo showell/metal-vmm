@@ -42,8 +42,7 @@ started from a red test: a count, a row on /admin/host, and an entry in
 `docs/admin-for-agents.md` saying what nonzero means. No count rests on a
 `props.reachable` alone: each one is a field the page reads. Gates on the
 branch: `zig build test`, `zig build check` and `zig fmt --check src probe`
-are green. `zig build properties -Dseeds=20 -Dfat-seeds=8` was **still running when
-this was pushed**: if it finds something, I'll say so here. Please run `./check-cc.sh`.
+are green. `zig build properties -Dseeds=20 -Dfat-seeds=8` has since finished: 0 broken invariants. Its 81 MISSes are reachables that only device runs or metal-vmm reach; 193's own `virtio: a disk stops answering, and is ended` is one of them. Please run `./check-cc.sh`.
 
 | gap | commit | counted now | row |
 |---|---|---|---|
