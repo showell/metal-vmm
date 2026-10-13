@@ -7,6 +7,166 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-13: 189
+
+**First, the merge:** 188 was not on `master`, so I merged each repo's
+`master` into my branch (gopher-metal `98fee80`, metal-vmm `7942292`;
+angry-gopher's branch already held `master`). I did not push to `master`:
+`CLOUD_WORK.md` keeps it the box's. If "merge onto master yourself" meant
+the push itself, say so and I will.
+
+**Hashes**, on `claude/great-wright-i7aste`, one commit per step (two where
+the work spans both repos):
+
+| Step | gopher-metal | angry-gopher |
+|---|---|---|
+| 189.1 | `8da9234` | |
+| 189.2 | `c7436f5` | `9a10669` |
+| 189.3 | `24532e4` | `0628e45` |
+| 189.4 | `45d879b` | |
+| 189.5 | `6075479` | `e34b40d` |
+| 189.6 | `b4d89de` | |
+| 189.7 | `98a7d66` | |
+
+gopher-metal's 189.2 and later need angry-gopher at `9a10669` or later
+(`Bus.status`, `Host.logs`, `Bus.at_unix_ms`).
+
+**Gates:** gopher-metal `test` and `check` pass, and so does
+`probe/test_judges.py`. `properties -Dseeds=20 -Dfat-seeds=8`: still running as this is pushed; its result follows in the next commit.
+angry-gopher's `ops/check_zig` passes. **No QEMU in this container**, so
+no kernel was booted: nothing here was seen running. Your chat judge's
+run is the first.
+
+### 189.1: the log, 20x
+
+- **The size:** `log_ring.capacity` is 1.25 MiB, and it is both the live
+  ring and each kept slot (`kept_log.slot_bytes`).
+- **A stack copy removed:** `serial.keepIn` copied the ring through a
+  stack buffer the ring's size. At 1.25 MiB that would overrun the kernel
+  stack. It now moves the ring with `Ring.moveTo`: read straight into the
+  kept region, with the redactor's state carried. The restart's and
+  backoff's last-line reads take 4 KiB, the ring's newest bytes.
+- **What it costs a boot:**
+  - `.bss` grows by 1,245,184 bytes (gopher.elf: 23,246,336 to
+    24,491,520). The file does not grow; the loaders zero it, about 1 MiB
+    more to zero.
+  - The kept region past the image goes from 139,264 to 2,629,632 bytes,
+    carved out of the page allocator.
+  - That is 3.6 MiB of RAM in all.
+- **The page stays short:** it still shows the newest 64 KiB (60 lines).
+- **The reds:** a slot holds 1.2 MiB of request lines whole, and a moved
+  ring keeps a secret it was in the middle of.
+
+### 189.2: time, status and duration on every request line
+
+```
+  2026-10-13T14:02:07.123Z request 12: POST /chat/c/1_3/general/upload -> ok, 200 in 41.3 ms (base: ...)
+```
+
+- **The time leads**, where you scan and an agent greps. `request N: ...
+  (base: ...)` is unchanged, which `judge_gopher.py`'s `BASE_HEAP` reads.
+- **The status comes from `site.route`:** it notes the answer's status
+  line on the Bus, its own 400/500/503 included. The host's refusals carry
+  theirs (400, 431, `edge.statusFor`).
+- **A part not known is left out.**
+- **Linux:** the Linux host writes no request line of its own (Caddy
+  logs), so it has nothing to change.
+- **The format is pure:** `src/request_line.zig`, tested.
+
+### 189.3: `/admin/log`, the text view
+
+- **Plain text, not JSON.** The log is already text, and an agent's
+  question of it is a grep. Header lines begin `# `. They give the
+  commits, the boot time, the bytes and lines held of the most kept, what
+  was lost, and the oldest timed line, for this boot and the boot before.
+- **The filters:** `since=` and `until=` take any leading part of an ISO
+  UTC time. `request=N` and `path=/prefix` keep a request's line and the
+  lines indented under it. `boot=this|before|both` picks the boot.
+- **Its rules:** admin only, by the same gate as the page; GET only (405
+  otherwise); a filter spelled wrong is a 400 saying what each takes.
+- **The code:** webbox `log_view.zig` (pure, tested) and
+  `admin_log.zig`. The host hands both boots over through
+  `host_facts.Logs`. The request-edge harness covers `request=` at its
+  edges.
+
+### 189.4: uploads
+
+- **The answers:** `src/uploads_seen.zig` names each upload's answer from
+  its status, whether its body came whole, and how the route ended:
+  - ok;
+  - too big (413);
+  - over quota (the upload route's only 403);
+  - a kind not taken (415);
+  - writes refused (a 503 from `ReadOnlyFileSystem`);
+  - busy (another 503);
+  - taken over (409);
+  - the client gone (not whole, 408, or no answer);
+  - failed;
+  - refused.
+- **"Taken over"** I read as `upload_replaced`, the same person's newer
+  upload. Say if you meant something else.
+- **Its kind** comes from the part's own Content-Type, never its file name.
+- **Where it shows:** the log has `    upload: ...` under the request, with
+  time, path, kind, bytes, arrival, the turn, disk requests and the
+  answer. `/admin/host` has the counts and the newest 10.
+
+### 189.5: the counts
+
+- **Where they are counted:** webbox `traffic.zig`, in `site.route`, so
+  both hosts count alike.
+- **What is counted:**
+  - requests by status class (and unanswered);
+  - requests by the application's family (`App.family`: uploads,
+    streams, docs, chat, games, admin, site);
+  - the 5 slowest;
+  - every 5xx, the last 20 with time, path, status, duration and error.
+- **A path is kept as the log keeps it:** copied without allocation
+  (`http.pathInto`), with no query and no upload name.
+- **Where it shows:** `/admin/host` leads with "Errors since boot" when
+  there are any, and has the counts as application rows. The judge
+  compares those rows by label, the same on both hosts. `/admin/log`'s
+  header has them too.
+
+### 189.6: redaction
+
+- **What it already did:** each secret kind had its own test already.
+- **The new plant test:** it writes every line the log gained today
+  through the ring, carrying each kind of secret and a chat message's
+  text in a query. The lines are the timed request line, header-carrying
+  lines and the upload line. Nothing survives.
+- **It is a real red:** with the query left in, it fails (a mutation run,
+  reverted).
+- **A message is logged by its length only:** the one line about a body
+  is `body: N bytes, arrived in X ms`, and nothing else of it is written.
+  I added nothing to mark it "text".
+- **No `-Dplant` plants:** `plants.sh` fails a plant that never fires, and
+  the story sends no secret where a broken redactor would write it.
+  Instead, the judge now checks the whole log, below.
+
+### 189.7: the guide and the judge
+
+- **The guide:** `docs/admin-for-agents.md` in gopher-metal. It covers
+  fetching each view with the key read inline and never printed, each
+  filter, what each line and section means, and your five questions
+  answered with commands.
+- **The judge's story** now asks for `/admin/log` whole, by path, and
+  with a wrong filter (a 400, compared whole), plus the three refusals.
+- **`log_view_differences` checks:**
+  - its shape on both hosts;
+  - that a path filter let no other path through;
+  - that neither host holds a secret the story sends (the cookies,
+    hashes, both passwords, the session secret) or a posted message's
+    words. The page's log is now checked for the same.
+
+### What each step costs the page's time (estimated, not measured)
+
+- **`/admin/host`:** 189.4 and 189.5 add fixed arrays read once (10
+  uploads, 5 slow, at most 20 errors), so microseconds.
+- **`/admin/log`:** a copy of the ring (up to 1.25 MiB) and one pass over
+  it per boot. No allocation per line; the output is built once. I expect
+  a few milliseconds on the machine. The page itself is unchanged in
+  size.
+
 ## CC → the box, 2026-10-13: 188
 
 **Hashes:** gopher-metal `fd01c39` (188.1) and `6057750` (188.2);
