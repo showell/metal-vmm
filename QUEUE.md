@@ -1501,6 +1501,289 @@ the build, the port); stay off those, and merge master in as it lands.
         and run separate). Then B31's guard: tier 0 fails when it passes
         its budget, so the cost cannot creep back.
 
+199. **The box's (Steve, 2026-10-13 night): an interpreter for a small
+    signed-script language, in zig-webbox, targeting Linux first.** The
+    thinking piece is `notes/scripts-on-the-unikernel.md` in
+    essay-repl-server (on GitHub: showell/essay-repl-server). Read it for
+    the why. **This brief overrides it where they differ**; most of all, the
+    script JUST RUNS: its effects happen as it goes (no describe-then-act,
+    no plan, no virtual file system).
+
+    **The goal.** Steve wants to run small programs on the live site
+    without installing a new kernel. For example: explore the store, then
+    delete a topic. The workflow is to write a script that explores and
+    prints, read its output, then write a concrete script that changes
+    things. A later item (the box's) adds the endpoint: an HTTP route that
+    takes a signed script and runs it in the server's turn. **This item is
+    the language and its interpreter only:**
+    - **no endpoint, no signing, no HTTP;**
+    - a library module, plus a Linux command-line runner for development.
+
+    **Where it lives:** zig-webbox, a new module beside `webbox`, using
+    webbox's `store` for every file effect. **The builtins must have the
+    same shape on Linux and on metal.** The interpreter never touches a file
+    system directly. It takes the host's `Io` (from `host_io`, as every
+    webbox file does) and an allocator, and calls `store.read`, `list`,
+    `stat`, `has`, `write`, `replace`, `append`, `makeDir`, `remove` and
+    `removeTree`. Then zig-metal-unikernel can compile the same sources
+    with its own `host_io`, as it does the rest of webbox. Follow
+    `src/host_io_std.zig` and how `store.zig` takes `io`. Nothing in the
+    module may import `std.fs` or `std.posix` or name the host. **Say how
+    you hold that** (a lint or a compile-time check, like
+    angry-gopher's std-Io refusal), not just that you did.
+
+    **Name it.** Steve leaves the language's name to you, with one wish:
+    sneak in his initials, SH. His own idea was "shy" (it runs on private
+    hardware), but he thinks you can do better. Not "shit". Propose two or
+    three in FEEDBACK with a line each on why, use your favourite as the
+    module and file-extension name, and Steve will pick.
+
+    **The language: Lua's look, our own smaller semantics.** Claude will
+    write most scripts, and models write Lua fluently, so keep Lua's surface
+    where it costs nothing:
+    - `local`, `if … then … elseif … else … end`, `while … do … end`;
+    - `for i = a, b do`, and `for x in <list> do` (simplified: no
+      iterator protocol);
+    - `function name(a, b) … end` with `return`;
+    - `..` for string concatenation, `--` comments, and `"…"` strings with
+      `\n`, `\t`, `\\` and `\"` escapes.
+
+    **Values:**
+    - **integers:** 64-bit, checked, so overflow stops the script;
+    - **strings:** byte strings;
+    - **booleans;**
+    - **lists:** `{1, 2, 3}`, indexed from 1 as in Lua, `#list` the length;
+    - **maps:** `{a = 1}`, `m.a`, `m["a"]`;
+    - **`nil`**, which stays, since Lua writers expect it. But reading a
+      missing map key or a list index out of range is an ERROR, not nil.
+      `has_key(m, k)` asks first.
+
+    **Deliberately absent:**
+    - floats (so nothing differs between hosts);
+    - metatables, coroutines, varargs and multiple returns;
+    - closures that capture changing locals (nested functions may be
+      refused outright: say what you chose);
+    - `pcall`, a goto, the standard library, `require`, any clock (a `now`
+      integer the host hands in is the only time), and any randomness.
+
+    Anything Lua accepts that we don't must be a clear parse error naming
+    the construct, never a silent different meaning.
+
+    **Builtins.** Keep it a short list, each name and shape a decision:
+    - **the store:**
+      - `ls(path)`: a sorted list of names;
+      - `stat(path)`: a map with size and kind;
+      - `exists(path)`, `is_dir(path)`, `read(path)`;
+      - `replace(path, s)` (no plain `write`: a replace never leaves a
+        torn file when a run stops), `append(path, s)`;
+      - `mkdir(path)`, `remove(path)`, `remove_tree(path)`;
+    - **strings:** `split(s, sep)`, `join(list, sep)`, `starts_with`,
+      `ends_with`, `contains`, `find` (plain text, not Lua's patterns:
+      the README warns), `sub(s, i, j)`, `trim`, `upper`, `lower`,
+      `tostring`, `tonumber` (an error on a bad number, not nil);
+    - **lists and maps:** `push`, `sort`, `keys`, `has_key`, and `count`
+      for maps only (`#` for strings and lists);
+    - `now()`, the integer the host handed in.
+    - **output:** `print(...)`.
+
+    **Paths are confined to the root, and the interpreter enforces it.**
+    The store has no root of its own: it resolves against the working
+    directory, and `fatName` checks only a path's last name, and only on
+    the calls that create. So `read("../auth/x")`, absolute paths, and
+    `remove_tree("")`, which would remove the whole data root, are all
+    reachable today. The rule:
+    - the interpreter joins `root` with the script's path;
+    - every part must pass `fatName`, so `.`, `..` and empty parts are
+      refused, and so is a leading `/`;
+    - `""` means the root, for `ls`, `stat` and `exists` only;
+    - every change needs a path of at least one part.
+
+    Plant each escape as a red test. The store's own checks (depth,
+    length) still apply on top. Store errors stop the script, naming the
+    path and the error. `@errorName`s may differ between hosts: accept
+    that, and say so in the README.
+
+    **The run:**
+    - `run(io, backing_alloc, root, source, budgets, now, out: []u8)
+      !Result` is the one entry. The Result owns the run's arena (the
+      caller calls `result.deinit()`) and says finished or stopped, with
+      the line, the column and why, plus the effects log. `print` writes
+      into `out`, and the output budget is at most `out.len`.
+    - **Every value the run makes comes from one arena,** freed when the
+      run ends. No garbage collector, no reference counting.
+    - **Budgets, all named constants with a caller override:**
+      - interpreter steps;
+      - arena bytes;
+      - call depth;
+      - output bytes;
+      - store reads (count and bytes);
+      - store changes (count and bytes);
+      - source size;
+      - parse nesting.
+
+      Defaults to start from: steps 5M; arena 16 MiB (a counting wrapper,
+      in the style of `mem_meter`, where every `OutOfMemory`, inside a
+      store call too, reads as the arena budget); call depth 64; output
+      256 KiB; reads 10k and 64 MiB; changes 1k and 16 MiB; source 64
+      KiB; nesting 200.
+
+      **Builtins charge steps in proportion to their work** (per byte or
+      element touched, with `sort`'s comparisons counted), so one step can
+      never hide gigabytes of `memcmp`.
+
+      **The Zig stack:** metal's stack is 16 MB with a 64 KiB guard
+      (zig-metal-unikernel `src/stack.zig`, which also has
+      `nearTheEnd()`); Linux's main thread has 8 MB. Measure the frame
+      size per parse level and per call, and state that the nesting and
+      depth budgets fit with margin on both.
+
+      Hitting one stops the run cleanly with the line and which budget.
+      **Any** source, however hostile, must end within the step budget,
+      without a crash, a Zig panic or unbounded memory.
+    - **A stopped run keeps what it already did.** There is no rollback, so
+      the result carries an **effects log**: every store change made, in
+      order (`remove chat/x/y.msg`), whether the run finished or stopped. A
+      script stopped halfway then says exactly what it changed.
+    - **Output** (`print`) goes to a bounded buffer the caller reads.
+
+    **The Linux runner:** `zig build script -- <file> --root <dir>`, or
+    with config from a file if you prefer (Steve dislikes CLI flags: one
+    positional script path plus an environment variable for the root is
+    fine). It runs a script against a data folder and prints the output,
+    the effects log and how it ended. It is how scripts get written and
+    tried, against a COPY of a site volume, before the endpoint exists.
+
+    **Tests:** host-only and fast. Tier-0 rules apply: the whole module's
+    tests well under a few seconds, with no slow test unless the slowness
+    is load-bearing.
+    - **The language:** every construct, every error message, and every
+      refused Lua construct.
+    - **Builtins:** each one against a temp store, including a store error
+      mid-script, with the effects log right.
+    - **Budgets:**
+      - an infinite loop;
+      - runaway recursion;
+      - an exploding string or list;
+      - a huge `print`.
+
+      Each stops with the right budget named.
+    - **Adversarial, the main event:** a fuzzer that feeds random and
+      mutated sources (seeded, deterministic, a small count in tier 0 and a
+      big one behind an option) and asserts that every run ends: finished
+      or stopped, never a panic, a leak or a budget overrun.
+    - **Determinism:** the same source, store and `now` give the same
+      output and effects log, byte for byte.
+    - **Example scripts as tests:** `examples/` with three real ones, run
+      against a fixture store shaped like angry-gopher's data:
+      - list every topic with its message count;
+      - find files over a size;
+      - delete one topic.
+
+      **The real layout:**
+      - conversations live at `chat/<a>_<b>/sessions/<sid>.md`, with a
+        `.count` beside each;
+      - channels at `chat/channels/<name>/sessions/<sid>.md`;
+      - a channel's members at `chat/channels/<name>.channel`;
+      - a "topic" is a session, and its messages are `MSG_` blocks.
+
+      Deleting a topic removes its `.md`, `.count`, `.reactions.jsonl` and
+      `.uploads/`, as angry-gopher's `chat_retire.zig` does. Read
+      `chat_paths.zig`, `chat_store.zig` and `chat_retire.zig` for the
+      fixture.
+
+    **Semantics the box settled after a cold read** (take these as
+    defaults: change any you must, and say so in the README, where every
+    rule is stated):
+    - **Truthiness and logic:**
+      - only `nil` and `false` are false;
+      - `and`/`or` short-circuit and return an operand.
+    - **Arithmetic:**
+      - `/` is a parse error naming floats;
+      - `//` and `%` floor, as in Lua;
+      - division by zero, and minint `//` -1, stop the script.
+    - **Comparison:**
+      - `==` across types is false; `<` across types is an error;
+      - strings compare byte by byte;
+      - `==` on lists or maps is an error.
+    - **Strings:**
+      - `..` takes integers and strings;
+      - `tostring` and `print` take scalars only;
+      - `print` joins with tabs and ends with a newline;
+      - `sub` follows Lua (1-based, inclusive, negatives from the end,
+        clamped);
+      - `tonumber` takes an optional `-` and decimal digits only;
+      - `split(s, "")` is an error.
+    - **Tables:**
+      - `{}` takes its kind (list or map) from its first insert; using it
+        as the other kind after that is an error naming both;
+      - map keys are strings only, and `m.k = nil` is an error;
+      - `l[#l+1] = x` appends; any other out-of-range index is an error;
+      - lists can't hold `nil`;
+      - a literal mixing positional and keyed entries is an error;
+      - `keys` returns insertion order;
+      - `sort` takes no comparator and needs all integers or all strings.
+    - **Loops:**
+      - `for x in list` walks the list as it was when the loop began;
+      - `for x in map` is an error: use `keys`;
+      - `break` is in.
+    - **Names and functions:**
+      - no implicit globals: an undeclared name is an error;
+      - locals are block-scoped;
+      - functions are top-level statements only, not values, and may
+        recurse;
+      - a top-level `return` ends the script.
+    - **Refused at parse, each by name:**
+      - long strings, unknown escapes and float literals;
+      - `:` method calls, and `string.` and `table.` names;
+      - `repeat`, `goto` and `...`;
+      - multiple assignment and multiple returns.
+    - **The store builtins:**
+      - `ls` on a missing path is an error, and returns names sorted;
+      - `stat` gives size and kind, without mtime, so runs stay
+        deterministic;
+      - `read` passes the remaining read budget as its limit;
+      - `ls`, `stat` and `exists` each count as one read.
+    - **The effects log** lists every change the script ATTEMPTED, in
+      order, root-relative, each with its outcome. A failed change is
+      logged and is also the reason the run stopped.
+    - **Errors are tested by class,** in a table, not by every message
+      string.
+    - **The fuzzer** runs in Debug or ReleaseSafe, so safety panics
+      surface. Use `testing.allocator` as the arena's backing allocator,
+      so a leak fails the test.
+    - **Holding "nothing names the host":** export the interpreter from
+      `webbox.zig` as `webbox.script` (`src/script/…`). Metal's build
+      then gets it with no new module, and angry-gopher's
+      `lint_portable.py` covers it. Also add a Zig test in zig-webbox that
+      `@embedFile`s the module's own sources and refuses, outside `test`
+      blocks:
+      - `std.fs.` (except `std.fs.path`), `std.posix`, `std.os`, `std.c`;
+      - `std.process`, `std.Thread`, `std.time`;
+      - `Io.Dir`, `Threaded`, `page_allocator`, `std.debug.print`.
+
+      Plant a violation of each kind and show the test fires. The
+      runner is outside the module, and exempt.
+    - **The runner** takes its root and `now` from environment variables
+      (`now` defaults to 0). It calls `store.setBases(root, <root>/../auth)`
+      so the path limits are measured as metal spells them.
+
+    **Size:** a cold read estimated 3,200 to 4,200 lines of code, plus
+    1,900 to 2,600 of tests, about 2.5 long chunks. The risk is in the
+    budgets: the fuzzer will find where a step hides real work. Land it in
+    parts; each part should leave the module green.
+
+    **Size and order:** the lexer and parser with their tests, then the
+    interpreter and budgets, then the builtins, then the fuzzer and
+    examples, then the runner. **Say before starting** if you'd split it
+    differently. Write a short README section in zig-webbox: the language
+    on one page, every builtin, the budgets and the runner.
+
+    **Not in this item (the box's):** the HTTP route, Ed25519 signing, the
+    sequence number and target, logging script runs on the server, and
+    running it on metal. Do keep metal in mind: no allocation outside the
+    arena and the caller's buffers, and nothing that assumes threads.
+    After 198. The box runs the module's tests and the runner on your branch before merging.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
