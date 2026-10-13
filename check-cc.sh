@@ -3,7 +3,7 @@
 # derived but could not run (it has no KVM), run before anyone reads the code.
 #
 # CC's branch (or master, where a repo has none) of metal-vmm, zig-metal-unikernel,
-# angry-gopher and zig-webbox, each in its own worktree, so no checkout here changes:
+# angry-gopher, zig-webbox and dog-park, each in its own worktree, so no checkout here changes:
 #   1. angry-gopher ported into zig-metal-unikernel, a -Dcoverage kernel built, and
 #      metal-vmm built;
 #   2. `sweep.sh 1 $SEEDS` over every shape: each shape's unhurt run and its
@@ -39,19 +39,22 @@ trap cleanup EXIT
 checkout() {
   local repo="$REPOS/$1" ref
   git -C "$repo" fetch -q origin || return 2
-  # CC's branch only when it holds something master doesn't: a branch whose
-  # work is all merged is behind master, and judging it judges old code.
-  ref="origin/master"
+  # The repo's main line (dog-park's is `main`), and CC's branch only when
+  # it holds something the main line doesn't: a branch whose work is all
+  # merged is behind it, and judging it judges old code.
+  local main="origin/master"
+  git -C "$repo" rev-parse -q --verify "$main" > /dev/null || main="origin/main"
+  ref="$main"
   if git -C "$repo" rev-parse -q --verify "origin/$BRANCH" > /dev/null &&
-     [ "$(git -C "$repo" rev-list --count "origin/master..origin/$BRANCH")" -gt 0 ]; then ref="origin/$BRANCH"; fi
+     [ "$(git -C "$repo" rev-list --count "$main..origin/$BRANCH")" -gt 0 ]; then ref="origin/$BRANCH"; fi
   git -C "$repo" worktree add -q --detach "$2" "$ref" || return 2
   worktrees+=("$repo:$2")
-  printf '%-13s %s %s (%s ahead of master)\n' "$1" "$ref" "$(git -C "$2" rev-parse --short HEAD)" \
-    "$(git -C "$repo" rev-list --count "origin/master..$ref")"
+  printf '%-13s %s %s (%s ahead of )\n' "$1" "$ref" "$(git -C "$2" rev-parse --short HEAD)" \
+    "$(git -C "$repo" rev-list --count "$main..$ref")"
 }
 
 echo "check-cc, $(date -u '+%F %T UTC'), in $OUT"
-for r in metal-vmm zig-metal-unikernel angry-gopher zig-webbox; do checkout "$r" "$OUT/$r" || exit 2; done
+for r in metal-vmm zig-metal-unikernel angry-gopher zig-webbox dog-park; do checkout "$r" "$OUT/$r" || exit 2; done
 
 # angry-gopher's generated assets (wasm, built js) are untracked, so a
 # worktree lacks them: copied from the main checkout, as built there.
@@ -97,7 +100,7 @@ esac
 
 echo "== the plants"
 GOPHER="$OUT/zig-metal-unikernel" COVERAGE_SDK="$SDK" GUESTS="$OUT/zig-metal-unikernel/probe" \
-  ANGRY_GOPHER="$OUT/angry-gopher" WEBBOX="$OUT/zig-webbox" VOLUME_SITE="$VOLUME_SITE" LAST="$PLANT_SEEDS" \
+  ANGRY_GOPHER="$OUT/angry-gopher" WEBBOX="$OUT/zig-webbox" DOGPARK_ROOT="$OUT/dog-park" VOLUME_SITE="$VOLUME_SITE" LAST="$PLANT_SEEDS" \
   KERNELS="$OUT/kernels" OUT="$OUT/plants" "$OUT/metal-vmm/plants.sh"
 case $? in 0) ;; 1) bad=1 ;; *) echo "plants.sh could not run"; bad=2 ;; esac
 
