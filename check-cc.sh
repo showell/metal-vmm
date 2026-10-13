@@ -49,7 +49,7 @@ checkout() {
      [ "$(git -C "$repo" rev-list --count "$main..origin/$BRANCH")" -gt 0 ]; then ref="origin/$BRANCH"; fi
   git -C "$repo" worktree add -q --detach "$2" "$ref" || return 2
   worktrees+=("$repo:$2")
-  printf '%-13s %s %s (%s ahead of )\n' "$1" "$ref" "$(git -C "$2" rev-parse --short HEAD)" \
+  printf '%-13s %s %s (%s ahead of ${main#origin/})\n' "$1" "$ref" "$(git -C "$2" rev-parse --short HEAD)" \
     "$(git -C "$repo" rev-list --count "$main..$ref")"
 }
 
