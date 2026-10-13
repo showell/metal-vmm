@@ -1484,6 +1484,22 @@ the build, the port); stay off those, and merge master in as it lands.
     10. **`nightly_test.sh` fails, and did before 2026-10-13** (red at
         `8b47d37` too). Find out why; fix it if it needs no KVM, otherwise
         write what the box should run.
+    11. **Tier 0 is too slow to run on every change: do this one EARLY.**
+        On the box, after merging 197 (zig-metal-unikernel `efa798d`), warm
+        cache, nothing else running: `./tier0.sh` 7m52s cold, and
+        `zig build test` alone 6m33s warm (5m55s user), nearly all of it
+        RUNNING, not compiling: the main unit binary 2m (328 tests),
+        `disk_fat_lies_test` 1m, `disk_fat_faults_test` 1m,
+        `disk_fat_test` 32s; the tcp_test variants about 0.5 s each. Steve's
+        rule (said for Dog Park, and it holds here): tests are fast, and a
+        slow test has a load-bearing reason to be slow. Target: tier 0 under
+        a minute warm. For each test over ~1 s: what it waits on (seed
+        counts, sweep sizes, Debug arithmetic, sleeps, real time), and
+        whether the size is load-bearing; cut the count to what the property
+        needs and move the big counts up a tier (or `long.sh`), never
+        delete the property. Give per-binary before/after times (compile
+        and run separate). Then B31's guard: tier 0 fails when it passes
+        its budget, so the cost cannot creep back.
 
 ## The box: open
 
