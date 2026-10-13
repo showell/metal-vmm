@@ -1343,6 +1343,26 @@ the build, the port); stay off those, and merge master in as it lands.
       CUTOVER.md, docs/). If the current README holds material only an
       insider needs, move it to a doc and link it.
 
+196. **The box's (Steve, 2026-10-13): two things the README (195, your
+    a7cfc56) must say.** It reads well: keep its voice and order. Add, in
+    the "What it is" / "What it is not" part, near the top:
+    1. **The scope is DigitalOcean droplets, and only that, for now.** Say
+       plainly that it does not claim to run on arbitrary hardware: it has
+       been made to work on one kind of machine (a droplet, and QEMU laid
+       out like one). Then the honest caveat: virtio is a fairly common
+       standard among hypervisors, so other virtual machines are a
+       plausible next step, and the kernel can be extended gradually as we
+       get access to other kinds of hardware. No promises beyond that.
+    2. **"Battle tested", and what that honestly means.** Use the phrase,
+       then say exactly what it rests on: it has served lynrummy.com since
+       2026-10-04 for about three regular daily users, uploading from
+       phones; it has never been under real load or stress; and Caddy sits
+       in front of it on a private network, so production exercises only a
+       well-behaved, happy-path setup (one polite client, no hostile or
+       lossy traffic). Say where the harder cases are tested instead (the
+       judges, metal-vmm's faults and sweeps), in a sentence.
+    One commit, docs only.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
