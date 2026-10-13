@@ -25,12 +25,12 @@ BRANCH="${CC_BRANCH:-claude/great-wright-i7aste}"
 # The repos CC works in: only these are taken from CC's branch. dog-park is
 # not one (Steve: CC works on it only when asked), and its CC branch is an
 # old line of work, not a change to judge.
-SDK="$OUT/zig-coverage-sdk"
 CC_REPOS="${CC_REPOS:-metal-vmm zig-metal-unikernel angry-gopher zig-webbox zig-coverage-sdk}"
 SEEDS="${SEEDS:-10}"
 PLANT_SEEDS="${PLANT_SEEDS:-300}"
 OUT="${OUT:-$(mktemp -d)}"
 mkdir -p "$OUT"
+SDK="$OUT/zig-coverage-sdk"
 VOLUME_SITE="${VOLUME_SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
 
 worktrees=()
