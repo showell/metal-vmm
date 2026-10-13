@@ -839,6 +839,58 @@ the build, the port); stay off those, and merge master in as it lands.
        took" now also fires when nothing was written: if the floor should
        tell those apart, split the message.
 
+189. **The box's (Steve, 2026-10-13): /admin/host, so an agent can answer
+    questions from it, and Steve can still read it.** First merge your 188
+    work onto master yourself only if the box has not (it will try today;
+    fetch first). Then, in this order, each its own commit, red first where
+    there is a rule:
+    1. **More log, 20x.** The live ring (`serial.zig`'s 64 KiB) and the kept
+       log's two slots (`kept_log.slot_bytes`, 64 KiB each) go to about 1.25
+       MiB each. Today a few minutes of traffic rotate it away; v29 uses 81
+       MB of 997. Check what it costs a boot (the ring's section, the kept
+       region's placement out of the page allocator) and say so. The page
+       itself stays short (see 3).
+    2. **Every request line carries its wall-clock time** (UTC, to the
+       second or better), so "what happened at 14:02" can be answered; and
+       its status code and its duration, where the line does not have them.
+    3. **A view for agents, beside the page for Steve.** The HTML page stays
+       human-first: a health summary at the top, then the sections it has,
+       the log's newest lines as now. Add a plain-text (or JSON) view under
+       the same bearer key, e.g. `/admin/host?view=text` or `/admin/log`,
+       that an agent can fetch and grep: the whole ring, this boot's and
+       the boot before (the kept log), with narrowing by time (`since=`),
+       by request number, and by path prefix, and a short header saying
+       what it is (boot time, commits, how many bytes and lines the ring
+       holds, the oldest line's time). Your choice of shape; say why.
+       Read-only, GET only, and refused without the key, as the page is.
+    4. **Uploads, clearly.** A section (and its lines) answering "did that
+       upload work, and what did it cost": the last N uploads with time,
+       topic (as the log may name it), kind, bytes, how long it took to
+       arrive, the turn, its disk requests, and the answer (ok, refused
+       and why: too big, over quota, writes refused, the client gone,
+       taken over). Counts since boot by outcome.
+    5. **Counts an agent would otherwise grep for:** since boot, requests by
+       status class and by route family (chat, games, docs, admin, uploads,
+       streams), the slowest N requests (time, path, duration), and every
+       5xx with its line. Errors first when there are any.
+    6. **Redaction stays as it is, at write time, and grows only where
+       Steve said:** a pure-text chat message may be logged as its LENGTH
+       (bytes, and that it was text), never its words; nothing else of a
+       message (not a link, a name, a mention). Cookies, keys, passwords,
+       secrets, session values and upload paths (`/uploads/` segments)
+       stay redacted. A plant for each: a line carrying each kind of
+       secret, and a message's text, must come out redacted.
+    7. **A short guide for agents**, in gopher-metal's docs: how to fetch
+       each view (the bearer key from `~/.gopher_api_key`, never printed),
+       what each section means, and five worked questions answered from it
+       ("did the upload at 14:02 work?", "what failed since boot?", "why
+       did the machine restart?", "is the disk healthy?", "who is
+       connected?" (as counts, not names)).
+    The chat judge compares /admin/host between hosts today
+    (`host_page_differences`): keep it comparing, and have it cover the
+    new view. Say what each step costs the page's time; it is fast now and
+    should stay so.
+
 188. **The box's (Steve, 2026-10-13): your two FAT design questions from
     187.1, answered. Both on master's gopher-metal (`689880c` or later: your
     179/181/180/182/187.2 are merged onto Phase B step 4).** Red first, both
