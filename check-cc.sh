@@ -39,7 +39,11 @@ trap cleanup EXIT
 checkout() {
   local repo="$REPOS/$1" ref
   git -C "$repo" fetch -q origin || return 2
-  if git -C "$repo" rev-parse -q --verify "origin/$BRANCH" > /dev/null; then ref="origin/$BRANCH"; else ref="origin/master"; fi
+  # CC's branch only when it holds something master doesn't: a branch whose
+  # work is all merged is behind master, and judging it judges old code.
+  ref="origin/master"
+  if git -C "$repo" rev-parse -q --verify "origin/$BRANCH" > /dev/null &&
+     [ "$(git -C "$repo" rev-list --count "origin/master..origin/$BRANCH")" -gt 0 ]; then ref="origin/$BRANCH"; fi
   git -C "$repo" worktree add -q --detach "$2" "$ref" || return 2
   worktrees+=("$repo:$2")
   printf '%-13s %s %s (%s ahead of master)\n' "$1" "$ref" "$(git -C "$2" rev-parse --short HEAD)" \
@@ -51,11 +55,16 @@ for r in metal-vmm zig-metal-unikernel angry-gopher zig-webbox; do checkout "$r"
 
 # angry-gopher's generated assets (wasm, built js) are untracked, so a
 # worktree lacks them: copied from the main checkout, as built there.
-python3 - "$REPOS/angry-gopher" "$OUT/angry-gopher" <<'PY'
+python3 - "$REPOS/angry-gopher" "$OUT/angry-gopher" <<'PY' || { echo "the assets could not be copied"; exit 2; }
 import os, re, shutil, sys
 src, dst = sys.argv[1], sys.argv[2]
-build = open(os.path.join(dst, "zig-server", "build.zig")).read()
-for path in re.findall(r'\.path\s*=\s*"([^"]+)"', build):
+# The embedded files are zig-server/assets.zon's (Phase B); paths are
+# relative to zig-server/.
+build = open(os.path.join(dst, "zig-server", "assets.zon")).read()
+paths = re.findall(r'\.path\s*=\s*"([^"]+)"', build)
+if not paths:
+    sys.exit("assets.zon names no embedded path: has its shape changed?")
+for path in paths:
     rel = os.path.normpath(os.path.join("zig-server", path))
     if not os.path.exists(os.path.join(dst, rel)) and os.path.exists(os.path.join(src, rel)):
         os.makedirs(os.path.dirname(os.path.join(dst, rel)), exist_ok=True)
