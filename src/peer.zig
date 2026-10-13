@@ -9,7 +9,7 @@
 //! **IT IS A CLIENT, NOT A SERVER.** The guest listens; this connects to it,
 //! which is what the HTTP probes are for. Nothing here opens a connection on
 //! its own: `open` is called when the guest says it is listening, exactly as
-//! gopher-metal's own judge waits for that line before it connects.
+//! zig-metal-unikernel's own judge waits for that line before it connects.
 //!
 //! The numbers are QEMU's user-mode network's, so a guest written against
 //! those cannot tell the difference and its printed output can be compared

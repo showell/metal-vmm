@@ -58,4 +58,4 @@ of the volume they left (`VOLUME_SITE`):
       VOLUME_SITE=<the setup's volume> KERNEL=<a -Dcoverage gopher.elf> ./sweep.sh 1 300
 
 A move told 204 must be on the volume after the power fails. This found the
-reset that turns the write cache back on (gopher-metal 7b2beb3).
+reset that turns the write cache back on (zig-metal-unikernel 7b2beb3).

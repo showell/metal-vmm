@@ -75,7 +75,7 @@
 # KEEP_FAILED=<dir>: a failing seed's files kept; KEEP=<dir> keeps every
 # run's log, page and the coverage JSONL there. VMM, REPORT and SOUND name the programs, for a test;
 # REPORT is $COVERAGE_SDK/tools/report.py, the SDK a sibling checkout unless
-# COVERAGE_SDK says where (as gopher-metal's long.sh reads it).
+# COVERAGE_SDK says where (as zig-metal-unikernel's long.sh reads it).
 # VOLUME_SITE=<image> attaches a fresh copy of that image to every run as its
 # volume (scsi.zig), so each seed also draws the volume's faults
 # (knobs.zig, `withVolume`); its copy must be sound too, and VOLUME_CUT_AFTER
@@ -108,15 +108,15 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # answers otherwise. Exit 1 is only seeds that failed, or the coverage
 # report; a night stops on 2 and goes on after 1.
 cannot_judge() { [ $# = 0 ] || echo "$*"; exit 2; }
-GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
+GUESTS="${GUESTS:-$HOME/showell_repos/zig-metal-unikernel/probe}"
 # shellcheck source=tools/fresh.sh
 . "$HERE/tools/fresh.sh"
-# The kernel and metal-vmm by default are this checkout's and gopher-metal's
+# The kernel and metal-vmm by default are this checkout's and zig-metal-unikernel's
 # as they are now, or the sweep says why not (tools/fresh.sh); one handed in
 # (KERNEL=, VMM=: plants.sh, nightly.sh, sweep_test.sh's fakes) is the caller's.
 [ -n "${KERNEL:-}" ] || fresh_kernel "$GUESTS/gopher.elf" "$(dirname "$GUESTS")"
 KERNEL="${KERNEL:-$GUESTS/gopher.elf}"
-SITE="${SITE:-$HOME/build/gopher-metal/probe/gopher/pristine.img}"
+SITE="${SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
 PATH_WANTED="${PATH_WANTED:-/}"
 FIRST="${1:-1}"
 LAST="${2:-100}"
@@ -125,7 +125,7 @@ VMM="${VMM:-$HERE/zig-out/bin/metal-vmm}"
 COVERAGE_SDK="${COVERAGE_SDK:-$HERE/../zig-coverage-sdk}"
 REPORT="${REPORT:-$COVERAGE_SDK/tools/report.py}"
 SOUND="${SOUND:-$HERE/sound.sh}"
-# The untouched files' check (tools/untouched.py), with gopher-metal's FAT
+# The untouched files' check (tools/untouched.py), with zig-metal-unikernel's FAT
 # reader beside the guests unless FAT_READ says where.
 UNTOUCHED="${UNTOUCHED:-$HERE/tools/untouched.py}"
 FAT_TAKEN="${FAT_TAKEN:-$HERE/tools/fat_taken.py}"
@@ -812,7 +812,7 @@ for n in "${SHAPE_NAMES[@]}"; do
   # Stopped here, before any seed.
   if ! grep -qE '^metal-vmm: coverage: [0-9]+ of [1-9][0-9]* properties' "$WORK/$u.err"; then
     echo "$KERNEL reported no coverage property in its unhurt run: it was built without -Dcoverage, or the run ended before it said any. Nothing can be judged."
-    echo "  build one: (cd ~/showell_repos/gopher-metal && zig build gopher -Dcoverage), and copy probe/gopher.elf aside: gates.sh wants the release build there"
+    echo "  build one: (cd ~/showell_repos/zig-metal-unikernel && zig build gopher -Dcoverage), and copy probe/gopher.elf aside: gates.sh wants the release build there"
     cannot_judge
   fi
   # **EVERY CLIENT'S UNHURT PAGE** (QUEUE 126): each client past the first

@@ -34,7 +34,7 @@ EOF
 chmod +x "$T/vmm"
 SDK="${COVERAGE_SDK:-$HERE/../zig-coverage-sdk}"
 [ -f "$SDK/tools/report.py" ] || { echo "no $SDK/tools/report.py: set COVERAGE_SDK"; exit 1; }
-# A FAT reader as gopher-metal's is found, under a checkout of its own
+# A FAT reader as zig-metal-unikernel's is found, under a checkout of its own
 # (GOPHER): the night must take it, and untouched.py, with it (QUEUE 127(a)).
 mkdir -p "$T/gopher/tools"
 printf 'class Problem(Exception):\n    pass\n' > "$T/gopher/tools/fat16_read.py"

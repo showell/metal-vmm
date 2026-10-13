@@ -123,7 +123,7 @@ pub const Wire = struct {
     ///
     /// **A GUEST THAT WAITS WITHOUT ASKING QUESTIONS WAITS FOREVER.** Time
     /// here is measured in exits (clock.zig), so a wait implemented by
-    /// spinning on memory — gopher-metal's `dhcp.exchange` counts twenty
+    /// spinning on memory — zig-metal-unikernel's `dhcp.exchange` counts twenty
     /// million turns of the receive ring and never looks at a clock — does not
     /// advance it, and a frame held for a while is never due. Its TCP loops do
     /// check the clock, so they see latency as intended. This is a real limit

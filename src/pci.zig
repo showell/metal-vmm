@@ -1,5 +1,5 @@
 //! **THE SAME DEVICES, ON A PCI BUS.** A droplet's network card and disks are
-//! virtio on PCI, and gopher-metal only lets its machine halt between frames
+//! virtio on PCI, and zig-metal-unikernel only lets its machine halt between frames
 //! when its card is there: an MSI-X message is what wakes it. So to run the
 //! code a droplet runs, this machine can present its devices as a PC does
 //! (`TRANSPORT=pci`), and the guest, which asks a PCI bus when there is one

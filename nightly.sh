@@ -34,22 +34,22 @@
 # alone says "report failed" on its progress line.
 #
 # **THE BINARIES ARE FROZEN AT THE START**: metal-vmm and the kernel (and
-# sweep.sh, sound.sh, untouched.py, site_requests.py and gopher-metal's FAT
+# sweep.sh, sound.sh, untouched.py, site_requests.py and zig-metal-unikernel's FAT
 # reader) are
 # copied into the night's folder and run from there, so a rebuild of either
-# during the night changes nothing about it. The kernel is gopher-metal's
+# during the night changes nothing about it. The kernel is zig-metal-unikernel's
 # probe/gopher.elf as it stands, unless KERNEL_ELF names another. It must
 # be built -Dcoverage (sweep.sh refuses one that reports no property, and
 # the night stops): `zig build gopher -Dcoverage` in
-# gopher-metal, then copy it aside, since gates.sh wants the release build
+# zig-metal-unikernel, then copy it aside, since gates.sh wants the release build
 # in probe/.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${NIGHTLY_ROOT:-$HOME/nightly}"
 HOURS="${HOURS:-10}"
 BATCH="${BATCH:-200}"
-GOPHER="${GOPHER:-$HOME/showell_repos/gopher-metal}"
-SITE="${SITE:-$HOME/build/gopher-metal/probe/gopher/pristine.img}"
+GOPHER="${GOPHER:-$HOME/showell_repos/zig-metal-unikernel}"
+SITE="${SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
 KERNEL_ELF="${KERNEL_ELF:-$GOPHER/probe/gopher.elf}"
 
 if [ -z "${NIGHTLY_ATTACHED:-}" ]; then
@@ -84,10 +84,10 @@ cp "$SITE" "$OUT/bin/site.img"
 # nothing about it.
 cp "$HERE/sweep.sh" "$HERE/sound.sh" "$OUT/bin/"
 # And what judges a cut's leftovers (QUEUE 127(a)): untouched.py, and
-# gopher-metal's FAT reader it reads with; and site_requests.py, which
+# zig-metal-unikernel's FAT reader it reads with; and site_requests.py, which
 # raises the site's limit for a shape of several clients (127(h)).
 FAT_READ="${FAT_READ:-$GOPHER/tools/fat16_read.py}"
-[ -f "$FAT_READ" ] || { echo "no FAT reader at $FAT_READ; set FAT_READ=<gopher-metal's tools/fat16_read.py>" >&2; exit 2; }
+[ -f "$FAT_READ" ] || { echo "no FAT reader at $FAT_READ; set FAT_READ=<zig-metal-unikernel's tools/fat16_read.py>" >&2; exit 2; }
 cp "$HERE/tools/untouched.py" "$HERE/tools/site_requests.py" "$OUT/bin/"
 cp "$FAT_READ" "$OUT/bin/fat16_read.py"
 SDK="${COVERAGE_SDK:-$HERE/../zig-coverage-sdk}"
@@ -99,7 +99,7 @@ deadline=$((start + $(python3 -c "print(int(float('$HOURS') * 3600))")))
 {
     echo "nightly sweep, started $(date '+%F %T %Z')"
     echo "metal-vmm     $(git -C "$HERE" rev-parse --short HEAD)$( [ -n "$(git -C "$HERE" status --porcelain)" ] && echo ' (with uncommitted changes)')"
-    echo "gopher-metal  $(git -C "$GOPHER" rev-parse --short HEAD)$( [ -n "$(git -C "$GOPHER" status --porcelain)" ] && echo ' (with uncommitted changes)')"
+    echo "zig-metal-unikernel  $(git -C "$GOPHER" rev-parse --short HEAD)$( [ -n "$(git -C "$GOPHER" status --porcelain)" ] && echo ' (with uncommitted changes)')"
     echo "kernel        $(sha256sum "$OUT/bin/gopher.elf" | cut -c1-16) ($KERNEL_ELF as built$(grep -aq antithesis_sdk "$OUT/bin/gopher.elf" && echo ', with the coverage properties'))"
     if [ -n "${SHAPES:-}" ]; then
         echo "request       the shapes in $SHAPES (seed s is shape s mod $(ls "$SHAPES"/*.shape | wc -l)): $(cd "$SHAPES" && ls *.shape | sed 's/\.shape$//' | tr '\n' ' ')"

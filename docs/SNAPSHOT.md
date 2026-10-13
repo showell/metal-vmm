@@ -81,7 +81,7 @@ run ends, so a branch's line names the branch's knobs.
    it may branch), and the result must match a fresh boot with it.
 3. **One process, a whole sweep:** boot once, then for each run restore,
    apply, serve, finish, keeping each run's outputs apart; `sweep.sh` and
-   long.sh (gopher-metal's release check) use it, and fall back to a boot for a seed that cannot branch.
+   long.sh (zig-metal-unikernel's release check) use it, and fall back to a boot for a seed that cannot branch.
 4. **Several snapshots** sorted by point; a branch restores the latest one
    before its first changed decision (later: snapshots stored as the pages
    that differ from their parent).

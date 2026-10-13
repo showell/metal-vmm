@@ -231,7 +231,7 @@ pub const Rtc = struct {
     /// begins `lead_ns` later, and every one after a second apart. A real
     /// chip's phase has nothing to do with when its machine booted, so this
     /// is as faithful as any; and a guest that waits for the next edge to set
-    /// its clock (gopher-metal's `wallclock.start`) waits `lead_ns`, not
+    /// its clock (zig-metal-unikernel's `wallclock.start`) waits `lead_ns`, not
     /// whatever was left of a second fixed at power-on, which cost a boot up
     /// to ten thousand exits. Long enough that a whole read of the date (about
     /// 40 exits, 4 ms) is over before the edge. Null: seconds begin at whole

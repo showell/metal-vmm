@@ -1,6 +1,6 @@
 //! **THE GUEST'S COVERAGE PROPERTIES, READ AS THEY ARE PRINTED.**
 //!
-//! A gopher-metal kernel built `-Dcoverage` writes zig-coverage-sdk's JSONL
+//! A zig-metal-unikernel kernel built `-Dcoverage` writes zig-coverage-sdk's JSONL
 //! to COM1, one event a line behind `coverage: `: an `antithesis_sdk` line
 //! when it boots, a declaration (`hit: false`) of every property, then the
 //! first pass and the first failure of each (the SDK's `src/coverage.zig`).
@@ -84,7 +84,7 @@ pub const Property = struct {
     }
 };
 
-/// Longer than any message gopher-metal declares; a longer one is cut, and
+/// Longer than any message zig-metal-unikernel declares; a longer one is cut, and
 /// two cut alike would share a row.
 const max_id = 160;
 const max_properties = 512;
@@ -406,10 +406,10 @@ test "with COVERAGE_OUT, coverage lines go to the JSONL and nothing else does" {
     var c = Captured{};
     const a = comptime sdkEvent("Sometimes", "tcp: x", false, false);
     const b = comptime sdkEvent("Sometimes", "tcp: x", true, true);
-    const text = "gopher-metal\r\n" ++ prefix ++ boot ++ "\r\n" ++ prefix ++ a ++ "\r\n" ++
+    const text = "zig-metal-unikernel\r\n" ++ prefix ++ boot ++ "\r\n" ++ prefix ++ a ++ "\r\n" ++
         "covered: no\ncoverage:not quite\n" ++ prefix ++ b ++ "\n" ++ "listening on port 80\n";
     byBytes(&s, text, .{ .exit = 1, .ns = 1 }, &c);
-    try testing.expectEqualStrings("gopher-metal\r\ncovered: no\ncoverage:not quite\nlistening on port 80\n", c.printed());
+    try testing.expectEqualStrings("zig-metal-unikernel\r\ncovered: no\ncoverage:not quite\nlistening on port 80\n", c.printed());
     try testing.expectEqualStrings(boot ++ "\n" ++ a ++ "\n" ++ b ++ "\n", c.written());
 }
 

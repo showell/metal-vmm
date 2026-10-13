@@ -46,7 +46,7 @@ table names.
 
 Never drawn by a seed: a date is a thing a person picks for what it means,
 and a clock that does not answer stops a boot, which a sweep would count as
-a failure. The last three exist to reach gopher-metal's refusals of a clock
+a failure. The last three exist to reach zig-metal-unikernel's refusals of a clock
 (its COVERAGE.md, "For the box"; QUEUE item 82).
 
 ## The wire: what the guest sends
@@ -91,7 +91,7 @@ the run must end with the page the run without it gets: `sweep.sh` does not
 excuse a page that differs under it. `zero_window` alone is no lie: a window
 of 0 with the frame's own data, which must be taken. Only TCP frames get a
 copy; the schedule counts every frame. The run ends saying which lies were
-sent and which of gopher-metal's checks (`proto.parseIpv4`,
+sent and which of zig-metal-unikernel's checks (`proto.parseIpv4`,
 `tcp.Table.handle`) each meets.
 
 ## The peer: a worse client
@@ -138,7 +138,7 @@ status, how many answers came whole, how many bytes, and how it ended.
 
 With none of the peer's knobs set, the peer is the plain client it always
 was, frame for frame. The guest's coverage properties these reach are
-gopher-metal's to measure (its `coverage/floor-metal.txt`).
+zig-metal-unikernel's to measure (its `coverage/floor-metal.txt`).
 
 ## The boot disk (virtio-blk)
 
@@ -167,7 +167,7 @@ still a filesystem: that is how a FAT volume's crash consistency is measured.
 
 `scsi.zig`. `VOLUME=<file>` attaches a second disk, a SCSI disk at target 0,
 LUN 0 of a virtio-scsi controller, which is how a DigitalOcean droplet reaches
-chat's data (gopher-metal's `scsi.zig`). It answers INQUIRY, READ
+chat's data (zig-metal-unikernel's `scsi.zig`). It answers INQUIRY, READ
 CAPACITY(10), MODE SENSE(10)'s caching page, READ(10), WRITE(10), SYNCHRONIZE
 CACHE(10) and TEST UNIT READY; anything else is ILLEGAL REQUEST, another target
 is BAD_TARGET, and the first command after power-on but INQUIRY is UNIT
@@ -184,7 +184,7 @@ disk's does. Nothing below changes anything unless `VOLUME` is set.
 | `VOLUME_CUT_AT_EXIT=1` | fails the power when the guest stops, at any end: every write cache (`VOLUME_CACHE`, `DISK_CACHE`) loses what was never synchronized before anything is reported or written back, and a line says how many sectors each lost. This is the cut `VOLUME_CUT_AFTER` cannot place: after a response that came after the last write | off |
 | `VOLUME_SYNC_FAIL=n` | answers the nth SYNCHRONIZE CACHE, and the `VOLUME_SYNC_FAIL_FOR - 1` after it, MEDIUM ERROR, keeping nothing: a cache that cannot reach its media | none |
 | `VOLUME_SYNC_FAIL_FOR=k` | how many SYNCHRONIZE CACHEs in a row fail | 1 |
-| `VOLUME_LATENCY_US=us` | every command costs the guest that long: it is answered at once and the machine's clock moves on by the latency before the guest runs again, which is what a driver spinning on the used ring (gopher-metal's) would have counted. A completion held back would never be seen, since that spin makes no exit | 0 |
+| `VOLUME_LATENCY_US=us` | every command costs the guest that long: it is answered at once and the machine's clock moves on by the latency before the guest runs again, which is what a driver spinning on the used ring (zig-metal-unikernel's) would have counted. A completion held back would never be seen, since that spin makes no exit | 0 |
 | `VOLUME_SYNC_US=us` | each SYNCHRONIZE CACHE costs that much more: the slow command on network storage | 0 |
 | `VOLUME_ATTENTION_AT=n` | CAPACITY DATA HAS CHANGED is pending from the nth command, as a volume resized under a droplet reports it: told on the next command but INQUIRY, which is not performed, so the driver must send it again | none |
 | `VOLUME_RESET_AT=n` | the disk is reset at the nth command: POWER ON, RESET OR BUS DEVICE RESET OCCURRED is told on the next command but INQUIRY (not performed), and every mode page is back at its default, so a write cache turned off by MODE SELECT is on again (SPC-4: a MODE SELECT with SP clear saves nothing). What the cache holds is kept: a reset is not a power cut (metal-vmm QUEUE 119) | none |
@@ -193,7 +193,7 @@ disk's does. Nothing below changes anything unless `VOLUME` is set.
 | `VOLUME_MODE_PAGES=none` | MODE SENSE answers with its header alone, no caching page | the caching page |
 | `VOLUME_WCE_FIXED=1` or `=ignore` | a write cache (`VOLUME_CACHE=1`) that cannot be turned off: MODE SENSE's changeable values say WCE is not changeable, and a MODE SELECT setting WCE=0 is refused (INVALID FIELD IN PARAMETER LIST). With `=ignore` (metal-vmm QUEUE 119) WCE is said to be changeable, the MODE SELECT answers GOOD, and the cache stays on: only the page read back shows it. Without it, MODE SELECT turns the cache off and later writes go through | the cache can be turned off |
 | `VOLUME_SHORT_AT=n` | the nth READ or WRITE moves the first half of its bytes and answers GOOD with the rest as its residual, a legal underrun: a driver that ignores the residual serves a read's stale half, or calls a half-written write done | none |
-| `VOLUME_MAX_TRANSFER=n` | INQUIRY's Block Limits page (B0h) says the disk carries at most n sectors in one command, and a READ or WRITE past it is ILLEGAL REQUEST: gopher-metal must ask the page and keep its requests within it (QUEUE 180.1; fewer than a cluster refuses the mount) | none |
+| `VOLUME_MAX_TRANSFER=n` | INQUIRY's Block Limits page (B0h) says the disk carries at most n sectors in one command, and a READ or WRITE past it is ILLEGAL REQUEST: zig-metal-unikernel must ask the page and keep its requests within it (QUEUE 180.1; fewer than a cluster refuses the mount) | none |
 | `VOLUME_READ_ONLY_AT=n` | read-only from the nth command: MODE SENSE says WP and every WRITE is DATA PROTECT, while reads and SYNCHRONIZE CACHE still answer, as a DO volume the host has made read-only after an I/O error | none |
 
 The run ends with `metal-vmm: volume: ...`: its reads, writes, SYNCHRONIZE
@@ -235,9 +235,9 @@ default); its header is the reference.
 
 | variable | what it does | default |
 |---|---|---|
-| `GUESTS` | where the kernels are | `~/showell_repos/gopher-metal/probe` |
+| `GUESTS` | where the kernels are | `~/showell_repos/zig-metal-unikernel/probe` |
 | `KERNEL` | the guest; it must be built `-Dcoverage` | `$GUESTS/gopher.elf` |
-| `SITE` | the **boot disk** (virtio-blk) every run gets a fresh copy of: the site's files | `~/build/gopher-metal/probe/gopher/pristine.img` |
+| `SITE` | the **boot disk** (virtio-blk) every run gets a fresh copy of: the site's files | `~/build/zig-metal-unikernel/probe/gopher/pristine.img` |
 | `PATH_WANTED` | the path fetched | `/` |
 | `TRANSPORT` | the machine | `pci` |
 | `FLOOR=<file>` | a coverage floor the merged report is gated on | none |

@@ -1,17 +1,17 @@
 # Working on metal-vmm from a cloud session
 
 For Claude Code running in the cloud ("CC"). Read this at the start of every
-session, then read `QUEUE.md`. This is the same arrangement gopher-metal ran
-on until 2026-10-04 (its `CLOUD.md`, retired, is in gopher-metal's
+session, then read `QUEUE.md`. This is the same arrangement zig-metal-unikernel ran
+on until 2026-10-04 (its `CLOUD.md`, retired, is in zig-metal-unikernel's
 `git show c28a6ec~1:CLOUD.md`), cut down to this repo.
 
 ## What this is for
 
-metal-vmm is our own deterministic hypervisor: gopher-metal's kernels run on
+metal-vmm is our own deterministic hypervisor: zig-metal-unikernel's kernels run on
 it, and the same guest with the same seed gives the same run, byte for byte.
-**The goal is zero bugs in the lower levels** (gopher-metal first, then this
+**The goal is zero bugs in the lower levels** (zig-metal-unikernel first, then this
 repo); angry-gopher is the reality check, not the only consumer. Judge the
-kernel by its own promises (gopher-metal's STORE.md and HOST.md).
+kernel by its own promises (zig-metal-unikernel's STORE.md and HOST.md).
 
 What works best, so far, is **a class hunt**: name one kind of mistake,
 walk every place in the code it could live, and end in red tests. Seed
@@ -31,7 +31,7 @@ parked. Essays: `notes/the-plan-after-the-postmortem.md`,
   `sweep.sh`, `nightly.sh` and the rest. It merges your branch into `master`
   after `check-cc.sh` (your branch built and swept on a guest, then
   `plants.sh`; its first run is pending), a cold review and the unit tests; what the guests catch comes
-  back to you as new items. It owns gopher-metal,
+  back to you as new items. It owns zig-metal-unikernel,
   the guest side of every contract here, and the releases.
 - **You (CC)**: build what needs no emulator, and anything adversarial
   (Steve, 2026-10-08): logic, tests that run on ordinary Linux, attacking
@@ -61,14 +61,14 @@ So treat "this needs a guest" as a smell. When you meet a behavior only the
 box's scripts check, ask how to check it here:
 
 - **Drive the device as the driver does.** `virtio.zig`'s `FakeGuest` lays out
-  a queue the way gopher-metal's driver does and drives the mmio window
+  a queue the way zig-metal-unikernel's driver does and drives the mmio window
   through it; `virtio_pci.zig`'s does the same over PCI (config space,
   capabilities, common config, MSI-X).
 - **Extract the decision from the I/O.** When a halted guest wakes, and on
   what, is `halt.zig`'s `wakes`: pure, and tested without a vCPU.
-- **Read the guest's side.** gopher-metal's `src/pci.zig`, `src/virtio.zig`
+- **Read the guest's side.** zig-metal-unikernel's `src/pci.zig`, `src/virtio.zig`
   and `src/interrupts.zig` are what the guest does. They are public
-  (github.com/showell/gopher-metal); clone it read-only. Do not push to it.
+  (github.com/showell/zig-metal-unikernel); clone it read-only. Do not push to it.
 - **Read the spec, not our code**, when writing a test's expectation: virtio
   1.2 §4.1 (PCI), PCI 3.0 §6.8.2 (MSI-X), Intel SDM vol. 3 ch. 11 (APIC). A
   test written from our code agrees with its bugs.
@@ -85,7 +85,7 @@ box's scripts check, ask how to check it here:
   honest oracle (README, "`rdtsc` does not exit").
 - **Contracts with the guest are the box's.** The marks (`mov $"mvmc", %ecx`
   before `rdtsc`, `mov $"mvmd", %esi` before the deadline `wrmsr`) and
-  anything else that needs gopher-metal to change: propose it under
+  anything else that needs zig-metal-unikernel to change: propose it under
   "Proposed" in `QUEUE.md`, and do not build on it until it is answered.
 - **`TRANSPORT` unset is the microvm-shaped machine**, and `check.sh` holds
   it to QEMU's microvm. Nothing you change may alter what it does.
@@ -121,19 +121,19 @@ Questions before building on it.
 | repo | branch | whose | what |
 |---|---|---|---|
 | metal-vmm | `master` | the box | the base: you branch from it, the box merges into it |
-| gopher-metal | `master` | the box | the base: you branch from it, the box merges into it |
+| zig-metal-unikernel | `master` | the box | the base: you branch from it, the box merges into it |
 | zig-coverage-sdk | `main` | the box | the base: you branch from it, the box merges into it |
 | angry-gopher | `master` | the box | the base: you branch from it, the box merges into it |
-| gopher-metal, angry-gopher | `next`, only during a release's gates | the box | integration while `master` is held for the gates; `master` fast-forwards to it after the tag, and it is deleted. Never branch from it |
+| zig-metal-unikernel, angry-gopher | `next`, only during a release's gates | the box | integration while `master` is held for the gates; `master` fast-forwards to it after the tag, and it is deleted. Never branch from it |
 | each of them | `claude/<your session's name>` | you | your work, with that repo's base merged in |
 
-**What serves lynrummy.com is a tag, not a branch**: gopher-metal's `vN`,
+**What serves lynrummy.com is a tag, not a branch**: zig-metal-unikernel's `vN`,
 and its README's "Serving" line says which. `master` may be
 ahead of it. `interrupts` and `antithesis-sdk` are retired: both are merged
 into `master`; don't branch from them.
 
 Use the same `claude/<name>` in both repos. Each QUEUE.md item says which
-repo it is in; an item in gopher-metal is merged there, and its answer comes
+repo it is in; an item in zig-metal-unikernel is merged there, and its answer comes
 here like any other.
 
 ## zig-coverage-sdk: the SDK
@@ -143,20 +143,20 @@ properties API (`src/coverage.zig`), its scanner (`tools/scan.zig`) and its
 report (`tools/report.py`). Read its README first, "Where this differs from
 Antithesis" above all: those differences are decisions, not gaps.
 
-- **gopher-metal builds against it as a sibling checkout**
+- **zig-metal-unikernel builds against it as a sibling checkout**
   (`.path = "../zig-coverage-sdk"` in its `build.zig.zon`), with no version
-  pin. A merge into `main` changes gopher-metal's build at once. So every
+  pin. A merge into `main` changes zig-metal-unikernel's build at once. So every
   existing call keeps compiling and meaning what it meant; add, never
-  change. Say in the commit what gopher-metal would see.
+  change. Say in the commit what zig-metal-unikernel would see.
 - **Follow Antithesis's documented names and JSON** for anything they have
   (their SDK docs and the JSONL they describe), and say where you could not.
   The README's line stays: inspired by Antithesis, not endorsed, not yet
   compatible.
 - Its tests are `zig build test` there; `tools/report.py` has its own.
 
-## gopher-metal: the simulators
+## zig-metal-unikernel: the simulators
 
-Since 2026-10-05 you work in gopher-metal too, on the **simulators and
+Since 2026-10-05 you work in zig-metal-unikernel too, on the **simulators and
 properties only**: `src/tcp_sim.zig`, `src/fat_sim.zig`, `src/properties.zig`,
 new simulators beside them, their regression seeds, and `coverage/floor-sim.txt`
 (raise it; never lower it without a line in QUEUE.md saying why). Read its
@@ -173,7 +173,7 @@ about the module, not a gap in the simulator. So:
   decides, because the module serves lynrummy.com.
 - **A failing seed is the code's or the simulator's, and you say which.** A
   model that is wrong blames the code for its own mistake (seed 23953 did:
-  the model client went silent after TIME-WAIT, gopher-metal `02de06f`).
+  the model client went silent after TIME-WAIT, zig-metal-unikernel `02de06f`).
   Read the RFC, not the model, before calling it the code's.
 - **A simulator finds; it does not fix the code it drives.** A defect in
   `tcp.zig`, `disk_fat.zig` or any module the kernel runs is a seed kept as a
@@ -195,7 +195,7 @@ about the module, not a gap in the simulator. So:
   between large runs.
 - Do not change the scripts (`check.sh`, `same.sh`, `site.sh`, `pc_vs_microvm.sh`,
   `lossy.sh`, `refused.sh`, `sound.sh`) without saying so in `QUEUE.md`.
-  gopher-metal's `gates.sh` runs three of them on a machine you cannot see.
+  zig-metal-unikernel's `gates.sh` runs three of them on a machine you cannot see.
   A change to the judge (`sweep.sh`, `sound.sh`, an excuse) says so in its
   commit, so the box runs `plants.sh` before merging it.
 - A review has this shape: what holds up; findings by severity, each with the

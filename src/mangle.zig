@@ -16,7 +16,7 @@
 //! sending until a window opens. Its data is the frame's own, so the run's
 //! answer still holds it; what may change is how long it takes.
 //!
-//! Which of gopher-metal's checks each kind meets (`proto.parseIpv4`,
+//! Which of zig-metal-unikernel's checks each kind meets (`proto.parseIpv4`,
 //! `tcp.Table.handle`, on `box/v18`) is in `Kind.check`.
 
 const std = @import("std");
@@ -133,7 +133,7 @@ pub fn mangle(frame: []const u8, kind: Kind, out: []u8) ?[]const u8 {
 
 const testing = std.testing;
 
-/// gopher-metal's checks, in its order (`proto.parseIpv4`, then
+/// zig-metal-unikernel's checks, in its order (`proto.parseIpv4`, then
 /// `tcp.Table.handle` up to the data), answering the one that refused the
 /// frame, or null for a segment that reaches the connection.
 fn guestRefuses(frame: []const u8, our_ip: [4]u8, our_port: u16) ?Kind {

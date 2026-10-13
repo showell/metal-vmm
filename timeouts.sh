@@ -13,7 +13,7 @@
 # **A silent client holds nobody up, and is let go when the volume says.**
 # On the PC-shaped machine, two clients: the first sends half a request
 # (`requests/half-request.http`) and then nothing; the second asks for /.
-# For each `idle_timeout_ms` in gopher-metal.conf:
+# For each `idle_timeout_ms` in zig-metal-unikernel.conf:
 #   - the second is answered within a second of opening, before the first
 #     is let go: it does not wait behind the silent one;
 #   - the guest closes the first no sooner than the setting after it opened,
@@ -65,17 +65,17 @@
 # other scripts have it) and mtools (`mcopy`) to write its config.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
+GUESTS="${GUESTS:-$HOME/showell_repos/zig-metal-unikernel/probe}"
 . "$HERE/tools/fresh.sh"
 [ -n "${KERNEL:-}" ] || fresh_kernel "$GUESTS/gopher.elf" "$(dirname "$GUESTS")"
 KERNEL="${KERNEL:-$GUESTS/gopher.elf}"
-SITE="${SITE:-$HOME/build/gopher-metal/probe/gopher/pristine.img}"
+SITE="${SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
 fresh_vmm "$HERE"
 VMM="$HERE/zig-out/bin/metal-vmm"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 [ -x "$VMM" ] || { echo "no $VMM; run: zig build"; exit 2; }
-[ -f "$KERNEL" ] || { echo "no $KERNEL; in gopher-metal: zig build gopher"; exit 2; }
+[ -f "$KERNEL" ] || { echo "no $KERNEL; in zig-metal-unikernel: zig build gopher"; exit 2; }
 [ -f "$SITE" ] || { echo "no site disk at $SITE; set SITE=<image>"; exit 2; }
 command -v mcopy > /dev/null || { echo "no mcopy: install mtools"; exit 2; }
 
@@ -92,8 +92,8 @@ for ms in 2000 6000; do
     cp "$SITE" "$WORK/boot.img"
     cp "$SITE" "$WORK/vol.img"
     printf 'requests = 2\nidle_timeout_ms = %s\n' "$ms" > "$WORK/conf"
-    mcopy -o -i "$WORK/boot.img@@$PART" "$WORK/conf" ::gopher-metal.conf ||
-        { echo "could not write gopher-metal.conf"; exit 2; }
+    mcopy -o -i "$WORK/boot.img@@$PART" "$WORK/conf" ::zig-metal-unikernel.conf ||
+        { echo "could not write zig-metal-unikernel.conf"; exit 2; }
     TRANSPORT=pci PEER_CLIENTS=2 VOLUME="$WORK/vol.img" \
         PEER_REQUEST="$HERE/requests/half-request.http,$HERE/requests/shapes/home.http" \
         timeout 120 "$VMM" "$KERNEL" "$WORK/boot.img" "" / > "$WORK/out" 2> "$WORK/err"
@@ -132,8 +132,8 @@ for ms in 3000 5000; do
         if [ "$late" = no ]; then paused=$(( ms - 500 )); else paused=$(( ms + 500 )); fi
         cp "$SITE" "$WORK/boot.img"; cp "$SITE" "$WORK/vol.img"
         printf 'requests = 3\nidle_timeout_ms = %s\n' "$ms" > "$WORK/conf"
-        mcopy -o -i "$WORK/boot.img@@$PART" "$WORK/conf" ::gopher-metal.conf ||
-            { echo "could not write gopher-metal.conf"; exit 2; }
+        mcopy -o -i "$WORK/boot.img@@$PART" "$WORK/conf" ::zig-metal-unikernel.conf ||
+            { echo "could not write zig-metal-unikernel.conf"; exit 2; }
         TRANSPORT=pci PEER_CLIENTS=3 PEER_CLIENT_GAP_US=4000000 VOLUME="$WORK/vol.img" \
             PEER_REQUEST="$HERE/requests/big-page.http,$HERE/requests/not-found.http" \
             PEER_SHUT_AFTER=4096 PEER_SHUT_FOR_US=$(( paused * 1000 )) \
@@ -174,8 +174,8 @@ done
 before=$failed; failed=0
 cp "$SITE" "$WORK/boot.img"; cp "$SITE" "$WORK/vol.img"
 printf 'requests = 2\n' > "$WORK/conf"
-mcopy -o -i "$WORK/boot.img@@$PART" "$WORK/conf" ::gopher-metal.conf ||
-    { echo "could not write gopher-metal.conf"; exit 2; }
+mcopy -o -i "$WORK/boot.img@@$PART" "$WORK/conf" ::zig-metal-unikernel.conf ||
+    { echo "could not write zig-metal-unikernel.conf"; exit 2; }
 TRANSPORT=pci PEER_CLIENTS=2 PEER_CLIENT_GAP_US=17000000 VOLUME="$WORK/vol.img" \
     PEER_REQUEST="$HERE/requests/trickle-chunked.http,$HERE/requests/shapes/home.http" \
     PEER_MSS=16 PEER_DRIP_US=3000000 \
@@ -195,8 +195,8 @@ else
 fi
 cp "$SITE" "$WORK/boot.img"; cp "$SITE" "$WORK/vol.img"
 printf 'requests = 1\n' > "$WORK/conf"
-mcopy -o -i "$WORK/boot.img@@$PART" "$WORK/conf" ::gopher-metal.conf ||
-    { echo "could not write gopher-metal.conf"; exit 2; }
+mcopy -o -i "$WORK/boot.img@@$PART" "$WORK/conf" ::zig-metal-unikernel.conf ||
+    { echo "could not write zig-metal-unikernel.conf"; exit 2; }
 TRANSPORT=pci VOLUME="$WORK/vol.img" PEER_REQUEST="$HERE/requests/trickle-chunked-long.http" \
     PEER_MSS=16 PEER_DRIP_US=5000000 \
     timeout 300 "$VMM" "$KERNEL" "$WORK/boot.img" "" / > "$WORK/out" 2> "$WORK/err"
@@ -214,8 +214,8 @@ before=$failed; failed=0
   head -c 63984 /dev/zero | tr '\0' 'a'; } > "$WORK/slow-form.http"
 cp "$SITE" "$WORK/boot.img"; cp "$SITE" "$WORK/vol.img"
 printf 'requests = 2\n' > "$WORK/conf"
-mcopy -o -i "$WORK/boot.img@@$PART" "$WORK/conf" ::gopher-metal.conf ||
-    { echo "could not write gopher-metal.conf"; exit 2; }
+mcopy -o -i "$WORK/boot.img@@$PART" "$WORK/conf" ::zig-metal-unikernel.conf ||
+    { echo "could not write zig-metal-unikernel.conf"; exit 2; }
 TRANSPORT=pci PEER_CLIENTS=2 PEER_CLIENT_GAP_US=300000 VOLUME="$WORK/vol.img" \
     PEER_REQUEST="$WORK/slow-form.http,$HERE/requests/shapes/home.http" \
     PEER_MSS=1460 PEER_DRIP_US=22000 \

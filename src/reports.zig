@@ -499,7 +499,7 @@ pub fn fired(peer: *const wire.Peer, drive: *const faults.Drive, volume: ?*const
 /// **`names` IS THE ONE LIST OF THE FAULTS THAT EXCUSE A 5XX**: sweep.sh
 /// excuses one by whatever this line names, and keeps no list of its own. A
 /// failed SYNCHRONIZE CACHE is not on it: the kernel logs it and answers
-/// anyway (gopher-metal io.durable), so a 5xx after one is unexplained.
+/// anyway (zig-metal-unikernel io.durable), so a 5xx after one is unexplained.
 pub const During = struct {
     pub const names = [_][]const u8{ "DISK_REFUSE", "DISK_CUT_AFTER", "DISK_TEAR", "DISK_ROT", "DISK_BAD_SECTOR", "VOLUME_CUT_AFTER", "VOLUME_SHORT_AT", "VOLUME_GONE_AT", "VOLUME_READ_ONLY_AT" };
     seen: [names.len]u64 = @splat(0),

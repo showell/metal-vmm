@@ -17,8 +17,8 @@
 #     never halted proves nothing here.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
-SITE="${SITE:-$HOME/build/gopher-metal/probe/gopher/pristine.img}"
+GUESTS="${GUESTS:-$HOME/showell_repos/zig-metal-unikernel/probe}"
+SITE="${SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
 LATENCY_US="${LATENCY_US:-5000}"
 PATH_WANTED="${1:-/}"
 ROUTES="/ /driving /tutorial /chess /steve-resume /steve-resume.pdf \
@@ -30,7 +30,7 @@ VMM="$HERE/zig-out/bin/metal-vmm"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 [ -x "$VMM" ] || { echo "no $VMM; run: zig build"; exit 1; }
-[ -f "$GUESTS/gopher.elf" ] || { echo "no $GUESTS/gopher.elf; in gopher-metal: zig build gopher"; exit 1; }
+[ -f "$GUESTS/gopher.elf" ] || { echo "no $GUESTS/gopher.elf; in zig-metal-unikernel: zig build gopher"; exit 1; }
 [ -f "$SITE" ] || { echo "no volume at $SITE; set SITE=<image with the site on it>"; exit 1; }
 
 failed=0

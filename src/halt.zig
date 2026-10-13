@@ -109,7 +109,7 @@ pub fn wakes(lapic: *apic.Apic, now: u64, frame_due: ?u64, cpu: Cpu) Wake {
     return .{ .move_to = @max(now, wake orelse return .never) };
 }
 
-/// The APIC as gopher-metal's `startApic` leaves it: enabled, the timer on
+/// The APIC as zig-metal-unikernel's `startApic` leaves it: enabled, the timer on
 /// 0x41 in TSC-deadline mode, nothing armed.
 pub fn startedApic() apic.Apic {
     var a = apic.Apic{};

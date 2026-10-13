@@ -1,7 +1,7 @@
 # metal-vmm
 
 **Active on `master`, 2026-10-09.** A deterministic hypervisor of our own, on
-KVM, for one kind of guest: [gopher-metal](https://github.com/showell/gopher-metal)'s
+KVM, for one kind of guest: [zig-metal-unikernel](https://github.com/showell/zig-metal-unikernel)'s
 bare-metal kernels, the probes and the real server behind lynrummy.com. It is
 a test machine, never a production one. The same guest with the same seed
 gives the same run, byte for byte, and any input can be withheld or damaged to
@@ -12,7 +12,7 @@ storage lab**: a place to find out whether code that keeps data on a disk
 (a filesystem, a log, a small store) keeps what it promised through refused
 requests, torn writes, power cuts and write caches that lie, every one of
 them chosen by a recipe and repeatable to the byte (see "A storage lab"
-below). Today the only code in the lab is gopher-metal's FAT and its store.
+below). Today the only code in the lab is zig-metal-unikernel's FAT and its store.
 
 Its work today is **judging**: a sweep of seeds, each a whole fault
 schedule, asks of every run whether anything the guest promises was broken,
@@ -23,7 +23,7 @@ toward runs no run has reached yet, is the long-term aim; it is not built,
 and its first step (`docs/SNAPSHOT.md`) is parked.
 
 - **Live work** is in [QUEUE.md](QUEUE.md), one queue for all four repos
-  (zig-coverage-sdk, metal-vmm, gopher-metal, angry-gopher).
+  (zig-coverage-sdk, metal-vmm, zig-metal-unikernel, angry-gopher).
 - **A cloud Claude session ("CC")**, which has zig and Python but no KVM or
   QEMU, reads [CLOUD_WORK.md](CLOUD_WORK.md) first.
 - **Agents** read [CLAUDE.md](CLAUDE.md).
@@ -37,7 +37,7 @@ and the application is in [docs/findings.md](docs/findings.md); reviews are in
 ## Words this repo uses
 
 - **the guest**: the kernel a run boots. Every guest so far is one of
-  gopher-metal's: its probes, and `gopher.elf`, a real web server.
+  zig-metal-unikernel's: its probes, and `gopher.elf`, a real web server.
 - **the peer**: the other end of the guest's wire, written here
   (`peer.zig`): a DHCP server and TCP clients, well-behaved or not.
 - **a door**: a port the guest writes to talk to this program rather than
@@ -52,7 +52,7 @@ and the application is in [docs/findings.md](docs/findings.md); reviews are in
   judges each seed against it.
 - **the judge**: `sweep.sh`'s verdict on a run (its exit, its properties,
   its volume's soundness, its page). **A plant**: a deliberate bug in the
-  guest's own source, off unless built `-Dplant=<name>` (gopher-metal's
+  guest's own source, off unless built `-Dplant=<name>` (zig-metal-unikernel's
   `src/plant.zig`), which the judge must catch (`plants.sh`).
 - **the box**: the development machine with `/dev/kvm`, where guests boot.
   **CC** is a cloud session with no KVM ([CLOUD_WORK.md](CLOUD_WORK.md)).
@@ -74,8 +74,8 @@ filter), and for `check.sh` and `site.sh`, `qemu-system-x86_64`.
 - `./sound.sh <image>` — is a disk image still a FAT filesystem; needs only
   `fsck.vfat`.
 
-**Needs `/dev/kvm`**, a built `zig-out/bin/metal-vmm`, and gopher-metal's
-kernels (`GUESTS`, by default `~/showell_repos/gopher-metal/probe`, built
+**Needs `/dev/kvm`**, a built `zig-out/bin/metal-vmm`, and zig-metal-unikernel's
+kernels (`GUESTS`, by default `~/showell_repos/zig-metal-unikernel/probe`, built
 there by `zig build kernels`; `gopher.elf` by `./port.sh && zig build gopher`):
 
 | | also needs | what it asks |
@@ -90,11 +90,11 @@ there by `zig build kernels`; `gopher.elf` by `./port.sh && zig build gopher`):
 | `./refused.sh` | `mkfs.vfat`; the site volume for `gopher` | which refused disk requests it survives |
 | `./sweep.sh` | the site volume, zig-coverage-sdk, **a `-Dcoverage` gopher.elf** (`KERNEL=`; a release build reports no properties, and the sweep refuses it) | a range of seeds, each a whole fault schedule |
 | `./nightly.sh` | the same | **overnight, detached:** `sweep.sh` with a volume, batch after batch of new seeds for `HOURS` (10), logging as it goes in `~/nightly/<date-time>/` (`progress.log`, `failures.log`, each failing seed's files). `KERNEL_ELF=` a `-Dcoverage` build judges its properties too (through the coverage door, which costs the guest no time); `PEER_REQUEST=requests/post-play.http` sends a write instead of `GET /`, so the volume's faults meet one; `SHAPES=requests/shapes` gives each seed one of ten requests (reads, writes as a player the setup makes, two clients at once), each judged against its own unhurt run |
-| `./plants.sh` | the same, gopher-metal's port | **does the judge still judge**: the same seeds over a clean kernel, which must fail none, and over one kernel per plant (gopher-metal's `-Dplant=<name>`, a deliberate bug in its source), each of which must fire (else it is dead) and fail a seed where it fired. Run after every change to the judge. Two plants stand; the full 300 seeds take ~10 minutes |
+| `./plants.sh` | the same, zig-metal-unikernel's port | **does the judge still judge**: the same seeds over a clean kernel, which must fail none, and over one kernel per plant (zig-metal-unikernel's `-Dplant=<name>`, a deliberate bug in its source), each of which must fire (else it is dead) and fail a seed where it fired. Run after every change to the judge. Two plants stand; the full 300 seeds take ~10 minutes |
 | `./check-cc.sh` | the same | the cloud session's branch, in worktrees: built, swept over every request shape for a few seeds, then `plants.sh` — run before its code is reviewed |
 
 "The site volume" is `SITE`, by default
-`~/build/gopher-metal/probe/gopher/pristine.img`, staged by gopher-metal's
+`~/build/zig-metal-unikernel/probe/gopher/pristine.img`, staged by zig-metal-unikernel's
 `probe/judge_gopher.py` (which needs a loop mount, and so sudo; the scripts
 here only read it).
 
@@ -131,14 +131,14 @@ other subject would need:
 
 ## A first run
 
-On the box, with gopher-metal checked out beside this repo and its kernels
+On the box, with zig-metal-unikernel checked out beside this repo and its kernels
 built:
 
     zig build
-    zig build run -- ../gopher-metal/probe/rng.elf
+    zig build run -- ../zig-metal-unikernel/probe/rng.elf
 
 ```
-gopher-metal rng probe
+zig-metal-unikernel rng probe
   virtio-rng: no   RDRAND: yes
   first draw: 1441cad88d3d62dbb490e88a7d50f865
   over 4 KB: 16306 of 32768 bits set, commonest byte appears 28 times
@@ -200,8 +200,8 @@ own repeat runs.
 | virtio-blk | **works**, checked against QEMU — one queue and a disk image, mapped private, written back only at the end |
 | virtio-net and the peer | **works**, checked against QEMU — DHCP, and TCP clients that fetch what curl fetches; no tap device and no real network, deliberately |
 | the real server as the guest | **works**, checked against QEMU — angry-gopher's own route table, twelve routes, pages identical to curl's |
-| the PC-shaped machine | **works** (`TRANSPORT=pci`) — virtio-pci, MSI-X, a local APIC with a TSC-deadline timer; the server halts between frames, and `pc_vs_microvm.sh` holds it to the microvm-shaped machine's pages. Only the paths gopher-metal walks are exercised by a guest |
-| a virtio-scsi volume | **works**, not compared with QEMU (`VOLUME`, `scsi.zig`) — the second disk a droplet has; unit-tested against gopher-metal's driver's sequence, and used by `sweep.sh`'s durability sweep |
+| the PC-shaped machine | **works** (`TRANSPORT=pci`) — virtio-pci, MSI-X, a local APIC with a TSC-deadline timer; the server halts between frames, and `pc_vs_microvm.sh` holds it to the microvm-shaped machine's pages. Only the paths zig-metal-unikernel walks are exercised by a guest |
+| a virtio-scsi volume | **works**, not compared with QEMU (`VOLUME`, `scsi.zig`) — the second disk a droplet has; unit-tested against zig-metal-unikernel's driver's sequence, and used by `sweep.sh`'s durability sweep |
 | faults on the wire | **works** — the guest's or the peer's nth frame lost or damaged, latency, lying frames (`mangle.zig`) |
 | a peer that misbehaves | **works** — resets, vanishing, SYN floods, shut windows, pipelining, slow clients, many clients |
 | faults on the disks | **works** — refused requests, bad sectors, rotten bytes, power cuts, torn writes, write caches that hold or lie (`cache.zig`), and the volume's own: failed synchronizes, latency, a volume that changes size, goes away or turns read-only |
@@ -284,14 +284,14 @@ guest memory, so QEMU still runs the same bytes and stays an honest oracle.
 **Only a marked `rdtsc` is rewritten.** Two bytes is too short a pattern:
 gopher.elf has `0F 31` pairs inside other instructions, and rewriting those
 corrupts them (an invalid opcode just after "listening on port 80").
-gopher-metal's `tsc.read` puts `mov $"mvmc", %ecx` (`B9 6D 76 6D 63`) before
+zig-metal-unikernel's `tsc.read` puts `mov $"mvmc", %ecx` (`B9 6D 76 6D 63`) before
 its `rdtsc`, and only the `rdtsc` after that mark becomes a question.
 Elsewhere the `mov` costs a register. An unmarked `rdtsc` reads the host's
 counter.
 
 ## Interrupts, at a halt
 
-`TRANSPORT=pci` is the machine a droplet is, as far as gopher-metal can tell:
+`TRANSPORT=pci` is the machine a droplet is, as far as zig-metal-unikernel can tell:
 
 - **a PCI bus** (`pci.zig`): a host bridge in slot 0, and the disk, the card,
   the entropy and the volume as modern virtio-pci functions, one memory BAR
@@ -315,7 +315,7 @@ counter.
 **The deadline is a marked write too.** IA32_APIC_BASE comes here through an
 MSR filter (`KVM_X86_SET_MSR_FILTER`), but on a host with the VMX preemption
 timer, like the box, KVM's fast path takes IA32_TSC_DEADLINE before the
-filter sees it. So gopher-metal marks that one `wrmsr` with
+filter sees it. So zig-metal-unikernel marks that one `wrmsr` with
 `mov $"mvmd", %esi`, and the loader makes it `out 0xE1, al`, answered from
 the registers.
 
@@ -363,15 +363,15 @@ each fault knob did, and the coverage line below.
 A run's wall time is about **its exits times 40 µs, plus what the guest
 computes**. The box this is developed on is itself a DigitalOcean VM, so every
 exit, and every page fault of the guest's, is a nested one. On 2026-10-08 one
-boot of gopher-metal's server (`TRANSPORT=pci`, a `VOLUME`, a 5 ms wire,
+boot of zig-metal-unikernel's server (`TRANSPORT=pci`, a `VOLUME`, a 5 ms wire,
 `GET /`) went from 1.68 s to 0.22 s, its output byte-identical throughout:
 
 | change | exits | wall |
 |---|---|---|
 | before | 32,951 | 1.68 s |
 | the RTC's phase is chosen at the guest's first read (`clock.zig`, `lead_ns`) | 23,591 | 1.48 s |
-| gopher-metal's disk check reads the FAT 64 sectors a request | 7,975 | 1.20 s |
-| gopher-metal's serial sends 16-byte bursts (`rep outsb`) | 6,379 | ≈1.2 s |
+| zig-metal-unikernel's disk check reads the FAT 64 sectors a request | 7,975 | 1.20 s |
+| zig-metal-unikernel's serial sends 16-byte bursts (`rep outsb`) | 6,379 | ≈1.2 s |
 | **built ReleaseSafe by default** (it was Debug); the loader's scan is one pass | 6,379 | 0.61 s |
 | **the guest's memory asks for huge pages** (`madvise`): 26k faults to 900 | 6,379 | 0.22 s |
 
@@ -411,7 +411,7 @@ PASS append/fat32 same words, same verdict (6531 ms here, 4587 ms under QEMU, so
 ```
 
 - **The last two are FAT32** (prod's data is FAT32): a fresh volume made by
-  `mkfs.vfat`, written by gopher-metal's own probes, and judged by `fsck.vfat`
+  `mkfs.vfat`, written by zig-metal-unikernel's own probes, and judged by `fsck.vfat`
   as well as by QEMU. `append` stamps its files with the wall clock, which
   differs between the two sides by design, so its clock line is left out and
   its two disks are each judged by `fsck.vfat` rather than compared;
@@ -518,7 +518,7 @@ the wire, the peer, the boot disk, the volume and the seeds.
 
 ### What the guest says it reached
 
-A gopher-metal kernel built `-Dcoverage` writes zig-coverage-sdk's JSONL
+A zig-metal-unikernel kernel built `-Dcoverage` writes zig-coverage-sdk's JSONL
 lines to **the coverage door** (port 0xE2, `main.zig`): it finds the door at
 boot, then hands over each line as one 32-bit `out` of its address, one exit
 a line. No exit through the door ticks the clock or counts as progress, so a
@@ -541,7 +541,7 @@ the properties only one run ever reached. `sweep.sh` ends with it.
 
 ## What it found
 
-Sweeps of lost frames and refused disk writes found defects in gopher-metal and
+Sweeps of lost frames and refused disk writes found defects in zig-metal-unikernel and
 angry-gopher, among them a DHCP client that never retransmitted and one
 refused write that left a volume that could never mount again. All but two
 are fixed (one partly, one a design decision);
@@ -549,7 +549,7 @@ are fixed (one partly, one a design decision);
 findings.md is frozen at September's sweeps. Since then the guest's own
 simulators and the cloud session's class hunts (one kind of mistake, hunted
 through all the code) have found more than the sweeps; those live in
-gopher-metal's history and this repo's [QUEUE-ARCHIVE.md](QUEUE-ARCHIVE.md).
+zig-metal-unikernel's history and this repo's [QUEUE-ARCHIVE.md](QUEUE-ARCHIVE.md).
 
 ## Reading it
 

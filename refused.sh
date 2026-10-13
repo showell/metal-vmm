@@ -13,12 +13,12 @@
 # The wire's equivalent is lossy.sh.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
+GUESTS="${GUESTS:-$HOME/showell_repos/zig-metal-unikernel/probe}"
 PROBE="${1:-vfat}"
 HOW_MANY="${2:-20}"
 # The real server reads its site off its own volume, and answers a request the
 # peer makes; a probe brings its own small disk and answers nobody.
-SITE="${SITE:-$HOME/build/gopher-metal/probe/gopher/pristine.img}"
+SITE="${SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
 FETCH=""
 . "$HERE/tools/fresh.sh"
 fresh_vmm "$HERE"

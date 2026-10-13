@@ -20,7 +20,7 @@ TOOL = os.path.join(HERE, "site_requests.py")
 
 
 def with_conf(text, other=b"untouched bytes\n"):
-    """A volume holding OTHER.TXT and `gopher-metal.conf` (its long name in
+    """A volume holding OTHER.TXT and `zig-metal-unikernel.conf` (its long name in
     two LFN entries before its short one) saying `text`."""
     img = T.volume({"OTHER.TXT": other, "GOPHER~1.CON": text})
     fat = U.reader()
@@ -30,7 +30,7 @@ def with_conf(text, other=b"untouched bytes\n"):
     # moves down two slots.
     entry = bytes(img[short_at:short_at + 32])
     img[short_at + 64:short_at + 96] = entry
-    name = "gopher-metal.conf"
+    name = "zig-metal-unikernel.conf"
     units = [ord(c) for c in name] + [0] + [0xFFFF] * (26 - len(name) - 1)
     for k, ordinal in ((0, 0x42), (1, 0x01)):
         part = units[13:26] if ordinal & 0x0F == 2 else units[0:13]
@@ -62,7 +62,7 @@ class SiteRequests(unittest.TestCase):
         return done, site, out
 
     def conf(self, path):
-        return self.fat.load(path).read("gopher-metal.conf")
+        return self.fat.load(path).read("zig-metal-unikernel.conf")
 
     def test_the_limit_is_raised_and_nothing_else_moves(self):
         text = b"# the site\nrequests = 1\nidle_timeout_ms = 2000\n"

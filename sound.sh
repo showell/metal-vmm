@@ -14,7 +14,7 @@
 # **WHAT A STOP LEAVES** (`STOP_LEAVES=1`, for a disk whose power was cut
 # mid-write): FAT has no journal, so a cut between an operation's writes
 # leaves a cluster allocated that nothing points at, a long name's parts
-# with no entry after them, or the two FATs apart. gopher-metal's own check
+# with no entry after them, or the two FATs apart. zig-metal-unikernel's own check
 # counts exactly these as what a stop leaves, not damage (disk_fat.zig
 # `Problem.damage`), and handles each at the next boot. With it, those three
 # are not complaints; anything else still is.
@@ -37,7 +37,7 @@ esac
 echo "$out" | tail -1 | sed 's/.*img: /  /'
 # Anything that is not the version line, the tally or the headings is a
 # complaint, and a complaint is the answer. Except one: FAT32's FSInfo free
-# count marked unknown (0xFFFFFFFF), which the spec allows and gopher-metal
+# count marked unknown (0xFFFFFFFF), which the spec allows and zig-metal-unikernel
 # does on purpose at a volume's first change after mount (disk_fat.zig
 # `forgetFsInfo`). A count that is set and wrong is still a complaint
 # ("Free cluster summary wrong").

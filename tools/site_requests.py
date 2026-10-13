@@ -3,7 +3,7 @@
 
     tools/site_requests.py SITE OUT N
 
-Copies the boot disk SITE to OUT with its `gopher-metal.conf` saying
+Copies the boot disk SITE to OUT with its `zig-metal-unikernel.conf` saying
 `requests = N`, where it said fewer. The site's own limit (1) is what ends a
 run, so a shape of n clients would be served only its first: sweep.sh boots
 such a shape from a copy made here.
@@ -15,7 +15,7 @@ touched. A number with more digits than the old one is refused, as is a conf
 with no `requests` line (a site that serves forever needs no raising) and
 one that already says N or more (copied unchanged).
 
-Read with gopher-metal's tools/fat16_read.py, as untouched.py reads.
+Read with zig-metal-unikernel's tools/fat16_read.py, as untouched.py reads.
 """
 import mmap
 import os
@@ -26,7 +26,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from untouched import reader  # noqa: E402
 
-CONF = "/gopher-metal.conf"
+CONF = "/zig-metal-unikernel.conf"
 LINE = re.compile(rb"^([ \t]*requests[ \t]*=[ \t]*)([0-9]+)([ \t]*)\r?$", re.M)
 
 

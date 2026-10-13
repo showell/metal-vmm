@@ -13,8 +13,8 @@ a folder's new cluster (`sweep.sh` `stop_leftovers`). The request bodies are
 no bound (a 221-byte puzzle move rewrites a 37 KB file); the unhurt run of
 the same shape says what its operations write.
 
-Read with gopher-metal's tools/fat16_read.py, as untouched.py is: FAT_READ=<path>
-says where, else the gopher-metal checkout beside this one.
+Read with zig-metal-unikernel's tools/fat16_read.py, as untouched.py is: FAT_READ=<path>
+says where, else the zig-metal-unikernel checkout beside this one.
 """
 import os
 import sys

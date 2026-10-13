@@ -1,6 +1,6 @@
 //! **A DIGITALOCEAN VOLUME** (`VOLUME=<file>`, QUEUE.md item 53): a SCSI
 //! disk behind a virtio-scsi controller, which is how prod reaches chat's
-//! data (gopher-metal `scsi.zig`). The boot disk stays virtio-blk; this is
+//! data (zig-metal-unikernel `scsi.zig`). The boot disk stays virtio-blk; this is
 //! the second disk, and the one whose writes matter.
 //!
 //! **THE SMALLEST CONTROLLER GOPHER-METAL'S DRIVER ACCEPTS.** Three queues
@@ -17,7 +17,7 @@
 //! SENSE(10) for the caching page, READ(10), WRITE(10), SYNCHRONIZE
 //! CACHE(10) (SPC-4, SBC-3). Anything else is ILLEGAL REQUEST. A target
 //! with no disk is BAD_TARGET, as QEMU answers, and the first command after
-//! power-on but INQUIRY is UNIT ATTENTION, as a real disk's is: gopher-metal
+//! power-on but INQUIRY is UNIT ATTENTION, as a real disk's is: zig-metal-unikernel
 //! sends it again.
 //!
 //! **THE WRITE CACHE** (`VOLUME_CACHE`, cache.zig), with `DISK_CACHE`'s
@@ -109,7 +109,7 @@ pub const Scsi = struct {
     sync_fail_for: u64 = 1,
     sync_failed: u64 = 0,
     /// **A VOLUME THAT TAKES TIME** (`VOLUME_LATENCY_US`): each command
-    /// answered costs the guest this long. gopher-metal waits on a command
+    /// answered costs the guest this long. zig-metal-unikernel waits on a command
     /// by spinning on the used ring, which no exit interrupts, so a
     /// completion held back would never be seen; instead it is answered at
     /// once and the machine's clock moves on by the latency before the
@@ -273,7 +273,7 @@ pub const Scsi = struct {
 
     /// One request: the device-readable descriptors (the header, then any
     /// data out), then the device-writable (the response, then any data
-    /// in), one descriptor each, as gopher-metal sends them. A chain of any
+    /// in), one descriptor each, as zig-metal-unikernel sends them. A chain of any
     /// other shape is not answered, as `virtio.Block` answers none.
     pub fn serve(self: *Scsi, ram: []u8, chain: []const Desc) u32 {
         var readable: [2]Desc = undefined;
@@ -623,12 +623,12 @@ pub const Scsi = struct {
     }
 };
 
-// ── driven as gopher-metal's scsi.zig drives it ─────────────────────────────
+// ── driven as zig-metal-unikernel's scsi.zig drives it ─────────────────────────────
 
 const testing = std.testing;
 
 /// A guest's memory with the request queue in it, and the requests built as
-/// gopher-metal's `scsi.command` builds them: the header (51 bytes), then
+/// zig-metal-unikernel's `scsi.command` builds them: the header (51 bytes), then
 /// the data the disk reads or the response, then the data it writes.
 pub const FakeDriver = struct {
     ram: [16384]u8 = @splat(0),
@@ -726,7 +726,7 @@ pub const FakeDriver = struct {
     }
 
     /// MODE SELECT(10) of the caching page with WCE as given and every other
-    /// field zero, PF set, as gopher-metal sends it; `changeable` asks MODE
+    /// field zero, PF set, as zig-metal-unikernel sends it; `changeable` asks MODE
     /// SENSE's changeable values first and gives WCE's bit there instead.
     fn select(self: *FakeDriver, d: *Device, wce_on: bool) Outcome {
         const len: u16 = 8 + 20;
@@ -757,12 +757,12 @@ pub const FakeDriver = struct {
     }
 };
 
-/// The configuration as gopher-metal reads it: `virtio.configRead32/16`.
+/// The configuration as zig-metal-unikernel reads it: `virtio.configRead32/16`.
 fn config32(d: *Device, off: u64) u32 {
     return @truncate(d.read(0x100 + off, 4));
 }
 
-test "brought up as gopher-metal brings it: sizes, INQUIRY, UNIT ATTENTION, READ CAPACITY, MODE SENSE" {
+test "brought up as zig-metal-unikernel brings it: sizes, INQUIRY, UNIT ATTENTION, READ CAPACITY, MODE SENSE" {
     var image: [64 * 512]u8 = @splat(0);
     var vol = Scsi{ .image = &image };
     var d = vol.device();

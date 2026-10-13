@@ -2,9 +2,9 @@
 # **CC'S BRANCH ON A GUEST**, the box's first look at what CC pushed: what CC
 # derived but could not run (it has no KVM), run before anyone reads the code.
 #
-# CC's branch (or master, where a repo has none) of metal-vmm, gopher-metal
-# and angry-gopher, each in its own worktree, so no checkout here changes:
-#   1. angry-gopher ported into gopher-metal, a -Dcoverage kernel built, and
+# CC's branch (or master, where a repo has none) of metal-vmm, zig-metal-unikernel,
+# angry-gopher and zig-webbox, each in its own worktree, so no checkout here changes:
+#   1. angry-gopher ported into zig-metal-unikernel, a -Dcoverage kernel built, and
 #      metal-vmm built;
 #   2. `sweep.sh 1 $SEEDS` over every shape: each shape's unhurt run and its
 #      recipe, then a few seeds (exit 2 there names the shape that can't be
@@ -27,9 +27,9 @@ PLANT_SEEDS="${PLANT_SEEDS:-300}"
 OUT="${OUT:-$(mktemp -d)}"
 mkdir -p "$OUT"
 SDK="${COVERAGE_SDK:-$REPOS/zig-coverage-sdk}"
-# gopher-metal's build.zig.zon finds the SDK at ../zig-coverage-sdk.
+# zig-metal-unikernel's build.zig.zon finds the SDK at ../zig-coverage-sdk.
 [ -e "$OUT/zig-coverage-sdk" ] || ln -s "$SDK" "$OUT/zig-coverage-sdk"
-VOLUME_SITE="${VOLUME_SITE:-$HOME/build/gopher-metal/probe/gopher/pristine.img}"
+VOLUME_SITE="${VOLUME_SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
 
 worktrees=()
 cleanup() { for w in "${worktrees[@]}"; do git -C "${w%%:*}" worktree remove --force "${w#*:}" 2>/dev/null; done; }
@@ -47,7 +47,7 @@ checkout() {
 }
 
 echo "check-cc, $(date -u '+%F %T UTC'), in $OUT"
-for r in metal-vmm gopher-metal angry-gopher; do checkout "$r" "$OUT/$r" || exit 2; done
+for r in metal-vmm zig-metal-unikernel angry-gopher zig-webbox; do checkout "$r" "$OUT/$r" || exit 2; done
 
 # angry-gopher's generated assets (wasm, built js) are untracked, so a
 # worktree lacks them: copied from the main checkout, as built there.
@@ -64,9 +64,9 @@ for path in re.findall(r'\.path\s*=\s*"([^"]+)"', build):
 PY
 
 echo "== building"
-(cd "$OUT/gopher-metal" && zig build gopher -Dcoverage -Dgopher-root="$OUT/angry-gopher") > "$OUT/kernel.log" 2>&1 ||
+(cd "$OUT/zig-metal-unikernel" && zig build gopher -Dcoverage -Dgopher-root="$OUT/angry-gopher" -Dwebbox-root="$OUT/zig-webbox") > "$OUT/kernel.log" 2>&1 ||
   { echo "the coverage kernel did not build; see $OUT/kernel.log"; exit 2; }
-cp "$OUT/gopher-metal/probe/gopher.elf" "$OUT/gopher-coverage.elf"
+cp "$OUT/zig-metal-unikernel/probe/gopher.elf" "$OUT/gopher-coverage.elf"
 (cd "$OUT/metal-vmm" && zig build) > "$OUT/vmm.log" 2>&1 ||
   { echo "metal-vmm did not build; see $OUT/vmm.log"; exit 2; }
 echo "built"
@@ -74,7 +74,7 @@ echo "built"
 bad=0
 echo "== every shape, then seeds 1-$SEEDS"
 KERNEL="$OUT/gopher-coverage.elf" SHAPES="$OUT/metal-vmm/requests/shapes" VOLUME_SITE="$VOLUME_SITE" TRANSPORT=pci \
-  COVERAGE_SDK="$SDK" GUESTS="$OUT/gopher-metal/probe" \
+  COVERAGE_SDK="$SDK" GUESTS="$OUT/zig-metal-unikernel/probe" \
   KEEP_FAILED="$OUT/failed" "$OUT/metal-vmm/sweep.sh" 1 "$SEEDS" > "$OUT/sweep.log" 2>&1
 code=$?
 grep -E '^shape .*(unhurt|answered|cannot|not )' "$OUT/sweep.log" | cut -c1-200
@@ -87,8 +87,8 @@ case $code in
 esac
 
 echo "== the plants"
-GOPHER="$OUT/gopher-metal" COVERAGE_SDK="$SDK" GUESTS="$OUT/gopher-metal/probe" \
-  ANGRY_GOPHER="$OUT/angry-gopher" VOLUME_SITE="$VOLUME_SITE" LAST="$PLANT_SEEDS" \
+GOPHER="$OUT/zig-metal-unikernel" COVERAGE_SDK="$SDK" GUESTS="$OUT/zig-metal-unikernel/probe" \
+  ANGRY_GOPHER="$OUT/angry-gopher" WEBBOX="$OUT/zig-webbox" VOLUME_SITE="$VOLUME_SITE" LAST="$PLANT_SEEDS" \
   KERNELS="$OUT/kernels" OUT="$OUT/plants" "$OUT/metal-vmm/plants.sh"
 case $? in 0) ;; 1) bad=1 ;; *) echo "plants.sh could not run"; bad=2 ;; esac
 
