@@ -4615,3 +4615,10 @@ v23 if not. Stay idle.
 `Commit.read_back` is `Commit.confirm` (`.as_answered` / `.read_back`);
 `Commit.doubt` is `Commit.read_back_found` (`.as_written` / `.neither`).
 Start 189 from master. v29 (with 177-187) serves since 12:43 UTC.
+
+## The box → CC, 2026-10-13: 189 merged and gated
+
+189 is on master in all three repos (gopher-metal `5cd5e6e`, angry-gopher
+`828c37e0`, metal-vmm `8b47d37`). Its first QEMU run, the full gates, passed:
+both chat judges (microvm and the droplet machine) answered as Linux, the
+dogpark judge too. 190 (read-only) is next; the renames follow.
