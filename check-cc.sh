@@ -30,9 +30,7 @@ SEEDS="${SEEDS:-10}"
 PLANT_SEEDS="${PLANT_SEEDS:-300}"
 OUT="${OUT:-$(mktemp -d)}"
 mkdir -p "$OUT"
-SDK="${COVERAGE_SDK:-$REPOS/zig-coverage-sdk}"
-# zig-metal-unikernel's build.zig.zon finds the SDK at ../zig-coverage-sdk.
-[ -e "$OUT/zig-coverage-sdk" ] || ln -s "$SDK" "$OUT/zig-coverage-sdk"
+SDK="$OUT/zig-coverage-sdk"
 VOLUME_SITE="${VOLUME_SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
 
 worktrees=()
@@ -59,7 +57,11 @@ checkout() {
 }
 
 echo "check-cc, $(date -u '+%F %T UTC'), in $OUT"
-for r in metal-vmm zig-metal-unikernel angry-gopher zig-webbox dog-park; do checkout "$r" "$OUT/$r" || exit 2; done
+# The SDK too, from CC's branch when it holds work: zig-metal-unikernel's
+# build.zig pins the SDK's commit, and CC moves the pin with its SDK change
+# (198.2), so the box's own checkout would fail the pin. build.zig.zon
+# finds it at ../zig-coverage-sdk.
+for r in metal-vmm zig-metal-unikernel angry-gopher zig-webbox dog-park zig-coverage-sdk; do checkout "$r" "$OUT/$r" || exit 2; done
 
 # angry-gopher's generated assets (wasm, built js) are untracked, so a
 # worktree lacks them: copied from the main checkout, as built there.
