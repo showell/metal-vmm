@@ -7,6 +7,60 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-14: 199, the script language, in zig-webbox
+
+**Done, in five parts, each leaving the module green.** On zig-webbox `claude/great-wright-i7aste`:
+- `32df8da`: lexer and parser.
+- `374e561`: interpreter and budgets.
+- `5b44157`: builtins.
+- `2e4b1a0` and `aea164c`: fuzzer, examples, the portability check.
+- `1cad9de`: runner and README.
+
+Size: about 3,400 lines in `src/script/` plus the runner, of which about 1,000 are tests. All of the module's tests run in about a second.
+
+**The name, for Steve to pick.** I used my favourite for the module comment, the README and the `.shale` extension; the module itself is `webbox.script`, as the brief asked.
+1. **Shale**: SH at the front. A quiet, layered stone, and the scripts stay down in the site's own strata. Short to type, and nothing else uses it.
+2. **Shard**: a small piece of the site you run against it. It sounds sharper than the language is.
+3. **Shoal**: shallow water, a deliberately small language. But a shoal is also something you run aground on.
+
+**Choices I made where the brief left one, each stated in the README:**
+- **A new budget, `depth`.**
+  - Measured in Debug, the call depth times the parse nesting (64 × 200) took 19.9 MB of Zig stack, past Linux's 8 MB and metal's 16 MB.
+  - I made the recursive frames small dispatchers, and `depth` (2,000) bounds the walk across all calls.
+  - Deepest walk: 3.8 MB in Debug, 1.1 MB in ReleaseSafe. Deepest parse: 369 KB in Debug, 123 KB in ReleaseSafe.
+  - A test measures both and holds them under 4 MB.
+  - A parenthesis costs two of the 200 nesting.
+- **Functions are top-level only.** Nested and `local` functions are refused by name, and a function cannot see the script's locals, only its own parameters and locals. So nothing is captured, and there are no closures to get wrong.
+- **Redeclaring a local in the same block is an error.** Shadowing in an inner block is fine. Lua allows the same-block case; here it is a clear error, not a different meaning.
+- **`'...'` strings are accepted as well as `"..."`.** Models write both, and it costs nothing.
+- **The store's lenience is not the script's.**
+  - `ls` of a missing folder is an error, though the store lists it as empty.
+  - `remove` or `remove_tree` of a missing path is an error, though the store takes it as done. The effects log says `FileNotFound` rather than "ok".
+- **Examples live in `src/script/examples/`**, because `@embedFile` cannot reach outside the module. They are run as tests against a store shaped like angry-gopher's data.
+- **The runner** is one positional script path. `SHALE_ROOT` names the data folder and `SHALE_NOW` sets `now()`.
+
+**Bugs the tests found in my own code, all fixed:**
+- `print` wrote each argument as it evaluated it, so a nested call's print came out mid-line. Lua evaluates them all first, and so does this now.
+- `sort` charged its comparisons after sorting. It now charges its upper bound before it runs.
+- A `for` loop with an empty body charged no steps.
+
+**How "nothing names the host" is held.**
+- `src/script/portable_test.zig` reads each module source as text and refuses std.posix, std.os, std.c, std.process, std.Thread, std.time, Io.Dir, Threaded, page_allocator, std.debug.print, and std.fs except std.fs.path. Test blocks and `*_test.zig` files are exempt.
+- Each refused name is planted in a test and fires. The check caught one real case, a test helper in parse.zig, which moved to parse_test.zig.
+- angry-gopher's `lint_portable.py` now walks 94 modules, Shale's among them, and passes.
+- zig-metal-unikernel's `check-apps` still type-checks gopher.elf.
+
+**The fuzzer.**
+- 400 sources in the tests; `-Dscript-fuzz=N` runs more. 200,000 passed in 19 s and found nothing.
+- Every run ends inside its budgets, with no leak and nothing changed outside the root.
+
+**Not done (yours, per the brief):** the endpoint, signing, logging runs on the server, and running on metal.
+
+**For metal:**
+- Values come from the run's arena over the caller's allocator, plus the caller's `out` buffer and the walk's one value stack, which is also in the arena.
+- No threads are assumed.
+- The store calls go through `host_io`, as every webbox file's do.
+
 ## CC → the box, 2026-10-13: 198 finished (P128, 198.6 to 198.10)
 
 **198.5, P128.**
