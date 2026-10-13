@@ -1343,6 +1343,76 @@ the build, the port); stay off those, and merge master in as it lands.
       CUTOVER.md, docs/). If the current README holds material only an
       insider needs, move it to a doc and link it.
 
+196. **The box's (Steve, 2026-10-13): two things the README (195, your
+    a7cfc56) must say.** It reads well: keep its voice and order. Add, in
+    the "What it is" / "What it is not" part, near the top:
+    1. **The scope is DigitalOcean droplets, and only that, for now.** Say
+       plainly that it does not claim to run on arbitrary hardware: it has
+       been made to work on one kind of machine (a droplet, and QEMU laid
+       out like one). Then the honest caveat: virtio is a fairly common
+       standard among hypervisors, so other virtual machines are a
+       plausible next step, and the kernel can be extended gradually as we
+       get access to other kinds of hardware. No promises beyond that.
+    2. **"Battle tested", and what that honestly means.** Use the phrase,
+       then say exactly what it rests on: it has served lynrummy.com since
+       2026-10-04 for about three regular daily users, uploading from
+       phones; it has never been under real load or stress; and Caddy sits
+       in front of it on a private network, so production exercises only a
+       well-behaved, happy-path setup (one polite client, no hostile or
+       lossy traffic). Say where the harder cases are tested instead (the
+       judges, metal-vmm's faults and sweeps), in a sentence.
+    One commit, docs only.
+
+197. **The box's (Steve, 2026-10-13): zig-metal-unikernel's checks, from
+    fast and alone to slow and dependent.** After 193, 194 and 196 (or
+    between them, if it suits you: it is its own chunk). The goal, in
+    Steve's words: someone can do software development on the kernel with
+    almost nothing but zig and Python. The unit tests are super thorough,
+    fast, and run outside the emulator. We can assume the zig coverage SDK is
+    cloned beside it (it is hard to test without it). Everything else (QEMU,
+    KVM, metal-vmm, zig-webbox, angry-gopher, dog-park) is a later tier, and a
+    developer can DEFER all testing against angry-gopher and dog-park and
+    still have reasonable confidence in a change.
+    1. **The tiers, each a script (or one script with a tier argument, if
+       that is simpler: Steve dislikes CLI flags, so prefer named scripts),
+       each adding exactly one kind of dependency to the one before:**
+       - **tier 0, zig + Python + the SDK:** `zig build test` and every
+         host-side check (simulators, lints, the judges' own Python tests),
+         needing no other repo, no QEMU, no network. Seconds to a couple of
+         minutes. This is the one a developer runs on every change.
+       - **tier 1, + QEMU:** the probes, which boot this repo's own test
+         kernels and need no application.
+       - **tier 2, + metal-vmm:** its checks against this repo's kernels.
+       - **tier 3, + zig-webbox and the applications:** the kernels built
+         from angry-gopher and dog-park, the judges, the site volume, the
+         droplet checks.
+       `gates.sh` becomes tiers 0-3 in order, cheapest first, failing fast,
+       with the same verdict rules; `long.sh` stays the release tier.
+    2. **Find every place tier 0 reaches outside the repo today and cut it,
+       or move the test up a tier,** saying which and why. Known ones:
+       `build.zig`'s unit tests import zig-webbox's `body.zig` as the
+       "body rule" (`-Dwebbox-root`); the store judges compile webbox's
+       `store.zig`; `tools/check_limits.py` reads webbox's store;
+       `tools/verdicts.py fresh` runs inside `zig build` and reads
+       angry-gopher and dog-park. A missing sibling must never fail tier 0,
+       and must never be silently skipped either: tier 0 names what it did
+       not check and which tier does.
+    3. **Coverage of the tiers:** for each subsystem (TCP, FAT, the page
+       cache, virtio, SCSI, the drain, the log ring, the serial gate, the
+       loader, ...), say what tier 0 proves and what only a higher tier
+       proves. Where a higher tier is the only thing standing behind
+       something a pure test could hold, write that test (red first): the
+       aim is that tier 0 alone catches most bugs. List what you would
+       still want and couldn't do in this item.
+    4. **Speed:** tier 0's wall time, per step, before and after. Builds
+       and runs are two separate times; give both. Anything over a few
+       seconds is suspect: say what it waits on.
+    5. **The README's "how to use it" section** (your 195 text) gains the
+       tiers: what to install for each, what each proves, how long each
+       takes.
+    The box runs `./check-cc.sh` and the full gates on your branch before
+    merging.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
