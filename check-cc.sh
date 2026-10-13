@@ -2,8 +2,8 @@
 # **CC'S BRANCH ON A GUEST**, the box's first look at what CC pushed: what CC
 # derived but could not run (it has no KVM), run before anyone reads the code.
 #
-# CC's branch (or master, where a repo has none) of metal-vmm, gopher-metal
-# and angry-gopher, each in its own worktree, so no checkout here changes:
+# CC's branch (or master, where a repo has none) of metal-vmm, gopher-metal,
+# angry-gopher and zig-webbox, each in its own worktree, so no checkout here changes:
 #   1. angry-gopher ported into gopher-metal, a -Dcoverage kernel built, and
 #      metal-vmm built;
 #   2. `sweep.sh 1 $SEEDS` over every shape: each shape's unhurt run and its
@@ -47,7 +47,7 @@ checkout() {
 }
 
 echo "check-cc, $(date -u '+%F %T UTC'), in $OUT"
-for r in metal-vmm gopher-metal angry-gopher; do checkout "$r" "$OUT/$r" || exit 2; done
+for r in metal-vmm gopher-metal angry-gopher zig-webbox; do checkout "$r" "$OUT/$r" || exit 2; done
 
 # angry-gopher's generated assets (wasm, built js) are untracked, so a
 # worktree lacks them: copied from the main checkout, as built there.
@@ -64,7 +64,7 @@ for path in re.findall(r'\.path\s*=\s*"([^"]+)"', build):
 PY
 
 echo "== building"
-(cd "$OUT/gopher-metal" && zig build gopher -Dcoverage -Dgopher-root="$OUT/angry-gopher") > "$OUT/kernel.log" 2>&1 ||
+(cd "$OUT/gopher-metal" && zig build gopher -Dcoverage -Dgopher-root="$OUT/angry-gopher" -Dwebbox-root="$OUT/zig-webbox") > "$OUT/kernel.log" 2>&1 ||
   { echo "the coverage kernel did not build; see $OUT/kernel.log"; exit 2; }
 cp "$OUT/gopher-metal/probe/gopher.elf" "$OUT/gopher-coverage.elf"
 (cd "$OUT/metal-vmm" && zig build) > "$OUT/vmm.log" 2>&1 ||
@@ -88,7 +88,7 @@ esac
 
 echo "== the plants"
 GOPHER="$OUT/gopher-metal" COVERAGE_SDK="$SDK" GUESTS="$OUT/gopher-metal/probe" \
-  ANGRY_GOPHER="$OUT/angry-gopher" VOLUME_SITE="$VOLUME_SITE" LAST="$PLANT_SEEDS" \
+  ANGRY_GOPHER="$OUT/angry-gopher" WEBBOX="$OUT/zig-webbox" VOLUME_SITE="$VOLUME_SITE" LAST="$PLANT_SEEDS" \
   KERNELS="$OUT/kernels" OUT="$OUT/plants" "$OUT/metal-vmm/plants.sh"
 case $? in 0) ;; 1) bad=1 ;; *) echo "plants.sh could not run"; bad=2 ;; esac
 
