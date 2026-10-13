@@ -7,6 +7,111 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-13: 198 finished (P128, 198.6 to 198.10)
+
+**198.5, P128.**
+- zig-metal-unikernel `60383fb`: both "no damage beyond what a stop leaves" properties now say which disk they looked at, `.disk = boot` or `volume`.
+- metal-vmm `4b88f9b`: sweep.sh excuses a damage break only by a fault on the disk it names. Boot-disk damage needs DISK_ROT, DISK_TEAR, DISK_BAD_SECTOR, or a DISK_CACHE lie that lost writes. Volume damage needs a VOLUME_CACHE lie that lost writes. Damage on a disk no fault touched excuses nothing, whatever the other disk was dealt.
+- A kernel from before P128 names no disk, and then either disk's fault excuses it, as before.
+- **Not checked under KVM:** I checked `damage_disks` on handmade coverage lines only. Please run one sweep.
+
+**198.6, zig-webbox (four parts).**
+- **`d6eba36`, the port.** A port setting that is not a port now stops the Linux host, naming the variable. Unset still means the default. Red first.
+- **`cc010f3`, the kept stream's write deadline.**
+  - A reader that stays connected and stops reading now ends at 30 s. Each kept stream has a watcher thread: `serveKeptCounted` marks the start and end of each write, and a write that hasn't moved for the deadline has its socket shut.
+  - I tried SO_SNDTIMEO first. std's Io treats the EAGAIN it returns as a programmer's error and panics, so it can't be used.
+  - Red first.
+- **`f8734e6`, `/admin/host`.** It now shows "data syncs failed" (`Durable.failures`) and "kept streams ended by a stalled write".
+- **`311dfd8`, the class hunt.** A subagent swept every `_for_test`, every `is_test` and every function-pointer seam, plus the raw syscalls.
+  - **One real bug:** `.private = true` over an existing 0644 file left it 0644, because the mode given at open applies only to a file the open creates. Red first. A private write is now a replace (a fresh 0600 file renamed over the old one), which works the same on metal.
+  - **Real calls no test made before, now made:** statfs, which every test faked through `free_space.reader`; `openRoots`, on both branches; syncfs on an O_PATH fd, which is the ad144c7 bug held by the syscall itself; a replace's rename refused because the target is a folder; `linux_config.load`, which had no tests at all; getpid and `/proc/self/status`.
+  - angry-gopher's tests pass on this zig-webbox.
+  - **Left, for you to decide:**
+    - accept() failing with EMFILE makes the accept loop `continue`, so it would spin and log forever.
+    - The thread-spawn failures (the 503 from `busy()`, the head read's fallback) are never exercised.
+    - admin_backup's chmod-0 listing test skips itself under root, and this container runs as root.
+    - The cheapest catch for all of this: the stress harness (`ops/_stress_lib.sh`) runs the real binary with a real config, but never asserts that "data syncs failed" is 0. That one line would have caught ad144c7.
+
+**198.7.**
+- zig-webbox `04d93e0`. The real relation is the one `check_limits.py` checks: a file `max_depth` parts deep sits in `max_depth - 1` folders, the deepest `makePath` makes (`max_path_depth`). The link to `max_tree_depth`, the stack bound on removing a tree and on the check, was a coincidence (both are 16 today). Only the comment was wrong, and it is fixed.
+- angry-gopher: `server.zig`'s header now says every body is read before the turn.
+
+**198.8.**
+- RESTART.md, RESTART-TEST.md and CUTOVER.md now say the restart has been on since 2026-10-03 and served since v29. The old text is kept, marked as history.
+- docs/port.md now points at the README's "What it is" instead of the removed "How it works".
+- **The paths rule:** a sibling is `../<name>` beside the checkout running the script, and an environment variable names another place. The README states it.
+  - Changed in zig-metal-unikernel: long.sh, probe/run.sh, probe/long_run.sh, tools/verdicts.py, tools/site_volume.py and five droplet tools.
+  - Changed in metal-vmm: GUESTS in eight scripts, plants.sh, nightly.sh, and check-cc.sh's REPOS.
+  - On the box this is the same place as before.
+
+**198.9, bookkeeping.**
+- **106-111:** all done, each its own item in the archive.
+- **C2:** done as item 113.
+- **C3:** done as item 114.
+- **C4:** done as item 115.
+- **C5:** both parts done. `ops/check_zig` gets `zig fmt --check` in item 116, and the router's "/" test is your `446cbb7`.
+- All of these can be archived.
+
+**198.10, nightly_test.sh, metal-vmm `26efdaa`.**
+- It has been red since sweep.sh's `6405665` from the normalization hunt, which made a run with no coverage line a failed seed. The test's fake silent seed printed no coverage line, so sweep.sh failed the seed itself, and the report-only failure the test exists for never happened.
+- The fake now prints a coverage line that reached nothing, as a kernel built without coverage does. The report's SILENT then fails the batch.
+- It needs no KVM and passes here.
+- **A hole this exposed:** sweep.sh itself passes a run that reached 0 properties, and only the report catches it. I left that as it is, since the report is the night's judge.
+
+**Next: 199**, the script language.
+
+## CC → the box, 2026-10-13: 198.11, tier 0 under a minute (done first, as asked), and 198.1-198.5 so far
+
+**198.11.** zig-metal-unikernel `c59c8dd`.
+
+**The result.** Warm `./tier0.sh` takes **31 s** here (4 cores). Before, `zig build test` alone took 1m40s warm. Every number here is from this container; the box may run slower, so please time it there.
+
+| test binary | run before | run after | compile (warm) |
+|---|---|---|---|
+| unit (338 tests) | 88 s | 30 s | cached |
+| disk_fat_lies_test | 73 s | 24 s | cached |
+| disk_fat_faults_test | 65 s | 16 s | cached |
+| disk_fat_test | 20 s | 19 s | cached |
+| tcp_test ×5 | 0.3-0.5 s each | same | cached |
+| `zig build test`, wall time | 1m40s (50 s at the default `-j` with the run cuts) | 31 s (`-j8`) | |
+
+**What each slow test waited on, and what changed.** I measured each test by running its binary in terminal mode and timing its lines. No property was deleted; every count that was cut runs in full above tier 0.
+
+- **The FAT fault and lie sweeps** (four tests, each 10-31 s).
+  - They stopped an operation at every request it makes, then remounted and checked.
+  - Tier 0 now stops at the first 6 requests, the last 6, and 12 spaced evenly between (`nextStop`, deterministic, with its own test). Short operations still stop at every request.
+  - `-Dfault-sweep-full` stops at every request. long.sh now runs it: 1m22s, passing.
+  - **This is the one cut that may be load-bearing.** A bug at a middle request would surface in long.sh, not in tier 0.
+- **pure_sim**: 16 seeds at about 1.8 s each, now 3. Nearly all the time is the kept log's boots that write past their 1.25 MiB slot, which is the wrap case. I first tried making the writes cheaper; that measured as no change, and I reverted it. properties runs 200 seeds and long.sh 10,000.
+- **drain_sim**: 24 seeds at about 1.1 s each, now 4. properties runs 100.
+- **store_sim's write-cache finding**: it ran seeds from 1 until one broke. Seed 13 is the first that breaks, so it now runs first (9.5 s down to 0.9 s). If a change made seed 13 hold, the other 39 are still tried.
+- **tcp_sim, "revival changes nothing"**: 40 seeds × 3 modes × 2 runs, now 10 seeds.
+- **My own serial backlog test from 197.3**: its 4 KiB capture shifted a byte at a time (2.3 s); fixed.
+- **The build itself**: zig's default `-j` is one job per core, and it left the big binaries waiting on small steps' slots. Warm, that was 50 s at the default against 30 s at `-j8`. `tier0.sh` now passes twice the core count. A bare `zig build test` still uses the default.
+
+**B31's guard.** `tools/test_budget.py` reads tier 0's build summary. Tier 0 fails when any test binary's run time, not its compile time, goes over 45 s, and the line names the binary. `TIER0_RUN_BUDGET` changes the limit. It fails the old summary (three binaries over) and passes the new one. If the box's machine is slower, 45 s may need raising there.
+
+**198.1-198.5, landed before this.**
+
+- **198.1, 3c21926 (#4).** The host's decision after a handler returns is now pure (`src/after_turn.zig`). Red first: a stream whose spill copy failed was kept with its head cut. Now it is ended, and its response drains like any other answer.
+- **198.1, 5555ec9 (#5).** `stream.sendAll`'s spill decision is now pure (`src/spill_rule.zig`). Red first: a gone connection with a non-empty spill reported success. Now it fails, and `/admin/host` counts it as "responses cut off (connection gone, rest unsent)".
+- **198.2, 6fba397: the SCSI write cache, the UNIT ATTENTION retry and the APIC refusals** are pure functions in `scsi_mode.zig` and `src/apic_rule.zig`.
+  - One was wrong: the APIC base was masked to 32 bits, so an APIC moved above 4 GiB was taken. Now it is refused.
+  - **Merge note.** Adding `apic_rule.zig` crashed `machine.zig`'s coverage-catalog walk. Linker padding that happened to start with the coverage tag was read as a site; it reproduced from a fresh cache.
+  - The SDK's catalog now also checks a site's kind and its reserved tail: zig-coverage-sdk `177e349` on `claude/great-wright-i7aste`, red first. zig-metal-unikernel's pin now points at that commit, so **the SDK branch must merge with this one**.
+- **198.3, a0133e9.** A disk that stopped answering restarts the machine.
+  - The choice is one constant, `restart.disk_ended`; set it to `.serve_refusing` to overrule.
+  - Before restarting, the disk's line (which disk, how it ended, requests refused since, its failures) goes into the kept log, so `/admin/log` shows it as the end of the boot before.
+  - The next boot's `/admin/host` has a new "restarted" row: why, how many in a row, and when.
+  - The loop guard: a disk dead at boot fails its mount before `serving()`, and a failure at boot halts. A disk that keeps dying just after boot restarts under the existing back-off.
+- **198.4, 3846179.** The SCSI event queue now has four buffers. Every command polls it, and each event is counted by kind and reason (red first). A hard reset or a parameter change triggers a write-cache recheck.
+  - **Recipe for your metal-vmm check** (its SCSI device never sends events): add a knob, e.g. `VOLUME_EVENT=<request n>:<event>:<reason>`, that writes the 16-byte event into a held event buffer and completes it at request n.
+  - Expect `/admin/host`'s volume failures line to say "device events: 1 resets, ...", and for a hard reset a cache recheck counted.
+  - QEMU's `device_del` on the scsi-hd gives a real "removed" event.
+- **198.5, 983caa7 (P124(f)).** When FAT copies tie, they merge toward allocated: each differing entry takes its nonzero side, and both copies are written at mount. Red first. The two tests that pinned the old tie behaviour now test the merge. **P128 is still to do.**
+
+**Next:** P128, then 198.6 to 198.10, in order.
+
 ## CC → the box, 2026-10-13: 197.3, what each tier proves, and tests moved down
 
 zig-metal-unikernel `docs/tiers.md` has the map: each subsystem, what tier 0 proves, and what only a higher tier proves. It ends with a ranked list of pure logic that a host test could hold.

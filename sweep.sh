@@ -108,7 +108,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # answers otherwise. Exit 1 is only seeds that failed, or the coverage
 # report; a night stops on 2 and goes on after 1.
 cannot_judge() { [ $# = 0 ] || echo "$*"; exit 2; }
-GUESTS="${GUESTS:-$HOME/showell_repos/zig-metal-unikernel/probe}"
+GUESTS="${GUESTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-metal-unikernel/probe}"
 # shellcheck source=tools/fresh.sh
 . "$HERE/tools/fresh.sh"
 # The kernel and metal-vmm by default are this checkout's and zig-metal-unikernel's
@@ -367,6 +367,27 @@ for line in open(sys.argv[1], errors="replace"):
 print("\n".join(seen))
 PY
 }
+# damage_disks <run>: the disk each broken damage property found its damage
+# on (its details' `disk`: boot or volume; P128), once each. A kernel from
+# before P128 names none: "either", which a fault on either disk excuses.
+damage_disks() {
+  python3 - "$WORK/$1.cov" "${DAMAGE_PROPS[@]}" <<'PY'
+import json, sys
+props = set(sys.argv[2:])
+seen = []
+for line in open(sys.argv[1], errors="replace"):
+    try:
+        a = json.loads(line).get("antithesis_assert")
+    except ValueError:
+        continue
+    if not a or a.get("id") not in props or not a.get("hit") or a.get("condition"):
+        continue
+    d = (a.get("details") or {}).get("disk", "either")
+    if d not in seen:
+        seen.append(d)
+print("\n".join(seen))
+PY
+}
 # **THE KERNEL'S OWN DAMAGE CHECK** (gopher.zig, `vol.check` at boot and
 # after each request): its properties, which a disk fault that writes damage
 # rightly breaks (QUEUE 128).
@@ -580,8 +601,10 @@ verdict() {
   # kernel's "no damage" check counts what rot, a torn write, a bad sector or
   # a lying cache's lost writes left, and is right to. Only those
   # properties, and only when such a fault fired; any other break fails, as
-  # does one of these with no such fault. The property does not say which
-  # disk it found the damage on, so a fault on either disk excuses it.
+  # does one of these with no such fault. **ON THE DISK THE DAMAGE WAS
+  # FOUND ON** (P128): the property names it (boot or volume), and only a
+  # fault dealt to that disk excuses it; the boot disk's are DISK_*, the
+  # volume's VOLUME_CACHE=lie. A kernel that names none: either disk's.
   local damage_by=""
   if [ "${broken:-0}" != 0 ]; then
     local props other=""
@@ -596,11 +619,22 @@ verdict() {
       done <<< "$props"
     fi
     if [ -z "$other" ]; then
+      local boot_by="" volume_by="" disk unexcused=""
       for f in DISK_ROT DISK_TEAR DISK_BAD_SECTOR; do
-        case "$fired" in *" $f "*) damage_by="$damage_by${damage_by:+, }$f" ;; esac
+        case "$fired" in *" $f "*) boot_by="$boot_by${boot_by:+, }$f" ;; esac
       done
-      case " $knobs" in *" DISK_CACHE=lie"*) ! lie_lost disk "$name" || damage_by="$damage_by${damage_by:+, }DISK_CACHE=lie" ;; esac
-      case " $knobs" in *" VOLUME_CACHE=lie"*) ! lie_lost volume "$name" || damage_by="$damage_by${damage_by:+, }VOLUME_CACHE=lie" ;; esac
+      case " $knobs" in *" DISK_CACHE=lie"*) ! lie_lost disk "$name" || boot_by="$boot_by${boot_by:+, }DISK_CACHE=lie" ;; esac
+      case " $knobs" in *" VOLUME_CACHE=lie"*) ! lie_lost volume "$name" || volume_by="$volume_by${volume_by:+, }VOLUME_CACHE=lie" ;; esac
+      while IFS= read -r disk; do
+        case "$disk" in
+          boot) [ -n "$boot_by" ] && damage_by="$damage_by${damage_by:+, }$boot_by on the boot disk" || unexcused=yes ;;
+          volume) [ -n "$volume_by" ] && damage_by="$damage_by${damage_by:+, }$volume_by on the volume" || unexcused=yes ;;
+          *) [ -n "$boot_by$volume_by" ] && damage_by="$damage_by${damage_by:+, }$boot_by${boot_by:+${volume_by:+, }}$volume_by" || unexcused=yes ;;
+        esac
+      done <<< "$(damage_disks "$name")"
+      # Damage on a disk no fault touched excuses nothing, whatever the
+      # other disk was dealt.
+      [ -z "$unexcused" ] || damage_by=""
     fi
     [ -n "$damage_by" ] || why="$why, $broken coverage properties broken"
   fi
@@ -812,7 +846,7 @@ for n in "${SHAPE_NAMES[@]}"; do
   # Stopped here, before any seed.
   if ! grep -qE '^metal-vmm: coverage: [0-9]+ of [1-9][0-9]* properties' "$WORK/$u.err"; then
     echo "$KERNEL reported no coverage property in its unhurt run: it was built without -Dcoverage, or the run ended before it said any. Nothing can be judged."
-    echo "  build one: (cd ~/showell_repos/zig-metal-unikernel && zig build gopher -Dcoverage), and copy probe/gopher.elf aside: gates.sh wants the release build there"
+    echo "  build one: (cd ../zig-metal-unikernel && zig build gopher -Dcoverage), and copy probe/gopher.elf aside: gates.sh wants the release build there"
     cannot_judge
   fi
   # **EVERY CLIENT'S UNHURT PAGE** (QUEUE 126): each client past the first

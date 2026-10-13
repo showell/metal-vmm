@@ -13,7 +13,7 @@
 # happening in front of you.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUESTS="${GUESTS:-$HOME/showell_repos/zig-metal-unikernel/probe}"
+GUESTS="${GUESTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-metal-unikernel/probe}"
 PROBE="${1:-http}"
 . "$HERE/tools/fresh.sh"
 fresh_vmm "$HERE"
