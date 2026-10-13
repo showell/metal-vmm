@@ -7,6 +7,1846 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-13: 190, four read-only reports
+
+Nothing committed to gopher-metal, angry-gopher or dog-park; this entry is
+the whole of 190. Reports 1 and 3 were each made by a subagent of mine (3
+by one that had not written 189, as asked); I checked their worst findings
+against the source before putting them here (the census's D1 and D2, and
+the review's 1 and 2). The trees they read were left clean.
+
+**One correction to 190's text:** when I started, 189 was on metal-vmm's
+`master` but not yet on gopher-metal's or angry-gopher's, so report 3 read
+my branch's heads (gopher-metal `98a7d66`, angry-gopher `e34b40d`), which
+are 189 exactly; report 1 read each repo's `master` as it then was.
+
+### 190.1: the rename census
+
+**The four to do first**, from the census's section 4 below:
+- **`gopher-metal.conf`** is the worst. The kernel reads it by name
+  (`probe/gopher.zig:327`), and a missing file means the defaults
+  (`readConfig`, `error.FileNotFound => return conf`): `card = public`, no
+  volume serial, no trusted proxy. Renamed on one side, prod would boot
+  serving on its public card with no check of its volume. The safe order is
+  a release that reads either name, refuses both, and logs which, then the
+  writers, then dropping the old name. Or keep the file's name for good.
+- **Strings a judge requires:** the `/admin/host` banner ("gopher-metal,
+  with no operating system", `judge_gopher.py:1386`), the loader banner
+  (`loader.S:143`, `judge_gopher.py:1025`) and the build tag (`boot.zig:127`
+  with `run.sh`'s grep). Each must change in one commit with what reads it.
+- **`~/build/gopher-metal`** is silent: change it in both repos the same
+  day, and move or delete the old directory, or the sweeps judge a stale
+  site volume.
+- **`tools/verdicts.py`'s content id** (also report 2): once the library
+  moves, a change to it no longer changes a kernel's verdict.
+
+Read-only. Source: the 915 lines of `census_all.txt` (default branches: gopher-metal, metal-vmm, angry-gopher at origin/master; dog-park, zig-coverage-sdk at origin/main). One row per dump line (a line naming the repo twice counts once). The underscore variants are 3 lines: build.zig.zon:2, src/boot.zig:126, probe/link.ld:31. No `GOPHER_METAL` exists anywhere outside QUEUE.md:850, which is item 190 itself.
+
+#### 1. Totals
+
+| repo | LIVE | HISTORY | total |
+|---|---|---|---|
+| gopher-metal | 150 | 30 | 180 |
+| metal-vmm | 203 | 385 | 588 |
+| angry-gopher | 130 | 0 | 130 |
+| dog-park | 4 | 0 | 4 |
+| zig-coverage-sdk | 13 | 0 | 13 |
+| **all** | **500** | **415** | **915** |
+
+#### 2. HISTORY files
+
+| file | count |
+|---|---|
+| gopher-metal/MIGRATION.md (line 270 only: the dated "Rehearsed again, 2026-10-02" log) | 1 |
+| gopher-metal/MUTATION.md (the dated findings of metal-vmm items 93/95) | 1 |
+| gopher-metal/STORE-CENSUS.md (a generated census pinned to angry-gopher `f5d360e`) | 1 |
+| gopher-metal/docs/reviews/REVIEW-admin-backup.md | 1 |
+| gopher-metal/docs/reviews/REVIEW-admin-host.md | 6 |
+| gopher-metal/docs/reviews/REVIEW-first-line.md | 1 |
+| gopher-metal/docs/reviews/REVIEW-fixed-sizes.md | 2 |
+| gopher-metal/docs/reviews/REVIEW-item90-step2.md | 1 |
+| gopher-metal/docs/reviews/REVIEW-request-paths.md | 4 |
+| gopher-metal/docs/reviews/REVIEW-secrets.md | 1 |
+| gopher-metal/docs/reviews/REVIEW-signed-uid-and-limits.md | 1 |
+| gopher-metal/docs/reviews/REVIEW-store.md | 6 |
+| gopher-metal/docs/reviews/REVIEW-two-disks.md | 4 |
+| metal-vmm/FEEDBACK.md | 130 |
+| metal-vmm/QUEUE-ARCHIVE.md | 178 |
+| metal-vmm/QUEUE.md (every numbered item, B/P/C item and dated "Now" status line; lines 3, 12, 41 are standing text and LIVE) | 40 |
+| metal-vmm/docs/findings.md | 13 |
+| metal-vmm/docs/reviews/REVIEW-flood.md | 2 |
+| metal-vmm/docs/reviews/REVIEW-interrupts.md | 20 |
+| metal-vmm/docs/reviews/REVIEW-peer.md | 2 |
+
+#### 3. Every LIVE occurrence
+
+Legend for "what it should become": `zig-metal-unikernel` = plain rename; CITE = keep, or `zig-metal-unikernel`: a citation of an old item/commit/file, findable either way; BUILD / CHECKOUT / CONF = depends on the box's choice of the build dir, the checkout dir, or the config file name (all three in section 4).
+
+##### gopher-metal
+
+**gopher-metal/ADMIN-PASSWORD-LOST.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| ADMIN-PASSWORD-LOST.md:46 | runbook naming the config file | CONF: follows the config file's name |
+| ADMIN-PASSWORD-LOST.md:83 | runbook heading for the metal side | `zig-metal-unikernel` |
+
+**gopher-metal/CLAUDE.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| CLAUDE.md:11 | cross-reference to metal-vmm CLOUD_WORK.md's heading | same as metal-vmm/CLOUD_WORK.md:157, together |
+
+**gopher-metal/COVERAGE.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| COVERAGE.md:6 | current doc prose | `zig-metal-unikernel` |
+
+**gopher-metal/CUTOVER.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| CUTOVER.md:1 | title of the (done) cutover runbook | keep: names the 2026-10-04 cutover as it was, or rename |
+| CUTOVER.md:9 | current doc prose | `zig-metal-unikernel` |
+| CUTOVER.md:29 | current doc prose | `zig-metal-unikernel` |
+| CUTOVER.md:76 | runbook: the droplet as named in DigitalOcean | depends on the box's choice of the droplet's name in DigitalOcean |
+| CUTOVER.md:82 | runbook: the droplet as named in DigitalOcean | depends on the box's choice of the droplet's name in DigitalOcean |
+| CUTOVER.md:188 | runbook GO line naming the config file | CONF: follows the config file's name |
+| CUTOVER.md:194 | runbook: the droplet as named in DigitalOcean | depends on the box's choice of the droplet's name in DigitalOcean |
+| CUTOVER.md:213 | runbook: the droplet as named in DigitalOcean | depends on the box's choice of the droplet's name in DigitalOcean |
+| CUTOVER.md:275 | GO line: a person checks /admin/host for the banner | follows the banner it quotes |
+
+**gopher-metal/HOST.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| HOST.md:47 | current doc prose | `zig-metal-unikernel` |
+
+**gopher-metal/README.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| README.md:1 | README title | `zig-metal-unikernel` |
+| README.md:14 | Serving line: the commit live now | `zig-metal-unikernel` (next time the line is rewritten) |
+| README.md:41 | README prose: "the retired gopher-metal queue, item N" | keep: the retired queue is this repo's own history; or "the retired queue" |
+| README.md:57 | README prose | `zig-metal-unikernel` |
+| README.md:130 | README prose naming the config file | CONF: follows the config file's name |
+| README.md:134 | README prose naming the config file | CONF: follows the config file's name |
+| README.md:141 | README prose: "the retired gopher-metal queue, item N" | keep: the retired queue is this repo's own history; or "the retired queue" |
+| README.md:154 | README prose: "the retired gopher-metal queue, item N" | keep: the retired queue is this repo's own history; or "the retired queue" |
+| README.md:183 | README prose | `zig-metal-unikernel` |
+| README.md:189 | README prose naming the config file | CONF: follows the config file's name |
+| README.md:374 | README prose: "the retired gopher-metal queue, item N" | keep: the retired queue is this repo's own history; or "the retired queue" |
+
+**gopher-metal/STORE.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| STORE.md:18 | current doc prose | `zig-metal-unikernel` |
+| STORE.md:78 | current doc prose | `zig-metal-unikernel` |
+| STORE.md:99 | current doc prose | `zig-metal-unikernel` |
+
+**gopher-metal/build.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| build.zig:1 | code comment | `zig-metal-unikernel` |
+| build.zig:463 | code comment | `zig-metal-unikernel` |
+
+**gopher-metal/build.zig.zon**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| build.zig.zon:2 | zig package name `.gopher_metal` | `.zig_metal_unikernel`, with a new `.fingerprint` (zig refuses the old one for a new name and prints the one to use) |
+
+**gopher-metal/docs/disk.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| docs/disk.md:128 | sample serial output in a doc | follows the banner it quotes |
+
+**gopher-metal/docs/port.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| docs/port.md:23 | sample serial output in a doc | follows the banner it quotes |
+| docs/port.md:75 | doc naming the config file | CONF: follows the config file's name |
+| docs/port.md:138 | sample serial output in a doc | follows the banner it quotes |
+
+**gopher-metal/docs/probes.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| docs/probes.md:27 | sample serial output in a doc | follows the banner it quotes |
+
+**gopher-metal/docs/tcp.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| docs/tcp.md:14 | doc naming the config file | CONF: follows the config file's name |
+| docs/tcp.md:134 | doc naming the config file | CONF: follows the config file's name |
+
+**gopher-metal/droplet/RESTART-TEST.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| droplet/RESTART-TEST.md:3 | current doc prose | `zig-metal-unikernel` |
+| droplet/RESTART-TEST.md:23 | procedure prose (the droplet/image as DigitalOcean names it) | depends on the box's choice of the droplet/image names in DigitalOcean |
+| droplet/RESTART-TEST.md:55 | expected serial output in a test procedure | follows the banner it quotes |
+| droplet/RESTART-TEST.md:82 | procedure prose (the droplet/image as DigitalOcean names it) | depends on the box's choice of the droplet/image names in DigitalOcean |
+
+**gopher-metal/droplet/chat.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| droplet/chat.py:5 | docstring naming the config file | CONF: follows the config file's name |
+| droplet/chat.py:8 | docstring naming the config file | CONF: follows the config file's name |
+| droplet/chat.py:26 | docstring naming the config file | CONF: follows the config file's name |
+| droplet/chat.py:130 | writes the PROD boot disk's config file (card, volume, trusted_proxy, admin reset) | same name as probe/gopher.zig:327; see DANGEROUS |
+
+**gopher-metal/droplet/compare_volume.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| droplet/compare_volume.py:23 | docstring/comment | `zig-metal-unikernel` |
+
+**gopher-metal/droplet/cutover_drill.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| droplet/cutover_drill.py:36 | docstring naming the scratch dir | follows line 83 |
+| droplet/cutover_drill.py:83 | scratch dir default `~/build/gopher-metal/cutover-drill` | BUILD (section 4) |
+| droplet/cutover_drill.py:397 | REQUIRES the substring `gopher-metal` in /admin/host (GO/NO-GO) | the new name, same commit as probe/gopher.zig:1973-1974 |
+| droplet/cutover_drill.py:399 | GO/NO-GO line text | `zig-metal-unikernel` |
+| droplet/cutover_drill.py:447 | REQUIRES the substring `gopher-metal` in /admin/host (GO/NO-GO) | the new name, same commit as probe/gopher.zig:1973-1974 |
+| droplet/cutover_drill.py:455 | GO/NO-GO line text | `zig-metal-unikernel` |
+
+**gopher-metal/droplet/droplet.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| droplet/droplet.sh:24 | comment | `zig-metal-unikernel` |
+
+**gopher-metal/droplet/extract_volume.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| droplet/extract_volume.py:2 | docstring/comment | `zig-metal-unikernel` |
+
+**gopher-metal/droplet/hello.S**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| droplet/hello.S:38 | hello-sector banner (droplet/shape.sh greps only its suffix) | `zig-metal-unikernel` |
+
+**gopher-metal/droplet/hello.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| droplet/hello.zig:145 | hello kernel serial banner (nothing greps it) | `zig-metal-unikernel` |
+
+**gopher-metal/droplet/image.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| droplet/image.sh:9 | comment | `zig-metal-unikernel` |
+
+**gopher-metal/droplet/image.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| droplet/image.zig:2 | code comment | `zig-metal-unikernel` |
+| droplet/image.zig:51 | code comment | `zig-metal-unikernel` |
+| droplet/image.zig:276 | GPT partition name written on the boot image (gpt.zig keys on the type GUID, not this) | `zig-metal-unikernel kernel`/`data`: cosmetic, shows in parted/blkid only |
+| droplet/image.zig:285 | GPT partition name written on the boot image (gpt.zig keys on the type GUID, not this) | `zig-metal-unikernel kernel`/`data`: cosmetic, shows in parted/blkid only |
+
+**gopher-metal/droplet/loader.S**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| droplet/loader.S:1 | comment | `zig-metal-unikernel` |
+| droplet/loader.S:4 | comment | `zig-metal-unikernel` |
+| droplet/loader.S:143 | loader banner on serial; judge_gopher.py:1025 REQUIRES it | `zig-metal-unikernel loader`, same commit as the judge |
+
+**gopher-metal/droplet/rehearse.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| droplet/rehearse.py:33 | docstring naming the scratch dir | follows line 73 |
+| droplet/rehearse.py:73 | scratch dir default `~/build/gopher-metal/rehearse` | BUILD (section 4) |
+| droplet/rehearse.py:136 | docstring naming the config file | CONF: follows the config file's name |
+| droplet/rehearse.py:144 | writes the config file onto the rehearsal image | same name as probe/gopher.zig:327 |
+
+**gopher-metal/droplet/rotate_secret.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| droplet/rotate_secret.py:154 | writes the config file onto a boot image | same name as probe/gopher.zig:327 |
+
+**gopher-metal/droplet/site_reads.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| droplet/site_reads.py:47 | writes the config file onto an image | same name as probe/gopher.zig:327 |
+
+**gopher-metal/gates.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| gates.sh:59 | verdict/log dir default `~/build/gopher-metal/gates` | BUILD (section 4) |
+| gates.sh:96 | PROBE_WORK dir per judge run | BUILD (section 4) |
+| gates.sh:115 | site volume path `~/build/gopher-metal/site/pristine.img` (shared with long.sh:113) | BUILD (section 4) |
+| gates.sh:154 | PROBE_WORK dir per judge run | BUILD (section 4) |
+| gates.sh:164 | copies each judge's verdict out of its PROBE_WORK | same as lines 96/154, same commit |
+
+**gopher-metal/long.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| long.sh:76 | output dir default `~/build/gopher-metal/long` | BUILD (section 4) |
+| long.sh:113 | site volume path, shared with gates.sh:115 | BUILD (section 4) |
+| long.sh:198 | mcopy writes the config file onto a test volume | same name as probe/gopher.zig:327 |
+| long.sh:265 | PROBE_WORK dir | BUILD (section 4) |
+
+**gopher-metal/probe/append.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/append.zig:69 | probe serial banner (run.sh judges exit codes, not this line) | `zig-metal-unikernel` |
+
+**gopher-metal/probe/backoff.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/backoff.zig:42 | probe serial banner (run.sh judges exit codes, not this line) | `zig-metal-unikernel` |
+
+**gopher-metal/probe/bench_page_cache.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/bench_page_cache.py:43 | writes the config file onto the image | same name as probe/gopher.zig:327 |
+
+**gopher-metal/probe/block.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/block.zig:25 | probe serial banner (run.sh judges exit codes, not this line) | `zig-metal-unikernel` |
+
+**gopher-metal/probe/clock.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/clock.zig:70 | probe serial banner (run.sh judges exit codes, not this line) | `zig-metal-unikernel` |
+
+**gopher-metal/probe/fuzz_requests.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/fuzz_requests.py:263 | writes the config file onto the image | same name as probe/gopher.zig:327 |
+
+**gopher-metal/probe/gopher.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/gopher.zig:24 | doc comment naming the config file | CONF: follows the config file's name |
+| probe/gopher.zig:327 | `config_path`: the file the kernel reads off the boot disk (and every serial line naming it) | `zig-metal-unikernel.conf` only with every writer; see DANGEROUS (accept both names first) |
+| probe/gopher.zig:378 | serial banner of the real server (no script greps it) | `zig-metal-unikernel` |
+| probe/gopher.zig:1738 | doc comment naming the config file | CONF: follows the config file's name |
+| probe/gopher.zig:1973 | /admin/host `host` row text; judge_gopher.py:1386 and cutover_drill.py REQUIRE it | `zig-metal-unikernel, with no operating system`, same commit as the judge and test_judges.py |
+| probe/gopher.zig:1974 | /admin/host row label `gopher-metal commit` (page text) | `zig-metal-unikernel commit`; note cutover_drill.py's substring check also matches this row |
+
+**gopher-metal/probe/http.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/http.zig:70 | probe serial banner (run.sh judges exit codes, not this line) | `zig-metal-unikernel` |
+
+**gopher-metal/probe/judge_dogpark.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/judge_dogpark.py:14 | docstring/comment | `zig-metal-unikernel` |
+
+**gopher-metal/probe/judge_gopher.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/judge_gopher.py:74 | session-secret fixture both hosts are given | keep, or rename: any 32+ bytes work |
+| probe/judge_gopher.py:512 | docstring/comment | `zig-metal-unikernel` |
+| probe/judge_gopher.py:708 | User-Agent the judge sends (nothing filters on it) | `zig-metal-unikernel-judge`, cosmetic |
+| probe/judge_gopher.py:751 | docstring/comment naming the config file | CONF: follows the config file's name |
+| probe/judge_gopher.py:767 | writes the config file onto the boot image | same name as probe/gopher.zig:327, same commit |
+| probe/judge_gopher.py:1025 | REQUIRES the loader banner on a droplet boot's serial | same string as droplet/loader.S:143, same commit |
+| probe/judge_gopher.py:1224 | docstring/comment | `zig-metal-unikernel` |
+| probe/judge_gopher.py:1386 | REQUIRES the /admin/host banner on metal | same string as probe/gopher.zig:1973, same commit |
+| probe/judge_gopher.py:1387 | failure message | `zig-metal-unikernel` |
+| probe/judge_gopher.py:2106 | docstring/comment naming the config file | CONF: follows the config file's name |
+| probe/judge_gopher.py:2148 | writes the config file onto the boot image | same name as probe/gopher.zig:327, same commit |
+| probe/judge_gopher.py:2275 | writes the config file onto the boot image | same name as probe/gopher.zig:327, same commit |
+
+**gopher-metal/probe/judge_replace.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/judge_replace.py:6 | docstring/comment | `zig-metal-unikernel` |
+
+**gopher-metal/probe/ladder.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/ladder.zig:347 | probe serial banner (run.sh judges exit codes, not this line) | `zig-metal-unikernel` |
+
+**gopher-metal/probe/link.ld**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/link.ld:31 | linker script KEEPs the build-tag section by name | same name as src/boot.zig:126, same commit |
+
+**gopher-metal/probe/long_run.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/long_run.sh:25 | log dir `~/build/gopher-metal/long_run` | BUILD (section 4) |
+
+**gopher-metal/probe/memory.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/memory.zig:51 | probe serial banner (run.sh judges exit codes, not this line) | `zig-metal-unikernel` |
+
+**gopher-metal/probe/net.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/net.zig:34 | probe serial banner (run.sh judges exit codes, not this line) | `zig-metal-unikernel` |
+
+**gopher-metal/probe/realunset.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/realunset.zig:21 | probe serial banner (run.sh judges exit codes, not this line) | `zig-metal-unikernel` |
+
+**gopher-metal/probe/replace.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/replace.zig:132 | probe serial banner (run.sh judges exit codes, not this line) | `zig-metal-unikernel` |
+
+**gopher-metal/probe/restart.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/restart.zig:103 | probe serial banner (run.sh judges exit codes, not this line) | `zig-metal-unikernel` |
+
+**gopher-metal/probe/restore.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/restore.zig:30 | probe serial banner (run.sh judges exit codes, not this line) | `zig-metal-unikernel` |
+
+**gopher-metal/probe/rng.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/rng.zig:28 | probe serial banner (run.sh judges exit codes, not this line) | `zig-metal-unikernel` |
+
+**gopher-metal/probe/run.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/run.sh:44 | probe work dir default `~/build/gopher-metal/probe` (the judge stages `gopher/pristine.img` there, which metal-vmm's scripts read) | BUILD (section 4) |
+| probe/run.sh:99 | greps the build tag out of the ELF | same string as src/boot.zig:127, same commit |
+| probe/run.sh:101 | strips the build-tag prefix for the PASS line | same string as src/boot.zig:127, same commit |
+| probe/run.sh:699 | greps the build tag out of the ELF | same string as src/boot.zig:127, same commit |
+| probe/run.sh:701 | strips the build-tag prefix for the PASS line | same string as src/boot.zig:127, same commit |
+
+**gopher-metal/probe/soak.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/soak.py:294 | writes the config file onto the image | same name as probe/gopher.zig:327 |
+
+**gopher-metal/probe/stdhttp.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/stdhttp.zig:47 | probe serial banner (run.sh judges exit codes, not this line) | `zig-metal-unikernel` |
+
+**gopher-metal/probe/stdio.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/stdio.zig:55 | probe serial banner (run.sh judges exit codes, not this line) | `zig-metal-unikernel` |
+
+**gopher-metal/probe/test_judges.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/test_judges.py:249 | fixture of the /admin/host banner row (feeds the judge's check) | same string as probe/gopher.zig:1973, same commit |
+| probe/test_judges.py:266 | fixture of the /admin/host banner row (feeds the judge's check) | same string as probe/gopher.zig:1973, same commit |
+| probe/test_judges.py:829 | fixture: the config file's name on a test image | follows the config file's name, same commit as judge_gopher.py |
+| probe/test_judges.py:837 | fixture: the config file's name on a test image | follows the config file's name, same commit as judge_gopher.py |
+| probe/test_judges.py:840 | fixture: the config file's name on a test image | follows the config file's name, same commit as judge_gopher.py |
+| probe/test_judges.py:848 | fixture: the config file's name on a test image | follows the config file's name, same commit as judge_gopher.py |
+| probe/test_judges.py:878 | ladder log fixture's first line (the parser ignores it) | follows probe/ladder.zig:347; cosmetic |
+
+**gopher-metal/probe/vfat.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| probe/vfat.zig:54 | probe serial banner (run.sh judges exit codes, not this line) | `zig-metal-unikernel` |
+
+**gopher-metal/src/admin_reset.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/admin_reset.zig:6 | code comment | `zig-metal-unikernel` |
+
+**gopher-metal/src/boot.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/boot.zig:126 | exported symbol and linker section `.rodata.gopher_metal_build` | `zig_metal_unikernel_build`, in the same commit as probe/link.ld:31 |
+| src/boot.zig:127 | build tag string `gopher-metal-build=<mode>` baked into every ELF; probe/run.sh greps it | `zig-metal-unikernel-build=`, in the same commit as probe/run.sh:99,101,699,701 |
+
+**gopher-metal/src/gpt.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/gpt.zig:12 | code comment | `zig-metal-unikernel` |
+
+**gopher-metal/src/machine.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/machine.zig:19 | code comment | `zig-metal-unikernel` |
+
+**gopher-metal/src/serial_gate.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/serial_gate.zig:111 | test literal; its length (29 bytes) is in the test's expected `dropped` count (29 + 15) | rename AND fix the 29 (or keep the literal); the test fails loudly otherwise |
+
+**gopher-metal/src/store.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/store.zig:40 | code comment | `zig-metal-unikernel` |
+
+**gopher-metal/src/store_judge.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/store_judge.zig:230 | code comment | `zig-metal-unikernel` |
+
+**gopher-metal/tools/fat16_read.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| tools/fat16_read.py:183 | docstring/comment | `zig-metal-unikernel` |
+
+**gopher-metal/tools/soak.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| tools/soak.sh:10 | comment naming the worktree | follows line 25 |
+| tools/soak.sh:25 | sibling worktree path `../gopher-metal-soak` | `../zig-metal-unikernel-soak` (or keep; an old worktree there is re-pointed by `checkout`) |
+| tools/soak.sh:33 | first line of the soak log (names the commit) | `zig-metal-unikernel` |
+
+**gopher-metal/tools/verdicts.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| tools/verdicts.py:36 | docstring naming VERDICT_DIR | follows line 50 |
+| tools/verdicts.py:50 | VERDICT_DIR default `~/build/gopher-metal/verdicts`; droplet/chat.py refuses to build without a PASS here | depends on the box's choice of the build dir (`~/build/<name>`); see DANGEROUS (move the old verdicts, or re-gate) |
+| tools/verdicts.py:194 | printed status line | `zig-metal-unikernel` |
+| tools/verdicts.py:226 | printed status line | `zig-metal-unikernel` |
+| tools/verdicts.py:238 | refusal reason (printed) | `zig-metal-unikernel` |
+
+##### metal-vmm
+
+**metal-vmm/CLOUD_WORK.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| CLOUD_WORK.md:4 | current doc prose | `zig-metal-unikernel` |
+| CLOUD_WORK.md:5 | current doc prose | `zig-metal-unikernel` |
+| CLOUD_WORK.md:10 | current doc prose | `zig-metal-unikernel` |
+| CLOUD_WORK.md:12 | current doc prose | `zig-metal-unikernel` |
+| CLOUD_WORK.md:14 | current doc prose | `zig-metal-unikernel` |
+| CLOUD_WORK.md:34 | current doc prose | `zig-metal-unikernel` |
+| CLOUD_WORK.md:64 | current doc prose | `zig-metal-unikernel` |
+| CLOUD_WORK.md:69 | current doc prose | `zig-metal-unikernel` |
+| CLOUD_WORK.md:71 | charter: the GitHub repo to clone | rename with the GitHub repo; GitHub redirects (update the URL anyway) |
+| CLOUD_WORK.md:88 | current doc prose | `zig-metal-unikernel` |
+| CLOUD_WORK.md:124 | branch map table: repo name | `zig-metal-unikernel` |
+| CLOUD_WORK.md:127 | branch map table: repo name | `zig-metal-unikernel` |
+| CLOUD_WORK.md:130 | current doc prose | `zig-metal-unikernel` |
+| CLOUD_WORK.md:136 | current doc prose | `zig-metal-unikernel` |
+| CLOUD_WORK.md:146 | current doc prose | `zig-metal-unikernel` |
+| CLOUD_WORK.md:148 | current doc prose | `zig-metal-unikernel` |
+| CLOUD_WORK.md:150 | current doc prose | `zig-metal-unikernel` |
+| CLOUD_WORK.md:157 | charter heading, cited by gopher-metal/CLAUDE.md:11 | `zig-metal-unikernel: the simulators`, with gopher-metal/CLAUDE.md:11 |
+| CLOUD_WORK.md:159 | current doc prose | `zig-metal-unikernel` |
+| CLOUD_WORK.md:176 | current doc prose | CITE |
+| CLOUD_WORK.md:198 | current doc prose | `zig-metal-unikernel` |
+
+**metal-vmm/KNOBS.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| KNOBS.md:49 | current doc prose | `zig-metal-unikernel` |
+| KNOBS.md:94 | current doc prose | `zig-metal-unikernel` |
+| KNOBS.md:141 | doc naming gopher-metal's coverage floor file | `zig-metal-unikernel` |
+| KNOBS.md:170 | current doc prose | `zig-metal-unikernel` |
+| KNOBS.md:187 | current doc prose | `zig-metal-unikernel` |
+| KNOBS.md:196 | current doc prose | `zig-metal-unikernel` |
+| KNOBS.md:238 | defaults table: GUESTS `~/showell_repos/gopher-metal/probe` | follows the scripts' GUESTS default |
+| KNOBS.md:240 | defaults table: SITE `~/build/gopher-metal/probe/gopher/pristine.img` | follows the scripts' SITE default |
+
+**metal-vmm/QUEUE.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| QUEUE.md:3 | standing header: the four repos | `zig-metal-unikernel` |
+| QUEUE.md:12 | standing Context paragraph | `zig-metal-unikernel` |
+| QUEUE.md:41 | standing CC role paragraph (test command) | `zig-metal-unikernel` |
+
+**metal-vmm/README.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| README.md:4 | README link to the GitHub repo | rename with the GitHub repo; GitHub redirects (update the URL anyway) |
+| README.md:15 | README prose | `zig-metal-unikernel` |
+| README.md:26 | README prose | `zig-metal-unikernel` |
+| README.md:40 | README prose | `zig-metal-unikernel` |
+| README.md:55 | README prose | `zig-metal-unikernel` |
+| README.md:77 | README prose | `zig-metal-unikernel` |
+| README.md:78 | README: default paths | follows the scripts' defaults |
+| README.md:93 | README prose | `zig-metal-unikernel` |
+| README.md:97 | README: default paths | follows the scripts' defaults |
+| README.md:134 | README prose | `zig-metal-unikernel` |
+| README.md:138 | README command `../gopher-metal/probe/rng.elf` | CHECKOUT (section 4) |
+| README.md:141 | README sample serial output | follows the banner it quotes |
+| README.md:203 | README prose | `zig-metal-unikernel` |
+| README.md:204 | README prose | `zig-metal-unikernel` |
+| README.md:287 | README prose | `zig-metal-unikernel` |
+| README.md:294 | README prose | `zig-metal-unikernel` |
+| README.md:318 | README prose | `zig-metal-unikernel` |
+| README.md:366 | README prose | `zig-metal-unikernel` |
+| README.md:373 | README prose | `zig-metal-unikernel` |
+| README.md:374 | README prose | `zig-metal-unikernel` |
+| README.md:414 | README prose | `zig-metal-unikernel` |
+| README.md:521 | README prose | `zig-metal-unikernel` |
+| README.md:544 | README prose | `zig-metal-unikernel` |
+| README.md:552 | README: "gopher-metal's history" | keep or rename: points at that repo's git history |
+
+**metal-vmm/check-cc.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| check-cc.sh:5 | comment | `zig-metal-unikernel` |
+| check-cc.sh:7 | comment | `zig-metal-unikernel` |
+| check-cc.sh:30 | comment | `zig-metal-unikernel` |
+| check-cc.sh:32 | VOLUME_SITE default `~/build/gopher-metal/probe/gopher/pristine.img` | depends on the box's choice of the build dir (`~/build/<name>`); see DANGEROUS - rename with probe/run.sh:44, same day |
+| check-cc.sh:50 | repo names checked out: `$REPOS/gopher-metal` (and the worktree dir name) | depends on the box's choice of the checkout dir name; see DANGEROUS (the checkout under $REPOS) |
+| check-cc.sh:67 | worktree path `$OUT/gopher-metal` (internal to the script; consistent with line 50) | follows line 50 |
+| check-cc.sh:69 | worktree path `$OUT/gopher-metal` (internal to the script; consistent with line 50) | follows line 50 |
+| check-cc.sh:77 | worktree path `$OUT/gopher-metal` (internal to the script; consistent with line 50) | follows line 50 |
+| check-cc.sh:90 | worktree path `$OUT/gopher-metal` (internal to the script; consistent with line 50) | follows line 50 |
+
+**metal-vmm/check.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| check.sh:30 | comment | `zig-metal-unikernel` |
+| check.sh:33 | GUESTS default `~/showell_repos/gopher-metal/probe` (where the kernels are) | CHECKOUT (section 4) |
+| check.sh:53 | comment | `zig-metal-unikernel` |
+| check.sh:77 | comment | `zig-metal-unikernel` |
+| check.sh:78 | error message | `zig-metal-unikernel` |
+
+**metal-vmm/docs/SNAPSHOT.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| docs/SNAPSHOT.md:84 | current doc prose | `zig-metal-unikernel` |
+
+**metal-vmm/lossy.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| lossy.sh:16 | GUESTS default `~/showell_repos/gopher-metal/probe` (where the kernels are) | CHECKOUT (section 4) |
+
+**metal-vmm/nightly.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| nightly.sh:37 | comment | `zig-metal-unikernel` |
+| nightly.sh:40 | comment | `zig-metal-unikernel` |
+| nightly.sh:44 | comment | `zig-metal-unikernel` |
+| nightly.sh:51 | GOPHER default `~/showell_repos/gopher-metal` (kernel ELF, FAT reader) | CHECKOUT (section 4) |
+| nightly.sh:52 | SITE default `~/build/gopher-metal/probe/gopher/pristine.img` (staged by gopher-metal's probe/run.sh:44) | depends on the box's choice of the build dir (`~/build/<name>`); see DANGEROUS - rename with probe/run.sh:44, same day |
+| nightly.sh:87 | comment | `zig-metal-unikernel` |
+| nightly.sh:90 | error message | `zig-metal-unikernel` |
+| nightly.sh:102 | night log header label | `zig-metal-unikernel` |
+
+**metal-vmm/nightly_test.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| nightly_test.sh:37 | comment | `zig-metal-unikernel` |
+
+**metal-vmm/pc_vs_microvm.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| pc_vs_microvm.sh:20 | GUESTS default `~/showell_repos/gopher-metal/probe` (where the kernels are) | CHECKOUT (section 4) |
+| pc_vs_microvm.sh:21 | SITE default `~/build/gopher-metal/probe/gopher/pristine.img` (staged by gopher-metal's probe/run.sh:44) | depends on the box's choice of the build dir (`~/build/<name>`); see DANGEROUS - rename with probe/run.sh:44, same day |
+| pc_vs_microvm.sh:33 | error message | `zig-metal-unikernel` |
+
+**metal-vmm/plants.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| plants.sh:5 | comment | `zig-metal-unikernel` |
+| plants.sh:8 | comment | `zig-metal-unikernel` |
+| plants.sh:28 | comment | `zig-metal-unikernel` |
+| plants.sh:31 | comment | `zig-metal-unikernel` |
+| plants.sh:37 | GOPHER default `~/showell_repos/gopher-metal` (builds the kernels) | CHECKOUT (section 4) |
+| plants.sh:40 | VOLUME_SITE default `~/build/gopher-metal/probe/gopher/pristine.img` | depends on the box's choice of the build dir (`~/build/<name>`); see DANGEROUS - rename with probe/run.sh:44, same day |
+| plants.sh:45 | comment | `zig-metal-unikernel` |
+| plants.sh:49 | comment | `zig-metal-unikernel` |
+| plants.sh:52 | comment | `zig-metal-unikernel` |
+| plants.sh:60 | error message | `zig-metal-unikernel` |
+| plants.sh:66 | error message | `zig-metal-unikernel` |
+| plants.sh:69 | error message | `zig-metal-unikernel` |
+| plants.sh:112 | run log header | `zig-metal-unikernel` |
+
+**metal-vmm/plants/pending/README.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| plants/pending/README.md:3 | README prose | `zig-metal-unikernel` |
+| plants/pending/README.md:5 | README prose | `zig-metal-unikernel` |
+
+**metal-vmm/refused.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| refused.sh:16 | GUESTS default `~/showell_repos/gopher-metal/probe` (where the kernels are) | CHECKOUT (section 4) |
+| refused.sh:21 | SITE default `~/build/gopher-metal/probe/gopher/pristine.img` (staged by gopher-metal's probe/run.sh:44) | depends on the box's choice of the build dir (`~/build/<name>`); see DANGEROUS - rename with probe/run.sh:44, same day |
+
+**metal-vmm/requests/shapes/README.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| requests/shapes/README.md:61 | README citing a commit | CITE |
+
+**metal-vmm/same.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| same.sh:20 | GUESTS default `~/showell_repos/gopher-metal/probe` (where the kernels are) | CHECKOUT (section 4) |
+| same.sh:43 | comment | `zig-metal-unikernel` |
+| same.sh:44 | error message | `zig-metal-unikernel` |
+
+**metal-vmm/site.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| site.sh:10 | comment naming the config file | CONF: follows the config file's name |
+| site.sh:18 | GUESTS default `~/showell_repos/gopher-metal/probe` (where the kernels are) | CHECKOUT (section 4) |
+| site.sh:21 | SITE default `~/build/gopher-metal/probe/gopher/pristine.img` (staged by gopher-metal's probe/run.sh:44) | depends on the box's choice of the build dir (`~/build/<name>`); see DANGEROUS - rename with probe/run.sh:44, same day |
+| site.sh:36 | error message | `zig-metal-unikernel` |
+
+**metal-vmm/sound.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| sound.sh:17 | comment | `zig-metal-unikernel` |
+| sound.sh:40 | comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/apic.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/apic.zig:1 | code comment | `zig-metal-unikernel` |
+| src/apic.zig:340 | code comment | `zig-metal-unikernel` |
+| src/apic.zig:361 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/checked.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/checked.zig:136 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/clock.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/clock.zig:234 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/coverage.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/coverage.zig:3 | code comment | `zig-metal-unikernel` |
+| src/coverage.zig:87 | code comment | `zig-metal-unikernel` |
+| src/coverage.zig:409 | test fixture: a serial transcript's first line (any text works) | keep or rename; cosmetic |
+| src/coverage.zig:412 | test fixture: a serial transcript's first line (any text works) | keep or rename; cosmetic |
+
+**metal-vmm/src/entropy.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/entropy.zig:4 | code comment | `zig-metal-unikernel` |
+| src/entropy.zig:80 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/faults.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/faults.zig:126 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/frames.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/frames.zig:221 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/fuzz.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/fuzz.zig:21 | code comment | `zig-metal-unikernel` |
+| src/fuzz.zig:243 | code comment | `zig-metal-unikernel` |
+| src/fuzz.zig:329 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/halt.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/halt.zig:112 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/knobs.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/knobs.zig:57 | code comment | `zig-metal-unikernel` |
+| src/knobs.zig:64 | code comment | `zig-metal-unikernel` |
+| src/knobs.zig:70 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/loader.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/loader.zig:170 | code comment | `zig-metal-unikernel` |
+| src/loader.zig:177 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/main.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/main.zig:5 | code comment | `zig-metal-unikernel` |
+| src/main.zig:82 | code comment | `zig-metal-unikernel` |
+| src/main.zig:308 | code comment | `zig-metal-unikernel` |
+| src/main.zig:1051 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/mangle.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/mangle.zig:19 | code comment | `zig-metal-unikernel` |
+| src/mangle.zig:136 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/pci.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/pci.zig:2 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/peer.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/peer.zig:12 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/processor.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/processor.zig:92 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/reports.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/reports.zig:502 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/scsi.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/scsi.zig:3 | code comment | `zig-metal-unikernel` |
+| src/scsi.zig:6 | code comment | `zig-metal-unikernel` |
+| src/scsi.zig:20 | code comment | `zig-metal-unikernel` |
+| src/scsi.zig:112 | code comment | `zig-metal-unikernel` |
+| src/scsi.zig:276 | code comment | `zig-metal-unikernel` |
+| src/scsi.zig:626 | code comment | `zig-metal-unikernel` |
+| src/scsi.zig:631 | code comment | `zig-metal-unikernel` |
+| src/scsi.zig:729 | code comment | `zig-metal-unikernel` |
+| src/scsi.zig:760 | code comment | `zig-metal-unikernel` |
+| src/scsi.zig:765 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/virtio.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/virtio.zig:1 | code comment | `zig-metal-unikernel` |
+| src/virtio.zig:558 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/src/virtio_pci.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/virtio_pci.zig:5 | code comment | `zig-metal-unikernel` |
+| src/virtio_pci.zig:367 | code comment | `zig-metal-unikernel` |
+| src/virtio_pci.zig:445 | code comment | `zig-metal-unikernel` |
+| src/virtio_pci.zig:517 | code comment | `zig-metal-unikernel` |
+| src/virtio_pci.zig:625 | code comment | `zig-metal-unikernel` |
+
+**metal-vmm/sweep.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| sweep.sh:78 | comment | `zig-metal-unikernel` |
+| sweep.sh:111 | GUESTS default `~/showell_repos/gopher-metal/probe` (where the kernels are) | CHECKOUT (section 4) |
+| sweep.sh:114 | comment | `zig-metal-unikernel` |
+| sweep.sh:119 | SITE default `~/build/gopher-metal/probe/gopher/pristine.img` (staged by gopher-metal's probe/run.sh:44) | depends on the box's choice of the build dir (`~/build/<name>`); see DANGEROUS - rename with probe/run.sh:44, same day |
+| sweep.sh:128 | comment | `zig-metal-unikernel` |
+| sweep.sh:815 | hint printed with a path `~/showell_repos/gopher-metal` | CHECKOUT (section 4) |
+
+**metal-vmm/sweep_test.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| sweep_test.sh:160 | fake kernel output echoing the kernel's `as gopher-metal.conf says` line (nothing parses that part) | follows the config file's name; cosmetic |
+| sweep_test.sh:161 | fake kernel output echoing the kernel's `as gopher-metal.conf says` line (nothing parses that part) | follows the config file's name; cosmetic |
+| sweep_test.sh:170 | fake kernel output echoing the kernel's `as gopher-metal.conf says` line (nothing parses that part) | follows the config file's name; cosmetic |
+| sweep_test.sh:172 | fake kernel output echoing the kernel's `as gopher-metal.conf says` line (nothing parses that part) | follows the config file's name; cosmetic |
+
+**metal-vmm/timeouts.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| timeouts.sh:16 | comment naming the config file | CONF: follows the config file's name |
+| timeouts.sh:68 | GUESTS default `~/showell_repos/gopher-metal/probe` (where the kernels are) | CHECKOUT (section 4) |
+| timeouts.sh:72 | SITE default `~/build/gopher-metal/probe/gopher/pristine.img` (staged by gopher-metal's probe/run.sh:44) | depends on the box's choice of the build dir (`~/build/<name>`); see DANGEROUS - rename with probe/run.sh:44, same day |
+| timeouts.sh:78 | error message | `zig-metal-unikernel` |
+| timeouts.sh:95 | mcopy writes the config file onto the boot image | same name as gopher-metal probe/gopher.zig:327; see DANGEROUS |
+| timeouts.sh:96 | error message naming the config file | CONF: follows the config file's name |
+| timeouts.sh:135 | mcopy writes the config file onto the boot image | same name as gopher-metal probe/gopher.zig:327; see DANGEROUS |
+| timeouts.sh:136 | error message naming the config file | CONF: follows the config file's name |
+| timeouts.sh:177 | mcopy writes the config file onto the boot image | same name as gopher-metal probe/gopher.zig:327; see DANGEROUS |
+| timeouts.sh:178 | error message naming the config file | CONF: follows the config file's name |
+| timeouts.sh:198 | mcopy writes the config file onto the boot image | same name as gopher-metal probe/gopher.zig:327; see DANGEROUS |
+| timeouts.sh:199 | error message naming the config file | CONF: follows the config file's name |
+| timeouts.sh:217 | mcopy writes the config file onto the boot image | same name as gopher-metal probe/gopher.zig:327; see DANGEROUS |
+| timeouts.sh:218 | error message naming the config file | CONF: follows the config file's name |
+
+**metal-vmm/tools/fat_taken.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| tools/fat_taken.py:17 | docstring/comment | `zig-metal-unikernel` |
+| tools/fat_taken.py:18 | docstring/comment | `zig-metal-unikernel` |
+| tools/fat_taken.py:28 | computes `../../gopher-metal/tools/fat16_read.py` (sibling checkout) when FAT_READ is unset | CHECKOUT (section 4) |
+| tools/fat_taken.py:30 | error message | `zig-metal-unikernel` |
+
+**metal-vmm/tools/fresh.sh**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| tools/fresh.sh:14 | comment | `zig-metal-unikernel` |
+| tools/fresh.sh:21 | error message | `zig-metal-unikernel` |
+| tools/fresh.sh:27 | error message | `zig-metal-unikernel` |
+
+**metal-vmm/tools/largest_write.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| tools/largest_write.py:16 | docstring/comment | `zig-metal-unikernel` |
+| tools/largest_write.py:17 | docstring/comment | `zig-metal-unikernel` |
+
+**metal-vmm/tools/site_requests.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| tools/site_requests.py:6 | docstring naming the config file | CONF: follows the config file's name |
+| tools/site_requests.py:18 | docstring/comment | `zig-metal-unikernel` |
+| tools/site_requests.py:29 | `CONF = "/gopher-metal.conf"`: reads and rewrites the config file on the image | same name as gopher-metal probe/gopher.zig:327; see DANGEROUS |
+
+**metal-vmm/tools/test_site_requests.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| tools/test_site_requests.py:23 | test fixture: the config file's name on a FAT image | same as tools/site_requests.py:29, same commit |
+| tools/test_site_requests.py:33 | test fixture: the config file's name on a FAT image | same as tools/site_requests.py:29, same commit |
+| tools/test_site_requests.py:65 | test fixture: the config file's name on a FAT image | same as tools/site_requests.py:29, same commit |
+
+**metal-vmm/tools/untouched.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| tools/untouched.py:20 | docstring/comment | `zig-metal-unikernel` |
+| tools/untouched.py:21 | docstring/comment | `zig-metal-unikernel` |
+| tools/untouched.py:33 | computes `../../gopher-metal/tools/fat16_read.py` (sibling checkout) when FAT_READ is unset | CHECKOUT (section 4) |
+| tools/untouched.py:35 | error message | `zig-metal-unikernel` |
+
+##### angry-gopher
+
+**angry-gopher/README.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| README.md:9 | README prose | `zig-metal-unikernel` |
+| README.md:13 | README heading | `zig-metal-unikernel` |
+| README.md:15 | README link to the GitHub repo | rename with the GitHub repo; GitHub redirects (update the URL anyway) |
+| README.md:21 | README prose | `zig-metal-unikernel` |
+| README.md:27 | README prose | `zig-metal-unikernel` |
+| README.md:33 | README prose | `zig-metal-unikernel` |
+| README.md:34 | README prose | `zig-metal-unikernel` |
+| README.md:40 | README prose | `zig-metal-unikernel` |
+| README.md:42 | README prose | `zig-metal-unikernel` |
+| README.md:48 | README prose | `zig-metal-unikernel` |
+| README.md:49 | README prose | `zig-metal-unikernel` |
+| README.md:247 | README prose | `zig-metal-unikernel` |
+
+**angry-gopher/deploy/Caddyfile**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| deploy/Caddyfile:40 | comment | `zig-metal-unikernel` |
+| deploy/Caddyfile:41 | comment | `zig-metal-unikernel` |
+
+**angry-gopher/deploy/README.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| deploy/README.md:3 | README prose | `zig-metal-unikernel` |
+| deploy/README.md:36 | README prose | `zig-metal-unikernel` |
+| deploy/README.md:39 | README prose | `zig-metal-unikernel` |
+| deploy/README.md:127 | README prose | `zig-metal-unikernel` |
+
+**angry-gopher/deploy/test_watchdog.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| deploy/test_watchdog.py:2 | docstring/comment | CITE |
+
+**angry-gopher/deploy/watchdog.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| deploy/watchdog.py:23 | docstring/comment | `zig-metal-unikernel` |
+| deploy/watchdog.py:24 | docstring/comment | CITE |
+| deploy/watchdog.py:27 | docstring/comment | `zig-metal-unikernel` |
+
+**angry-gopher/docs/SEAM.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| docs/SEAM.md:3 | design note header citing an item | CITE |
+| docs/SEAM.md:35 | current doc prose | `zig-metal-unikernel` |
+| docs/SEAM.md:52 | design note naming the config file | CONF: follows the config file's name |
+
+**angry-gopher/ops/check_zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| ops/check_zig:45 | comment | `zig-metal-unikernel` |
+| ops/check_zig:70 | comment | `zig-metal-unikernel` |
+
+**angry-gopher/ops/deploy**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| ops/deploy:5 | comment | `zig-metal-unikernel` |
+| ops/deploy:32 | comment | `zig-metal-unikernel` |
+| ops/deploy:33 | comment | `zig-metal-unikernel` |
+| ops/deploy:65 | comment | `zig-metal-unikernel` |
+| ops/deploy:111 | message printed by ops/deploy to the person deploying | `zig-metal-unikernel` |
+| ops/deploy:112 | message printed by ops/deploy to the person deploying | `zig-metal-unikernel` |
+
+**angry-gopher/ops/reset_admin_password**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| ops/reset_admin_password:2 | comment | CITE |
+| ops/reset_admin_password:21 | comment naming the config file | CONF: follows the config file's name |
+| ops/reset_admin_password:22 | comment | CITE |
+
+**angry-gopher/tools/embedded_assets.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| tools/embedded_assets.py:3 | docstring/comment | `zig-metal-unikernel` |
+
+**angry-gopher/tools/lint_portable.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| tools/lint_portable.py:8 | docstring/comment | `zig-metal-unikernel` |
+| tools/lint_portable.py:36 | docstring/comment | `zig-metal-unikernel` |
+| tools/lint_portable.py:43 | docstring/comment | CITE |
+| tools/lint_portable.py:74 | docstring/comment | `zig-metal-unikernel` |
+
+**angry-gopher/tools/lint_store_absence.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| tools/lint_store_absence.py:37 | docstring/comment | `zig-metal-unikernel` |
+
+**angry-gopher/tools/mutate.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| tools/mutate.py:21 | docstring/comment | `zig-metal-unikernel` |
+
+**angry-gopher/tools/test_lint_portable.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| tools/test_lint_portable.py:441 | docstring/comment | CITE |
+
+**angry-gopher/zig-server/README.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/README.md:54 | README prose | `zig-metal-unikernel` |
+| zig-server/README.md:62 | README prose | `zig-metal-unikernel` |
+
+**angry-gopher/zig-server/assets.zon**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/assets.zon:2 | comment | `zig-metal-unikernel` |
+
+**angry-gopher/zig-server/build.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/build.zig:37 | code comment | `zig-metal-unikernel` |
+| zig-server/build.zig:77 | code comment | `zig-metal-unikernel` |
+| zig-server/build.zig:116 | code comment | `zig-metal-unikernel` |
+
+**angry-gopher/zig-server/src/admin.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/admin.zig:73 | code comment | `zig-metal-unikernel` |
+| zig-server/src/admin.zig:109 | code comment | CITE |
+
+**angry-gopher/zig-server/src/admin_backup.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/admin_backup.zig:2 | code comment | CITE |
+| zig-server/src/admin_backup.zig:4 | code comment | `zig-metal-unikernel` |
+| zig-server/src/admin_backup.zig:8 | code comment | `zig-metal-unikernel` |
+| zig-server/src/admin_backup.zig:16 | code comment | CITE |
+| zig-server/src/admin_backup.zig:20 | code comment | `zig-metal-unikernel` |
+| zig-server/src/admin_backup.zig:24 | code comment | `zig-metal-unikernel` |
+| zig-server/src/admin_backup.zig:29 | code comment | CITE |
+| zig-server/src/admin_backup.zig:38 | code comment | `zig-metal-unikernel` |
+| zig-server/src/admin_backup.zig:74 | code comment | CITE |
+| zig-server/src/admin_backup.zig:126 | PAGE TEXT on /admin/backup (an admin reads it) | `zig-metal-unikernel` (or "On metal") |
+
+**angry-gopher/zig-server/src/admin_host.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/admin_host.zig:7 | code comment | `zig-metal-unikernel` |
+| zig-server/src/admin_host.zig:53 | code comment | `zig-metal-unikernel` |
+
+**angry-gopher/zig-server/src/admin_secret.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/admin_secret.zig:2 | code comment | CITE |
+| zig-server/src/admin_secret.zig:4 | code comment | `zig-metal-unikernel` |
+
+**angry-gopher/zig-server/src/auth.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/auth.zig:35 | code comment | `zig-metal-unikernel` |
+
+**angry-gopher/zig-server/src/body.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/body.zig:4 | code comment (moves to zig-webbox) | `zig-metal-unikernel` |
+
+**angry-gopher/zig-server/src/chat_count.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/chat_count.zig:38 | code comment | CITE |
+| zig-server/src/chat_count.zig:140 | code comment | CITE |
+| zig-server/src/chat_count.zig:334 | code comment | CITE |
+| zig-server/src/chat_count.zig:337 | code comment | `zig-metal-unikernel` |
+| zig-server/src/chat_count.zig:583 | code comment | CITE |
+| zig-server/src/chat_count.zig:640 | code comment | CITE |
+| zig-server/src/chat_count.zig:695 | code comment | CITE |
+| zig-server/src/chat_count.zig:718 | code comment | CITE |
+| zig-server/src/chat_count.zig:743 | test NAME (shows in test output) citing an item | CITE |
+| zig-server/src/chat_count.zig:762 | test NAME (shows in test output) citing an item | CITE |
+
+**angry-gopher/zig-server/src/chat_paths.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/chat_paths.zig:229 | code comment | CITE |
+
+**angry-gopher/zig-server/src/chat_retire.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/chat_retire.zig:243 | code comment | CITE |
+
+**angry-gopher/zig-server/src/chat_state.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/chat_state.zig:52 | code comment | CITE |
+
+**angry-gopher/zig-server/src/chat_store.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/chat_store.zig:181 | code comment | CITE |
+
+**angry-gopher/zig-server/src/chat_upload.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/chat_upload.zig:38 | code comment | `zig-metal-unikernel` |
+| zig-server/src/chat_upload.zig:40 | code comment | `zig-metal-unikernel` |
+| zig-server/src/chat_upload.zig:185 | code comment | `zig-metal-unikernel` |
+
+**angry-gopher/zig-server/src/game_limits.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/game_limits.zig:2 | code comment | CITE |
+| zig-server/src/game_limits.zig:21 | code comment | `zig-metal-unikernel` |
+| zig-server/src/game_limits.zig:47 | code comment | CITE |
+
+**angry-gopher/zig-server/src/hash_password.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/hash_password.zig:3 | code comment | CITE |
+| zig-server/src/hash_password.zig:6 | comment naming the config file | CONF: follows the config file's name |
+
+**angry-gopher/zig-server/src/home.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/home.zig:271 | code comment | `zig-metal-unikernel` |
+
+**angry-gopher/zig-server/src/host_io_std.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/host_io_std.zig:3 | code comment (moves to zig-webbox) | `zig-metal-unikernel` |
+
+**angry-gopher/zig-server/src/http.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/http.zig:584 | message printed when the legacy-names test fires (2026-11-15); moves to zig-webbox | `zig-metal-unikernel` (it names judge_gopher.py in that repo) |
+
+**angry-gopher/zig-server/src/limits.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/limits.zig:2 | code comment | `zig-metal-unikernel` |
+| zig-server/src/limits.zig:5 | code comment | `zig-metal-unikernel` |
+| zig-server/src/limits.zig:12 | code comment | `zig-metal-unikernel` |
+| zig-server/src/limits.zig:20 | code comment | `zig-metal-unikernel` |
+
+**angry-gopher/zig-server/src/login.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/login.zig:287 | code comment | CITE |
+
+**angry-gopher/zig-server/src/login_throttle.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/login_throttle.zig:2 | code comment | CITE |
+| zig-server/src/login_throttle.zig:5 | code comment | `zig-metal-unikernel` |
+| zig-server/src/login_throttle.zig:25 | code comment | CITE |
+
+**angry-gopher/zig-server/src/player.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/player.zig:107 | code comment | CITE |
+| zig-server/src/player.zig:109 | code comment | `zig-metal-unikernel` |
+| zig-server/src/player.zig:363 | test NAME (shows in test output) citing an item | CITE |
+
+**angry-gopher/zig-server/src/presence.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/presence.zig:36 | code comment | `zig-metal-unikernel` |
+
+**angry-gopher/zig-server/src/puzzles.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/puzzles.zig:110 | code comment | CITE |
+
+**angry-gopher/zig-server/src/recent.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/recent.zig:202 | code comment | `zig-metal-unikernel` |
+| zig-server/src/recent.zig:203 | code comment | CITE |
+| zig-server/src/recent.zig:242 | code comment | CITE |
+
+**angry-gopher/zig-server/src/roots.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/roots.zig:29 | code comment | CITE |
+
+**angry-gopher/zig-server/src/router.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/router.zig:8 | code comment | `zig-metal-unikernel` |
+| zig-server/src/router.zig:53 | code comment | `zig-metal-unikernel` |
+| zig-server/src/router.zig:90 | code comment | CITE |
+| zig-server/src/router.zig:104 | code comment | `zig-metal-unikernel` |
+| zig-server/src/router.zig:125 | code comment | CITE |
+| zig-server/src/router.zig:844 | code comment | CITE |
+| zig-server/src/router.zig:1038 | code comment | CITE |
+
+**angry-gopher/zig-server/src/search_bench.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/search_bench.zig:12 | code comment | `zig-metal-unikernel` |
+
+**angry-gopher/zig-server/src/search_index.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/search_index.zig:26 | code comment | `zig-metal-unikernel` |
+
+**angry-gopher/zig-server/src/server.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/server.zig:3 | code comment | `zig-metal-unikernel` |
+| zig-server/src/server.zig:8 | code comment | `zig-metal-unikernel` |
+| zig-server/src/server.zig:18 | code comment | `zig-metal-unikernel` |
+| zig-server/src/server.zig:20 | code comment | `zig-metal-unikernel` |
+| zig-server/src/server.zig:21 | code comment | `zig-metal-unikernel` |
+
+**angry-gopher/zig-server/src/storage.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/storage.zig:21 | code comment | CITE |
+| zig-server/src/storage.zig:104 | code comment | CITE |
+
+**angry-gopher/zig-server/src/uid_cookie.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/uid_cookie.zig:1 | code comment | CITE |
+| zig-server/src/uid_cookie.zig:119 | code comment | CITE |
+
+**angry-gopher/zig-server/src/users_session.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| zig-server/src/users_session.zig:228 | code comment | CITE |
+| zig-server/src/users_session.zig:252 | code comment | CITE |
+
+##### dog-park
+
+**dog-park/README.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| README.md:14 | README prose | `zig-metal-unikernel` |
+
+**dog-park/build.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| build.zig:28 | code comment | `zig-metal-unikernel` |
+
+**dog-park/docs/BUILD-BRIEF.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| docs/BUILD-BRIEF.md:146 | current doc prose | `zig-metal-unikernel` |
+
+**dog-park/src/play/hosted.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/play/hosted.zig:3 | code comment | `zig-metal-unikernel` |
+
+##### zig-coverage-sdk
+
+**zig-coverage-sdk/README.md**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| README.md:64 | README link to the GitHub repo | rename with the GitHub repo; GitHub redirects (update the URL anyway) |
+| README.md:66 | README prose | `zig-metal-unikernel` |
+| README.md:67 | README prose | `zig-metal-unikernel` |
+| README.md:70 | README prose | `zig-metal-unikernel` |
+| README.md:78 | README link to the GitHub repo | rename with the GitHub repo; GitHub redirects (update the URL anyway) |
+| README.md:246 | README prose | `zig-metal-unikernel` |
+| README.md:249 | README prose | `zig-metal-unikernel` |
+
+**zig-coverage-sdk/src/coverage.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/coverage.zig:378 | code comment | CITE |
+| src/coverage.zig:445 | code comment | `zig-metal-unikernel` |
+
+**zig-coverage-sdk/src/explore.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/explore.zig:986 | code comment | `zig-metal-unikernel` |
+
+**zig-coverage-sdk/src/explore_lab.zig**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| src/explore_lab.zig:2 | code comment | `zig-metal-unikernel` |
+
+**zig-coverage-sdk/tools/report.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| tools/report.py:281 | docstring/comment | `zig-metal-unikernel` |
+
+**zig-coverage-sdk/tools/report_test.py**
+
+| file:line | what it is | what it should become |
+|---|---|---|
+| tools/report_test.py:210 | docstring/comment | `zig-metal-unikernel` |
+
+#### 4. THE DANGEROUS ONES
+
+These are the occurrences where renaming only one side fails silently, or fails late. Each line was checked against the source at the refs above.
+
+##### D1. The boot-disk config file `gopher-metal.conf`: THE WORST ONE
+
+- **The reader:** gopher-metal `probe/gopher.zig:327` (`config_path`). Every serial line that names the file is built from it (432, 444, 551, 594, 1889-1915).
+- **The writers:**
+  - gopher-metal: `droplet/chat.py:130` (the PROD boot image), `droplet/rehearse.py:144`, `droplet/rotate_secret.py:154`, `droplet/site_reads.py:47`, `long.sh:198`, `probe/judge_gopher.py:767,2148,2275`, `probe/bench_page_cache.py:43`, `probe/fuzz_requests.py:263`, `probe/soak.py:294`.
+  - metal-vmm: `timeouts.sh:95,135,177,198,217` and `tools/site_requests.py:29`.
+  - The fixtures that must follow: gopher-metal `probe/test_judges.py:829,837,840,848`; metal-vmm `tools/test_site_requests.py:23,33,65`.
+- **How it fails:** `gopher.zig:1881-1887` says *"A MISSING FILE IS THE DEFAULTS"* (`error.FileNotFound => return conf`). If the kernel and the image's writer disagree on the name, the kernel boots with the defaults and says nothing. The defaults are `card = public` (line 1846), no `volume` check, no `trusted_proxy`, no `idle_timeout_ms`, no `admin_password_reset`, and no `requests` limit.
+  - **On the droplet:** metal serves on its PUBLIC card in plain HTTP. It stops checking that the attached volume is the right one (README:132-137). Every client looks like Caddy, so the per-address game bounds become site-wide. A pending admin reset is ignored.
+  - **In the judges and timeouts.sh:** a boot meant to serve `n` requests serves forever. You get timeouts, not a clear FAIL.
+  - **In site_requests.py:** it reads and rewrites `/gopher-metal.conf`. With the old name it edits a file the new kernel never reads.
+- **Safe order:**
+  1. Release N: the kernel reads `zig-metal-unikernel.conf` and falls back to `gopher-metal.conf`. It fails the boot if both are present. Its serial log says which one it read.
+  2. Rename every writer and fixture in both repos in one batch. metal-vmm's timeouts.sh and site_requests.py are in that batch.
+  3. Release N+1 drops the fallback.
+
+  Another option: keep the name `gopher-metal.conf` for good. It is a file on a disk, not a brand, so keeping it is a reasonable answer. Either way, rename the documentation that quotes the file (README:130,134,189,374, docs/port.md:75, docs/tcp.md:14,134, ADMIN-PASSWORD-LOST.md:46, SEAM.md:52, hash_password.zig:6, reset_admin_password:21) only after the code.
+
+##### D2. Strings a judge or script REQUIRES
+
+- **The /admin/host banner `gopher-metal, with no operating system`** (`probe/gopher.zig:1973`):
+  - Required by `probe/judge_gopher.py:1386`. Its fixtures are `probe/test_judges.py:249,266`. The runbook check `CUTOVER.md:275` also quotes it.
+  - Rename the banner alone: every metal judge run gets "/admin/host on metal does not say it is gopher-metal", a loud gate FAIL. Rename the judge alone: same FAIL.
+  - **Safe order:** banner, judge and test_judges in ONE commit.
+- **`droplet/cutover_drill.py:397,447`** checks only `b"gopher-metal" in host_body`. It is satisfied by the banner OR by the row label `gopher-metal commit` (`gopher.zig:1974`).
+  - The danger: renaming one of the two leaves the drill passing on the other, so the drill stops checking what it means to check.
+  - Rename both strings and the drill together. Better, have the drill match the full banner, as the judge does.
+- **The loader banner `gopher-metal loader`** (`droplet/loader.S:143`):
+  - Required by `probe/judge_gopher.py:1025` on every droplet-shaped boot ("a droplet boot that never printed the loader's line"). This fails loudly.
+  - Same commit for both.
+  - `droplet/hello.S:38` is safe: `droplet/shape.sh:45` greps only the suffix "booted from the disk's first sector".
+- **The build tag `gopher-metal-build=<mode>`** (`src/boot.zig:126-127`, section kept by `probe/link.ld:31`; read by `probe/run.sh:99,101,699,701`). Two ways it goes wrong quietly:
+  - Rename the string but not run.sh: run.sh prints "kernels of unknown build" (run.sh:103), and the PASS line loses whether it judged Debug or ReleaseSafe. That is silent.
+  - Rename the symbol/section in boot.zig without link.ld: KEEP no longer pins it. It is still matched by `*(.rodata*)`, but gc-sections may now drop it, with the same silent result.
+  - **Safe order:** the four places in one commit.
+- **`src/serial_gate.zig:111`** (a test literal): the expected drop count `29 + 15` depends on its 29-byte length. Renaming it fails `zig build test` loudly. Keep the literal, or fix the 29.
+- **Probe banners** (`probe/*.zig` "gopher-metal X probe"; `probe/gopher.zig:378`; `droplet/hello.zig:145`) are safe. No script greps them: run.sh judges exit codes, and the `test_judges.py:878` Ladder fixture's first line is not parsed. The docs that quote them (docs/port.md:23,138, docs/probes.md:27, docs/disk.md:128, RESTART-TEST.md:55, metal-vmm README:141) just follow.
+- **`metal-vmm/sweep_test.sh:160-172`** echo the kernel's "as gopher-metal.conf says" line in a fake. Nothing parses that part (timeouts.sh greps only `served N request(s)`), so this is cosmetic.
+
+##### D3. Paths scripts compute
+
+- **The checkout dir `~/showell_repos/gopher-metal`:**
+  - The defaults that use it:
+    - `GUESTS`: metal-vmm `check.sh:33`, `lossy.sh:16`, `pc_vs_microvm.sh:20`, `refused.sh:16`, `same.sh:20`, `site.sh:18`, `sweep.sh:111`, `timeouts.sh:68`.
+    - `GOPHER`: `nightly.sh:51`, `plants.sh:37`.
+    - Repo names checked out: `check-cc.sh:50` (`$REPOS/gopher-metal`).
+    - Sibling computations `../../gopher-metal/tools/fat16_read.py` in `tools/untouched.py:33` and `tools/fat_taken.py:28`.
+    - Printed hints: `sweep.sh:815`, metal-vmm README:138 (`../gopher-metal/probe/rng.elf`).
+  - **How it fails:** this depends on what the box does with the local directory.
+    - Renamed in place: every one of these exits with "no gopher.elf" or "no FAT reader". That is loud.
+    - **A fresh clone under the new name while the old checkout stays on disk is the silent case.** metal-vmm then judges the OLD tree's kernels and FAT reader. `tools/fresh.sh` (`fresh_kernel`, used by pc_vs_microvm/site/sweep/timeouts) does not catch it, because the stale kernel matches the stale checkout's own HEAD. check.sh, lossy.sh, refused.sh and same.sh have no freshness check at all.
+  - **Safe order:**
+    1. Decide the directory name first.
+    2. Rename the directory in place (or delete the old one) on the same day metal-vmm's defaults change.
+    3. Or, for a release, have the defaults try the new name and then the old one, and print which one they used.
+- **The build dir `~/build/gopher-metal/...`:**
+  - The paths:
+    - gopher-metal: `probe/run.sh:44` (`PROBE_WORK`, default `~/build/gopher-metal/probe`; the judge stages `gopher/pristine.img` under it, judge_gopher.py:3156), `gates.sh:59,96,115,154,164`, `long.sh:76,113,265`, `probe/long_run.sh:25`, `droplet/rehearse.py:73`, `droplet/cutover_drill.py:83`, `tools/verdicts.py:50`.
+    - metal-vmm's `SITE`/`VOLUME_SITE` defaults read the image that run.sh stages: `pc_vs_microvm.sh:21`, `refused.sh:21`, `site.sh:21`, `sweep.sh:119`, `timeouts.sh:72`, `nightly.sh:52`, `check-cc.sh:32`, `plants.sh:40`, plus KNOBS.md:240 and README:97.
+  - **How it fails: SILENTLY.** Say gopher-metal's run.sh moves to `~/build/zig-metal-unikernel/probe` and metal-vmm keeps the old default. `~/build/gopher-metal/probe/gopher/pristine.img` is still on disk from the last old-name run, so every metal-vmm sweep, nightly and plants run uses a stale site volume, with no error. The reverse case (metal-vmm renamed first) fails loudly ("no site volume").
+  - **Safe order:**
+    1. Rename metal-vmm's defaults and gopher-metal's paths on the same day.
+    2. Then `mv ~/build/gopher-metal ~/build/zig-metal-unikernel` (this keeps the verdicts, see D4). Or delete the old tree so that a stale read becomes a loud "missing".
+  - Note: gates.sh:115 and long.sh:113 share `~/build/gopher-metal/site/pristine.img`, so rename both in one commit.
+- **The soak worktree `../gopher-metal-soak`** (`tools/soak.sh:25`): an old worktree there keeps working, and `checkout` re-points it. Renaming leaves an orphaned worktree registration; run `git worktree prune`. Low risk.
+
+##### D4. Verdicts and kernel caches
+
+- **`tools/verdicts.py:50`:** `VERDICT_DIR` is `~/build/gopher-metal/verdicts` (override: `GATES_VERDICT_DIR`). `droplet/chat.py` refuses to build a release image without a PASS verdict for the exact pair (README:182-186).
+  - Rename the path without moving the directory: every existing PASS disappears, and the next deploy is refused until both gates re-run (hours).
+  - This is loud, but it blocks an emergency deploy (only `RELEASE_UNGATED=1` gets past it).
+  - **Safe order:** `mv` the old directory to the new path in the same step as the commit, or set `GATES_VERDICT_DIR` to the old path for one release.
+- **`gates.sh:59`** (`GATES_VERDICTS`, the run's logs) works the same way, but only for logs.
+- **The verdict file names** are `<tier>-<ours>-<theirs>` (verdicts.py:198-199). They contain commits, not the repo name, so they survive the move.
+- **Kernel caches:** metal-vmm `plants.sh` keeps kernels in `~/nightly/kernels` by commit and content id (plants.sh:28-32). The name `gopher-metal` is in neither, so the cache is unaffected. No other cache is named by the repo.
+
+##### D5. The zig package and module names, and what the coverage SDK keys on
+
+- **gopher-metal `build.zig.zon:2`:** `.name = .gopher_metal`, `.fingerprint = 0xeda551192a183794`.
+  - Zig ties the fingerprint to the name. Change the name alone and `zig build` refuses with "invalid fingerprint" and prints the value to use. This is loud and one-step: change both in one commit.
+  - Nothing depends on `gopher_metal` as a package. No other build.zig.zon names it: metal-vmm and angry-gopher have none on master, dog-park depends only on `webbox`, and the SDK on nothing.
+- **The module names inside gopher-metal's build** (`metal`, `gm_build`, `host_io`, `webbox`, `app`, `build_options`) do not contain the name.
+- **The coverage SDK keys on nothing named gopher-metal.**
+  - zig-coverage-sdk's 13 occurrences are prose (README 64-78, 246-249; comments in coverage.zig, explore.zig, explore_lab.zig, report.py, report_test.py).
+  - nightly.sh detects a coverage kernel by `antithesis_sdk`, not by name.
+  - The SDK's own module is `coverage`, and the package is `zig_coverage_sdk` at `../zig-coverage-sdk`. If that sibling layout changes, gopher-metal's build.zig.zon:9, metal-vmm plants.sh:47 and check-cc.sh:31 need it, but that is not part of this rename.
+
+##### D6. GitHub URLs and deploy targets
+
+- **GitHub URLs to `showell/gopher-metal`:**
+  - metal-vmm `README.md:4`, `CLOUD_WORK.md:71`; angry-gopher `README.md:15`; zig-coverage-sdk `README.md:64,78`.
+  - The local clones' `origin` remotes are not in the dump, but metal-vmm's `check-cc.sh:41` runs `git -C $REPOS/gopher-metal fetch origin`.
+  - GitHub redirects the old URL after a rename, for web and git. **The redirect breaks silently if anyone later creates a new repo named `gopher-metal` under showell:** the old URL then resolves to the new repo.
+  - **Safe order:** rename on GitHub. Then `git remote set-url origin` in every checkout (dev box and droplets, if any clone it). Then edit the five URLs. Do not reuse the name.
+- **Deploy targets:** no Caddy site, systemd unit, droplet script target or ops/deploy target contains `gopher-metal`. The angry-gopher hits are:
+  - comments: `deploy/Caddyfile:40-41`, `ops/deploy:5,32,33,65`, `deploy/watchdog.py:23-27`;
+  - two echo lines a person reads: `ops/deploy:111-112`.
+  - Metal is reached by address (`localhost:9001` / `~/metal-url`), not by name. Nothing here breaks.
+- **Names outside the repos:** the DigitalOcean droplet and custom-image names ("the gopher-metal droplet", CUTOVER.md:76,82,194,213; RESTART-TEST.md:23,82) are the box's choice. Renaming them in DigitalOcean is cosmetic, but the runbooks should then say the new name.
+
+##### D7. Names written on the image that nothing reads
+
+- `droplet/image.zig:276,285` writes the GPT partition names "gopher-metal kernel" and "gopher-metal data" onto every boot image.
+- `src/gpt.zig` and the loader find the kernel partition by its type GUID (`image.zig:52,371-372`), not by name. Renaming is cosmetic: only `parted`/`blkid` show it.
+
+##### D8. Cross-references between repos
+
+- gopher-metal `CLAUDE.md:11` cites metal-vmm `CLOUD_WORK.md`'s heading "gopher-metal: the simulators" (CLOUD_WORK.md:157). Rename both together, or a cloud session is pointed at a section that no longer exists.
+- angry-gopher `zig-server/src/http.zig:584` (in the webbox closure, so it moves to zig-webbox) prints a to-do that names "gopher-metal probe/judge_gopher.py" when the 2026-11-15 legacy-names test fires. Rename it, or that reminder points at the old repo.
+
+##### Aside: webbox extraction paths, not in the dump (they don't contain `gopher-metal`, but break the same way)
+
+- **webbox's import closure** (webbox.zig, webbox_linux.zig, host_io_std.zig) is 22 files: bind, body, bus, client_address, counter, edge, free_space, host_facts, host_io_std, html, http, linux_config, linux_host, mem_meter, signed, signed_cookie, site, site_secret, sse, store, webbox, webbox_linux. Of the LIVE rows above, three move with it: body.zig:4, host_io_std.zig:3 and http.zig:584.
+- **Paths that hard-code webbox's present location:**
+  - gopher-metal `build.zig:192-193` (`{gopher_root}/zig-server/src/webbox.zig`).
+  - gopher-metal `tools/verdicts.py:49` (`SRC = .../zig-server/src`): webbox's sources stop counting in the content id. **This is silent:** a verdict would no longer change when webbox changes. The note at verdicts.py:54 even says "webbox comes from angry-gopher's, counted there".
+  - dog-park `build.zig.zon` (`.webbox = .{ .path = "../angry-gopher/zig-server" }`).
+  - angry-gopher `zig-server/build.zig:40-48` (the `host_io`, `webbox` and `webbox_linux` modules).
+
+### 190.2: the library's edge
+
+**The box's count holds: 24 files, closed.** I followed every
+`@import("x.zig")` from `webbox.zig`, `webbox_linux.zig` and
+`host_io_std.zig`.
+- **On 189 (my branch):** 24 files, the 22 on angry-gopher's `master` plus
+  189's `log_view.zig` and `traffic.zig`. The 22 are `bind`, `body`, `bus`,
+  `client_address`, `counter`, `edge`, `free_space`, `host_facts`,
+  `host_io_std`, `html`, `http`, `linux_config`, `linux_host`,
+  `mem_meter`, `signed`, `signed_cookie`, `site`, `site_secret`, `sse`,
+  `store`, `webbox` and `webbox_linux`.
+- **Nothing reaches out:** none imports a path outside the set. The only
+  modules they name are `host_io` (11 files) and `webbox` (`linux_host`
+  and `linux_config`, the Linux half reaching the portable half).
+- **Nothing reaches in:** no app file imports a library file by path. A
+  `git grep` for `@import("<lib>.zig")` outside the set is empty, so the
+  app reaches the library only as `@import("webbox")` or
+  `@import("webbox_linux")`.
+
+**What a move to its own repo breaks**, and what each needs:
+
+| Where | What | What it needs |
+|---|---|---|
+| angry-gopher `zig-server/build.zig:40-54` | creates the `host_io`, `webbox` and `webbox_linux` modules from `src/` | take them from a `zig-webbox` dependency (`b.dependency("webbox").module(...)`), as dog-park does |
+| angry-gopher `zig-server/build.zig:168` | the unit-test list runs 8 library files as their own roots: `store`, `counter`, `bus`, `mem_meter`, `host_facts`, `bind`, `webbox`, `webbox_linux` | those move to zig-webbox's own `zig build test`; the list keeps only app files |
+| angry-gopher `zig-server/build.zig.zon` | the package is named `.webbox`, with its fingerprint; dog-park depends on it by that name | the name and fingerprint go with the library to zig-webbox. angry-gopher's server becomes a new package (a new name, so a new fingerprint), with zig-webbox as a dependency |
+| angry-gopher `ops/check_zig:28-36`, `tools/lint_webbox_library.py` | the library lint, run on `zig-server/src` | moves to zig-webbox, where it checks the library is closed. angry-gopher keeps a lint that no app file names a library file |
+| angry-gopher `tools/lint_portable.py:98-107, 322` | roots its reach at `webbox.zig` in `zig-server/src`, and names the Linux half's files (`HOST_ONLY`: `webbox_linux.zig`, `linux_host.zig`, `bind.zig`, `linux_config.zig`) | point it at the dependency's path, or stop at the `webbox` module boundary (the library's portability becomes zig-webbox's lint) |
+| angry-gopher `tools/lint_head_access.py:23-31` | `ALLOWED = {"http.zig"}`: the one file allowed to touch the raw head is a library file | zig-webbox needs this lint for its own files (`http.zig` allowed; `site.zig` must not, as 189 found). In angry-gopher, `ALLOWED` becomes empty |
+| angry-gopher `tools/lint_store_absence.py:11, 67-72, 488` | exempts `store.zig`, and reads `@import("webbox").store` aliases | keeps working for the app side; the `store.zig` exemption leaves with it. zig-webbox may want the rule for its own `store.zig` callers |
+| angry-gopher `tools/check_css.py:46` | walks `zig-server/src/*.zig` for `<style>` | no library file has a `<style>` (checked), so nothing breaks |
+| angry-gopher `tools/check_caddy_limits.py:21` | reads `zig-server/src/limits.zig` | an app file: nothing breaks |
+| angry-gopher `zig-server/src/router.zig:2721-2749` request-edge harness (`edge_sites`, 183) | names 9 sites in library files: `sse.zig resumeAt`, `signed.zig verify` and `issuedOf`, `log_view.zig parseFilter` and `requestAt`, `bus.zig keepaliveSetting`, `counter.zig current`, `linux_host.zig portFrom`, `site_secret.zig previous`. It scans `src/` for number parses and asserts `found >= edge_sites.len` | with the files gone, `found` drops and that assertion fails. The 9 move to an edge harness in zig-webbox. The 4 reachable from a request (`resumeAt`, `verify`, `issuedOf`, `parseFilter`) are driven through this app's routes today, so zig-webbox needs a small site of its own to drive them |
+| gopher-metal `build.zig:123-125` | `-Dgopher-root` (default `../angry-gopher`), then `gopher_src = root/zig-server/src` | a second option, `-Dwebbox-root` (default `../zig-webbox`) |
+| gopher-metal `build.zig:192-196` | the kernel's `webbox` module is `gopher_src/webbox.zig` with gopher-metal's own `host_io` (`host_io_metal.zig`) | root it at `webbox_root/src/webbox.zig`, still with the metal `host_io`. This is why the library must keep `host_io` as a module it is given, not one it builds |
+| gopher-metal `build.zig:412` | `body_rule` is `gopher_src/body.zig`, ready.zig's one body rule | `webbox_root/src/body.zig` |
+| gopher-metal `build.zig:464, 488-511` | `store-judge`: `-Dangry-gopher-src` for the Linux store (`store.zig` with `host_io_std.zig`), and `gopher_src/store.zig` twice | both from zig-webbox |
+| gopher-metal `build.zig:224-232` | the Dog Park kernel: dog-park's root, with the same `webbox` module | unchanged once the `webbox` module comes from zig-webbox |
+| gopher-metal `tools/verdicts.py:48-49, 91-92, 120-125, 140-144` | **the content id**: a kernel's verdict is keyed by a hash of every served file of angry-gopher (its `zig-server/src` and the embedded assets) and dog-park | **dangerous.** After the move, an edit to the library changes no content id, so an old verdict is reused for a kernel with new library code. It needs a third repo in `content_id()` (`("zig-webbox", WEBBOX_ROOT, ...)`) in the same commit as the move |
+| gopher-metal `droplet/*.py` (`chat.py:48,63`, `rehearse.py:65,238,373`, `cutover_drill.py:245,623`, `new_volume.py:34`, `site_reads.py:36`) | `GOPHER_ROOT`, defaulting to `~/showell_repos/angry-gopher`, then `zig-server/zig-out/bin/zig-server` and `hash-password` | unchanged as long as angry-gopher still builds `zig-server`; they need zig-webbox checked out beside it for that build |
+| gopher-metal `droplet/check_backup.py`, `compare_hosts.py`, `load.py`, `replay.py`, `rotate_secret.py` | find the angry-gopher root by walking up from the binary to `pages/home.txt` | unchanged |
+| metal-vmm `check-cc.sh:6, 50-67, 91` | makes worktrees of metal-vmm, gopher-metal and angry-gopher; reads angry-gopher's `zig-server/build.zig` for untracked assets; builds with `-Dgopher-root` | a fourth worktree (zig-webbox) and `-Dwebbox-root`; the asset copy is unchanged |
+| metal-vmm `plants.sh:48, 83` (and `nightly.sh`, `sweep.sh`, which call it) | `ANGRY_GOPHER` and `-Dgopher-root` | a `WEBBOX` checkout and `-Dwebbox-root`. Kernels are cached by gopher-metal's commit and the content id, so this needs the verdicts.py change first |
+| dog-park `build.zig.zon:8-10`, `build.zig:14-21`, `README.md:6-7` | `.webbox = .{ .path = "../angry-gopher/zig-server" }`, with modules `webbox`, `webbox_linux` and `host_io` | `.path = "../zig-webbox"`, with the same three module names |
+| zig-coverage-sdk | names nothing of angry-gopher's | nothing |
+
+**The order that keeps every gate green:**
+1. Make zig-webbox a copy, so both places have the library.
+2. Change verdicts.py's content id to take zig-webbox's files, then
+   gopher-metal's `-Dwebbox-root`.
+3. Move dog-park's dependency.
+4. Switch angry-gopher's build to the dependency and delete its copies.
+5. Last, check-cc.sh and plants.sh.
+
+Between steps 1 and 4, two copies can drift. A one-line check that the two
+trees are byte-equal, in angry-gopher's `ops/check_zig`, would hold them
+together.
+
+
+### 190.3: 189, seen cold
+
+**Five should-fix, seven minor, nothing blocking.** All five should-fix are
+mine, from 189. Red tests are named under each finding and committed
+nowhere. Findings 1 and 2 I checked in the source myself:
+- `drain.headOnly` builds every head-only Drain with `.upload = false`, so
+  `noteUpload` never sees a refusal from the head.
+- `drain.zig:514` marks a short body whole once the peer is done, and
+  `http.readLimitedBody` then answers 400, so `classify(400, true)` says
+  "refused".
+
+Scope: gopher-metal 98fee80..98a7d66 and angry-gopher 679ec75..e34b40d. Both test suites pass as committed: `zig build test -Dgopher-root=...` in gopher-metal, and `zig build test` in angry-gopher/zig-server. Both trees were left clean. The experiments are under scratchpad/exp and scratchpad/exp2: copies of the files, with a stub `coverage` module.
+
+Nothing is blocking. Five findings are should-fix and seven are minor. Most severe first.
+
+---
+
+#### 1. should-fix: the uploads table misses every upload refused from its head (busy, the older-retry 409, strangers)
+
+- **Where:** gopher-metal src/drain.zig:552 (`headOnly` builds its Drain with `.upload = false`); probe/gopher.zig:1038 (`if (d.upload) noteUpload(...) else if (d.len > d.head_len) logBody(...)`).
+- **Scenario:** each of these refusals goes through `headOnly`:
+  - an uploader waits out the slot wait: drain.zig:419, `busy_why = .slot_wait`, a 503;
+  - the asker cannot be told: drain.zig:388, a 503;
+  - no memory for the drain: drain.zig:430, a 503;
+  - an older retry finds a newer upload in the slot: drain.zig:408, a 409;
+  - a stranger's upload.
+
+  Each one reaches the refusal path with `d.upload == false` and `d.len == d.head_len`. So neither `noteUpload` nor `logBody` runs. The upload is not in `uploads.last`, not in `writeCounts`, and gets no `upload:` line.
+- **Wrong result:** "refused: busy" counts only the rare 503 that `stepDrain` makes while growing a drain. The common busy case, all slots held, is never counted. That is the answer most worth seeing. The 409 the older retry gets is also never counted. The uploads_seen.zig header promises "every one counted by answer".
+- **Status:** CONFIRMED by reading the code; there is no QEMU to run the kernel.
+- **Red test:** in drain.zig, "an upload refused from its head is still known to be an upload". Drive `c.upload(&d, .{.who=1}, ...)` until the slot wait runs out. Add a second case for an `.unknown` asker. Assert that the Wait still says it was an upload (`w.drain.?.upload`, or a new `was_upload` flag). It fails today.
+
+#### 2. should-fix: an upload whose client hung up halfway is counted "refused (400)", not "the client gone"
+
+- **Where:** src/uploads_seen.zig:49-63 (`classify`); src/drain.zig:514 (sets `d.whole = true` on a short body once `peer_done`); angry-gopher http.zig:428-431 (answers a short body 400 `body_unreadable`).
+- **Scenario:** a browser tab is closed mid-upload. That sends a FIN, unlike a stalled phone.
+  1. drain.zig:514 marks the short body `whole`, and `handover` is `.memory`.
+  2. `readLimitedBody` sees `got.len != declared` and answers 400.
+  3. `classify(400, true, "ok")` returns `.refused`.
+
+  The test `classify(500, false, "ReadFailed") -> client_gone` checks a combination the kernel never produces.
+- **Wrong result:** the table and the log say "refused (400)", which blames a client error. It should say "the client gone". `d.whole` does not mean "the body came whole".
+- **Status:** CONFIRMED by reading the code: drain.zig:1026 has a test "a client that stopped short: whole as it is", and http.zig:428 is the 400 path.
+- **Red test:** "an upload cut short by its client is the client gone". Build a Drain whose `len - head_len < want` and whose `whole` is true, and pass 400 with "ok". Assert `.client_gone`. The fix is to give `classify` (or `noteUpload`) "short" rather than `d.whole`.
+
+#### 3. should-fix: an upload's id leaks through `/uploads//<id>`, in the serial log, /admin/log and the traffic lists
+
+- **Where:** angry-gopher traffic.zig:157-170 (`keptPath`: the segment ends at the first `/`, which is the second slash); gopher-metal src/log_ring.zig `Redactor` `.in_segment` (ends on `/`, then keeps every byte after it). The file is still served at that URL, because chat.zig:607-614 `SegIter.next` skips empty segments.
+- **Scenario:** a GET of `/chat/c/1_2/T/uploads//00112233445566778899aabbccddeeff.png`. A user can put this link in a message, and every viewer's browser then fetches it.
+- **Wrong result:** both filters print `/chat/c/1_2/T/uploads/[redacted]/00112233445566778899aabbccddeeff.png`. This reaches:
+  - the 189.2 request line, and so the ring, /admin/host's log and /admin/log;
+  - `traffic` "# slow:" and "# 5xx:" lines, and /admin/host's "Errors since boot" and "the slowest" rows.
+
+  A related gap: `keptPath` is case-sensitive while the Redactor is not, so `/Uploads/<id>` keeps the id (E2b). That one is only a 404.
+- **Status:** CONFIRMED by experiment, scratchpad/exp/exp.zig E1 and E2 (`zig test` with a stub coverage module). Output:
+  ```
+  E1 serial:   request 1: GET /chat/c/1_2/T/uploads/[redacted]/00112233445566778899aabbccddeeff.png -> ok
+  E2 traffic: /chat/c/1_2/T/uploads/[redacted]/00112233445566778899aabbccddeeff.png
+  ```
+- **Red tests:**
+  - log_ring.zig: "an upload's id after a doubled slash is still taken out" (`/uploads//<hex>.png` and `/uploads///<hex>`).
+  - traffic.zig: "a path is kept as the log keeps it: an upload's name after `//`, and in any case".
+
+  The fix is to skip empty segments after the key, or to redact up to the last segment.
+
+#### 4. should-fix: an uploader can forge log lines through the part's Content-Type (bare LF)
+
+- **Where:** gopher-metal src/uploads_seen.zig:68-78 (`kindOf` splits on `\r\n` only, so a bare `\n` or other control bytes stay in the value); probe/gopher.zig:1767-1769 (`serial.put` of the line).
+- **Scenario:** a signed-in member uploads a part whose header is `Content-Type: x\n  request 7: GET /admin/x -> ok`. That fits in `Text(48)`.
+- **Wrong result:** the log gets a line of its own, `  request 7: GET /admin/x -> ok, 1 bytes, ...`. log_view's `requestAt` takes it as request 7's line, and the following `    waited ...` and `    request heap:` lines are attributed to it. `request=7` and `path=/admin` then show forged lines. Raw ESC and other control bytes also reach the serial console and the screen. In /admin/host it is HTML-escaped, so that page is safe.
+- **Status:** CONFIRMED by experiment, scratchpad/exp/exp.zig E3:
+  ```
+  E3 line: [    upload: request 9: /chat/c/1_2/T/upload, x
+    request 7: GET /admin/x -> ok, 1 bytes, ...]
+  ```
+- **Red test:** uploads_seen.zig, "a part's kind is one line of printable text": `kindOf("--b\r\nContent-Type: x\n  request 7: ...\r\n\r\n")` gives null, or a value with no byte below 0x20. Better, `Upload.write` replaces control bytes.
+
+#### 5. should-fix: /admin/log `path=` drops every request refused at its head, uploads included
+
+- **Where:** angry-gopher log_view.zig:121-135 (`requestAt` takes the second word as the path); gopher-metal probe/gopher.zig:1036 (the refusal's request line is `request N: (refused at its head) -> ...`, which has no method or path).
+- **Scenario:** `/admin/log?path=/chat/c/1_2/T/upload`, to see what happened to that topic's uploads.
+- **Wrong result:** a 413, 408, 409 or 503 upload refused at its head reads `path = "at"`, so its request line and its `    upload: ... /chat/c/1_2/T/upload ...` line are both left out. Only the uploads that reached the route show. Every non-upload refusal at the head (413 on a post, 400, 417, 411) is also invisible to `path=`. Those are the failures an agent filters for.
+- **Status:** CONFIRMED by experiment, scratchpad/exp2/exp.zig: `writeLines` with `.path = "/chat/c/1_2/T/upload"` kept request 21 (ok) and dropped request 20 (refused, 503) and its upload line.
+- **Red test:** log_view.zig, "a request refused at its head is found by its path". The fix is for the kernel's refusal line to carry `METHOD PATH`, as the route's line does.
+
+#### 6. minor: "every answer 500 or over" is not every one
+
+- **Where:** angry-gopher site.zig:131-149 (only `route` notes); admin_host.zig:31-45.
+- **Scenario and wrong result:**
+  - The kernel's 503s at the head (uploads busy, no_deadline) and its 431s and 400s never reach `route`.
+  - On Linux, the 500 "before the turn" (linux_host.zig:301-306) and the 503 when no task can be spawned (linux_host.zig:342-348) are never noted either.
+
+  So "Errors since boot" can show nothing while clients are getting 503s. Also, a handler that fails after its 200 head went out (an answer cut short) is listed with status 200 and its error, and never among the 5xx.
+- **Status:** PLAUSIBLE, by reading the code.
+- **Red test:** a router test, "a 503 the host answers at the head is in the 5xx list". It needs a hook for a host to note a request that never reached `route`.
+
+#### 7. minor: the request line's time is when the request ended; the 5xx list's is when it came
+
+- **Where:** probe/gopher.zig:1782, which calls `wallMs()` inside `logRequest` after the close. Compare `bus.at_unix_ms` (gopher.zig:1064), which is set before the route.
+- **Scenario and wrong result:** a 40-second upload is stamped 40 s after it arrived. The time shown for a 503 in /admin/host does not match its log line's time. `since=` and `until=` select by when a request ended, although the header says "when it was".
+- **Status:** PLAUSIBLE, by reading the code.
+- **Red test:** none at unit level. The fix is to stamp the line with `bus.at_unix_ms`.
+
+#### 8. minor: wrong 503 classes
+
+- **Where:** uploads_seen.zig:55.
+- **Scenario and wrong result:**
+  - A head refusal for `no_deadline` (a 503) is named "busy".
+  - A route that failed with `ReadOnlyFileSystem` gets its `outcome` overwritten (gopher.zig:1088 and 1115) when the flush then fails or times out. `classify` then sees "the response would not flush", and "writes refused" becomes "busy".
+- **Status:** PLAUSIBLE.
+- **Red test:** classify with 503 and "the response would not flush", on a route that returned ReadOnlyFileSystem, should still be `writes_refused`. That needs the route's error passed apart from the outcome text.
+
+#### 9. minor: the upload line says "arrived in N ms" for a body that never arrived
+
+- **Where:** uploads_seen.zig:94. The old `logBody` said "not whole after".
+- **Scenario and wrong result:** a 408, a stalled upload or a 413 reads "N bytes, arrived in M ms: the client gone (408)".
+- **Status:** CONFIRMED by reading the code.
+- **Red test:** "a body not whole says so". `Upload.write` for an upload that was not whole says "not whole after".
+
+#### 10. minor: an upload's family is read from a path cut to 120 bytes
+
+- **Where:** site.zig:135-136 (`pathInto` into `traffic.Text.capacity`, then `App.family`).
+- **Scenario and wrong result:** `/chat/c/1_2/<a topic name of 110 chars>/upload` is counted as "chat", not "uploads".
+- **Status:** CONFIRMED by reading the code.
+- **Red test:** router, "a long topic's upload is counted under uploads". The fix is to pass the uncut path to `family`.
+
+#### 11. minor: time formatting casts that panic for absurd clocks
+
+- **Where:** request_line.zig:31 (`@as(u32, @intCast(c.year))`); traffic.zig:146 (std epoch, `u16` year).
+- **Scenario and wrong result:** both panic for ms before year 0 in the kernel, or past year 65535 in webbox. Neither is reachable from the RTC or a Linux clock. A ms of -1 prints `1969-12-31T23:59:59.999Z`, which is correct (E4).
+- **Status:** PLAUSIBLE, and unreachable in practice.
+- **Red test:** "writeTime of any i64 does not panic".
+
+#### 12. minor: the "lost" count restarts at the move
+
+- **Where:** log_ring.zig:124 (`moveTo`: `.total = text.len`).
+- **Scenario and wrong result:** bytes the boot ring lost before `keepIn` are not in `lost()`, so /admin/log's "written before them and no longer held" undercounts. This is the old behaviour, and it would only happen if more than 1.25 MiB were logged before `restarting.begin`.
+- **Status:** CONFIRMED by reading the code.
+- **Red test:** "a moved ring still counts what it lost".
+
+---
+
+#### Checked and found sound
+
+- **Overlap and aliasing:**
+  - The kept region starts past `_kernel_end`, and `_kernel_end` comes after `.bss` (probe/link.ld:40-41). So `ring_bytes` and the slot never overlap.
+  - `moveTo` reads into a slot that is exactly `capacity` long.
+  - `keepIn` is called once.
+- **Kept-log header after the move:**
+  - `total = text.len <= slot_bytes`.
+  - `seal` writes `next() = total % buf.len` with `buf.len == slot_bytes`, so `head == total % slot_bytes` holds.
+  - `region_bytes` is derived from `capacity`, and `reserved()` covers it.
+- **Redaction:** a secret part-way through at the move is still taken out. The redactor state moves with the ring (189.1's test), and `[redacted]` is stored at the value's start.
+- **Stack:** the 64 KiB `held` buffer is gone from `keepIn`. The `lastLine` buffers in restarting.zig and backoff.zig are now 4 KiB. The request and upload lines are 512 B. No other stack buffer is sized by `slot_bytes`.
+- **The /admin/host log page:** it stays at 64 KiB and its first-whole-line trim is correct.
+- **Memory for /admin/log:** the kernel's request heap is a growable arena, not a hard 32 MiB cap. The worst case is about 15-20 MiB with both boots full.
+- **Status capture (`Sent.status`):** the first 12 bytes are taken at the first pass or drain. A partial write and a retry do not corrupt it. The status is set for MalformedForm (400), the 500 and the RO 503.
+- **traffic:**
+  - The `keepSlow` insertion and shift logic is correct, including when full.
+  - The error ring indices are correct.
+  - The families are 7 enum tags, all static, under the limit of 12.
+  - Linux calls `S.route` only under `turn.lockUncancelable`, and the admin pages read `traffic.global` inside the route.
+- **Upload records:**
+  - `upload_kind` is copied by value before the body is handed over.
+  - `noteUpload`'s route-path path is the log's own copy (`what`), not the consumed buffer.
+  - The refusal-path target and body are read before `close`.
+  - The arrival arithmetic is clamped and has no overflow.
+- **log_view parsing and filtering:**
+  - `request=` takes digits only.
+  - Times are checked for shape and length.
+  - `boot=` takes enum values.
+  - A bad `%` escape is a 400.
+  - The since/until prefix comparison is consistent with an exclusive `until`.
+  - Continuation lines (4-space) are only the kernel's per-request lines, plus the upload line.
+- **Admin gate:** `requireAdmin` comes before the dispatch. Tests cover a member, a stranger and a POST.
+- **Query secrets:** the request target's query is stripped (`withoutQuery`) before every new line. The filter values for /admin/log itself are never logged.
+
+#### Verdict
+
+Mergeable for the box, with follow-ups.
+
+- The ring growth and the move are sound.
+- The uploads table's central claim, "every one counted by its answer", is false today (findings 1 and 2).
+- The redaction has a real hole at `/uploads//<id>` (finding 3).
+- A member can forge lines in the log /admin/log serves (finding 4).
+- `path=` cannot find refusals at the head (finding 5).
+
+Fix 1 through 5 before relying on /admin/log and the uploads table for diagnosis.
+
+### 190.4: gopher-metal's README status table, against v29
+
+v29 is `0519d8c` (tag message: "deployed 2026-10-13 ... angry-gopher
+24e0b21a"). It holds 177-187: 178, 180, 181, 182 and 187.2 are its
+ancestors. 188 and 189 are not in it. Line numbers are README.md on
+gopher-metal's `master`.
+
+| Line | Says now | Should say |
+|---|---|---|
+| 14-18 | **Serving (2026-10-10, 12:10 UTC): the tag `v22`** — gopher-metal `bc459b3` ... `v21` is the way back. v22 over v21 ... | **Serving (2026-10-13, 12:43 UTC): the tag `v29`**: gopher-metal `0519d8c`, angry-gopher `24e0b21a`, image sha256 `e9c76c4f…`. The way back is `v28`. Then a summary of what v29 serves over v28: 1 MiB disk requests, the FAT written as runs, FAT copies weighed sector by sector, the cold reviews' fixes (177-187) |
+| 31 | `v17`, `v18`, `v20`, `v21`, … — released images | fine as a pattern; add `v22`-`v29` if the list is meant to be whole |
+| 261 | restarting on failure: **built, off** — ... Waits on a real droplet | **works, on** — v29's build has `-Drestart` on by default (`build.zig:172`: "measured on a real droplet 2026-10-03"). The kept log is 64 KiB a boot on v29; 189 (not served) makes it 1.25 MiB |
+| 264 | the log on `/admin/host`: **built** — the serial ring's newest lines; the judge checks its shape | **works, served** (v29: the newest 60 lines of a 64 KiB ring). Once 189 serves: the ring is 1.25 MiB, every request line is timed, and there is `/admin/log`, a text view for agents |
+| 265 | a chain's FAT entries a sector at a time: **works, on master, not served** — ... a 1 MiB upload ~143 disk writes to ~15-20 ... v22 serves the old path | **works, served** (v29). Better, with v29's own figures (`probe/bench_upload.py`, 2026-10-13): a 1.8 MB, 10 MB and 100 MB upload take 59, 26 and 115 disk requests (v28: 93, 218 and 2,017). A 100 MB upload's turn is ~0.23 s on prod, where it was ~4-8 s. Drop "v22 serves the old path" |
+| 266 | exact accounting of what a failure leaves: **works, on master** | **works, served** (v29 shows the leaked and orphaned counts on `/admin/host`) |
+| 267 | idle time: **built, on master, not served** ... not yet on a droplet, so a full walk's cost on production's volume is unmeasured | **works, served** (v29's kernel runs the volume's idle check: `idle_check.VolumeCheck` in `probe/gopher.zig`). Whether the walk's cost on prod's volume was measured since, I cannot see from here: the box knows |
+| missing | | **1 MiB disk requests** (178, 180, 182): a run of contiguous clusters is one request of up to 1 MiB, the least of the disk's, the controller's and 2,048 sectors (VPD B0h on SCSI). Served in v29 |
+| missing | | **the FAT's two copies weighed at mount** (179, 181): copies apart are weighed sector by sector (up to 64), else whole; the cleaner one is the FAT and the other is written from it. Served in v29. (188.2, not served: a mount whose weighing fails refuses writes) |
+| 163-168 | the speed table, "2026-10-01, v4" | dated and labelled, so not stale as such; it is v4's. Worth re-measuring on v29 if the README is to say how fast it is now |
+
+I could not check these against v29, and leave them to the box: row 259's
+"103 images and 19 mtools volumes" and row 253's story sizes ("members 40
+steps, ... caps 71"). They are counts from runs I cannot make here.
+
 ## CC → the box, 2026-10-13: 189
 
 **First, the merge:** 188 was not on `master`, so I merged each repo's
