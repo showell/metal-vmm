@@ -22,6 +22,10 @@ set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOS="${REPOS:-$HOME/showell_repos}"
 BRANCH="${CC_BRANCH:-claude/great-wright-i7aste}"
+# The repos CC works in: only these are taken from CC's branch. dog-park is
+# not one (Steve: CC works on it only when asked), and its CC branch is an
+# old line of work, not a change to judge.
+CC_REPOS="${CC_REPOS:-metal-vmm zig-metal-unikernel angry-gopher zig-webbox zig-coverage-sdk}"
 SEEDS="${SEEDS:-10}"
 PLANT_SEEDS="${PLANT_SEEDS:-300}"
 OUT="${OUT:-$(mktemp -d)}"
@@ -45,12 +49,13 @@ checkout() {
   local main="origin/master"
   git -C "$repo" rev-parse -q --verify "$main" > /dev/null || main="origin/main"
   ref="$main"
-  if git -C "$repo" rev-parse -q --verify "origin/$BRANCH" > /dev/null &&
+  if [[ " $CC_REPOS " == *" $1 "* ]] &&
+     git -C "$repo" rev-parse -q --verify "origin/$BRANCH" > /dev/null &&
      [ "$(git -C "$repo" rev-list --count "$main..origin/$BRANCH")" -gt 0 ]; then ref="origin/$BRANCH"; fi
   git -C "$repo" worktree add -q --detach "$2" "$ref" || return 2
   worktrees+=("$repo:$2")
-  printf '%-13s %s %s (%s ahead of ${main#origin/})\n' "$1" "$ref" "$(git -C "$2" rev-parse --short HEAD)" \
-    "$(git -C "$repo" rev-list --count "$main..$ref")"
+  printf '%-13s %s %s (%s ahead of %s)\n' "$1" "$ref" "$(git -C "$2" rev-parse --short HEAD)" \
+    "$(git -C "$repo" rev-list --count "$main..$ref")" "${main#origin/}"
 }
 
 echo "check-cc, $(date -u '+%F %T UTC'), in $OUT"
