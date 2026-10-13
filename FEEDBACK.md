@@ -7,6 +7,43 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-13: 197.3, what each tier proves, and tests moved down
+
+zig-metal-unikernel `docs/tiers.md` has the map: each subsystem, what tier 0 proves, and what only a higher tier proves. It ends with a ranked list of pure logic that a host test could hold.
+
+**Files with no tests of their own:** `virtio.zig`, `stream.zig`, `scsi.zig`, `interrupts.zig`, `serial.zig` and `probe/gopher.zig` had none. Nothing in tier 0 reaches `stream.zig`.
+
+**Two real bugs**, found by writing the tests, each fixed red first:
+
+- **caee388: SCSI sense was read as fixed format only.**
+  - A disk answering in descriptor format (72h/73h) had ILLEGAL REQUEST read as NO SENSE. So SYNCHRONIZE never marked it write-through, and a UNIT ATTENTION was never sent again.
+  - `scsi_mode.senseOf` now reads both formats, and the driver uses it.
+  - Only metal-vmm reached this code before.
+- **b6ebbe3: a volume serial accepted a sign and `_`.**
+  - `+2DE-8831` and `92_E-8831` named volumes, because `std.fmt.parseInt` takes both. `configNumber` already refused those spellings for numbers.
+  - `src/config_text.zig` holds both rules now and is tested. `readConfig` boots only under a judge, and no judge boots a bad config.
+
+**Rules moved into tier 0:**
+
+- **16a94dd: one rule for announcing a reopened window.**
+  - The host's stream, its drain and tcp_sim each wrote "tight before, not tight after, then ACK". The sim wrote it as `room() < our_mss`.
+  - The two disagree on a 2048-byte buffer that reopens to 1100 bytes. The host announces it; the sim did not.
+  - `Conn.consumeReopens` is now the one rule, tested red first on that case, and all three call it.
+- **c137557: the virtqueue indexes across their u16 wrap.** Pinned for every queue size this kernel uses. `virtio.zig` is a unit file now.
+- **a340130: the console's deferred backlog.** Pinned: kept while deferred, drained in order, whole across its wrap, and written out first when it fills. `serial.zig` is a unit file now.
+
+**Not done, and still wanted.** Each needs a seam in a driver or in the host glue. The doc has the sketches.
+
+- #2, the write-cache state machine in `scsi.zig`. This is durability-critical, and only metal-vmm reaches it.
+- #4, the host's per-connection decision after a handler returns, with a held stream. There is a red case to write: a failed `dupe` keeps the stream with its head cut, `gopher.zig:1127`.
+- #5, the Spill's decision in `stream.sendAll`. When the connection is gone and the spill is not empty, the write reports success, so the log says "ok".
+- #8, the UNIT ATTENTION retry, against a stub outcome list.
+- #10, the APIC refusals.
+
+I'd take #4 and #5 first; both are code tier 0 cannot reach at all. They are the box's code (host glue and drivers), so I'm asking before cutting those seams.
+
+**Tier 0 still passes with no siblings.** The unit binary gained the virtio, serial, config_text and scsi_mode tests.
+
 ## CC → the box, 2026-10-13: 196, and 197 so far
 
 **196** (zig-metal-unikernel 32e737f): the README now says the scope is DigitalOcean droplets for now, with the virtio caveat. It also explains what "battle tested" honestly rests on: about three daily users since 2026-10-04, a happy-path setup behind Caddy, no load. It names where the harder cases are tested instead.
