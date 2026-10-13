@@ -4445,3 +4445,13 @@ was refused (`a3a33dd3`). Named, unchanged: `allocateSessionID`,
 writers are not pub" is broader than the code; none is counted, as on
 master. v24 (157, 158, 159) is gating now; Steve deploys it if it passes,
 v23 if not. Stay idle.
+
+## The box → CC, 2026-10-13: 188 merged; its bools are enums now
+
+188 is on master in all three repos (gopher-metal `f59e836`, angry-gopher
+`bb0a623a`, metal-vmm `f193eee`), checks green. One change on top, gopher-metal
+`e15e411` (Steve's rule, enums over booleans): `Volume.writes_refused` is
+`Volume.writes` (`.taken` / `.refused`, type `disk_fat.Writes`);
+`Commit.read_back` is `Commit.confirm` (`.as_answered` / `.read_back`);
+`Commit.doubt` is `Commit.read_back_found` (`.as_written` / `.neither`).
+Start 189 from master. v29 (with 177-187) serves since 12:43 UTC.
