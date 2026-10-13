@@ -7,6 +7,127 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-13: 188
+
+**Hashes:** gopher-metal `fd01c39` (188.1) and `6057750` (188.2);
+angry-gopher `679ec75` (188.2's 503). Both on `claude/great-wright-i7aste`,
+on the heads 187 left.
+
+**Gates:** gopher-metal `test`, `check` and `properties -Dseeds=20
+-Dfat-seeds=8` pass, with 0 broken invariants. 80 properties are
+unsatisfied, 3 more than 187's 77, all of them new:
+- **"a mount whose weighing failed refuses writes"** (`disk_fat_fat.zig:116`):
+  no sim fails a weighing at mount. Its sibling, "FAT copies apart cannot
+  be weighed" (`:342`), was already unsatisfied. The unit tests reach it.
+- **"a write is refused, the FAT's copies unweighed"** (`disk_fat.zig:951`):
+  the sector-level refusal is the backstop. The operation's own refusal
+  always comes first, so nothing reaches it today.
+- **"a commit the disk answered reads back as neither"**
+  (`disk_fat_file.zig:769`): it needs a write the disk answers as done
+  that left other bytes. Our faults that tear also fail the request.
+
+If you want any of the three reached, say which and I will make a sim
+reach it.
+
+angry-gopher's `ops/check_zig` passes.
+
+### 188.1: an overwrite reads its commit back
+
+- **What it does:** after the directory entry's sector is written, an
+  overwrite reads it back from the disk, past the directory cache
+  (`Commit.read_back`, `disk_fat_file.zig` `setEntry`). Three answers:
+  - **The new entry:** the old chain is freed, as before.
+  - **The old entry** (the commit landed nothing): the cache's copy is
+    dropped, nothing is freed, the write fails `WriteFailed`, and the file
+    is its old self, whole.
+  - **Neither** (a tear, or other bytes): the commit is kept and the old
+    chain is not freed but counted unsure (`unlinkUnsure`), as a commit of
+    unknown landing already was. A leak at worst, never a freed live chain.
+  - **The read-back fails:** the write's own answer stands; the disk said
+    the write landed.
+- **The red:** your `overwrite10` `lands_nothing`-on-the-commit run, as a
+  test (`disk_fat_test_fat32.zig`, "an overwrite whose commit lands
+  nothing keeps the old file whole"): `broken /f.bin` before, the old file
+  whole after. The upload-sized lie sweep in `disk_fat_faults_test.zig` now
+  takes the overwrite too, with `lands_nothing`, `torn` and `torn_tail`.
+- **What it costs:** one one-sector read per overwrite, whatever its size.
+  A 10 MB overwrite on the experiment's small FAT32 goes from 335 requests
+  to 336. A new file pays nothing: it has no old chain to free.
+- **A first draft was wrong, and the sweep said so:** it failed the write
+  when the read-back failed. The sweep found a run where the commit landed
+  and the write then said it failed. Only "reads as it was" now undoes.
+
+### 188.2: an unweighed mount refuses writes
+
+- **The one refusal, in two places:**
+  - **disk_fat:** `Volume.writes_refused`, set by the mount
+    (`cacheFatChecked`) when the weighing ends `.unweighed`. Every sector
+    write (`writeSector`, `writeSectors`) refuses with `WritesRefused`.
+    Each write operation (`writeFile`, `writeFileIn`, `writeInto` (the
+    append), `makePath`, `makeDirIn`, `rename`, `remove`, `removeTree`) also
+    refuses first, before it reads or plans anything. So the held FAT is
+    never changed for a write that cannot land.
+  - **io.zig:** `writing()`, which every write in io goes through
+    (`writeFile`, `writePositionalAll`, `createDirPath`, `createFile`,
+    `deleteFile`, `rename`, `renamePreserve`, `deleteTree`), answers
+    `error.ReadOnlyFileSystem` before anything is done. io's mappings also
+    turn a `WritesRefused` from below into the same error. So games,
+    docs, uploads, chat posts and the store's rename all reach it: every
+    angry-gopher write goes through io. A backup download only reads.
+- **The application's answer:** `site.route` answers
+  `error.ReadOnlyFileSystem` as **503**, "The server is taking no writes
+  just now. Try again in a minute.", with `retry-after: 60`. Nothing
+  panics. Two handlers answered their own write failures with a 500, and
+  now pass this error through to the 503: `admin_secret`'s rotate and
+  `admin_lynrummy`'s delete. An upload's quota reservation is itself a
+  write, so a refused upload stops there, before any bytes are kept.
+  The FAT Store maps `WritesRefused` to `Io`, never `Damaged`.
+- **The retry:**
+  - **At every mount:** the mount weighs afresh.
+  - **From the idle check, once a minute:** `idle_check.VolumeCheck` has
+    `reweigh_ns = 1 min`. While the volume refuses, a quiet moment at
+    least a minute after the last try calls `Volume.reweigh`. That reads
+    the FAT afresh and weighs it as the mount does, whole, in one step,
+    the same work as the mount's weighing. The hourly check waits until
+    then.
+  - **On success:** writes are taken again, and the repair is written as
+    at mount.
+- **Where it shows:**
+  - **The boot log:** `gopher.zig`'s unweighed line now ends "writes are
+    refused until a weighing succeeds, tried again once a minute in idle
+    time".
+  - **`/admin/host`:** a "writes" fact under the volume: REFUSED or taken,
+    and the reweighs tried and failed (`Volume.reweighs`,
+    `reweighs_failed`). It shows once either is true.
+- **The reds:**
+  - **Test 7** (`disk_fat_test_fat32.zig`, "a mount whose weighing of apart
+    copies fails refuses every write"). A lie to copy 0's run of an
+    upload, then the mount's first data-region read fails. Every write kind
+    is `WritesRefused`, the disk's write count is unchanged (copy 1
+    intact), and reads go on. Then `reweigh` weighs, the file reads whole,
+    and writes land. Run for an upload-sized run (`upload_clusters`) and
+    for 178's one-sector form (300 clusters).
+  - **io_test:** a refusing volume answers `ReadOnlyFileSystem` to a
+    write, a directory and a delete, writes nothing, and still reads.
+  - **idle_check:** on each side, the weighing fails (stays refused,
+    counted), the next waits its minute with no request, then it succeeds
+    and the volume is writable. A volume taking writes is never weighed
+    again.
+  - **store_test:** a refusing volume is `Io` on write, append, replace
+    and remove.
+  - **site:** a `/refused` case answers 503.
+- **fat_sim:** a new probe, `refusing`. It refuses every write kind
+  against the model's own files and directories, writes nothing, and
+  still reads them. Then it reweighs and must take writes again, and
+  `verify` then finds the volume as the model holds it. It is a new
+  choice in the probe's pick, so a fat seed's run after a probe is not
+  the run it was.
+- **For you to decide:** a reweigh is one whole step, unsliced. On prod's
+  volume that is the mount's own weighing time (whole-FAT read plus two
+  checks; the check's walk was 548 ms). It runs only while refusing,
+  once a minute. Slice it like `CheckRun` if that is too long for one
+  quiet moment.
+
 ## CC → the box, 2026-10-13: 187, 186, 183, 184, 185
 
 **Hashes:**
