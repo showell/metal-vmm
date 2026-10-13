@@ -157,8 +157,8 @@ case "$s" in
   16 | 17) page=""; status=0; code=1; echo "error: GuestIdle" >&2 ;;
   14) page="Home unavailable"; status=500 ;;
   15 | 58) page="Home unavailable"; status=500 ;;
-  18) page=""; status=0; echo "  serving 1 request(s), as gopher-metal.conf says"; echo "  served 1 request(s); base heap holds 52 live bytes"; echo "peer 2: 204, 1 of 1 answers, 65 bytes, done" ;;
-  19) page=""; status=0; echo "  serving 1 request(s), as gopher-metal.conf says"; echo "  served 1 request(s); base heap holds 52 live bytes"; echo "peer 2: 0, 0 of 1 answers, 0 bytes, established" ;;
+  18) page=""; status=0; echo "  serving 1 request(s), as zig-metal-unikernel.conf says"; echo "  served 1 request(s); base heap holds 52 live bytes"; echo "peer 2: 204, 1 of 1 answers, 65 bytes, done" ;;
+  19) page=""; status=0; echo "  serving 1 request(s), as zig-metal-unikernel.conf says"; echo "  served 1 request(s); base heap holds 52 live bytes"; echo "peer 2: 0, 0 of 1 answers, 0 bytes, established" ;;
   23 | 24 | 25 | 26) printf 'UNSOUND' > "$img"; [ "$s" = 24 ] || echo "metal-vmm: the power was cut after the guest's write 2 (sector 9, 1 sectors)" >&2; [ "$s" != 25 ] || page="jello"
     lost=3; [ "$s" != 26 ] || lost=0
     [ "$s" = 24 ] || echo "metal-vmm: disk: a write cache, write-back, though the guest did not negotiate FLUSH (DISK_CACHE=lie); 4 writes held, 0 flushes; the power cut lost $lost sectors never flushed" >&2 ;;
@@ -167,9 +167,9 @@ case "$s" in
   33) [ -z "${VOLUME:-}" ] || printf 'STOPLEFT' > "$VOLUME"; echo "metal-vmm: the power was cut after the guest's write 2 (sector 9, 1 sectors)" >&2 ;;
   52) printf 'LOSTFILE' > "$img"; echo "metal-vmm: the power was cut after the guest's write 2 (sector 9, 1 sectors)" >&2 ;;
   32) printf 'STOPLEFT' > "$img"; echo "metal-vmm: the power was cut after the guest's write 2 (sector 9, 1 sectors)" >&2 ;;
-  30) page=""; status=0; echo "  serving 2 request(s), as gopher-metal.conf says"; echo "request 1: (no request) -> the client stopped sending, and was let go"; echo "  served 2 request(s); base heap holds 52 live bytes"; echo "peer 2: 204, 1 of 1 answers, 65 bytes, done" ;;
+  30) page=""; status=0; echo "  serving 2 request(s), as zig-metal-unikernel.conf says"; echo "request 1: (no request) -> the client stopped sending, and was let go"; echo "  served 2 request(s); base heap holds 52 live bytes"; echo "peer 2: 204, 1 of 1 answers, 65 bytes, done" ;;
   29) page="Home unavailable"; status=500 ;;
-  27) page=""; status=0; echo "  serving 2 request(s), as gopher-metal.conf says"; echo "  served 2 request(s); base heap holds 52 live bytes"; echo "peer 2: 204, 1 of 1 answers, 65 bytes, done" ;;
+  27) page=""; status=0; echo "  serving 2 request(s), as zig-metal-unikernel.conf says"; echo "  served 2 request(s); base heap holds 52 live bytes"; echo "peer 2: 204, 1 of 1 answers, 65 bytes, done" ;;
   11) page="oops"; status=500; echo "  let go at the end: 1 response(s) cut by the stop, 2 bytes never acknowledged" ;;
 esac
 case "$s" in [2-9] | 1[0-9] | 2[3-9] | 30 | 52 | 53 | 54 | 55 | 58) ;; *) [ -z "${PEER_REQUEST:-}" ] || page="$(cat "${PEER_REQUEST%%,*}")" ;; esac

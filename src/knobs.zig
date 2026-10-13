@@ -54,20 +54,20 @@
 //! `withVolume` draws `VOLUME_CACHE`, `VOLUME_CACHE_KEEPS`,
 //! `VOLUME_CUT_AFTER`, `VOLUME_SYNC_FAIL`, `VOLUME_SYNC_FAIL_FOR`,
 //! `VOLUME_ATTENTION_AT` and, with a cache, `VOLUME_RESET_AT` (a reset that
-//! turns the cache on again, which gopher-metal turns off again since
+//! turns the cache on again, which zig-metal-unikernel turns off again since
 //! 2026-10-09, metal-vmm QUEUE 119), and in one seed in eight one of
 //! `VOLUME_GONE_AT`, `VOLUME_READ_ONLY_AT` and `VOLUME_SHORT_AT` (a write
 //! refused, QUEUE 135); it never draws `VOLUME_LATENCY_US`,
 //! `VOLUME_SYNC_US`, `VOLUME_CUT_AT_EXIT`, `VOLUME_SECTOR`,
 //! `VOLUME_MODE_PAGES`, `VOLUME_MAX_TRANSFER` (a disk that takes less in a
 //! command; one smaller than a cluster is refused at mount, by design),
-//! `VOLUME_WCE_FIXED` (a cache gopher-metal cannot turn
+//! `VOLUME_WCE_FIXED` (a cache zig-metal-unikernel cannot turn
 //! off, which leaves FAT's order to the cache: the damage is known, and said
 //! at boot). Nor are
 //! `RTC_ABSENT`, `RTC_STUCK` or `PIT_FROZEN`: each stops a boot, which a
 //! sweep would count as a failure. Set by hand, they print with the rest.
 //!
-//! The peer's ranges are gopher-metal's `tcp_sim.zig` `Rough`'s and
+//! The peer's ranges are zig-metal-unikernel's `tcp_sim.zig` `Rough`'s and
 //! `Scenario`'s, where they have one.
 
 const std = @import("std");

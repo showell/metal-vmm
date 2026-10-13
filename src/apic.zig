@@ -1,4 +1,4 @@
-//! **THE LOCAL APIC, OURS.** gopher-metal halts between frames (`sti; hlt`)
+//! **THE LOCAL APIC, OURS.** zig-metal-unikernel halts between frames (`sti; hlt`)
 //! once its network card is on PCI, and wakes on one of two interrupts: the
 //! card's MSI-X message, or the APIC's timer in TSC-deadline mode. KVM can
 //! model an APIC in the kernel, but that one keeps the host's time, and this
@@ -337,7 +337,7 @@ pub const Apic = struct {
                 // Its counts are the run's, and are kept.
                 if (value & base_enabled == 0) self.* = .{ .timer_fired = self.timer_fired, .raised = self.raised, .taken = self.taken };
                 // The address stays where it is: a guest that moves it is not
-                // one this machine was built for, and gopher-metal refuses to.
+                // one this machine was built for, and zig-metal-unikernel refuses to.
                 // The bootstrap flag is the processor's, not the guest's.
                 self.base_msr = (value & base_enabled) | base_bsp | base;
             },
@@ -358,7 +358,7 @@ pub const Apic = struct {
 
 const testing = std.testing;
 
-/// The guest's own start (gopher-metal's interrupts.startApic), then a rest.
+/// The guest's own start (zig-metal-unikernel's interrupts.startApic), then a rest.
 fn started() Apic {
     var a = Apic{};
     _ = a.writeMsr(msr_apic_base, a.readMsr(msr_apic_base, 0).? | base_enabled, 0);

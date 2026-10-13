@@ -18,7 +18,7 @@
 //!     zig build fuzz -Dseeds=10000        # seeds 1..n
 //!     zig build test                      # the first `test_seeds`, and the regressions
 //!
-//! A seed that finds something stays as a named regression, as gopher-metal's
+//! A seed that finds something stays as a named regression, as zig-metal-unikernel's
 //! do (`regressions`).
 
 const std = @import("std");
@@ -326,7 +326,7 @@ fn volumeSide(w: *World, r: std.Random) void {
             std.mem.writeInt(u32, cdb[2..6], r.uintLessThan(u32, 72), .big);
             std.mem.writeInt(u16, cdb[7..9], count, .big);
         }
-        // A MODE SELECT is often the one gopher-metal sends: PF set, the
+        // A MODE SELECT is often the one zig-metal-unikernel sends: PF set, the
         // header and the caching page, WCE either way (metal-vmm QUEUE 119).
         if (cdb[0] == scsi.op_mode_select and r.boolean()) {
             cdb[1] = 0x10;

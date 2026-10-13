@@ -2,10 +2,10 @@
 # **THE PLANTS**: does the judge still catch a bug, and still pass a kernel
 # that has none?
 #
-# Each plant is a deliberate bug in gopher-metal's own source, behind
+# Each plant is a deliberate bug in zig-metal-unikernel's own source, behind
 # `if (comptime plant.on == .<name>)` (its src/plant.zig), off unless the
 # kernel is built `-Dplant=<name>`; the names are build.zig's `Plant` enum.
-# This builds the kernel at gopher-metal's HEAD as it is (the clean one)
+# This builds the kernel at zig-metal-unikernel's HEAD as it is (the clean one)
 # and once with each plant on, all `-Dcoverage`, then sweeps the
 # same seeds with each through this checkout's sweep.sh:
 #
@@ -25,33 +25,33 @@
 #   FIRST=1 LAST=100 ./plants.sh
 #   PLANTS="net-goback-byte" ./plants.sh
 #
-# Kernels are kept in `$KERNELS` (default ~/nightly/kernels) by gopher-metal
+# Kernels are kept in `$KERNELS` (default ~/nightly/kernels) by zig-metal-unikernel
 # commit and plant, so a second run builds nothing. The application is
 # angry-gopher's checkout, `$ANGRY_GOPHER`, compiled as it is; a kernel's name
-# carries gopher-metal's commit and the checkout's content id (gopher-metal's
+# carries zig-metal-unikernel's commit and the checkout's content id (zig-metal-unikernel's
 # tools/verdicts.py), so an edit to angry-gopher builds anew. Exit 0 when every
 # check holds, 1 when one doesn't, 2 when something could not be built or
 # judged at all.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GOPHER="${GOPHER:-$HOME/showell_repos/gopher-metal}"
+GOPHER="${GOPHER:-$HOME/showell_repos/zig-metal-unikernel}"
 KERNELS="${KERNELS:-$HOME/nightly/kernels}"
 SHAPES="${SHAPES:-$HERE/requests/shapes}"
-VOLUME_SITE="${VOLUME_SITE:-$HOME/build/gopher-metal/probe/gopher/pristine.img}"
+VOLUME_SITE="${VOLUME_SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
 FIRST="${FIRST:-1}"
 LAST="${LAST:-300}"
 OUT="${OUT:-$(mktemp -d)}"
 mkdir -p "$OUT"
-# gopher-metal's build.zig.zon finds the SDK at ../zig-coverage-sdk, so a
+# zig-metal-unikernel's build.zig.zon finds the SDK at ../zig-coverage-sdk, so a
 # worktree here needs it beside it.
 [ -e "$OUT/zig-coverage-sdk" ] || ln -s "${COVERAGE_SDK:-$HOME/showell_repos/zig-coverage-sdk}" "$OUT/zig-coverage-sdk"
 # The angry-gopher checkout the kernel is compiled from (-Dgopher-root; no
-# copy since gopher-metal's Phase B step 2b), named by its content id.
+# copy since zig-metal-unikernel's Phase B step 2b), named by its content id.
 ANGRY_GOPHER="${ANGRY_GOPHER:-$HOME/showell_repos/angry-gopher}"
 # The webbox library's checkout (-Dwebbox-root), counted in the content id.
 WEBBOX="${WEBBOX:-$HOME/showell_repos/zig-webbox}"
 
-# The plants: PLANTS, or every one gopher-metal's build.zig names (its
+# The plants: PLANTS, or every one zig-metal-unikernel's build.zig names (its
 # `Plant` enum, `none` aside). A name is the enum's (disk_write_swallowed);
 # its "PLANT: <name> fires" property spells it with hyphens.
 names=()
@@ -59,16 +59,16 @@ if [ -n "${PLANTS:-}" ]; then
   for p in $PLANTS; do names+=("${p//-/_}"); done
 else
   enum=$(sed -n 's/^const Plant = enum { \(.*\) };$/\1/p' "$GOPHER/build.zig" | tr -d ' ' | tr ',' ' ')
-  [ -n "$enum" ] || { echo "gopher-metal's build.zig names no Plant enum (src/plant.zig)"; exit 2; }
+  [ -n "$enum" ] || { echo "zig-metal-unikernel's build.zig names no Plant enum (src/plant.zig)"; exit 2; }
   for p in $enum; do [ "$p" = none ] || names+=("$p"); done
 fi
 
 commit=$(git -C "$GOPHER" rev-parse --short HEAD) || exit 2
 [ -z "$(git -C "$GOPHER" status --porcelain --untracked-files=no)" ] ||
-  { echo "gopher-metal has uncommitted changes; plants build from a commit"; exit 2; }
+  { echo "zig-metal-unikernel has uncommitted changes; plants build from a commit"; exit 2; }
 sdk=$(git -C "${COVERAGE_SDK:-$HOME/showell_repos/zig-coverage-sdk}" rev-parse --short HEAD) || exit 2
 ported=$(GOPHER_ROOT="$ANGRY_GOPHER" WEBBOX_ROOT="$WEBBOX" python3 "$GOPHER/tools/verdicts.py" ids | awk '{print $2}' | cut -c9-20)
-[ -n "$ported" ] || { echo "gopher-metal cannot build angry-gopher at $ANGRY_GOPHER as it is (its tools/verdicts.py fresh says why)"; exit 2; }
+[ -n "$ported" ] || { echo "zig-metal-unikernel cannot build angry-gopher at $ANGRY_GOPHER as it is (its tools/verdicts.py fresh says why)"; exit 2; }
 mkdir -p "$KERNELS"
 
 # build <name>: the kernel for "clean" or a plant, built once per commit and
@@ -111,7 +111,7 @@ trap '[ -z "$building" ] || git -C "$GOPHER" worktree remove --force "$building"
 judged() { grep -q '^FAILED_SEEDS:' "$OUT/$1.log"; }
 
 bad=0
-echo "plants, gopher-metal $commit, metal-vmm $(git -C "$HERE" rev-parse --short HEAD), seeds $FIRST-$LAST, logs in $OUT"
+echo "plants, zig-metal-unikernel $commit, metal-vmm $(git -C "$HERE" rev-parse --short HEAD), seeds $FIRST-$LAST, logs in $OUT"
 clean_elf=$(build clean) || exit 2
 sweep clean "$clean_elf"; code=$?
 judged clean || { echo "clean: sweep.sh judged nothing (exit $code); see $OUT/clean.log"; exit 2; }

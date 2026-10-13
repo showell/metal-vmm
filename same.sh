@@ -17,7 +17,7 @@
 # runs agreed.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
+GUESTS="${GUESTS:-$HOME/showell_repos/zig-metal-unikernel/probe}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -40,8 +40,8 @@ for one in $CASES; do
     image="$WORK/fat16.blank"
     elf="$GUESTS/$probe.elf"
     # A probe that is not there is a failure, not a skip: a wrong GUESTS or
-    # a probe dropped from gopher-metal's build would otherwise pass unseen.
-    [ -f "$elf" ] || { echo "FAIL $probe: no $elf (in gopher-metal: zig build kernels)"; failed=1; continue; }
+    # a probe dropped from zig-metal-unikernel's build would otherwise pass unseen.
+    [ -f "$elf" ] || { echo "FAIL $probe: no $elf (in zig-metal-unikernel: zig build kernels)"; failed=1; continue; }
     fetch=""
     case "$probe" in http|stdhttp) fetch="/probe" ;; esac
 

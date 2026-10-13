@@ -7,7 +7,7 @@
 # `gopher.elf` is angry-gopher's own route table compiled for a machine with no
 # operating system: its data on a FAT16 volume, its clocks from its own
 # hardware, std.http.Server on top of a TCP stack it brought with it. It serves
-# `requests = N` from gopher-metal.conf on the volume and stops.
+# `requests = N` from zig-metal-unikernel.conf on the volume and stops.
 #
 # The page it serves here, to the TCP client in peer.zig, must be the page it
 # serves under QEMU to curl — byte for byte. The guest's own closing counters
@@ -15,10 +15,10 @@
 # difference between the two hypervisors, not between two runs.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
+GUESTS="${GUESTS:-$HOME/showell_repos/zig-metal-unikernel/probe}"
 # The staged GPT + FAT16 volume with the site on it, as judge_gopher.py builds
 # it (that needs a loop mount, and so sudo; this does not, it only reads one).
-SITE="${SITE:-$HOME/build/gopher-metal/probe/gopher/pristine.img}"
+SITE="${SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
 PATH_WANTED="${1:-/}"
 
 # Cookie-free GET routes, from judge_gopher.py's own list. /version is left out
@@ -33,7 +33,7 @@ VMM="$HERE/zig-out/bin/metal-vmm"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 [ -x "$VMM" ] || { echo "no $VMM; run: zig build"; exit 1; }
-[ -f "$GUESTS/gopher.elf" ] || { echo "no $GUESTS/gopher.elf; in gopher-metal: zig build gopher"; exit 1; }
+[ -f "$GUESTS/gopher.elf" ] || { echo "no $GUESTS/gopher.elf; in zig-metal-unikernel: zig build gopher"; exit 1; }
 [ -f "$SITE" ] || { echo "no volume at $SITE; set SITE=<image with the site on it>"; exit 1; }
 
 failed=0

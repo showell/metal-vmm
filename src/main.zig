@@ -2,7 +2,7 @@
 //!
 //!     metal-vmm <kernel.elf>
 //!
-//! Loads a PVH kernel — gopher-metal's probes and its server are exactly this
+//! Loads a PVH kernel — zig-metal-unikernel's probes and its server are exactly this
 //! — into memory we own, hands it a processor through `/dev/kvm`, and answers
 //! the two devices it needs before anything else works: the serial port it
 //! prints on, and the door it exits through. The guest's console comes out on
@@ -79,7 +79,7 @@ const load = loader.load;
 const pvhEntry = loader.pvhEntry;
 const tsc_port = loader.tsc_port;
 const msr_port = loader.msr_port;
-/// **THE COVERAGE DOOR**: a gopher-metal kernel built `-Dcoverage` reads it
+/// **THE COVERAGE DOOR**: a zig-metal-unikernel kernel built `-Dcoverage` reads it
 /// at boot, and finding `coverage_door_answer` there, writes its coverage
 /// lines to it instead of the serial port: each line in its own memory, a
 /// little-endian u32 length and then the bytes, and the line's physical
@@ -305,7 +305,7 @@ pub const Machine = struct {
     /// **THE GUEST'S OWN WORDS ARE THE CLOCK HERE.** It polls memory, so
     /// nothing it does gives this program back control except a device
     /// register or a printed character — and a printed line is the only signal
-    /// that says "I am listening now". gopher-metal's own judge waits for the
+    /// that says "I am listening now". zig-metal-unikernel's own judge waits for the
     /// same line before it connects.
     said: [128]u8 = undefined,
     said_len: usize = 0,
@@ -1048,7 +1048,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     defer _ = linux.close(vm);
 
     // **`TRANSPORT=pci` IS THE PC-SHAPED MACHINE**: the devices on a PCI bus,
-    // an APIC, and a guest that halts between frames, as gopher-metal does on
+    // an APIC, and a guest that halts between frames, as zig-metal-unikernel does on
     // a droplet. Unset is the microvm-shaped machine check.sh compares with
     // QEMU's microvm.
     const pc = if (init.environ.getPosix("TRANSPORT")) |t| std.mem.eql(u8, t, "pci") else false;

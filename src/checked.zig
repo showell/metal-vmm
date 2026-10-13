@@ -133,7 +133,7 @@ pub const table = [_]Setting{
 const families = [_][]const u8{ "WIRE_", "PEER_", "DISK_", "VOLUME_", "RTC_", "PIT_", "DHCP_", "FAULT_" };
 
 /// **NAMES IN A FAMILY THAT ARE THE SCRIPTS', NOT METAL-VMM'S**: sweep.sh's
-/// and plants.sh's (`VOLUME_SITE`, `VOLUME_SEEDS`) and gopher-metal's probes'
+/// and plants.sh's (`VOLUME_SITE`, `VOLUME_SEEDS`) and zig-metal-unikernel's probes'
 /// (`VOLUME_LUN`, `VOLUME_TARGET`), exported beside the settings. Every other
 /// name in a family is a misspelling until it is added here or to `table`.
 const script_names = [_][]const u8{ "VOLUME_SITE", "VOLUME_SEEDS", "VOLUME_LUN", "VOLUME_TARGET" };

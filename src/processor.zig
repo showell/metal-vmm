@@ -89,7 +89,7 @@ pub fn forgetTheDice(e: *kvm.CpuidEntry) void {
 }
 
 /// **THE PC-SHAPED MACHINE HAS AN APIC WITH A DEADLINE TIMER** (apic.zig),
-/// and says so where gopher-metal looks before it starts one: leaf 1's APIC
+/// and says so where zig-metal-unikernel looks before it starts one: leaf 1's APIC
 /// bit and TSC-deadline bit. No x2APIC: its registers are MSRs this machine
 /// does not answer.
 pub fn sayTheApic(e: *kvm.CpuidEntry) void {

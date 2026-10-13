@@ -218,7 +218,7 @@ pub fn fakeSegment(out: []u8, flags: u8, seq: u32, ack: u32, data: []const u8) [
     return wrap(out, 6, guest_ip, server_ip, tcp_len);
 }
 
-/// A guest's SYN-ACK announcing `mss`, as gopher-metal's tcp.zig sends one.
+/// A guest's SYN-ACK announcing `mss`, as zig-metal-unikernel's tcp.zig sends one.
 pub fn fakeSynAck(out: []u8, seq: u32, ack: u32, mss: u16) []const u8 {
     const option = [4]u8{ 2, 4, @truncate(mss >> 8), @truncate(mss) };
     const frame = fakeSegment(out, flag_syn | flag_ack, seq, ack, &option);

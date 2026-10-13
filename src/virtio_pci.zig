@@ -2,7 +2,7 @@
 //! configuration registers and capability list, the four windows in its BAR
 //! (the common configuration, the ISR, the device's own configuration and
 //! the doorbells), and its MSI-X (msix.zig). The bus it sits on, and how a
-//! guest reaches it, is pci.zig. The tests here drive it as gopher-metal's
+//! guest reaches it, is pci.zig. The tests here drive it as zig-metal-unikernel's
 //! driver does (`FakeGuest`).
 
 const std = @import("std");
@@ -442,7 +442,7 @@ pub const FakeGuest = struct {
         try self.store(u32, addr + 4, @truncate(value >> 32));
     }
 
-    // ── gopher-metal's pci.zig ──
+    // ── zig-metal-unikernel's pci.zig ──
 
     /// `Scan`: every slot of bus 0, function 0 unless the header says more;
     /// the first function whose device id names virtio `kind`.
@@ -514,7 +514,7 @@ pub const FakeGuest = struct {
         };
     }
 
-    // ── gopher-metal's virtio.zig ──
+    // ── zig-metal-unikernel's virtio.zig ──
 
     /// `negotiate`: reset and wait for it, ACKNOWLEDGE, DRIVER, VERSION_1 and
     /// `want_low`, FEATURES_OK read back. The status so far, or null where
@@ -622,7 +622,7 @@ pub const FakeGuest = struct {
 };
 
 /// The PC-shaped machine's three devices in main.zig's slots, and its APIC
-/// as gopher-metal's `startApic` leaves it.
+/// as zig-metal-unikernel's `startApic` leaves it.
 pub const Machine = struct {
     bus: Bus = .{},
     lapic: apic.Apic = .{},

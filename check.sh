@@ -27,10 +27,10 @@
 # itself: that one is same.sh.
 #
 # The probes that need a step between boots — a Linux mount writing a file the
-# next boot reads — belong to gopher-metal's own runner and are not here.
+# next boot reads — belong to zig-metal-unikernel's own runner and are not here.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUESTS="${GUESTS:-$HOME/showell_repos/gopher-metal/probe}"
+GUESTS="${GUESTS:-$HOME/showell_repos/zig-metal-unikernel/probe}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -50,7 +50,7 @@ echo "PASS the unit tests, built ReleaseSafe"
 CASES="block:fat16 vfat:fat16 net:fat16 http:fat16 stdhttp:fat16 rng:fat16 clock:fat16 \
 vfat:fat32 append:fat32"
 
-# **FAT32, ON A VOLUME MADE HERE**, as gopher-metal's runner makes its own
+# **FAT32, ON A VOLUME MADE HERE**, as zig-metal-unikernel's runner makes its own
 # (`FAT=32 probe/run.sh`): 512-byte sectors and clusters, enough clusters to be
 # FAT32, and a FAT bigger than one device request. Prod's data is FAT32, so
 # this is the format the devices here must not get wrong. One format, copied to
@@ -74,8 +74,8 @@ for one in $CASES; do
     fi
     elf="$GUESTS/$probe.elf"
     # A probe that is not there is a failure, not a skip: a wrong GUESTS or
-    # a probe dropped from gopher-metal's build would otherwise pass unseen.
-    [ -f "$elf" ] || { echo "FAIL $probe: no $elf (in gopher-metal: zig build kernels)"; failed=1; continue; }
+    # a probe dropped from zig-metal-unikernel's build would otherwise pass unseen.
+    [ -f "$elf" ] || { echo "FAIL $probe: no $elf (in zig-metal-unikernel: zig build kernels)"; failed=1; continue; }
 
     # **THE HTTP PROBES NEED A CLIENT.** Ours is the peer inside the program;
     # QEMU's is curl through a forwarded port. Both fetch the same path, and

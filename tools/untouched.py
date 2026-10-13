@@ -17,8 +17,8 @@ orphaned long name and reclaimed clusters: a lost file passed as a stop's
 leftovers. A file the request touches may rightly be old, new or gone
 (store.zig's promises for a cut); one it does not touch has no excuse.
 
-Read with gopher-metal's tools/fat16_read.py, written from Microsoft's FAT
-specification: FAT_READ=<path> says where, else the gopher-metal checkout
+Read with zig-metal-unikernel's tools/fat16_read.py, written from Microsoft's FAT
+specification: FAT_READ=<path> says where, else the zig-metal-unikernel checkout
 beside this one.
 """
 import hashlib
@@ -30,9 +30,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def reader():
-    path = os.environ.get("FAT_READ") or os.path.join(HERE, "..", "..", "gopher-metal", "tools", "fat16_read.py")
+    path = os.environ.get("FAT_READ") or os.path.join(HERE, "..", "..", "zig-metal-unikernel", "tools", "fat16_read.py")
     if not os.path.isfile(path):
-        raise SystemExit(f"untouched: no FAT reader at {path}; set FAT_READ=<gopher-metal's tools/fat16_read.py>")
+        raise SystemExit(f"untouched: no FAT reader at {path}; set FAT_READ=<zig-metal-unikernel's tools/fat16_read.py>")
     spec = importlib.util.spec_from_file_location("fat16_read", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

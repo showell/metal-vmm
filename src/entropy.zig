@@ -1,7 +1,7 @@
 //! **RANDOMNESS THAT REPEATS**, which is a contradiction everywhere except
 //! here.
 //!
-//! A guest needs entropy — gopher-metal mints session tokens with it, and
+//! A guest needs entropy — zig-metal-unikernel mints session tokens with it, and
 //! refuses to invent one out of a clock. A deterministic machine needs every
 //! byte of that entropy to be the same on the next run. Both are satisfied by
 //! the same thing: a generator seeded from a number this program chose, which
@@ -77,7 +77,7 @@ test "a guest's buffer comes back filled, and the used ring says how much" {
     var d = card.device();
     try testing.expectEqual(virtio.device_id_entropy, @as(u32, @intCast(d.read(0x008, 4))));
 
-    // One write-only descriptor, offered the way gopher-metal's rng.zig does.
+    // One write-only descriptor, offered the way zig-metal-unikernel's rng.zig does.
     var ram: [4096]u8 align(8) = @splat(0);
     const desc_at: u64 = 0x100;
     const avail_at: u64 = 0x200;

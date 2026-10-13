@@ -1,4 +1,4 @@
-//! **THE OTHER HALF OF A PROTOCOL WE ALREADY WROTE.** gopher-metal drives
+//! **THE OTHER HALF OF A PROTOCOL WE ALREADY WROTE.** zig-metal-unikernel drives
 //! virtio-mmio from inside a guest; this answers it from outside. The register
 //! offsets, the status bits and the ring layout below are the same numbers,
 //! read from the opposite side — which is the whole reason this is a good way
@@ -555,7 +555,7 @@ test "FEATURES_OK reads back, because the driver checks whether it was granted" 
     try testing.expectEqual(@as(u64, 0), d.read(0x070, 4));
 }
 
-/// A guest's memory with one queue in it, laid out the way gopher-metal's
+/// A guest's memory with one queue in it, laid out the way zig-metal-unikernel's
 /// `Ring(8)` lays it out, so the test drives the device the way the driver does.
 const FakeGuest = struct {
     ram: [8192]u8 = @splat(0),
