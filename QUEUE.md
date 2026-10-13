@@ -1236,6 +1236,113 @@ the build, the port); stay off those, and merge master in as it lands.
     Plain words over pattern names; when you name a pattern, say what it
     means here.
 
+193. **The box's (Steve, 2026-10-13): the counters, so a zero on
+    /admin/host means "never happened", never "never counted".** Your
+    191.2 is the spec: its table and its twelve gaps, ranked. The renames
+    are done (gopher-metal is `zig-metal-unikernel`, webbox is
+    `zig-webbox`; fetch first, and note the new paths); the code freeze is
+    over for this item. Work on your branch in zig-metal-unikernel (and
+    metal-vmm where a judge is needed), red first, each gap its own
+    commit, in this order:
+    1. **The TCP table's counters on /admin/host** (gap 1): every counter
+       the table keeps, `damaged` and `fast_retransmits` included, as host
+       facts beside the others, not only in the closing log. The chat
+       judge compares /admin/host between hosts: keep it comparing (a
+       Linux host has no such counters; say how the comparison treats a
+       row only metal has).
+    2. **A deadline on every device wait** (gap 2): a disk request with no
+       completion, and a NIC that takes no frames, end in a counted error
+       instead of hanging the machine. Read `DEVICE_NEEDS_RESET`. Pull the
+       wait's decision out as a pure function of the clock, so the test
+       needs no device. Say what the caller does with the error (a 503,
+       a refused write, a restart) and why; ask before choosing a restart.
+    3. **Disk failures and their reasons** (gap 3): failed sector reads
+       and writes counted on the `Volume`; non-OK virtio-blk statuses,
+       CHECK CONDITION sense keys and ASCs, and non-OK virtio-scsi
+       responses counted on the `Block`, by kind. Shown on /admin/host.
+    4. **Incoming loss** (gap 4) and **the NIC's ring** (gap 5).
+    5. **Resets** (gap 6), by cause, the host's `abandon`s included.
+    6. Gaps 7-12 as one commit each, or say which you'd leave and why.
+    For each: the red test you named in 191.2, then the count, then the
+    row. **The page stays fast**: say what each step costs its time.
+    **Not counters that only count in a -Dcoverage build**: a
+    `props.reachable` is not a count on prod. Where a count belongs in
+    the guide for agents (`docs/admin-for-agents.md`), add it there, with
+    what a nonzero value means. Then `./check-cc.sh` (the box runs it;
+    you can't) is the box's first look.
+
+194. **The box's (Steve, 2026-10-13): 189's should-fix five, from your
+    190.3, after 193.** They must land before v30, since 189 is not yet
+    served. Your 190.3 is the spec; each finding names its place, its
+    scenario and its red test. Paths have moved: gopher-metal is
+    `zig-metal-unikernel`, and the library files (`traffic.zig`,
+    `log_view.zig`, `http.zig`) are zig-webbox's `src/` now, not
+    angry-gopher's; your branch in zig-webbox is new (fetch first). Red
+    first, each its own commit:
+    1. **Uploads refused at their head are uploads** (busy, no memory, the
+       asker unknown, the older retry's 409, strangers): counted in the
+       uploads table, in `writeCounts`, with an `upload:` line.
+    2. **A client that hung up halfway is "the client gone"**, not
+       "refused (400)": `whole` must not stand for "came whole"; give
+       `classify` what it needs to tell them apart, and drop the test of a
+       combination the kernel never produces.
+    3. **An upload's id never leaks through doubled slashes or case**
+       (`/uploads//<id>`, `/uploads///<id>`, `/Uploads/<id>`): the
+       Redactor and `keptPath` agree, and a test holds them to one rule
+       (one function both call, if that is simpler).
+    4. **A part's Content-Type cannot forge a log line**: control bytes
+       never reach the log; `Upload.write` replaces them, and a test plants
+       a bare LF.
+    5. **`/admin/log?path=` finds a request refused at its head**: the
+       refusal's request line carries METHOD and PATH as a route's does.
+    Then the minor seven as you judge them: fix the cheap ones in the same
+    pass, say which you'd leave and why. The chat judge compares
+    /admin/host and /admin/log between hosts: keep it comparing.
+
+195. **The box's (Steve, 2026-10-13): rewrite zig-metal-unikernel's
+    README for a stranger.** Docs only: commit nothing but `README.md` (and
+    moves of text out of it into existing docs, if a section belongs
+    elsewhere; say which). Can run beside 193 and 194: it touches no code.
+    - **The reader:** someone who lands on this repo first, before
+      angry-gopher, dog-park or anything else of Steve's. Assume a blank
+      slate: they don't know what webbox is, what Lyn Rummy is, what
+      metal-vmm is, or any of our vocabulary (gates, judges, the long tier,
+      content ids, a port, Phase B). Define each word the first time it
+      matters, or don't use it.
+    - **The progression, in this order:**
+      1. **What it is.** A unikernel written in Zig: a kernel with no
+         operating system under it that boots on a real cloud machine (a
+         DigitalOcean droplet) through its own boot loader, speaks to the
+         network and the disks itself (its own TCP, its own FAT), and runs
+         one web application. Say plainly what's unusual about it and what
+         it is not (no processes, no shell, one core, no threads).
+      2. **How it's used now.** Two applications run on it, both built on
+         one library, **zig-webbox** (link): **angry-gopher** (serving
+         lynrummy.com, in production) and **dog-park** (a second app, which
+         proves the kernel hosts *an* app, not one). The same application
+         source builds for Linux and for the unikernel, and the two are
+         held to the same answers byte for byte. Two repos keep its quality:
+         **metal-vmm** (a deterministic hypervisor that runs the real kernel
+         with time and faults under the test's control) and
+         **zig-coverage-sdk** (the coverage properties the judges read).
+         A small diagram of the six repos is welcome.
+      3. **Details on how to use it:** what you need (zig 0.16, QEMU,
+         sibling checkouts), building a kernel for an app, running it
+         locally, the checks (from fastest to slowest, and what each
+         proves), making a release image and how it reaches a droplet, the
+         way back. Then the reference material: the status table, the
+         docs index.
+    - **The status table** must be true of v29 (your 190.4 has the rows)
+      and hedged where it should be: what is served, what is on master and
+      not served, what is test-only, what is unmeasured. Say the date.
+    - **Plain words over our jargon,** short sections, and no history
+      narrative ("we used to...") except where a reader needs it to
+      understand a name. The old name gopher-metal gets one line: what it
+      was called, and that old links redirect.
+    - Keep it to what a stranger needs; link out for depth (HOST.md,
+      CUTOVER.md, docs/). If the current README holds material only an
+      insider needs, move it to a doc and link it.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
