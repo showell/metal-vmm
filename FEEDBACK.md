@@ -7,6 +7,32 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-13: 196, and 197 so far
+
+**196** (zig-metal-unikernel 32e737f): the README now says the scope is DigitalOcean droplets for now, with the virtio caveat. It also explains what "battle tested" honestly rests on: about three daily users since 2026-10-04, a happy-path setup behind Caddy, no load. It names where the harder cases are tested instead.
+
+**197: parts 1, 2, 5 and 4 are pushed; part 3 (coverage by tier) is next.** zig-metal-unikernel:
+
+- **fb4f848, tier 0 needs no sibling.**
+  - `zig build test` failed with no zig-webbox or angry-gopher present. The unit tests imported webbox's `body.zig`, and `check` type-checked gopher.elf.
+  - The unit tests now take `src/pinned/webbox_body.zig`, a byte-for-byte copy. `zig build pinned` (`tools/pinned.py`) is the tier-3 check that fails when the copy differs from the source, and it prints the `cp` that fixes it.
+  - gopher.elf's type-check is now `zig build check-apps`.
+  - `zig build test -Dgopher-root=/x -Dwebbox-root=/x -Ddogpark-root=/x` passes.
+  - **A choice you may want to reverse:** the pinned copy. The alternative is a test-only rule in this repo, but then the drain's tests would stop testing the real rule.
+- **c87f869, the tiers.**
+  - `tier0.sh` to `tier3.sh` share `tools/tier_lib.sh`.
+  - Each tier stops before its first step if anything it needs is missing, says what, and exits 2. Tier 0 ends by listing what it did not check and which tier does.
+  - `gates.sh` runs the tiers in order and stops at the first failure. `gates.sh quick` is tiers 0 and 1 plus `tier3.sh quick` (gopher.elf and the members story); it no longer runs the dogpark judge or webbox's tests. A full pass records its verdict as before.
+  - Siblings are found at `../<name>`, as build.zig finds them; environment variables name another place. `long.sh` still uses `~/showell_repos`.
+  - **Fixed along the way:** gates.sh never set `GUESTS`. metal-vmm's `check.sh` and `same.sh` booted `~/showell_repos/zig-metal-unikernel/probe` whatever tree ran the gates. Tiers 2 and 3 now set it to this checkout.
+  - **Not run here:** this container has no QEMU, no KVM, no dosfstools or mtools, and no sudo. So `tier1.sh` to `tier3.sh` and the new `gates.sh` have been syntax-checked only. The first box run is their first run, so please read their output closely. Tier 0 ran here and passed.
+- **What tier 0 waits on (197.4).** These are times on this container.
+  - **Before:** `zig build test`, everything compiled, took 1m40s. From a cold cache it took 1m54s to 3m.
+  - The run time is three binaries in parallel. The unit binary takes about 90 s; inside it, pure_sim 30 s, drain_sim 28 s, store_sim 13 s and tcp_sim 11 s, and every other file under 3 s.
+  - `disk_fat_faults_test` and `disk_fat_lies_test` take 81 s for 17 tests, and `disk_fat_test` takes 22 s. The faults and lies tests are exhaustive: every operation is stopped after every write, then each stop point formats a whole in-memory image, mounts it, replays the operation and runs a full check. That is CPU, not I/O. ReleaseSafe barely helps (29 s and 56 s, plus 28 s to compile), so the fix would be smaller images or fewer stop points. That is a design call for the FAT owner, and I have not made it.
+  - `zig build properties` at its defaults takes 1173 s in Debug here (the README said "~1 min"). In ReleaseSafe it takes 45 s to compile and 4 min to run, and cutting the seeds from 100 to 20 barely changes that. So the time is in a fixed part of the sweep, not the seeds. I left it out of tier 0 and named it there; long.sh runs it.
+  - **After:** no speed-ups yet, only the measurements. Each would trade coverage, so I'd rather you choose.
+
 ## CC → the box, 2026-10-13: 194, 189's should-fix five
 
 These are on branch `claude/great-wright-i7aste` in two repos, zig-metal-unikernel and zig-webbox.
