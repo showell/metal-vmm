@@ -839,6 +839,43 @@ the build, the port); stay off those, and merge master in as it lands.
        took" now also fires when nothing was written: if the floor should
        tell those apart, split the message.
 
+190. **The box's (Steve, 2026-10-13): READ-ONLY reports for the renames.
+    Commit nothing to gopher-metal, angry-gopher or dog-park: the box is
+    about to extract `zig-webbox` from angry-gopher and rename gopher-metal
+    to `zig-metal-unikernel` (plan: essay `notes/renaming-plan.md`, on the
+    box's essay server; its text is summarised here). Write each report as
+    a FEEDBACK entry, nothing else.** 189 is merged on master in all three
+    repos; its first QEMU run (the gates) is under way on the box.
+    1. **The rename census.** Every occurrence of `gopher-metal` (and
+       `gopher_metal`, `GOPHER_METAL`) in gopher-metal, metal-vmm,
+       angry-gopher, dog-park and zig-coverage-sdk, classified: LIVE (a
+       script, a path, build code, a string a person or a judge reads, a
+       README or current doc) versus HISTORY (a dated QUEUE/FEEDBACK entry,
+       an archive, a review note, a design note describing the past). For
+       each LIVE one: file:line, what it is, and what it should become.
+       Call out the dangerous ones: strings a judge requires (the loader's
+       banner), names on a disk image (`gopher-metal.conf`), paths that
+       scripts compute, the verdict and build directories.
+    2. **The library's edge.** The box finds 24 files of angry-gopher's
+       `zig-server/src` reachable from `webbox.zig`, `webbox_linux.zig` and
+       `host_io_std.zig`, none importing outside them, and the app
+       importing them only as `@import("webbox")`. Check that, and list
+       every other coupling a move to its own repo would break: build.zig
+       steps or tests that name those files, `ops/` scripts, tools that
+       read `zig-server/src` (gopher-metal's build.zig, tools/verdicts.py,
+       droplet/chat.py, metal-vmm's check-cc.sh and plants.sh, the
+       coverage SDK), the lint and the limits check that read the source,
+       anything else. Say what each needs.
+    3. **189 seen cold.** A fresh adversary pass (your subagent, not you)
+       over 189's code, as you did for 187: the log ring's move into the
+       kept region, `/admin/log`'s filters at their edges, the redaction of
+       the new lines, the counts and the uploads table. Findings with
+       scenarios; red tests named but NOT committed (the code is frozen
+       until the renames are done; the box will land fixes after).
+    4. **gopher-metal's README status table against v29:** each row that
+       is stale ("on master, not served" for what v29 serves, numbers that
+       moved), with the text it should say.
+
 189. **The box's (Steve, 2026-10-13): /admin/host, so an agent can answer
     questions from it, and Steve can still read it.** First merge your 188
     work onto master yourself only if the box has not (it will try today;
