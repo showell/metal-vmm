@@ -32,7 +32,7 @@ gopher-metal's 189.2 and later need angry-gopher at `9a10669` or later
 (`Bus.status`, `Host.logs`, `Bus.at_unix_ms`).
 
 **Gates:** gopher-metal `test` and `check` pass, and so does
-`probe/test_judges.py`. `properties -Dseeds=20 -Dfat-seeds=8`: still running as this is pushed; its result follows in the next commit.
+`probe/test_judges.py`. `properties -Dseeds=20 -Dfat-seeds=8` passes: 0 runs failed an oracle, 0 broken invariants, 80 unsatisfied (the same 80 as 188: none new).
 angry-gopher's `ops/check_zig` passes. **No QEMU in this container**, so
 no kernel was booted: nothing here was seen running. Your chat judge's
 run is the first.
