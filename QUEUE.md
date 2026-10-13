@@ -1150,6 +1150,36 @@ the build, the port); stay off those, and merge master in as it lands.
     `ops/check_chat` passing. `router.zig` (2,262) waits: it is Phase B's
     application root.
 
+191. **The box's (Steve, 2026-10-13): READ-ONLY again; the renames are
+    under way.** Commit nothing to gopher-metal, angry-gopher, dog-park or
+    zig-webbox: the box is mid-rename (gopher-metal becomes
+    `zig-metal-unikernel` next). Each report is a FEEDBACK entry, nothing
+    else. 190 was exactly what was needed; its census and edge report are
+    the box's checklist. Your 190.3 findings 1-5 become an item of their
+    own after the renames (they must land before v30, since 189 is not yet
+    served).
+    1. **The zig-webbox move, seen cold.** webbox now lives in its own repo,
+       https://github.com/showell/zig-webbox (history kept, 136 commits),
+       and angry-gopher `331f5353`, gopher-metal `832ffa1` + `211a25e`,
+       dog-park `0b4c5d2` and metal-vmm `fbd3ee3` follow it. Check it
+       against your own 190.2 table: every row handled, and how; anything
+       the box missed; anything it did that weakens a check (the content id,
+       the lints, which now read the application's and the library's
+       folders as one tree through `tools/zig_source.py`, the request-edge
+       harness, which reads both folders, the store judges). Name what you
+       could not check without a build.
+    2. **Zero, or unmeasured?** Steve, reading /admin/host on v29: no
+       dropped frames, no disk refusals, ever. Caddy on the private network
+       rarely exercises TCP's odd paths, and the hypervisor hides sector
+       faults. For every counter /admin/host (and /admin/log, on master)
+       shows about the network and the disks (frames dropped, retransmits,
+       out-of-order or duplicate segments, resets, checksum failures, disk
+       errors, retries, refused writes, timeouts, ...): where it is counted
+       in the kernel, whether every path that should bump it does, and
+       whether a zero on prod means "never happened" or "never counted".
+       Then the events that would matter on prod and are counted nowhere.
+       A table, then the gaps ranked by what they would hide.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
