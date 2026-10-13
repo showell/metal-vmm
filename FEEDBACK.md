@@ -7,6 +7,531 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-13: 192, Dog Park's page code, seen by its seams
+
+Read-only. I committed nothing to dog-park. A subagent of mine read dog-park
+`origin/main` (`094292a`, PHYSICS.md draft 9) and wrote this; I checked two
+of its claims against `solo/park.js` myself:
+- The pointer moves the held dog by writing into the dog object that
+  `known` and `moves` hold (`Object.assign(hold.dog, …)`, line 583).
+- The file starts itself as it loads (line 733), so node cannot load it.
+
+It did not run `tools/test_cows_agree.mjs`, which needs a `zig build` and
+a live server. That need is its seam 5.
+
+Read at dog-park `origin/main` 094292a (PHYSICS.md draft 9). Line numbers are `solo/park.js` unless a file is named. I did not run `tools/test_cows_agree.mjs`. It needs `zig build` (the server binary and `zig-out/web/cows.wasm`) and a live server, and neither exists without a build. That is a finding in its own right; see seam 5.
+
+### 0. In one paragraph
+
+Most of park.js's small pieces are already pure and good: frames, tiles, the scroll band, the overview frame, and `blit` itself. The trouble is one function. `start()` (535-731) holds the hand's state in closures and does three jobs inline. It turns a pointer event into a game meaning. It decides the drag's rules. It builds what to draw. Meanwhile the game state sits in module-level globals that the pointer code writes into through shared object references. Nothing that matters can be loaded in node: the file calls `start()` as soon as it loads (733), and `start` needs `document`, `fetch` and a canvas. The physics doubles the page's job: a 16 Hz tick, a report, acks and rewinds. That work should go into a JS engine that takes its clock, its network and its wasm as arguments. The rules go into the Zig, and the drawing becomes one function that takes a list of objects.
+
+### 1. The map as it is
+
+```
+ DOM events ──► start() closures [hold, pointer, mode, viewport]   535-548
+   pointerdown 587 ─► grabbed() 138 ─► leashTo() 235 ─► post /leash
+                   └► overview rect hit, inline 591-595
+   pointermove 609 ─► pan math inline 613-620 ─► sendViewport() 333 ─► post
+                   └► follow() 580 ─► keptOnScreen/keptInWorld ─► WRITES hold.dog
+                                   └► sendMove() 291 ─► sendNext() 305 ─► post /move
+   pointerup   630 ─► keepOnLeash() 249 ─► setTimeout(releaseLeash) ─► post
+   keydown "z" 572 ─► keepOnLeash, mode flip
+
+ rAF frame() 637
+   ├► syncTiles(viewport, inHand) 356 ─► post /tiles ─► rewrites known,
+   │        beginPoints, serverCows; reads leashed, inHand(), moving()
+   ├► predictCows(rule) 406 ─► reads serverCows, moves, beginPoints;
+   │        writes wasm memory; returns knownCows
+   ├► sayJumps 435 (console)
+   ├► pan edge-scroll inline 647-659 ─► sendViewport
+   ├► held-dog edge-scroll inline 660-679 ─► WRITES dog, viewport ─► sendMove, sendViewport
+   ├► builds ground + sprites inline 680-699 ─► blit() 452
+   └► drawOverview() 705 ─► reads subscribed, known, knownCows, lastLeashed ─► blitOverview() 486
+
+ module globals (anyone reads, anyone writes):
+   known 197, serverCows 200, toldOf 203, knownCows 211, beginPoints 214,
+   subscribed 220, leashed 229, lastLeashed 231, moves 270,
+   viewportSends 331, tileSends 354
+```
+
+The parts, and what each one knows:
+
+| part | lines | knows | pure? |
+|---|---|---|---|
+| frames | 53-70 | viewport and park points, dog_px | yes |
+| tiles and world | 74-132 | tile maths, the 25 cap | yes (apart from one `console.error` at 130) |
+| drag hit-test `grabbed` | 138-148 | dogs and dog_px; returns the dog **object** | yes, but it knows the game |
+| scroll band | 155-173 | speeds in px **per frame** | yes |
+| wire | 177-191 | fetch, JSON | no |
+| game state | 197-231, 270, 331, 354 | everything | globals |
+| leash | 235-263 | state, `setTimeout`, wire | no: three jobs in one |
+| sends | 276-346 | state, begin points, wire | no |
+| tile sync | 356-387 | wire, game state, **the hand** (through `inHand`) | no |
+| prediction | 396-445 | wasm memory layout, moves, begin points | reads globals |
+| blitters | 452-512 | canvas; also "leashed", "cow", "ringed", freshness colours | nearly |
+| overview frame | 518-531 | world_px | yes |
+| `start` | 535-731 | all of the above | no |
+
+**Where the three parts (screen, engine, physics) are tangled today:**
+
+1. **`pointerdown` (587-608).** One handler does a screen hit-test (`grabbed`, plus the overview rectangle test written inline at 593-594), decides what the press means (grab or pan), and changes the game (`leashTo`, which posts). Screen, meaning and engine all live in one closure.
+2. **`follow()` (580-585) and the held-dog edge scroll (660-679).** These are the drag's rules: keep the dog on screen, keep it in the world, move the viewport and the dog together. They are decided inline and written straight into `hold.dog`. That object is the one stored in `known` (597-600), and it is also captured in `moves.pending` and `moves.waiting` (297, 311). **Object identity is the channel between the pointer and the game state:** `inHand() === d` (370, 374) compares references. This is the worst tangle. Under PHYSICS the pointer must never move the dog. It records a displacement, and the tick moves the dog.
+3. **`syncTiles` (356-387).** It merges a wire answer into game state and asks the hand's state (`inHand`, passed in from `start`'s closure) which dogs to spare. The wire, the engine and the pointer meet here.
+4. **`frame()` (637-702).** Ticking, sending and drawing happen in one rAF callback, and nothing in it is a tick. Speeds are counted per frame (156-157), so a 120 Hz display scrolls twice as fast.
+5. **The leash timer.** It is wall time, a `setTimeout` (251, 569). PHYSICS makes it 80 ticks, counted in the board.
+6. **Draw order and hit order are linked only by accident.** `grabbed` walks `known` backwards (139). `blit` draws dogs in `known`'s order after the cows (693). They agree only because both iterate the same Map.
+
+What is already right: `blit` (452) and `blitOverview` (486) are close to dumb. They take arrays of plain objects at viewport points. The leftover game knowledge in them is small: the `"leashed"` kind and `dog_px` for the ring, and the `"cow"`, `"ringed"` and freshness colours. Seam 2 removes it.
+
+**`src/park.js`, the old page.** It belongs to the wrapping-plane design: plane copies, `nearestCopy`, `homeShift`, `/scene`. All of that is dead here. Four things are worth lifting before it goes:
+- the load guard `if (typeof document !== "undefined") start();` (361), which is what lets node import a page file;
+- `AbortSignal.timeout(5000)` on requests (39, 55), which is PHYSICS's 5 s resend in one line;
+- "whole units cross the wire, a fraction stays behind" (`sendableUnits` and `unsent*`, 159-163 and 198-203), which is exactly how pointer movement in fractional CSS px must become displacements in 256ths;
+- `take()` (124-157), "the answer is the truth, plus what you did since", which is a small ancestor of the rewind.
+
+### 2. The seams, in order of value
+
+The rule that decides which side of the wall a question goes on: **the line on the wire is the wall.** Anything that decides what a report line says goes in the shared Zig, because the server must reach the same answer. That covers critter lines, `bump`, `rest`, a timer `release`, the cap and the merge, the stall, and the canonical text. Anything that only decides what the human sees, or how a pointer gesture becomes a recorded input, stays in JS. Recorded inputs are taken as given (PHYSICS item 6), so the server never needs to agree on how the page arrived at them.
+
+#### Seam 1: the tick, in Zig wasm (`physics.wasm`)
+
+**What crosses.** Inputs go in, a tick comes out:
+
+```
+in:  tick(T) after writing inputs into wasm memory:
+     { leash?: dog, grab?: bool, letgo?: bool, release?: dog,
+       drag: [{dx256, dy256, atMs}] (≤ 16 after merge), view?, held? }
+out: { lines: text (canonical, Zig-written),
+       drag: "on" | "stalled" | "bumped" (critter rank) | "none",
+       resting: bool, released?: dog }
+     + the critter table in memory: [id, kind, x256, y256] × n
+```
+
+**Who owns what.** Zig owns the board: positions, the known set, held tiles, the leash, whether a drag is on or the tick it ended. It owns the cap, the merge, the 10 px steps, the stall at 600 px, the bump, the cascade and the 80-tick timer. It also keeps **two board slots**: the live board, and the board at the last kept tick. A rewind then becomes "copy kept to live, lay the server's `board` over it, replay inputs". It never touches JS state.
+
+**The pure questions.** "May the drag continue?" is Steve's example, and it lands here exactly. The tick answers it as `drag: on | stalled | bumped`. JS never decides it. It only obeys: on `bumped` it lets go of the pointer capture. A second pure function, `wantedTiles(leashed, viewport)` (item 11: the 1400 px square plus the viewport, cap 49, the over-cap order), also belongs in Zig. The server holds the page to that promise, so both sides must compute it the same way. Today it is JS (124-132).
+
+**Also in Zig: the answer parser** for `board`, `state`, `tile` and `input` lines. Those lines become board state, and the canonical form is the Zig's. JS treats answers as opaque text it hands over, except for the first word (`kept`, `differ`, `reload`, `taken`), which it needs in order to schedule.
+
+`cows_wasm.zig` is the seed of this seam. Its shape is already right: fixed buffers in linear memory, `positions()` and `capacity()` exports, and one verb. The only change is to grow it. It stops being "replay a move over cows the page owns" and becomes "own the board and tick it". `predictCows` (406-428) then disappears: the page no longer predicts the server, it runs the same tick.
+
+#### Seam 2: the blitter contract (JS, game-agnostic)
+
+**What crosses.** `draw(ctx, objects)` and `hit(objects, x, y) → id | null`. The object type is in section 4. The blitter owns the canvas, the devicePixelRatio and fonts, and nothing else. It never sees dog, cow, leash or tile.
+
+**The pure question.** "What do I draw this frame?" It is answered by `nearScene(view, critters, alpha)` and `overviewScene(view, critters, subscribed)`, both pure. They replace 680-699 and 705-730, and the colour choices currently in `blitOverview` (499) move into them. `grabbed` (138) and the inline overview rectangle test (593) both become `hit()` over the objects the frame just drew. Hit order is then draw order by construction, which removes tangle 6.
+
+#### Seam 3: what a pointer event means (JS)
+
+**What crosses.** In: `{type: down|move|up|cancel, x, y}`, plus the id `hit()` returned. Out: a new `hand` and a list of intents:
+
+```
+hand:    resting | panning{lastX,lastY} | dragging{dogId} | spent{dogId}   // spent = bumped, wait for up
+intent:  grab(dogId) | drag(dx, dy) | letgo | pan(dx, dy) | none
+```
+
+**Who owns what.** The pure function `meaning(hand, event, hitId, mode)` owns the hand. It does not own the dog. The hand holds a **dogId, never the dog object**, which removes tangle 2. The engine applies the intents. DOM listeners only translate events and call the function.
+
+**The pure questions.** "What does this pointer event mean?" Also: "while dragging and the pointer sits in the edge band, what displacement does this tick add?" That is `axisScroll` (169), counted per tick rather than per frame. Under PHYSICS the edge scroll stops moving the dog. It adds to the tick's recorded drag, and the viewport follows wherever the tick put the dog. `keptOnScreen` (64) goes away: the screen does not constrain the physics, the viewport chases the dog. All of this stays JS, because it all happens before the recorded line.
+
+#### Seam 4: the engine (JS, no DOM)
+
+**What crosses.**
+
+```
+createEngine({ rule /* wasm exports */, send(text) → Promise<text>, now() → ms })
+engine.intent(i)        // from seam 3
+engine.frame(nowMs)     // runs 0..n ticks due by the 16 Hz clock; sends if due
+engine.answer(text)     // the server's reply
+engine.view()           // { critters: [...], leashed, subscribed, viewport, alpha }
+```
+
+**Who owns what.** The engine owns:
+- the tick clock: 62.5 ms, with a freeze at 32 ticks or 48 KiB unsent;
+- the report buffer: the header, the `t` lines with `+ms`, and the Zig's lines appended;
+- one report in flight, the 250 ms spacing and the 5 s resend;
+- "ignore answers at or below my kept tick";
+- the epoch and `reload` / `taken over`;
+- the known-critters-this-epoch store used for re-holding;
+- the viewport (panning while unleashed is a `view` input);
+- the leash, but only as inputs. The 80 ticks live in the board.
+
+Every global from 197-354, and every closure in `start`, moves here or into the Zig. The timer, `fetch` and the clock come in as arguments, so node can drive it.
+
+**The pure questions.** "Is a report due?" is `due(unsentBytes, inFlight, msSinceLast, ticksPastKept)`. "Do I tick now?" is `ticksDue(lastTickMs, nowMs, frozen)`. Both are tiny and pure, and both stay JS: wall time is page-only by PHYSICS's own rule ("records it, never computes with it").
+
+#### Seam 5: the re-run as a pure Zig function (server side, but it serves the page)
+
+`check(board, report) → answer`, with no I/O. The server wraps it with the log, the sync and the snapshot. This is the gopher-metal rule ("the pure decision pulled out, the I/O left behind") applied to the server. It is on this list because it is what makes the agreement test run without a server. Compile `check` into a second wasm, or into the same one under a separate export, and node can pass the page engine's reports straight to it. Today `test_cows_agree.mjs` has to build, spawn the binary, wait for a port and fetch a cookie.
+
+### 3. What each seam makes testable, and how
+
+All of these run in node with no browser, no server and no canvas:
+
+| seam | test made possible |
+|---|---|
+| 1 tick | Zig tests for every rule in PHYSICS (bump, stall, cap, timer at T+80, jump corners). A node test that loads `physics.wasm` and replays PHYSICS's own example report, asserting the exact lines. |
+| 2 blitter | `nearScene` on a fixed state gives exact objects (positions, z, ring flag). `hit()` on hand-made objects returns the topmost hittable. Interpolation at alpha 0, ½ and 1. No canvas needed; `draw` itself stays untested and stays dumb. |
+| 3 pointer | A whole gesture as a table: down on a dog → grab. Moves → drags. Bump → spent, so further moves mean nothing. Up → letgo. Down on empty ground → pan. Overview down outside the rectangle → nothing. |
+| 4 engine | Fake `send`, fake clock. Report spacing, one in flight, a resend at 5 s, freezing at 32 ticks, ignoring a stale `kept`, a rewind after `differ`, re-holding a re-subscribed tile at the same tick. |
+| 5 check | Engine → report → `check` → answer → engine, closed in one process. This is `test_cows_agree` without a build-and-spawn, and it can run thousands of seeded games. |
+
+**Sketch A: the drag asks, it doesn't decide (seams 3 and 1).**
+
+```js
+let hand = { kind: "resting" }, out;
+out = meaning(hand, { type: "down", x: 100, y: 100 }, "dog:219", "near");
+assert.deepEqual(out.intents, [{ grab: 219 }]);           hand = out.hand;
+out = meaning(hand, { type: "move", x: 103, y: 99 }, null, "near");
+assert.deepEqual(out.intents, [{ drag: [3, -1] }]);       hand = out.hand;
+hand = afterTick(hand, { drag: "bumped" });                // the tick's answer, pure
+assert.equal(hand.kind, "spent");
+out = meaning(hand, { type: "move", x: 120, y: 99 }, null, "near");
+assert.deepEqual(out.intents, []);                         // a spent drag moves nothing
+```
+
+**Sketch B: the engine and the re-run agree, and a rewind heals (seams 4, 1 and 5).**
+
+```js
+const rule = await loadWasm("zig-out/web/physics.wasm");
+const judge = await loadWasm("zig-out/web/check.wasm");     // or the same module
+let clock = 0, sent = [];
+const e = createEngine({ rule, now: () => clock, send: (t) => { sent.push(t); return pending(); } });
+e.answer(loadAnswer);                                       // board, epoch, view, tiles
+e.intent({ grab: 219 }); e.intent({ drag: [-3, 0] });
+for (; clock < 600; clock += 16) e.frame(clock);
+assert.equal(judge.check(loadBoard, sent[0]).split("\n")[0], `kept ${lastTick(sent[0])}`);
+// now tamper: the server says differ at the 2nd tick
+e.answer(`kept 1041\ndiffer 1042 dog 223 e15.f0,1216.00 > e15.e0,1216.00\nboard 1042 …\nstate …`);
+e.frame(clock += 300);
+assert.match(sent[1], /^from 1041 /m);                      // resumes from the kept tick
+assert.deepEqual(e.view().critter(223).at256, judgeBoardAt(1042, 223));
+```
+
+(`pending()`, `loadWasm`, `lastTick` and `judgeBoardAt` are a few lines of test helpers each.)
+
+### 4. The blitter's contract
+
+**An object on the screen:**
+
+```
+{ id: string            // "dog:219", "cow:23", "tile:5,7", "view"; opaque to the blitter
+  shape: "glyph" | "rect" | "dot" | "frame"   // emoji text, filled square, circle, stroked rectangle
+  x, y: number          // screen CSS px, centre (rect/frame: top-left), already interpolated
+  w, h: number          // size; the hit box for glyphs (dogs 40, cows 60, as the physics' squares)
+  glyph?, fill?, stroke?, label?, ring?: colour   // look only
+  z: integer            // layer; ties broken by order in the list
+  hittable: boolean }
+```
+
+- **Z-order.** The layer is explicit: ground 0, cows 10, dogs 20, the leashed dog 30, overlay 40 (the view rectangle, debug). Within a layer, order is by rank (cows by number, dogs by number). That is the cascade's order, so a herd stacks the way it is resolved. The scene builder sorts once. The blitter draws in list order and never sorts.
+- **Hit-testing.** `hit(objects, x, y)` walks the list backwards and returns the first hittable object whose box contains the point (closed box, as the physics' squares are). Cows are not hittable. Tiles are not hittable, so a miss is a pan. The overview's view rectangle is hittable. The blitter keeps the list it last drew, so a pointer event is hit against what the human actually saw.
+- **Interpolation between ticks.** The engine keeps each critter's position at the previous tick and the current one. The scene builder draws `prev + (cur − prev) × alpha`, where alpha is the time since the last tick over 62.5 ms, clamped to 1. Two exceptions, decided in the builder, not the blitter:
+  1. **Snap, don't slide,** for a move over about 50 px in one tick (a push's jump pops up to about 200 px, and sliding would draw it through other critters) and for every critter after a rewind or a `board`.
+  2. **The leashed dog** while a drag is on. Either interpolate it like everything else, which costs about one tick of lag but means the screen never shows a place the physics refused, or draw it at last tick plus the unticked displacement, which feels tighter but shows it overlapping a cow it is about to bump. I'd start with plain interpolation plus a faint pointer mark, given PHYSICS's own note that "the pointer drifts from the dog". That is a feel call for Steve.
+
+**Does the Safari blitter's shape fit?** It fits in part.
+- **What fits:** Zig writes a table into linear memory and JS reads it with typed-array views, with no JSON and no per-object calls. `cows_wasm.zig` already does this. The physics should expose its critter table (`[id, kind, x256, y256]`) the same way.
+- **What doesn't:**
+  1. The Safari frame is a function of the camera, which Zig owns. Dog Park's frame is a function of the viewport, the mode, alpha and the hand, all of which JS owns and changes at 60 Hz between 16 Hz ticks. If Zig wrote the frame, every pan would cross into wasm, and Zig would have to learn about hover, rings and the overview, none of which the server cares about.
+  2. The physics hash covers "the physics' sources". If drawing lived in that wasm, a ring-colour tweak would change the hash or need carving out, and an unnoticed change would reload every open page.
+  3. Safari's JS owns no pointer. Dog Park's hit-test must run against what was drawn, in screen space, in JS.
+
+So: **Zig writes the board, JS writes the frame.** The blitter stays as dumb as Safari's: it draws a list in order and answers "what is under this point". The difference is that a small pure JS scene builder makes the list, not Zig.
+
+### 5. What I'd leave alone
+
+- **Abstracting the canvas** for tests. Test the scene builder's output and leave `draw` untested. It is roughly thirty lines of `fillText` and `arc`.
+- **A retained scene graph, dirty rectangles or layers as canvases.** A full redraw of about 100 glyphs each frame is cheap. Keep `draw` stateless, apart from the last list kept for hits.
+- **A transport abstraction** over fetch. The engine takes `send(text) → Promise<text>`, and that is enough. Don't build a socket/SSE layer until there are two players.
+- **Generalising the overview into a zoom.** Keep two scene builders. A second builder costs far less than a camera model.
+- **`sayJumps` (435) and the console logging.** These are page-only diagnostics. Keep them as a debug view of the engine's state with no seam of their own. Once the physics lands, the report itself is the better log.
+- **The frames, tiles and overview-frame helpers (53-132, 518-531).** They are already pure. Move them whole into the module that needs them, and don't redesign them. (`wantedTiles` moves to Zig only because item 11 makes it a promise the server checks.)
+- **Wasm loading and instantiation.** It is two lines and needs no seam.
+- **`test_cows_agree.mjs` as it is.** Leave it alone until seam 5 exists, then retire it. Its random walk, mulberry32 seed and "predict, then compare" loop are the right idea for the replacement.
+
+### 6. The order
+
+Each step leaves the game playable. Each is one session's work for the box with a local agent, sized after the renames.
+
+1. **Make the page importable.** Split `solo/park.js` into ES modules: `blit.js`, `scene.js`, `pointer.js`, `engine.js`, `park.js` (DOM wiring only). Guard the start the way `src/park.js:361` does. One cost belongs to the box: `src/play/app.zig` routes the page files by name (131-132), so new files need a route, either per file or a `solo/*.js` rule. No behaviour changes. Add an empty `node --test` file that imports each module, to prove the split.
+2. **The blitter contract (seam 2).** Write `nearScene` and `overviewScene` from 680-699 and 705-730, make `draw` and `hit` generic, and route both `grabbed` and the overview rectangle test through `hit`. Add tests for the scenes and `hit`. Same game.
+3. **The pointer's meaning (seam 3).** `meaning(hand, event, hitId, mode)`. The hand holds `dogId`. `follow` and the held-dog edge scroll stop writing into the dog object and emit drag intents instead, which today's engine code still applies at once and sends as `/move`. Add the gesture table tests. Same game.
+4. **The engine (seam 4), on today's wire.** Move the globals, the leash, the sends and `syncTiles` into `createEngine({rule, post, now, setTimer})`. `syncTiles` asks the engine's own hand state, not a callback. Add tests with a fake `post`. Same game, same server.
+5. **The tick clock.** Split the 16 Hz tick from rAF inside the engine. Speeds go per tick, edge scroll becomes a per-tick drag, the scene builder interpolates, and the leash timer counts ticks. Still today's server: the engine sends the leashed dog's per-tick positions as `/move` paths. Playable, and the feel of 16 Hz can be judged before any physics exists.
+6. **`physics.wasm`, page-only, first cut.** `cows_wasm.zig` grows into a board plus `tick`, with cows in 256ths (item 1), the drag's steps, the cap, the bump, and the `drag: on | stalled | bumped` answer. The engine draws from it and obeys bumps. To stay playable before the report exists, it keeps sending `/move` with the dog's positions, and the server's half-pixel cows will drift from the page's. Accept that for one step, or land 6 and 7 together if Steve would rather not see it.
+7. **The report replaces `/move`, `/leash` and `/release`** (the box's server work, with `check` pulled out as seam 5). The engine writes the header and `t` lines, appends the Zig's lines, and handles one in flight, the spacing, the 5 s resend and `kept`. Answers other than `kept` reload the page for now. Write sketch B's first half, the agreement, in node.
+8. **Views and held tiles in the report,** replacing `/tiles`. `wantedTiles` moves to Zig. Add the re-hold from the known-this-epoch store.
+9. **`differ`, `board` and the rewind,** using the two board slots in the wasm. Write sketch B's second half.
+10. **The dogs' wishes** (the cascade's second half) go into the tick. By now that is a change to the Zig and its tests only. If the seams held, no JS file should change.
+
+The test of whether the seams are in the right places is step 10: the biggest change to the game should touch no page code at all.
+
+## CC → the box, 2026-10-13: 191, the move seen cold, and zero or unmeasured
+
+Read-only. Nothing committed to gopher-metal, angry-gopher, dog-park or
+zig-webbox. I made 191.1 myself. A subagent of mine made 191.2, reading
+gopher-metal `origin/master` at `211a25e`. I checked its two largest claims
+against the source:
+- **Disk waits spin with no bound:** `virtio.zig`'s `wait()`, a `while
+  (true)` with no deadline.
+- **The TCP counters reach only the end-of-serving summary:**
+  `probe/gopher.zig` about 792-810, after "streams ended". Prod's
+  `gopher-metal.conf` has no `requests` limit (`droplet/chat.py`), so prod
+  never prints it.
+
+### 191.1: the zig-webbox move, seen cold
+
+What I read:
+- zig-webbox `781131e`;
+- angry-gopher `331f535`;
+- gopher-metal `832ffa1` and `211a25e`;
+- dog-park `0b4c5d2`;
+- metal-vmm `fbd3ee3`.
+
+What I ran, all in scratch copies (a worktree of angry-gopher's `master`
+with a copy of zig-webbox beside it). Nothing in any repo was changed, and
+the copies are gone.
+- zig-webbox's own `zig build test`: passes on its own.
+- angry-gopher's three moved lints over both folders: pass.
+- Two plants in the library copy: one caught, one not (below).
+
+**Two weakenings, one confirmed by experiment:**
+
+1. **`tools/lint_store_absence.py` no longer reads the library.**
+   CONFIRMED.
+   - **Why:** it is the one lint the move did not touch. It still reads
+     only `zig-server/src` (`main`, line 488), and not `zig_source.TREE`.
+   - **What it loses:**
+     - the library's own store readers: `counter.zig`, `site_secret.zig`,
+       `site.zig` and `webbox.zig`;
+     - 114's wrapper-following through `@import("webbox").x` (`MEMBER`,
+       `imports()`, about line 296). It maps `x` to `x.zig` and looks for
+       it in the app's folder, so an app call through a library wrapper
+       that reads the store is no longer followed.
+   - **The experiment:** I changed `counter.zig:47` in the library copy to
+     `(store.readOrNull(...) catch null) orelse return 1`. The lint said
+     "no read of the store makes its failure a value". The same plant in
+     an app file (`chat_paths.zig:101`) was caught at once.
+   - **The fix:** `zig_source.TREE`, as the other lints, with its
+     `store.zig` exemption meaning the library's.
+   - **The red test** (not committed): `lint_store_absence --self-test`
+     gains a two-folder tree with the plant in the second folder.
+
+2. **No gate runs zig-webbox's own tests.**
+   - zig-webbox's `build.zig:33` now runs the 8 library test roots that
+     angry-gopher's list dropped: `store`, `counter`, `bus`, `mem_meter`,
+     `host_facts`, `bind`, `webbox` and `webbox_linux`. The `webbox.zig`
+     root carries every library file's tests, `log_view`, `traffic`,
+     `site` and `body` among them.
+   - Nothing calls that `zig build test`. Not angry-gopher's
+     `ops/check_zig`, nor gopher-metal's `gates.sh` or `long.sh`, nor
+     metal-vmm's `check-cc.sh`. A grep for `zig-webbox` across the three
+     repos finds only build roots and paths.
+   - The app's own tests do not run an imported module's tests. So since
+     the move, a broken library test fails nowhere a merge looks.
+     gopher-metal's unit tests still run `body.zig`'s, as its own file
+     (`build.zig:415-417`).
+   - **The fix:** `(cd ../../zig-webbox && zig build test)` in
+     angry-gopher's `ops/check_zig`, which every subsystem gate already
+     runs, or a gates.sh line.
+
+**One check that is missing:** the chat judge has no one-library check.
+- `judge_dogpark.py:234-236` fails when the kernel's webbox
+  (`WEBBOX_ROOT`) is not the one dog-park's Linux build uses (its zon's
+  `../zig-webbox`).
+- `judge_gopher.py` has nothing of the kind, and never names webbox. It
+  compares a kernel built with `-Dwebbox-root="$WEBBOX_ROOT"` against a
+  Linux `zig-server` whose zon says `../../zig-webbox`, the sibling of
+  `GOPHER_ROOT`.
+- The defaults agree (`$HOME/showell_repos/zig-webbox` and
+  `$HOME/showell_repos/angry-gopher`). An override of one of the two
+  would judge two different libraries against each other, and every
+  difference would look like the kernel's.
+- The verdict's content id counts `WEBBOX_ROOT`'s files only.
+- **The fix:** the same three lines as dogpark's, against `GOPHER_ROOT`'s
+  `../zig-webbox`.
+
+**My 190.2 table, row by row:**
+
+| 190.2 row | Handled? | How |
+|---|---|---|
+| angry-gopher `build.zig` modules | yes | `b.dependency("webbox")`, its three modules |
+| angry-gopher's unit-test list | yes | the 8 library roots dropped; zig-webbox's `build.zig:33` runs them (but see weakening 2) |
+| `build.zig.zon` name and fingerprint | yes | zig-webbox keeps `.webbox` and `0x90f0ca47715bdd8d`; angry-gopher's server is `.angry_gopher`, a new fingerprint, depending on `../../zig-webbox` |
+| `lint_webbox_library` | yes, and better | it reads both folders, and now refuses a library file in the app's folder and an app file embedding one by path. Still run only from angry-gopher, which is fine while angry-gopher is the library's one gate |
+| `lint_portable` | yes | `zig_source.at`; 93 modules reach, as before plus the moved ones |
+| `lint_head_access` | yes | reads `TREE`; `ALLOWED = {http.zig}`, the library's. Plant test: a `req.head.target` added to the library copy's `site.zig` was caught |
+| `lint_store_absence` | **no** | weakening 1 |
+| `check_css`, `check_caddy_limits` | nothing needed | as 190.2 said |
+| request-edge harness (`edge_sites`) | yes | it reads both folders through `build_options.webbox_src`, so the library's parse sites are found and still driven through this app's routes. That is cheaper than the separate harness I proposed, and as strong while angry-gopher is the library's one application with routes. Dog-park's routes drive none of it |
+| gopher-metal `build.zig` | yes | `-Dwebbox-root`: the webbox module, the body rule, and the store judges' `store.zig` |
+| `verdicts.py`'s content id | yes | `("zig-webbox", WEBBOX_ROOT, src + build.zig + build.zig.zon)`. `require` refuses a dirty zig-webbox, and the freshness check reads both trees' Io |
+| `droplet/*.py` | nothing needed | angry-gopher still builds `zig-server`, now with zig-webbox beside it |
+| metal-vmm `check-cc.sh` | yes | a fourth worktree, and `-Dwebbox-root` |
+| metal-vmm `plants.sh` | yes | `WEBBOX`, in the content id |
+| dog-park `build.zig.zon` | yes | `.path = "../zig-webbox"` |
+| zig-coverage-sdk | nothing needed | |
+
+**What the box did that my table didn't have:**
+- `tools/check_limits.py` reads zig-webbox's `store.zig`.
+- `judge_dogpark` has its one-webbox check.
+- `roots.zig`'s test takes the library's `store.zig` by name
+  (`addAnonymousImport("webbox_store_source")`), and the lint holds that
+  rule.
+
+**Something I can't settle from here:** zig-webbox's history.
+- The repo has the library's commits, 189's included (`411ca0f`,
+  `ba7bd17`), and I read it with `--depth`. Whether every one of the 24
+  files' history came across whole needs a full clone and a `git log
+  --follow` per file.
+- I could not check that both kernels build and that gopher-metal's 1075
+  tests pass against the move. I didn't build gopher-metal against it, as
+  that is the box's run.
+
+**A small one:** `zig_source.at()` takes the first folder that has a name,
+the app's. The library lint refuses a library file in the app's folder,
+so the two can't disagree today. If the library one day adds a file whose
+name an app file already has, the lint reports that, and it is right to.
+Nothing to change.
+
+### 191.2: zero, or unmeasured?
+
+**The short answer for Steve:** most of the network and disk zeros on
+`/admin/host` today mean "never counted", or "counted but never shown",
+not "never happened".
+- **TCP:** retransmits, give-ups, strays and the rest are counted, but
+  only the run's closing summary prints them. Prod's server serves until
+  it is stopped, so that summary never runs. A restart doesn't print it
+  either.
+- **Dropped frames:** there is no counter at all.
+- **Disk read and write failures:** not counted. That includes SCSI CHECK
+  CONDITION and its sense data, and a virtio-blk status other than OK.
+- **Disk requests have no timeout:** a disk that stops answering hangs the
+  machine with no record.
+
+The table, then the gaps ranked by what they would hide, each with where
+it would be counted and a red test named (not committed). Three of those
+tests need a seam first, the pure decision pulled out of the driver.
+Under the simulators rule, those are proposals for the box, not mocks.
+
+Read at gopher-metal `origin/master` 211a25e, in a throwaway worktree (now removed). All paths are relative to gopher-metal. Nothing was changed anywhere.
+
+#### The short answer
+
+Steve is right, and the gap is wider than he thinks. /admin/host has **no row for dropped frames at all**. Every TCP counter the kernel keeps is printed only by the closing log (`probe/gopher.zig:792-810`). That log runs only when the serve loop ends, which needs `requests = N` in the config. Prod's config has no `requests` line (`droplet/chat.py:8`: "serves until stopped"), and a restart after a panic does not print it either. So on prod, retransmits, give-ups, strays, refusals and probes are counted but never shown. Some counters are not printed even there: `damaged` (bad TCP checksums), `fast_retransmits`, `revived`, `revival_no_room`, `half_open_given_way`, `samples` and `nic.sent`.
+
+On the disk side, **no read failure or write failure is counted anywhere** (`src/disk_fat.zig:770, 783, 841, 866`). Nor is any SCSI CHECK CONDITION, sense key, non-OK virtio-scsi response, or virtio-blk status other than OK. A disk request that never completes hangs the whole machine, because the wait has no bound (`src/virtio.zig:543-549`), and nothing records it.
+
+One thing to know: `props.reachable` / `props.sometimes` are coverage properties. They report only in a `-Dcoverage` build, where the sink is set (`probe/gopher.zig:378-382`). In the prod image they count nothing, so the many `props.reachable` sites below are not counters on prod.
+
+#### The table
+
+"Closing log" means the lines at `probe/gopher.zig:792-810`, which prod never prints.
+
+##### Network
+
+| counter | shown as | counted at | every path? | a prod zero means |
+|---|---|---|---|---|
+| `nic.oversized` | host: "frames refused (too long to send)" (`gopher.zig:2118`), plus a console line (`gopher.zig:729-733`) | `src/net.zig:158-160` | Yes. Every send, DHCP's included, goes through `Net.send`. | Never happened. It also can't happen while the MSS cap holds (`net.zig:100-104`). |
+| open / at most / of | host: "connections" (`gopher.zig:2070`) | `gopher.zig:745-746` (`table.inUse`) | Yes. It is state, not an event. | Honest. |
+| `table.refused` (table full) | closing log only (`gopher.zig:793-795`) | `src/tcp.zig:1075` | Yes, for a SYN finding no slot and nothing to give way. A revival that finds no slot is a separate counter, `revival_no_room` (`tcp.zig:1057`), shown nowhere. | Never shown. "busiest = max_connections" on the host page is the only hint. |
+| `retransmits` | closing log only (`gopher.zig:797-798`) | `tcp.zig:795` (SYN-ACK timer), `:812` (RTO go-back), `:907` (three duplicate ACKs) | Mostly. A SYN-ACK sent again for a repeated SYN (`tcp.zig:1110-1114`) is not counted. | Never shown. |
+| `fast_retransmits` | nowhere | `tcp.zig:908` | Yes | Never shown. |
+| `probes` (zero window) | closing log only | `tcp.zig:835` | Yes | Never shown. |
+| `given_up` | closing log only | `tcp.zig:948` | Yes. It lumps together a silent peer and a zero-window peer whose probes go unanswered: both run out `max_retries` through `backoff` (`tcp.zig:936-945`). | Never shown. |
+| `fin_waits_expired` | closing log only | `tcp.zig:785` | Yes | Never shown. |
+| `strays` (segment for no connection, reset sent) | closing log only | `tcp.zig:688` (`refuse`, called only from `:1071`) | For non-RST strays, yes. A stray RST is dropped uncounted (`tcp.zig:1036`). | Never shown. |
+| `window_updates` | closing log only | `tcp.zig:887` | Yes | Never shown. |
+| `damaged` (TCP checksum, rx) | **nowhere** | `tcp.zig:1014-1016` | Only for frames already found to be TCP, to our IP, to port 80 (`tcp.zig:1008-1013` filter first). | Never shown. |
+| IP header checksum, rx | nothing | verified at `src/proto.zig:215-218`, then a silent null | Not counted | Never counted. |
+| TCP / IP checksum, tx | nothing | computed in software (`tcp.zig:675-679`, `proto.zig:125-128`) and never verified | n/a | Can't fail visibly. No offload is negotiated (`net.zig:62, 108`: only `VIRTIO_NET_F_MAC`), so the kernel never relies on the device's offload flags. It does all checksums itself, both ways. |
+| `wire.lost` | closing log only | `src/stream.zig:105-111` | Yes | Can't happen on prod: `lose_one_sent_in` defaults to 0. |
+| resets sent | partly, inside strays / given_up / fin_waits_expired | `tcp.zig:688`, `:948`, `:785` | **No.** Not counted: the SYN-RECEIVED bad-ACK reset (`tcp.zig:1165`); `abandon` from the host for a stalled response (`gopher.zig:1124, 1174`), a lagging stream (`:1327`), a handshake never finished (`:1383`) and the end of boot (`:746`). | Never counted, as one number. |
+| resets received | nothing | `tcp.zig:1031-1043` (an exact one closes at `:1039`; an inexact one draws a challenge ACK at `:1040`) | Not counted | Never counted. |
+| out-of-order (ahead) segments | nothing | `tcp.zig:1206-1209` (data dropped and re-ACKed) | Not counted | Never counted. |
+| duplicate / from-behind segments | nothing | `tcp.zig:1139-1151` | Not counted | Never counted. |
+| data past our window | nothing | `tcp.zig:1220` (only what fits is taken) | Not counted | Never counted. |
+| RX ring full (device drop) | nothing | the device drops with no buffer free, and only 8 are offered (`net.zig:67`) | Can't be counted from this guest: no stats or control queue is negotiated. | Never counted. Prod drops are plausible: the pump stops during disk work (`net.zig:20-23`). Ahead segments (above) would be the guest-side sign. |
+| used entry naming no buffer of ours (rx) | nothing | `net.zig:225` (`continue`, and the buffer the device really used is never recycled) | Not counted | Never counted. Each one costs a receive buffer for good, out of 8. |
+| bad used length (rx) | nothing | `net.zig:227-230` (recycled) | Not counted | Never counted. |
+| tx completion for a buffer not lent | nothing | `net.zig:199` | Not counted | Never counted. |
+| unknown ethertype, IPv6, fragments, IP options | nothing | `proto.zig:188, 194, 199, 204` | Not counted | Never counted. |
+| frames for another IP / port, UDP, ICMP | nothing | `tcp.zig:1008-1013`. A SYN to another port gets no reset and no count. The destination MAC is never checked. | Not counted | Never counted. |
+| ARP for another IP | nothing | `stream.zig:168-174` | Not counted | Never counted. |
+| ARP misses | n/a | there is no ARP cache and no request side (`src/arp.zig:8-9`). Replies go to the MAC the peer's frame or SYN came from (`tcp.zig:1083`). | n/a | Can't happen in this design. A peer MAC that changes mid-connection would go unnoticed. |
+| stream read/write timeouts | per-request log lines only ("the client stopped ...": `gopher.zig:993-996, 1118, 1175`) | `stream.zig:322, 327, 395, 421` | Logged as lines, not counted | No count exists. Read the log. |
+| NMIs | host: "NMIs" (`gopher.zig:2117`) | `src/interrupts.zig:177` | Yes | Honest. |
+
+##### Disks
+
+| counter | shown as | counted at | every path? | a prod zero means |
+|---|---|---|---|---|
+| `requests`, `busy_ticks` | host: "disk requests" (`gopher.zig:2109`) | `virtio.zig:1035-1036` (blk), `src/scsi.zig:159-160` (SCSI), `virtio.zig:869` (memory) | Yes. It includes unit-attention resends, cache rechecks and boot retries. | Honest. |
+| read failure | nothing (a request's log line may carry `ReadFailed` as its outcome, `gopher.zig:1132`) | `disk_fat.zig:770-773` (sector), `:783-786` (run) | **Not counted** | Never counted. |
+| write failure | nothing | `disk_fat.zig:841-851`, `:866-869` | **Not counted** | Never counted. |
+| virtio-blk status other than OK (IOERR, UNSUPP, 0xFF "device wrote nothing") | nothing | returned from `virtio.zig:1037`; 0xFF is preset at `:1004`; the driver's own UNSUPP comes from `:1015, 1071, 1084` | Not counted | Never counted. |
+| SCSI CHECK CONDITION, sense key, ASC/ASCQ | nothing; the sense is decoded and dropped | `scsi.zig:162-165`, mapped to IOERR at `:219, 236` | Not counted | Never counted. |
+| virtio-scsi response other than OK (BAD_TARGET, BUSY, RESET, ABORTED, TRANSPORT_FAILURE) | nothing | `scsi.zig:188, 219` | Not counted, and BUSY is not retried | Never counted. |
+| short transfer (residual on GOOD) | nothing (coverage property only) | `scsi.zig:215-218` | Not counted | Never counted. |
+| `reads_retried` (`read_tries`) | boot log line only, if > 0 (`gopher.zig:572-579`) | `virtio.zig:1052` (it counts only retries that then succeeded) | Yes at boot. While serving, `read_tries = 1` (`gopher.zig:573`), so it can't move. | At boot: never happened, but the line is lost once the 1.25 MiB ring wraps (`src/log_ring.zig:1-8`). While serving: can't happen. |
+| `Volume.writes == .refused` | host: "writes" row, shown only when refused now or `reweighs > 0` (`gopher.zig:2174-2181`) | set at `disk_fat_fat.zig:116-118, 129` | State, yes. Refused write **attempts** are not counted (`disk_fat.zig:954-957`). | No row means never refused, this boot. Honest. |
+| `reweighs`, `reweighs_failed` | host "writes" row | `disk_fat_fat.zig:126, 128, 132` | Yes | Honest. |
+| `flushes` | host: write-cache row (`gopher.zig:2193`) | `virtio.zig:1107` | **Over-counts.** A no-command `.clear` on a write-through disk is counted as a flush (`durable.zig:50-52`, `virtio.zig:1104-1110`). The boot disk (virtio-blk, `write_cache = false` at `virtio.zig:954`) only ever "flushes" this way. | Not "SYNCHRONIZE sent". |
+| `flush_failures` | host: write-cache row; also a log line (`src/io.zig:160-166`) | `virtio.zig:1112` | Yes, for SYNCHRONIZE. ILLEGAL REQUEST is turned into OK plus write-through (`scsi.zig:232-235`), with no count. | Boot disk: can't happen. Volume with its cache turned off at boot: can't happen (no command is sent). Volume that caches: never happened. |
+| `cache_rechecks` | host: write-cache row | `scsi.zig:301`, flagged at `:181-182` only for ASC 29h or 2Ah/01h, acted on after READ/WRITE (`:211`) and SYNCHRONIZE (`:230`) | For those two ASCs, yes. Every other unit attention is resent silently (`scsi.zig:175-183`). | Boot disk: can't happen. Volume: never happened, as read/write saw it. |
+| `fat_copies_failed` | host: volume row (`gopher.zig:2165`); closing log | `disk_fat_fat.zig:490`, called from `disk_fat_chain.zig:241, 363, 392, 709` and `disk_fat_fat.zig:430, 459, 469, 473, 482` | By design, it counts only copies left apart. A first-copy failure is judged by its verdict instead. A repair refused at mount is only a boot log line (`gopher.zig:1585-1589`). | Never happened, but it can't be cross-checked, since the write failures under it are not counted. |
+| `cleanups_failed`, leaks | host: volume row | `disk_fat_chain.zig:498, 509, 561, 727`, `disk_fat_dir.zig:482` | Yes | Honest. |
+| idle check "ended by a read that failed" | host: check row (`gopher.zig:2046`) | `src/idle_check.zig:69, 79` | Yes | Honest. This is **the only read-failure count prod shows**, and only for the check's own reads. |
+| disk request timeout | n/a | none exists: `virtio.zig:1033` and `scsi.zig:157` call `q.wait()`, which spins with no bound (`virtio.zig:543-549`) | n/a | Can't be counted. A request that never finishes stops the machine, silently. |
+| used-ring id/len (blk, SCSI) | n/a | ignored (`_ = self.q.wait()`) | n/a | Never counted. One request is in flight, so the id is moot; the length is not checked against what was asked. |
+
+#### Events that matter on prod and are counted nowhere, ranked by what they would hide
+
+1. **The TCP table's counters exist but never reach prod.** That covers retransmits, give-ups, strays, table-full refusals, probes, FIN-WAIT expiries and window updates. `damaged` and `fast_retransmits` are not printed even in the closing log. This hides every sign of a lossy or overloaded link to Caddy, and it is why "no dropped frames, ever" reads as health. They would be shown in `metalFacts`, beside `gopher.zig:2118`.
+   Red test: `test "host facts name the tcp table's retransmits, refusals, strays, give-ups and damaged segments"`.
+
+2. **A device that stops answering hangs the machine, unbounded and unrecorded.** This covers a disk request with no completion (`virtio.zig:543-549`, from `:1033` and `scsi.zig:157`) and a NIC that takes no frames (`net.zig:171-174`). `DEVICE_NEEDS_RESET` (status bit 64) is never read after `driverOk` (`virtio.zig:604-610`). It hides a stalled volume or a reset device as "the site went dark, the log just stops". A deadline would be counted at `virtio.zig:543` and `net.zig:171`.
+   Red test (needs a seam: the wait's decision, pure, given the clock): `test "a request with no completion past its deadline answers an error and is counted"`.
+
+3. **Disk read and write failures, and why they failed.** Nothing counts a failed sector read or write (`disk_fat.zig:770, 783, 841, 866`), a non-OK virtio-blk status (`virtio.zig:1037`), a CHECK CONDITION's sense key and ASC (`scsi.zig:162-165, 219`), or a non-OK virtio-scsi response (`scsi.zig:219`). This hides a failing DO volume: MEDIUM ERROR, NOT READY, BUSY and so on each look like one 500 in the log at most. Counts would go on `Volume` at those four `disk_fat.zig` lines, and per sense key on `Block` at `scsi.zig:219`.
+   Red test: `test "a sector read the disk fails is counted on the volume"` (memory disk with `Fault{ .kind = .fails }`, then expect `read_failures == 1`).
+
+4. **Incoming loss is invisible.** The ring has only 8 receive buffers (`net.zig:67`), and the device drops silently when they are full. The guest can see the effect, segments ahead of `rcv_nxt` (`tcp.zig:1206`), and the peer's resends, from-behind segments (`tcp.zig:1139`), but counts neither. Data past the window (`tcp.zig:1220`) is not counted either. This hides receive-side drops under disk stalls, which would show as slow uploads. Counts would go at those lines.
+   Red test: `test "a segment ahead of rcv_nxt is counted as out of order"` (in `tcp_test.zig`).
+
+5. **The NIC's ring itself.** Not counted: a used entry naming no buffer of ours (`net.zig:225`, which leaks the buffer the device really used), a bad used length (`net.zig:227`), and a tx completion for a buffer not lent (`net.zig:199`). This hides a ring that shrinks one buffer at a time until receive goes quiet, or until send waits forever (gap 2). Counts would go at those three lines.
+   Red test: `test "poll counts a used entry naming no buffer of ours"`, built on the fake ring of the existing test at `net.zig:256`.
+
+6. **Resets received, and resets sent by the host.** An exact reset from the peer closes a connection uncounted (`tcp.zig:1039`). Inexact ones draw challenge ACKs (`:1040`). Also uncounted: the SYN-RECEIVED bad-ACK reset (`:1165`), and every host `abandon` (`gopher.zig:746, 1124, 1174, 1327, 1383`). This hides Caddy resetting its upstream connections, and how often this machine cuts a slow client off. Counts would go in `Table.abandon` (`tcp.zig:736`), by cause, and at `:1039`.
+   Red test: `test "an exact reset from the peer is counted"`.
+
+7. **SCSI unit attentions other than reset or mode-changed, and the event queue.** Capacity changed (2Ah/09), LUNs changed (3Fh/0Eh) and the thin-provisioning threshold (38h/07) are resent with no count (`scsi.zig:175-183`). A UA that lasts all three tries fails the command, also uncounted. The event queue has no buffers, so transport resets and hot-unplug events are lost (`scsi.zig:350-354`). This hides a volume resized or re-attached under the machine. Counts would go at `scsi.zig:175`.
+   Red test (needs a seam: `commandSettled`'s decision pulled out, pure): `test "a capacity-changed unit attention is counted by its ASC"`.
+
+8. **Frames the parser throws away.** Uncounted: a bad IP header checksum (`proto.zig:215`), fragments (`:204`), non-IPv4 ethertypes (`:188`), other IPs and ports, UDP and ICMP (`tcp.zig:1008-1013`), and ARP for others (`stream.zig:169`). ICMP frag-needed is ignored, so MTU trouble hides here too, along with misrouting and port scans. Counts would go at each of those `return null` / `return .nothing` lines.
+   Red test: `test "a frame whose IP header checksum is wrong is counted"`.
+
+9. **What the flush row says.** `flushes` counts no-op clears as flushes (`virtio.zig:1107`). Refused write attempts are not counted (`disk_fat.zig:954`). ILLEGAL REQUEST on SYNCHRONIZE quietly turns the disk write-through (`scsi.zig:232-235`). This overstates durability work, and hides how many saves a refusing volume turned away. The fix: count `synchronize` steps apart from `.clear` at `virtio.zig:1107`, and count refusals at `disk_fat.zig:955`.
+   Red test: `test "a write-through disk's clear is not counted as a flush sent"`.
+
+10. **Boot-only facts lost to the ring.** `reads_retried` (`gopher.zig:574-578`), mount repairs and refusals (`gopher.zig:1560-1595`) and the cache state at bring-up (`gopher.zig:1448-1452`) are boot log lines only. After about a ring's worth of requests they are gone from /admin/log; only `lost` says so (`log_ring.zig:107`). The fix is a host fact beside `gopher.zig:2112`.
+    Red test: `test "host facts carry the reads retried at boot"`.
+
+11. **IRQ storm, wakes.** No interrupt or wake is counted (`interrupts.zig:410-421`, the `gm_irq` stub at `:108-109`). A device that interrupts endlessly would look like a busy CPU with "rests between frames". A count would go in `rest()` and the `gm_irq` handler.
+    Red test (a metal-vmm judge, not a host test): `judge "a card that interrupts without completions is counted as spurious wakes"`.
+
+12. **DHCP lease.** It is taken once, never renewed, and its length is never read (`src/dhcp.zig:23-26, 263-270`). On DO's private network the address is fixed, so this is low risk. A lost lease would show only as Caddy unable to reach the machine. The lease time could be printed and kept at `gopher.zig:557`.
+    Red test: `test "acquire reports the lease time the ACK names"`.
+
+#### Plain summary for Steve
+
+On prod, what /admin/host can be trusted to show as a real zero: oversized frames, NMIs, connection and stream counts, disk requests, FAT copies left apart, cleanups and leaks, the writes-refused state, the idle check's failed reads, and flush failures (but only on a volume whose cache is on).
+
+Counted, but shown only in a log prod never prints: every TCP counter.
+
+Not counted at all: every frame drop, every disk error, every SCSI sense, every reset received, and every device stall.
+
 ## CC → the box, 2026-10-13: 190, four read-only reports
 
 Nothing committed to gopher-metal, angry-gopher or dog-park; this entry is
