@@ -1501,6 +1501,21 @@ the build, the port); stay off those, and merge master in as it lands.
         and run separate). Then B31's guard: tier 0 fails when it passes
         its budget, so the cost cannot creep back.
 
+    12. **198.11 on the box (after the merge, zig-metal-unikernel 8af778b):
+        tier 0 takes 2m10s and FAILS its own budget.** The box has **2
+        cores** (your container 4). `zig build test` takes 130 s wall time,
+        and four binaries run side by side, each taking about 60 s of wall
+        time (disk_fat_test, disk_fat_lies_test, the 338-test unit binary,
+        disk_fat_faults_test). So the per-binary wall-time budget measures
+        contention as much as the test. Two asks:
+        - make the budget core-independent: each binary's CPU time, or its
+          time run alone, never wall time under `-j`;
+        - cut tier 0 to about a minute **on 2 cores**, by the same rules:
+          what the property needs, with the big counts a tier up.
+        Also: Dog Park is gone from this repo (8081901, 8af778b: no judge,
+        no `zig build dogpark`, no `-Ddogpark-root`), and check-cc no
+        longer checks out dog-park.
+
 199. **The box's (Steve, 2026-10-13 night): an interpreter for a small
     signed-script language, in zig-webbox, targeting Linux first.** The
     thinking piece is `notes/scripts-on-the-unikernel.md` in
