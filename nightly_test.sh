@@ -16,7 +16,8 @@ expect() { # expect <what> <pattern> <text>
 }
 printf 'pristine volume' > "$T/site.img"
 : > "$T/kernel.elf"
-# Every run the page "hello", unhurt, with one property; seed 2 reports none.
+# Every run the page "hello", unhurt, with one property; seed 2 reports none,
+# though it says its coverage line.
 cat > "$T/vmm" <<'EOF'
 #!/bin/bash
 s="${FAULT_SEED:-}"
@@ -26,6 +27,13 @@ echo '{"antithesis_sdk":{"language":{"name":"Zig","version":"0.16.0"},"sdk_versi
 if [ "$s" != 2 ]; then
   echo '{"antithesis_assert":{"hit":true,"must_hit":true,"assert_type":"x","display_type":"Sometimes","message":"tcp: common","condition":true,"id":"tcp: common","location":{"class":"tcp","function":"f","file":"tcp.zig","begin_line":1,"begin_column":1}}}' >> "$COVERAGE_OUT"
   echo "metal-vmm: coverage: 1 of 1 properties reached (1 hold, 0 broken), from 2 lines over 1 boots" >&2
+else
+  # **ITS COVERAGE LINE, AND NO PROPERTY** (198.10): a run with no coverage
+  # line at all is a failed seed since sweep.sh's 6405665, so the report
+  # alone would never be what failed. A kernel built without its coverage
+  # says it reached nothing: sweep.sh passes the seed, and only the
+  # report's SILENT can fail the batch, which is what this test is for.
+  echo "metal-vmm: coverage: 0 of 0 properties reached (0 hold, 0 broken), from 1 lines over 1 boots" >&2
 fi
 printf 'hello' > "$PEER_BODY"
 echo 'peer: 200 "hello"'
