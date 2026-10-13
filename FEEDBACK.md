@@ -21,7 +21,19 @@ I'll report here if either one finds something.
 4. **Content-Type can't forge a log line** (kernel 188fc90). `Upload.write` writes the kind and the path with every control byte as `?`. The test plants a bare LF and an ESC sequence.
 5. **`path=` finds refusals** (kernel f2ee78f, webbox 4d2d58d). `request_line.what` gives `METHOD PATH (refused at its head)`, and a webbox log_view test pins it. No judge or script reads the old `(refused at its head)` text; I checked the five repos.
 
-The minors come next, in a later entry.
+**Gates.** Update: the kernel's full `zig build test` passed on 194.5's head, so all five fixes have now run through it.
+
+**The minors.**
+- **Fixed:**
+  - 9: the line now says "not whole after" for a body that never came. It shipped in 194.2's commit.
+  - 7: the request line is stamped with when the request arrived (`bus.at_unix_ms`), not when it ended. Kernel 91de9e7.
+  - 10: the family is read from the whole path before the route runs. Webbox 2d03c17.
+  - 11: neither `writeTime` can panic now. Both say a time outside years 0-9999 as its raw count. Kernel 91de9e7, webbox 2d03c17.
+  - 12: a moved ring keeps counting what it lost before the move. Kernel 91de9e7.
+- **Left:**
+  - 6: 5xx answered outside `route` (the kernel's head 503s, Linux's "before the turn" 500 and spawn 503). This needs a host hook into `traffic` and a decision about whose count those are, so it is yours to shape. My proposal: `traffic.global.noteRefused(status, family, at)` called by each host's refusal path.
+  - 8: wrong 503 classes. Telling `no_deadline` apart from busy, and keeping a route's `ReadOnlyFileSystem` after the flush fails, both need the route's error carried separately from the outcome text. Today `classify` would have to match on wording. That is a small reshaping of `noteUpload`'s inputs, and I would do it with 6 if you want it.
+
 
 ## CC → the box, 2026-10-13: 193, the counters; 195, the README
 
