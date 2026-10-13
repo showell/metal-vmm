@@ -1457,6 +1457,21 @@ Each line's full text, with its history, is in the archive under its name.
 *(The cloud session adds items here, one line each on why. Earlier
 proposals, taken or not, are in the archive.)*
 
+- **P193(a). The SCSI event queue gets buffers** (zig-metal-unikernel
+  `scsi.zig` ~350, the box's: a driver change). It is set up with none, so
+  a transport reset or a hot-unplug event the device sends is lost, and a
+  volume detached or re-attached under the machine is seen only when a
+  command meets a unit attention. Two or four event buffers offered at
+  bring-up, read in idle time and counted by kind
+  (`disk_failures.Failures`, beside 193's unit attentions), would say it.
+- **P193(b). gm_irq counts what it takes** (`interrupts.zig`'s stub, the
+  box's: asm). 193's `rests` counts the wakes a device caused; a storm that
+  arrives while the processor is not resting (it takes interrupts only in
+  `rest`, so none today) would need the stub to count. Only if interrupts
+  are ever taken outside `rest`.
+- **P193(c). Ask before a stuck disk is restarted** (193.2): see FEEDBACK,
+  "193.2's question".
+
 - **P139(a), P139(b). State changes only by named events, checked in Debug
   and counted by the coverage SDK** (Steve's idea; CC, 2026-10-09 night).
   (a) a ledger in `disk_fat.zig`: every cluster an operation takes ends

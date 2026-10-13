@@ -7,6 +7,88 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-13: 193, the counters; 195, the README
+
+zig-metal-unikernel, branch `claude/great-wright-i7aste`. Every gap has its own commit, and every commit
+started from a red test: a count, a row on /admin/host, and an entry in
+`docs/admin-for-agents.md` saying what nonzero means. No count rests on a
+`props.reachable` alone: each one is a field the page reads. Gates on the
+branch: `zig build test`, `zig build check` and `zig fmt --check src probe`
+are green. `zig build properties -Dseeds=20 -Dfat-seeds=8` was **still running when
+this was pushed**: if it finds something, I'll say so here. Please run `./check-cc.sh`.
+
+| gap | commit | counted now | row |
+|---|---|---|---|
+| 1, TCP table | d3fed23 | every u64 the table keeps (a reflection test fails if a new one is left off the line) | `tcp since boot` |
+| 2, device waits | d9cdd4b | every wait has a deadline; DEVICE_NEEDS_RESET is read; `device_wait.verdict` is pure and tested | cache row: `answering` / `STOPPED ANSWERING`; `network card stalls` |
+| 3, disk failures | c2fed28 | Volume read/write failures; virtio-blk statuses; CHECK CONDITION by sense key with the last ASC/ASCQ; virtio-scsi responses; short transfers | volume row; cache row's failure kinds |
+| 4, incoming loss | c8e264d | segments ahead of the next byte, from behind, past the window | `tcp since boot` |
+| 5, the NIC's ring | c8e264d | rx entries for a buffer never offered, with an impossible length; tx completions for a buffer not lent (`net.rxEntry`, `txEntryOurs`, tested) | `network card ring` |
+| 6, resets | 5f5d5a7 | exact peer resets, challenge ACKs, our bad-ACK resets; `Table.abandon` now takes a cause: slow client, stream behind, unfinished handshake (silent peer and FIN-wait already had counts) | `tcp since boot` |
+| 7, unit attentions | 6187a1d | UAs by ASC: reset, mode changed, capacity changed, LUNs changed, thin threshold, other; those that lasted every try. `commandSettled`'s choice moved into `disk_failures.noteAttention`, which is pure | cache row's failure kinds |
+| 8, parser drops | 7bf8404 | `proto.readIpv4` gives the reason; counted: other ethertype, fragment, damaged IP header, malformed, not TCP, another address or port, ARP for others | `frames passed over` |
+| 9, flush row | 7f05cbb | flush points are now separate from SYNCHRONIZE CACHE sent; a SYNCHRONIZE the disk did not know is reported; writes turned away while writes are refused | cache row; `writes` row |
+| 10, boot-only facts | a345f44 | reads retried at boot; the FAT copies at mount (`boot_facts.zig`, tested). The cache state at bring-up was already on the cache row | `… at boot`, one per volume |
+| 11, wakes | dd357e0 | rests, and rests a device ended early (`rest_count.zig`, tested across a TSC wrap) | `rests` |
+| 12, DHCP lease | 41dfb6f | the ACK's lease time (`dhcp.takeAck`, tested); past the lease is reported | `address` |
+
+**Page cost.** About 1.3 KB more on /admin/host: about 450 bytes on the
+TCP line, about 200 for frames passed over, 110 for the ring, 120 for each
+"at boot" row, about 100 on each cache row, and 50 each for rests and
+the address. Each row is one `allocPrint` per request to the page. Nothing
+is added on the serving path except the counter increments.
+
+**The judges.** No judge or metal-vmm script reads these labels. I
+grepped every `.py`, `.zig` and `.sh` in the five repos: only
+`probe/gopher.zig` writes them. So the chat judge's comparison of
+/admin/host between Linux and metal is unaffected. If it ever compares
+the host table, these rows belong to metal alone, like `NMIs`.
+
+### 193.2's question, before anything is restarted
+
+A wait that runs past its budget (30 s for a disk, 1 s for a network
+send), or a device that sets DEVICE_NEEDS_RESET, now ends that device
+**for good**. A disk refuses every later request: each one is counted and
+answered with an error, and the row says STOPPED ANSWERING. The NIC drops
+frames while it takes none back, and TCP sends them again. I did not choose a
+restart. The descriptor we gave up on may still be written by the device
+later, so reusing the ring without a device reset is unsafe. A device
+reset plus re-negotiation is driver work, and so is a machine restart
+(v29's restart is on). Both are yours to choose. Options:
+(a) leave it as it is, so the row alone tells Steve;
+(b) restart the machine when the site's disk stops answering, since
+nothing can be saved anyway;
+(c) reset and re-negotiate the device in place.
+I'd take (b) for the disk and (a) for the NIC. A NIC that recovers on its
+own resumes, because the stall clears when a buffer comes back. This is P193(c)
+under "Proposed".
+
+### What I left, and why
+
+- **The SCSI event queue** still has no buffers, so transport resets and
+  hot-unplug events are lost. Fixing that is a driver change, written up
+  as P193(a).
+- **The gm_irq stub** counts nothing. Interrupts are taken only inside
+  `rest`, so `rests` already sees every wake. P193(b) is for the day
+  that changes.
+- **DHCP renewal**: not added. On DO's private network the address is
+  fixed, and the row now says when the machine has run past its lease.
+
+### Stale docs I passed (not fixed, not 193's)
+
+- `docs/port.md` points to the README's "How it works", which 195
+  removed.
+- `RESTART.md`, `droplet/` and `RESTART-TEST.md` still say restart is
+  off; v29 turned it on.
+- The default checkout paths disagree: `../name` in some scripts,
+  `~/showell_repos/name` in others.
+
+### 195
+
+`a7cfc56`: the README is rewritten for a stranger, and the move's paths
+are fixed in `docs/port.md`, `docs/probes.md`, `COVERAGE.md` and
+`CUTOVER.md`. 196's two additions are next, after 194.
+
 ## CC → the box, 2026-10-13: 192, Dog Park's page code, seen by its seams
 
 Read-only. I committed nothing to dog-park. A subagent of mine read dog-park
