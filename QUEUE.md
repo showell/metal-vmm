@@ -1413,6 +1413,78 @@ the build, the port); stay off those, and merge master in as it lands.
     The box runs `./check-cc.sh` and the full gates on your branch before
     merging.
 
+198. **The box's (Steve, 2026-10-13 evening): metal hardening, the next long
+    chunk.** Dog Park is parked at a good point; the box's attention is on
+    the metal stack, so this is sized to keep you busy. Take the parts in
+    order unless one blocks; each lands red first where it can, and its
+    own commit names `198.N`. The box runs `./check-cc.sh` and the gates
+    on your branch before merging, as always.
+    1. **Your 197.3 #4 and #5: yes, cut the seams** (the host glue is the
+       box's code; you have the go). #4: the host's per-connection decision
+       after a handler returns, with a held stream, pure and in tier 0; its
+       red case is the failed `dupe` that keeps the stream with its head cut
+       (`gopher.zig:1127`), then the fix. #5: `stream.sendAll`'s Spill
+       decision; a gone connection with a non-empty spill must not report
+       success (the log says "ok" today), red first, then the fix and a
+       count on `/admin/host` for it.
+    2. **Then 197.3 #2, #8, #10:** the SCSI write-cache state machine as a
+       pure function in tier 0 (durability-critical, only metal-vmm reaches
+       it today), the UNIT ATTENTION retry against a stub outcome list, and
+       the APIC refusals.
+    3. **P193(c), decided: (b) for the site's disk, (a) for the NIC.** A
+       disk that has STOPPED ANSWERING restarts the machine (v29's restart
+       is on; nothing can be saved, and a fresh boot re-negotiates the
+       device). Say what `/admin/host` and the serial log show before the
+       restart, so Steve can tell afterwards that it happened and why; a
+       restart loop (the disk dead at boot too) must not spin: name the
+       guard. The NIC stays as you left it. Steve may still overrule (b):
+       write it so the choice is one named constant.
+    4. **P193(a): the SCSI event queue gets its buffers,** so transport
+       resets and hot-unplug events are counted rather than lost. Driver
+       work: write the host test you can, and the recipe for the box's
+       metal-vmm check under Questions.
+    5. **P124(f): take "merge toward allocated"** (your recommendation: on
+       a tie, each differing entry's nonzero side wins, both copies written
+       at once; the worst case is a leaked cluster fsck reclaims). Red first
+       against `fat16_test.zig`'s "FAT copies that tie". **P128: take it**
+       (the damage property names its disk; sweep.sh's excuse needs the
+       fault on that disk).
+    6. **zig-webbox's Linux host, four small ones** (from the box's lock and
+       HOST.md review, 2026-10-13):
+       - a malformed `GOPHER_PORT` (or any port setting) silently becomes
+         the default; metal stops. Linux must refuse to start too, naming
+         the setting;
+       - a kept stream whose reader stays connected but stops reading
+         blocks `serveKept`'s write with no deadline (mailbox overflow is
+         checked only at the loop's top), so it ends only when a newer
+         stream evicts it. Give the write a deadline, as metal's has, red
+         first;
+       - `linux_durable`'s `Durable.failures` is shown nowhere: put it on
+         angry-gopher's `/admin/host` (`linuxFacts`, linux_host.zig ~846);
+       - **a class hunt the box just paid for:** every Linux sync since
+         `ad144c7` failed (an `openDir` that won't iterate is O_PATH, and
+         `syncfs` refused it with EBADF), because the tests swapped the sync
+         for a fake. Fixed in `f3e2b92`, with a test that runs the real
+         syscall. Find every other test in zig-webbox (and angry-gopher's
+         Linux path) where a fake stands in for a syscall, and give each
+         real call one test that makes it on a temp dir or socket.
+    7. **Two small truths:** store.zig's comment says `max_depth` is
+       disk_fat's `max_tree_depth`, while `tools/check_limits.py` compares
+       `max_depth - 1` with `max_path_depth`; one is wrong, fix it. And
+       angry-gopher `server.zig`'s header says "a small body read before
+       the turn": every body is now.
+    8. **The stale docs you passed in 193:** `docs/port.md`'s pointer to the
+       README's removed "How it works"; `RESTART.md`, `droplet/` and
+       `RESTART-TEST.md` still saying restart is off (v29 turned it on);
+       the default checkout paths (`../name` against
+       `~/showell_repos/name`): pick one rule, say it in the README, make
+       every script follow it.
+    9. **Bookkeeping:** say in FEEDBACK which of 106-111 and of C2-C5
+       (under Proposed) are done, so the box can archive them.
+    10. **`nightly_test.sh` fails, and did before 2026-10-13** (red at
+        `8b47d37` too). Find out why; fix it if it needs no KVM, otherwise
+        write what the box should run.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
@@ -1422,9 +1494,6 @@ Each line's full text, with its history, is in the archive under its name.
 - **B29 (2026-10-09, found moving the slow-reader gate): stray resets after a reader that paused.** A client that shuts its window for 2.5 s mid-page (`PEER_SHUT_AFTER=4096 PEER_SHUT_FOR_US=2500000`, the 231 KB `requests/big-page.http`) gets the whole page, but the guest's tcp line then counts 8 strays reset (none unhurt), with 4 timeouts resent. Something reaches the guest for a connection it no longer holds: either the peer keeps talking after it is done, or the guest forgets a connection the peer is still owed (TIME-WAIT's ACK, say). Find which, from a frame trace; a peer fault is fixed here, a guest one becomes a red test in gopher-metal.
 - **v20** (2026-10-08): port, `gates.sh`, `long.sh`, the image, Steve's go;
   Steve's steps gain a Caddy reload (angry-gopher `deploy/Caddyfile`).
-- **The request door, stage 1** (angry-gopher branch `request-door`): to
-  `master` once v20 is ported; rebase onto `limits.zig` first. Stage 2 (our
-  own response type; a small body read before the turn) after.
 - **The explorer against blind runs, properly** (with Steve, a design
   session): the full bench (`zig build explore` at its defaults: 20 explorer
   seeds, counted against what blind runs reach at 300; CC's item 98,
@@ -1448,9 +1517,8 @@ Each line's full text, with its history, is in the archive under its name.
   sector, the last TCP properties on the real kernel, request_heap's figure,
   the fat16 seam, the deadline mark, the snapshot's box half, microvm,
   revival on the real kernel).
-- **HOST.md's owed list:** the application's locks deleted (one handler at a
-  time is in), durability on Linux (`fsync` before a response that followed
-  a write), the Bus contract and its simulator.
+- **HOST.md's owed list:** the Bus contract and its simulator (the locks
+  are gone and Linux durability is in, 2026-10-13).
 
 ## Proposed
 
@@ -1480,7 +1548,7 @@ proposals, taken or not, are in the archive.)*
   `sometimes` per legal transition. CC votes (a) first. Written up in
   [STATE_TRACKING.md](STATE_TRACKING.md). **Taken: 139 and 140 under "CC: open".**
 
-- **P128. The damage property says which disk** (gopher-metal
+- **P128 (taken, 198.5). The damage property says which disk** (gopher-metal
   `gopher.zig` ~1358 and ~1417, the box's). Its details carry
   `.damage = n` only, so sweep.sh excuses a break by a damaging fault on
   either disk. Adding the disk (`.disk = "boot"` / `"volume"`, or the
@@ -1488,7 +1556,7 @@ proposals, taken or not, are in the archive.)*
   the disk the damage was found on. sweep.sh's `broken_props` already
   reads each event; it would read the details too.
 
-- **P124(f). A FAT tie that cannot postpone the rot** (gopher-metal
+- **P124(f) (taken, 198.5). A FAT tie that cannot postpone the rot** (gopher-metal
   fat16, the box's; pinned as it is by `fat16_test.zig`'s "FAT copies that
   tie", gopher-metal `3f17998`). Today, copies that check alike are both
   kept, the first held, and the next change to a differing sector writes

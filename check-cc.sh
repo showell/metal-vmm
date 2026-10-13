@@ -3,7 +3,7 @@
 # derived but could not run (it has no KVM), run before anyone reads the code.
 #
 # CC's branch (or master, where a repo has none) of metal-vmm, zig-metal-unikernel,
-# angry-gopher and zig-webbox, each in its own worktree, so no checkout here changes:
+# angry-gopher, zig-webbox and dog-park, each in its own worktree, so no checkout here changes:
 #   1. angry-gopher ported into zig-metal-unikernel, a -Dcoverage kernel built, and
 #      metal-vmm built;
 #   2. `sweep.sh 1 $SEEDS` over every shape: each shape's unhurt run and its
@@ -22,6 +22,10 @@ set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOS="${REPOS:-$HOME/showell_repos}"
 BRANCH="${CC_BRANCH:-claude/great-wright-i7aste}"
+# The repos CC works in: only these are taken from CC's branch. dog-park is
+# not one (Steve: CC works on it only when asked), and its CC branch is an
+# old line of work, not a change to judge.
+CC_REPOS="${CC_REPOS:-metal-vmm zig-metal-unikernel angry-gopher zig-webbox zig-coverage-sdk}"
 SEEDS="${SEEDS:-10}"
 PLANT_SEEDS="${PLANT_SEEDS:-300}"
 OUT="${OUT:-$(mktemp -d)}"
@@ -39,23 +43,36 @@ trap cleanup EXIT
 checkout() {
   local repo="$REPOS/$1" ref
   git -C "$repo" fetch -q origin || return 2
-  if git -C "$repo" rev-parse -q --verify "origin/$BRANCH" > /dev/null; then ref="origin/$BRANCH"; else ref="origin/master"; fi
+  # The repo's main line (dog-park's is `main`), and CC's branch only when
+  # it holds something the main line doesn't: a branch whose work is all
+  # merged is behind it, and judging it judges old code.
+  local main="origin/master"
+  git -C "$repo" rev-parse -q --verify "$main" > /dev/null || main="origin/main"
+  ref="$main"
+  if [[ " $CC_REPOS " == *" $1 "* ]] &&
+     git -C "$repo" rev-parse -q --verify "origin/$BRANCH" > /dev/null &&
+     [ "$(git -C "$repo" rev-list --count "$main..origin/$BRANCH")" -gt 0 ]; then ref="origin/$BRANCH"; fi
   git -C "$repo" worktree add -q --detach "$2" "$ref" || return 2
   worktrees+=("$repo:$2")
-  printf '%-13s %s %s (%s ahead of master)\n' "$1" "$ref" "$(git -C "$2" rev-parse --short HEAD)" \
-    "$(git -C "$repo" rev-list --count "origin/master..$ref")"
+  printf '%-13s %s %s (%s ahead of %s)\n' "$1" "$ref" "$(git -C "$2" rev-parse --short HEAD)" \
+    "$(git -C "$repo" rev-list --count "$main..$ref")" "${main#origin/}"
 }
 
 echo "check-cc, $(date -u '+%F %T UTC'), in $OUT"
-for r in metal-vmm zig-metal-unikernel angry-gopher zig-webbox; do checkout "$r" "$OUT/$r" || exit 2; done
+for r in metal-vmm zig-metal-unikernel angry-gopher zig-webbox dog-park; do checkout "$r" "$OUT/$r" || exit 2; done
 
 # angry-gopher's generated assets (wasm, built js) are untracked, so a
 # worktree lacks them: copied from the main checkout, as built there.
-python3 - "$REPOS/angry-gopher" "$OUT/angry-gopher" <<'PY'
+python3 - "$REPOS/angry-gopher" "$OUT/angry-gopher" <<'PY' || { echo "the assets could not be copied"; exit 2; }
 import os, re, shutil, sys
 src, dst = sys.argv[1], sys.argv[2]
-build = open(os.path.join(dst, "zig-server", "build.zig")).read()
-for path in re.findall(r'\.path\s*=\s*"([^"]+)"', build):
+# The embedded files are zig-server/assets.zon's (Phase B); paths are
+# relative to zig-server/.
+build = open(os.path.join(dst, "zig-server", "assets.zon")).read()
+paths = re.findall(r'\.path\s*=\s*"([^"]+)"', build)
+if not paths:
+    sys.exit("assets.zon names no embedded path: has its shape changed?")
+for path in paths:
     rel = os.path.normpath(os.path.join("zig-server", path))
     if not os.path.exists(os.path.join(dst, rel)) and os.path.exists(os.path.join(src, rel)):
         os.makedirs(os.path.dirname(os.path.join(dst, rel)), exist_ok=True)
@@ -88,7 +105,7 @@ esac
 
 echo "== the plants"
 GOPHER="$OUT/zig-metal-unikernel" COVERAGE_SDK="$SDK" GUESTS="$OUT/zig-metal-unikernel/probe" \
-  ANGRY_GOPHER="$OUT/angry-gopher" WEBBOX="$OUT/zig-webbox" VOLUME_SITE="$VOLUME_SITE" LAST="$PLANT_SEEDS" \
+  ANGRY_GOPHER="$OUT/angry-gopher" WEBBOX="$OUT/zig-webbox" DOGPARK_ROOT="$OUT/dog-park" VOLUME_SITE="$VOLUME_SITE" LAST="$PLANT_SEEDS" \
   KERNELS="$OUT/kernels" OUT="$OUT/plants" "$OUT/metal-vmm/plants.sh"
 case $? in 0) ;; 1) bad=1 ;; *) echo "plants.sh could not run"; bad=2 ;; esac
 
