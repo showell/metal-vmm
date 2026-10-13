@@ -1,6 +1,6 @@
 # QUEUE
 
-The one queue for the four repos (metal-vmm, gopher-metal, zig-coverage-sdk,
+The one queue for the four repos (metal-vmm, zig-metal-unikernel, zig-coverage-sdk,
 angry-gopher): what is open, and who has it. **Finished work, the answered
 questions and every earlier item, by its number, are in
 [`QUEUE-ARCHIVE.md`](QUEUE-ARCHIVE.md)**, verbatim, each batch under the
@@ -9,7 +9,7 @@ charter is [`CLOUD_WORK.md`](CLOUD_WORK.md).
 
 ## Context
 
-metal-vmm runs gopher-metal's real kernel deterministically (both machines:
+metal-vmm runs zig-metal-unikernel's real kernel deterministically (both machines:
 microvm-shaped and `TRANSPORT=pci`); the scenarios that cover what the site
 meets go here, not to QEMU, which stays on the happy path (Steve). The goal
 is zero bugs in the lower levels; class hunts find more than seeds; the
@@ -38,7 +38,7 @@ archive.
 
 **Your role (Steve, 2026-10-08): build what needs no emulator, and anything
 adversarial.** Every item here runs on the host: `zig build test
--Dtest-file=<file>` runs one gopher-metal test file in seconds (the whole step
+-Dtest-file=<file>` runs one zig-metal-unikernel test file in seconds (the whole step
 takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
@@ -1179,6 +1179,62 @@ the build, the port); stay off those, and merge master in as it lands.
        whether a zero on prod means "never happened" or "never counted".
        Then the events that would matter on prod and are counted nowhere.
        A table, then the gaps ranked by what they would hide.
+
+192. **The box's (Steve, 2026-10-13): READ-ONLY, an architecture report on
+    Dog Park's page code, addressed to the box as its author.** Commit
+    nothing to dog-park (or anywhere but FEEDBACK). This is not a review of
+    lines; Steve doesn't read code line by line, but he can tell when code
+    is hard to test because the seams are in the wrong places. Write for the
+    author who has to move them.
+    - **The subject:** dog-park `solo/park.js` (the page as played today,
+      733 lines) and its partners: `solo/index.html`, `src/play/*.zig` (the
+      server it talks to, and `cows_wasm.zig`, the cows' rule compiled to
+      wasm for the page), `tools/test_cows_agree.mjs`. `src/park.js` is an
+      older page; say whether anything in it is worth keeping. For
+      contrast, angry-gopher `games/driving/wasm/blitter.js`, a blitter
+      that is deliberately dumb: zig decides everything, the JS only fills
+      polygons.
+    - **Where it is going:** dog-park `docs/PHYSICS.md` (draft 9 being
+      written): the page will run all the critter physics, the same Zig
+      compiled to wasm, at 16 ticks a second, and report each tick to the
+      server, which re-runs it. That doubles the page's job, so the seams
+      matter now.
+    - **The shape Steve wants, as he put it (fuzzy on purpose):** the JS
+      blitter as game-agnostic as possible. (1) A main component that knows
+      only "objects on the screen" and the mouse: it draws what it is given
+      and reports pointer events, and knows nothing of dogs, cows, leashes
+      or tiles. (2) Across a wall from it, a small JS engine that knows the
+      game state: the leash, the subscriptions, the report and its acks.
+      (3) A seam to the physics in Zig wasm. His example of a good seam:
+      drag and drop ASKS PURE FUNCTIONS whether the drag may continue,
+      rather than deciding inline.
+    - **What to deliver, as a FEEDBACK entry:**
+      1. **The map as it is:** the parts of park.js and what each one knows
+         (drawing, pointer, game state, wire, prediction), drawn as who
+         calls whom and who reads whose state. Where the three parts above
+         are tangled today, name the functions where they meet.
+      2. **The seams you'd cut,** in order of value: for each, what crosses
+         it (the data, as a small type or message), which side owns what,
+         and which questions become pure functions (the drag's "may I
+         continue", "what does this pointer event mean", "what do I draw
+         this frame"). Say which belong in the Zig wasm (because the server
+         must agree) and which stay JS (because only the page cares).
+      3. **What each seam makes testable** that isn't now, and how: a test
+         you could write in node with no browser, no server, no canvas. For
+         the two most valuable, sketch the test in a few lines.
+      4. **The blitter's contract:** what "objects on the screen" means
+         (fields, z-order, hit-testing, interpolation between ticks), and
+         whether the Safari blitter's shape (zig writes a frame, JS fills
+         it) fits, partly fits, or is wrong for a game where JS owns the
+         pointer.
+      5. **What you'd leave alone,** and why: a seam that costs more than
+         it buys.
+      6. **The order to do it in,** as steps that each leave the game
+         playable, sized so the box (with local agents, Steve in the loop)
+         can take them one at a time after the renames. Don't write the
+         code.
+    Plain words over pattern names; when you name a pattern, say what it
+    means here.
 
 ## The box: open
 
