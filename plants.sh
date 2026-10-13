@@ -34,7 +34,7 @@
 # judged at all.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GOPHER="${GOPHER:-$HOME/showell_repos/zig-metal-unikernel}"
+GOPHER="${GOPHER:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-metal-unikernel}"
 KERNELS="${KERNELS:-$HOME/nightly/kernels}"
 SHAPES="${SHAPES:-$HERE/requests/shapes}"
 VOLUME_SITE="${VOLUME_SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
@@ -44,12 +44,12 @@ OUT="${OUT:-$(mktemp -d)}"
 mkdir -p "$OUT"
 # zig-metal-unikernel's build.zig.zon finds the SDK at ../zig-coverage-sdk, so a
 # worktree here needs it beside it.
-[ -e "$OUT/zig-coverage-sdk" ] || ln -s "${COVERAGE_SDK:-$HOME/showell_repos/zig-coverage-sdk}" "$OUT/zig-coverage-sdk"
+[ -e "$OUT/zig-coverage-sdk" ] || ln -s "${COVERAGE_SDK:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-coverage-sdk}" "$OUT/zig-coverage-sdk"
 # The angry-gopher checkout the kernel is compiled from (-Dgopher-root; no
 # copy since zig-metal-unikernel's Phase B step 2b), named by its content id.
-ANGRY_GOPHER="${ANGRY_GOPHER:-$HOME/showell_repos/angry-gopher}"
+ANGRY_GOPHER="${ANGRY_GOPHER:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/angry-gopher}"
 # The webbox library's checkout (-Dwebbox-root), counted in the content id.
-WEBBOX="${WEBBOX:-$HOME/showell_repos/zig-webbox}"
+WEBBOX="${WEBBOX:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-webbox}"
 
 # The plants: PLANTS, or every one zig-metal-unikernel's build.zig names (its
 # `Plant` enum, `none` aside). A name is the enum's (disk_write_swallowed);
@@ -66,7 +66,7 @@ fi
 commit=$(git -C "$GOPHER" rev-parse --short HEAD) || exit 2
 [ -z "$(git -C "$GOPHER" status --porcelain --untracked-files=no)" ] ||
   { echo "zig-metal-unikernel has uncommitted changes; plants build from a commit"; exit 2; }
-sdk=$(git -C "${COVERAGE_SDK:-$HOME/showell_repos/zig-coverage-sdk}" rev-parse --short HEAD) || exit 2
+sdk=$(git -C "${COVERAGE_SDK:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-coverage-sdk}" rev-parse --short HEAD) || exit 2
 ported=$(GOPHER_ROOT="$ANGRY_GOPHER" WEBBOX_ROOT="$WEBBOX" python3 "$GOPHER/tools/verdicts.py" ids | awk '{print $2}' | cut -c9-20)
 [ -n "$ported" ] || { echo "zig-metal-unikernel cannot build angry-gopher at $ANGRY_GOPHER as it is (its tools/verdicts.py fresh says why)"; exit 2; }
 mkdir -p "$KERNELS"

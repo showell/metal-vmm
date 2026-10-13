@@ -20,7 +20,7 @@
 # not run.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPOS="${REPOS:-$HOME/showell_repos}"
+REPOS="${REPOS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 BRANCH="${CC_BRANCH:-claude/great-wright-i7aste}"
 # The repos CC works in: only these are taken from CC's branch. dog-park is
 # not one (Steve: CC works on it only when asked), and its CC branch is an

@@ -17,7 +17,7 @@
 # runs agreed.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUESTS="${GUESTS:-$HOME/showell_repos/zig-metal-unikernel/probe}"
+GUESTS="${GUESTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-metal-unikernel/probe}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 

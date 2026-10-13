@@ -17,7 +17,7 @@
 #     never halted proves nothing here.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUESTS="${GUESTS:-$HOME/showell_repos/zig-metal-unikernel/probe}"
+GUESTS="${GUESTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-metal-unikernel/probe}"
 SITE="${SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
 LATENCY_US="${LATENCY_US:-5000}"
 PATH_WANTED="${1:-/}"

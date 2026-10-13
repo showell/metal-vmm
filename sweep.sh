@@ -108,7 +108,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # answers otherwise. Exit 1 is only seeds that failed, or the coverage
 # report; a night stops on 2 and goes on after 1.
 cannot_judge() { [ $# = 0 ] || echo "$*"; exit 2; }
-GUESTS="${GUESTS:-$HOME/showell_repos/zig-metal-unikernel/probe}"
+GUESTS="${GUESTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-metal-unikernel/probe}"
 # shellcheck source=tools/fresh.sh
 . "$HERE/tools/fresh.sh"
 # The kernel and metal-vmm by default are this checkout's and zig-metal-unikernel's
@@ -846,7 +846,7 @@ for n in "${SHAPE_NAMES[@]}"; do
   # Stopped here, before any seed.
   if ! grep -qE '^metal-vmm: coverage: [0-9]+ of [1-9][0-9]* properties' "$WORK/$u.err"; then
     echo "$KERNEL reported no coverage property in its unhurt run: it was built without -Dcoverage, or the run ended before it said any. Nothing can be judged."
-    echo "  build one: (cd ~/showell_repos/zig-metal-unikernel && zig build gopher -Dcoverage), and copy probe/gopher.elf aside: gates.sh wants the release build there"
+    echo "  build one: (cd ../zig-metal-unikernel && zig build gopher -Dcoverage), and copy probe/gopher.elf aside: gates.sh wants the release build there"
     cannot_judge
   fi
   # **EVERY CLIENT'S UNHURT PAGE** (QUEUE 126): each client past the first

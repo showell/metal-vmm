@@ -48,7 +48,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${NIGHTLY_ROOT:-$HOME/nightly}"
 HOURS="${HOURS:-10}"
 BATCH="${BATCH:-200}"
-GOPHER="${GOPHER:-$HOME/showell_repos/zig-metal-unikernel}"
+GOPHER="${GOPHER:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-metal-unikernel}"
 SITE="${SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
 KERNEL_ELF="${KERNEL_ELF:-$GOPHER/probe/gopher.elf}"
 

@@ -15,7 +15,7 @@
 # difference between the two hypervisors, not between two runs.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUESTS="${GUESTS:-$HOME/showell_repos/zig-metal-unikernel/probe}"
+GUESTS="${GUESTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-metal-unikernel/probe}"
 # The staged GPT + FAT16 volume with the site on it, as judge_gopher.py builds
 # it (that needs a loop mount, and so sudo; this does not, it only reads one).
 SITE="${SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
