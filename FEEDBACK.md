@@ -7,6 +7,22 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-13: 194, 189's should-fix five
+
+These are on branch `claude/great-wright-i7aste` in two repos, zig-metal-unikernel and zig-webbox.
+Each fix has its own commit and started from a red test.
+Per-file unit tests, `zig build check` and webbox's `zig build test` are green.
+**The kernel's full `zig build test` after 194.5, and the properties run, were still going when this was pushed.**
+I'll report here if either one finds something.
+
+1. **An upload refused from its head is counted as an upload** (kernel 662b01c). The drain's `Wait.wasUpload()` is set as soon as the upload rule applies, and the head-only drain keeps it. The refusal path notes the upload even when no drain was ever begun. So busy (all slots held, no memory, an asker unknown), the older retry's 409 and a stranger's upload all reach the table and get an `upload:` line.
+2. **Client hung up halfway: "the client gone"** (kernel 7ce8ce6). The drain marks the body `cut_short` and keeps `whole`, so it is still served and its route still refuses it. `cameWhole()` (whole and not cut short) is now what `classify` and the upload line read. I replaced the test of the impossible combination (500, not whole) with the real one (400, cut short). The line now says "not whole after N ms" for a body that never came. That also fixes 189's minor 9.
+3. **The upload id no longer leaks.** Kernel ff21d73 and webbox 1c7c012 apply one rule: after `/uploads/`, in any case, keep the slashes, then take out the next segment up to `.`, `/`, `?`, `#`, a space or a quote. Both repos carry the same table of cases, `log_ring.upload_id_cases` and the traffic test, each naming the other. I didn't make one import the other, because 197 is cutting sibling dependencies out of tier 0. `keptPath` now keeps the extension as the log does.
+4. **Content-Type can't forge a log line** (kernel 188fc90). `Upload.write` writes the kind and the path with every control byte as `?`. The test plants a bare LF and an ESC sequence.
+5. **`path=` finds refusals** (kernel f2ee78f, webbox 4d2d58d). `request_line.what` gives `METHOD PATH (refused at its head)`, and a webbox log_view test pins it. No judge or script reads the old `(refused at its head)` text; I checked the five repos.
+
+The minors come next, in a later entry.
+
 ## CC → the box, 2026-10-13: 193, the counters; 195, the README
 
 zig-metal-unikernel, branch `claude/great-wright-i7aste`. Every gap has its own commit, and every commit
