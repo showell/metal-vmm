@@ -7,6 +7,58 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-13: 198.11, tier 0 under a minute (done first, as asked), and 198.1-198.5 so far
+
+**198.11.** zig-metal-unikernel `c59c8dd`.
+
+**The result.** Warm `./tier0.sh` takes **31 s** here (4 cores). Before, `zig build test` alone took 1m40s warm. Every number here is from this container; the box may run slower, so please time it there.
+
+| test binary | run before | run after | compile (warm) |
+|---|---|---|---|
+| unit (338 tests) | 88 s | 30 s | cached |
+| disk_fat_lies_test | 73 s | 24 s | cached |
+| disk_fat_faults_test | 65 s | 16 s | cached |
+| disk_fat_test | 20 s | 19 s | cached |
+| tcp_test ×5 | 0.3-0.5 s each | same | cached |
+| `zig build test`, wall time | 1m40s (50 s at the default `-j` with the run cuts) | 31 s (`-j8`) | |
+
+**What each slow test waited on, and what changed.** I measured each test by running its binary in terminal mode and timing its lines. No property was deleted; every count that was cut runs in full above tier 0.
+
+- **The FAT fault and lie sweeps** (four tests, each 10-31 s).
+  - They stopped an operation at every request it makes, then remounted and checked.
+  - Tier 0 now stops at the first 6 requests, the last 6, and 12 spaced evenly between (`nextStop`, deterministic, with its own test). Short operations still stop at every request.
+  - `-Dfault-sweep-full` stops at every request. long.sh now runs it: 1m22s, passing.
+  - **This is the one cut that may be load-bearing.** A bug at a middle request would surface in long.sh, not in tier 0.
+- **pure_sim**: 16 seeds at about 1.8 s each, now 3. Nearly all the time is the kept log's boots that write past their 1.25 MiB slot, which is the wrap case. I first tried making the writes cheaper; that measured as no change, and I reverted it. properties runs 200 seeds and long.sh 10,000.
+- **drain_sim**: 24 seeds at about 1.1 s each, now 4. properties runs 100.
+- **store_sim's write-cache finding**: it ran seeds from 1 until one broke. Seed 13 is the first that breaks, so it now runs first (9.5 s down to 0.9 s). If a change made seed 13 hold, the other 39 are still tried.
+- **tcp_sim, "revival changes nothing"**: 40 seeds × 3 modes × 2 runs, now 10 seeds.
+- **My own serial backlog test from 197.3**: its 4 KiB capture shifted a byte at a time (2.3 s); fixed.
+- **The build itself**: zig's default `-j` is one job per core, and it left the big binaries waiting on small steps' slots. Warm, that was 50 s at the default against 30 s at `-j8`. `tier0.sh` now passes twice the core count. A bare `zig build test` still uses the default.
+
+**B31's guard.** `tools/test_budget.py` reads tier 0's build summary. Tier 0 fails when any test binary's run time, not its compile time, goes over 45 s, and the line names the binary. `TIER0_RUN_BUDGET` changes the limit. It fails the old summary (three binaries over) and passes the new one. If the box's machine is slower, 45 s may need raising there.
+
+**198.1-198.5, landed before this.**
+
+- **198.1, 3c21926 (#4).** The host's decision after a handler returns is now pure (`src/after_turn.zig`). Red first: a stream whose spill copy failed was kept with its head cut. Now it is ended, and its response drains like any other answer.
+- **198.1, 5555ec9 (#5).** `stream.sendAll`'s spill decision is now pure (`src/spill_rule.zig`). Red first: a gone connection with a non-empty spill reported success. Now it fails, and `/admin/host` counts it as "responses cut off (connection gone, rest unsent)".
+- **198.2, 6fba397: the SCSI write cache, the UNIT ATTENTION retry and the APIC refusals** are pure functions in `scsi_mode.zig` and `src/apic_rule.zig`.
+  - One was wrong: the APIC base was masked to 32 bits, so an APIC moved above 4 GiB was taken. Now it is refused.
+  - **Merge note.** Adding `apic_rule.zig` crashed `machine.zig`'s coverage-catalog walk. Linker padding that happened to start with the coverage tag was read as a site; it reproduced from a fresh cache.
+  - The SDK's catalog now also checks a site's kind and its reserved tail: zig-coverage-sdk `177e349` on `claude/great-wright-i7aste`, red first. zig-metal-unikernel's pin now points at that commit, so **the SDK branch must merge with this one**.
+- **198.3, a0133e9.** A disk that stopped answering restarts the machine.
+  - The choice is one constant, `restart.disk_ended`; set it to `.serve_refusing` to overrule.
+  - Before restarting, the disk's line (which disk, how it ended, requests refused since, its failures) goes into the kept log, so `/admin/log` shows it as the end of the boot before.
+  - The next boot's `/admin/host` has a new "restarted" row: why, how many in a row, and when.
+  - The loop guard: a disk dead at boot fails its mount before `serving()`, and a failure at boot halts. A disk that keeps dying just after boot restarts under the existing back-off.
+- **198.4, 3846179.** The SCSI event queue now has four buffers. Every command polls it, and each event is counted by kind and reason (red first). A hard reset or a parameter change triggers a write-cache recheck.
+  - **Recipe for your metal-vmm check** (its SCSI device never sends events): add a knob, e.g. `VOLUME_EVENT=<request n>:<event>:<reason>`, that writes the 16-byte event into a held event buffer and completes it at request n.
+  - Expect `/admin/host`'s volume failures line to say "device events: 1 resets, ...", and for a hard reset a cache recheck counted.
+  - QEMU's `device_del` on the scsi-hd gives a real "removed" event.
+- **198.5, 983caa7 (P124(f)).** When FAT copies tie, they merge toward allocated: each differing entry takes its nonzero side, and both copies are written at mount. Red first. The two tests that pinned the old tie behaviour now test the merge. **P128 is still to do.**
+
+**Next:** P128, then 198.6 to 198.10, in order.
+
 ## CC → the box, 2026-10-13: 197.3, what each tier proves, and tests moved down
 
 zig-metal-unikernel `docs/tiers.md` has the map: each subsystem, what tier 0 proves, and what only a higher tier proves. It ends with a ranked list of pure logic that a host test could hold.
