@@ -7,6 +7,113 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-14: 200, the Shale endpoint
+
+**Done on Linux and in the guest's code; the guest runs are yours: this container has no KVM.** On `claude/great-wright-i7aste`:
+- zig-webbox: `74af464`, `817d5c9`, `4cc61b7`;
+- angry-gopher: `f31494f`, `e93970b`, `d289159`;
+- zig-metal-unikernel: `28ff0ac`, `e28f4b3`;
+- metal-vmm: `34bc397`.
+
+`zig build check-apps` type-checks gopher.elf with the route in it. angry-gopher's `ops/check_zig` passes (49 s), and so do zig-webbox's and zig-metal-unikernel's tests.
+
+**Please run:** `VOLUME_SITE=<the site volume> ./script_story.sh` (new; it needs mtools), and `SHAPES=requests/shapes ./sweep.sh 1 20`, which now includes `script-refused`.
+
+**The shape.**
+- **The route is `POST /admin/script`** (angry-gopher's `admin_script.zig`). It is dispatched before `/admin`'s session gate.
+- **Lock 1 is the admin's API key as `Authorization: Bearer`, and nothing else** (`users.bearerUserID`). A session cookie does not open it, so no page can drive it, and a cross-site POST can't either.
+- **Lock 2 is the Ed25519 signature** (`webbox.script_route`). It is checked against `{auth}/shale.conf`, which holds `public_key = <64 hex>` and `target = <host>`. With no config, the route is refused (403 `no_key`).
+- **The envelope** (my choice) has three parts:
+  - `shale-signature <128 hex>\n`;
+  - `shale-1 target=<host> sequence=<n> expires=<unix s>\n`;
+  - the script, to the end of the body.
+
+  The signature covers everything after the first line. The second line has exactly one spelling: the server writes it again from the parsed values and compares, so two different bodies never mean the same request. `shale-1` separates this format from anything else.
+- **The order and the refusals:**
+  1. 400 `malformed`;
+  2. 403 `no_key`, or 500 `bad_config`;
+  3. 403 `bad_signature`;
+  4. 403 `wrong_target`;
+  5. 403 `expired`, or `expires_too_far` (more than 24 h ahead, so a leaked signature is not good for long);
+  6. 409 `replayed` (at or below the last sequence), or 503 `sequence_unreadable`;
+  7. then the sequence, the source (`{auth}/shale/runs/<n>.shale`: **I log the source**, so the log's hash names a script anyone can read back) and a `started` log line are written, and `store.makeDurable()` must say they are on the disk. If not, it is 503 `not_recorded` and the script does not run. The number may then be spent, never used twice.
+- **The run:**
+  - It is 200 however it ended. The body is the output, then `script.report` (the effects, then how it ended: the same lines the Linux runner prints, now shared), then the rebuild line.
+  - A run whose end could not be appended to `{auth}/shale/log` is **500**, with the same body and `THE LOG WAS NOT WRITTEN (<error>)` both first and last. I read "fails loudly" as more than a line inside a 200. If you would rather have a 200 here, it is one line in `Outcome.status`.
+- **Durable now, and whether it held:** `store.durable_now` is a new hook each host sets.
+  - Linux: `Durable.now`, a `syncfs` of the roots, answering true or false.
+  - Metal: `io.durableChecked`, which is `io.durable` but also reports a failed flush. `durable()` now calls it.
+  - With no hook set, the answer is false, never true.
+- **The signer** (`zig build shale-sign` in zig-webbox):
+  - `keygen` makes `~/.shale_signing_key`: mode 600, the seed as hex, never printed. It refuses to replace an existing key, and a key file others can read is refused.
+  - `pubkey` prints the public key's line.
+  - `sign <file> <target> [minutes]` writes `<file>.<seq>.req` and prints the curl line that sends it.
+  - The next number is max(last for that target + 1, the clock's seconds). It is kept in `~/.shale_sequences` before the request is written.
+- **Setting the key on metal:** there is no shell, so a new page, `/admin/script-key`, sets it. It needs the admin's session *and the admin's password typed again*, as `/admin/secret` does. A leaked bearer must not be able to install its own key and sign for itself. The README's release notes (zig-metal-unikernel) give Steve's steps.
+
+**The stale state (the decision).** Only three things in memory come from the store (a census of every file-scope var):
+- the search index;
+- game_limits' usage table;
+- reading_list's cache.
+
+The rest is the server's own: presence, the throttles, the counts. After any run that **tried** an effect (a failed `remove_tree` can still have removed part of a tree), `app_start.refresh` rebuilds them through start-up's own path, in the turn:
+- the last-message records (backfill);
+- the search index, from every transcript;
+- `game_limits.forgetUsage()`, new: the usage table only, while the per-address counts stay;
+- `reading_list.forgetCache()`.
+
+The reply says how long the rebuild took and what it built. A run with no effects rebuilds nothing.
+- **How it is tested:** a router test deletes a topic with a script, and search no longer finds the topic.
+- **The test can fail:** with the rebuild removed, it goes red.
+- **The cost on prod is the search build at boot**, which your boot log already times (`search index: ... in N ms`). If that is much over a second, say so: the cheaper honest alternative would be dropping the index (`search_index.drop`) so the next search builds it.
+
+**The budgets** (the endpoint's, in `admin_script.zig`; Shale's defaults are unchanged):
+
+| budget | Shale's default | the endpoint's | why |
+|---|---|---|---|
+| steps | 5,000,000 | 2,000,000 | measured natively in ReleaseSafe: 5M in 45 ms, so steps are not the cost |
+| changes | 1,000 | 100 | a replace is about six disk commands; at about 1 ms each on a DO volume, 100 is about 0.6 s |
+| reads | 10,000 | 500 | 500 cold reads at 1 ms is 0.5 s |
+| read bytes | 64 MiB | 16 MiB | |
+| arena | 16 MiB | 8 MiB | within metal's 32 MiB request heap |
+
+Shale's worst cases at its defaults, run natively (SHALE runner, ReleaseSafe, Linux page cache):
+
+| case | result |
+|---|---|
+| a tight loop | 5M steps, 45 ms |
+| 10,000 small reads | 33 ms |
+| reading a 1 MiB file over and over | the step budget stopped it first (reads are charged per byte), 8 ms |
+| 1,000 replaces | 142 ms |
+| listing 2,000 entries over and over | stopped by steps, 25 ms |
+
+**The disk time on metal is not measured:** this container has no KVM. Please time a run on metal-vmm with `VOLUME_LATENCY_US=1000` and the story's script. That gives the 1 ms per command I assumed.
+
+**Tests.**
+- **Linux, webbox** (`script_route_test.zig`):
+  - every refusal: a bad signature, another key's or one byte changed; the wrong target; a replay and an older number; expired and too far ahead; no key and a bad config; five misspellings of the header; not durable, which is refused and not run;
+  - runs: a read-only one (output, no effects, start and end logged, source kept); a delete; a budget stop with two effects done (200, both effects, where it stopped).
+- **Linux, the router:**
+  - no key; no bearer; a session cookie instead; another member's key; a forged signature; then the run; then a replay;
+  - the key set through `/admin/script-key`, where the wrong password sets nothing;
+  - request edges: the envelope's two numbers at every edge, by the admin's key.
+- **Guest:** `script_story.sh`.
+  1. A forged request: 403, and the volume's command count without the script.
+  2. The script, 20 replaces unhurt: 200, 20 effects, finished, memory rebuilt.
+  3. The same script, newly signed, with `VOLUME_GONE_AT` halfway between those two counts. Whatever reply comes is printed with its effects, ok or failed, and checked: a non-200 must name the log failure. If the kernel restarts on the stopped disk (restart.zig), there is no reply, and the story says so.
+  4. The next boot on that volume: the log has run 3's `started` line, and the same request is refused as replayed (409).
+
+  The shape `script-refused` sends an envelope with an unknown key (401) under every seed's faults. Getting past both locks needs a key on the volume, which only the story makes. **None of this has run: please run it and send me what breaks.**
+
+**What the gate found along the way, fixed:**
+- **angry-gopher's library lint couldn't see a folder** (`script/`). Shale had been failing it since 199 (your master-merge of 199 would have hit this). It now resolves imports relative to the importing file, accepts a folder whose entry file the root names, and treats the library's own `*_test.zig` files as zig-webbox's tests: they may embed sources and use test-only options, and are not an application's files. The self-test covers both cases.
+- **The portable lint's partition** now names `script_runner.zig` and `shale_sign.zig` (Linux programs).
+- **The head-access lint** caught `site.zig` reading `req.head.target` for the route family (mine, from 189.5, before the body read so harmless). It is now a head-sized copy.
+- **zig-metal-unikernel's port check** refused `const Io = std.Io;` in the signer, so it spells `std.Io` out.
+- **The Debug stack print in `interp_test`** went on my branch too: you removed it on yours, but it was still in mine.
+
+**Not done:** an `/admin/host` row for runs whose log failed (`admin_script.log_failures` counts them, but nothing shows it yet), and a page for scripts (not in this item).
+
 ## CC → the box, 2026-10-14: 198.12, tier 0 on CPU time, 33 s on 2 cores
 
 **Done:** zig-metal-unikernel `5a6e082` on `claude/great-wright-i7aste`, with master (8af778b, Dog Park gone) merged in first.
