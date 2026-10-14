@@ -7,6 +7,45 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-14: 206, Shale for v31 (zig-webbox)
+
+zig-webbox `claude/great-wright-i7aste` `f938960`, on master `92ea157`. All 264 tests pass and zig fmt is clean. It touches only the script module and its README; angry-gopher and zig-metal-unikernel name none of its internals.
+
+### What's in it
+
+Items 2-8 of 204(b), each with a test seen red before it was built: eight tests, all red, then green.
+
+| item | builtins | the rule worth knowing |
+|---|---|---|
+| 2 | `walk(p)`, `budget()` | `walk` gives `{path, size, kind, modified}` for every entry under `p`, depth first with names sorted, for **one store read a folder**: a walk of the whole root costs its folders, not its files. A folder's size is 0, since Linux and metal disagree on it. It keeps its own stack, not the Zig stack. `budget()` gives what's left of steps, reads, read_bytes, changes, change_bytes and output. |
+| 3 | `lines`, `words`, `count` on a list | `#lines("a\nb\nc\n")` is 3, not `split`'s 4. |
+| 4 | `sort(rows, key)`, `reverse(l)` | **Stable** (block sort), so sorting by one key and then another orders by both. A row missing the key is an index error. |
+| 5 | `date`, `seconds`, `stat(p).modified` | UTC, 1970 to 9999, each the other's inverse (tested over a sweep of times). `seconds` takes RFC 3339 with `Z` or `±HH:MM`, drops a fraction of a second, and takes a date alone as its midnight UTC. An unreal day is an error. `modified` is whole seconds; the same volume gives the same run. |
+| 6 | `human`, `pad`, `table` | `human`: one decimal, rounded half up, in integers. `pad(v, -w)` aligns right. `table(rows, columns)` returns the aligned text: a column of integers aligns right, every row must have every column, and there is no newline at the end, since `print` adds it. |
+| 7 | `like(s, pattern)` | `*` and `?` only, matched against the whole string. It charges every byte it looks at, so a pattern that backtracks on a long string runs out of steps (tested). |
+| 8 | `const NAME = e` | Top level only. It is never assigned, and the functions declared after it see it. A table it names can still change. A function that reads one before its line has run stops with a name error, not nil. |
+
+**Not built: item 1, the dry run.** That stays Steve's call, as 206 says.
+
+### The same shape on Linux and metal
+
+The new store builtins go only through webbox's `store` (`list`, `stat`), so they behave the same on both hosts. The one value that can differ is `modified`: it is whatever the host's `statFile` reports, and if the metal FAT store answers 0 there, that is what scripts will see.
+
+### Consequences
+
+- **`const` is a keyword now**, and `walk`, `budget`, `lines`, `words`, `like`, `date`, `seconds`, `human`, `pad`, `table` and `reverse` are builtin names. A script that used one of them as a local or a function now stops at parse, naming it. One existing example did, `big_files.shale`'s own `walk`; it is now `walk_dir`.
+- **`table.insert` still gets Lua's "standard library" message** even though `table` is now a builtin.
+
+### The three 204(a) scripts, rewritten
+
+They are in `src/script/examples/`, each run as a test against the angry-gopher-shaped store, and listed in the README.
+
+- **`where_the_bytes_are.shale`:** one `walk`, then a `table` of folders by bytes and a `table` of the 15 largest files. There's no hand-kept read count any more, because the walk costs one read a folder.
+- **`chat_topics.shale`:** finds topics with `walk("chat")` plus `like`, counts messages with `lines`, and gives the top 15 by messages via `sort(rows, "messages")` and `reverse`. "Quiet" now means older than `QUIET_DAYS` before `now()`, using `seconds`, instead of a hand-typed date. The caches that disagree are in a `table`. The test plants a cache that lies (39 against 40) and checks the run names it.
+- **`first_change.shale`:** the same one folder and one file. The file now says `date(now())`, and the paths are `const`s.
+
+They need `now()` to be the real time in seconds, which the route already hands in. The signing and sending commands are as in my 204(a) entry.
+
 ## CC → the box, 2026-10-14: 203(e), a lying cache's run now tries the counted leak too
 
 metal-vmm `claude/great-wright-i7aste`, on master's `c0cc214`.
