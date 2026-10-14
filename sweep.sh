@@ -725,14 +725,18 @@ verdict() {
         why="$why, a stop left the boot disk more than one operation's worth ($c)"
       fi
     else
-      case " $knobs" in
-        *" DISK_CACHE=lie"*) [ -n "$disk_cut$exit_cut" ] && lie_lost disk "$name" && unsound="$unsound${unsound:+, }DISK_CACHE=lie (the volume left unsound)" || why="$why, the volume is not sound" ;;
-        *) if c=$(counted_leak "$WORK/$name.sound" "$WORK/$name.out" "the boot disk" "$WORK/$name.img"); then
-             unsound="$unsound${unsound:+, }a leak the kernel counted (the boot disk: $c)"
-             "$UNTOUCHED" "$site" "$WORK/$u.img" "$WORK/$name.img" > "$WORK/$name.untouched" 2>&1 ||
-               why="$why, the volume lost a file the request does not touch ($(head -1 "$WORK/$name.untouched" | sed 's/^ *//'))"
-           else why="$why, the volume is not sound"; fi ;;
-      esac
+      # A lying cache that lost its power excuses it; failing that, as on
+      # any run, a leak the kernel counted exactly (QUEUE 203(e): a lie
+      # beside a give-back the disk refused tried only the first).
+      local lied=""
+      case " $knobs" in *" DISK_CACHE=lie"*) [ -n "$disk_cut$exit_cut" ] && lie_lost disk "$name" && lied=1 ;; esac
+      if [ -n "$lied" ]; then
+        unsound="$unsound${unsound:+, }DISK_CACHE=lie (the volume left unsound)"
+      elif c=$(counted_leak "$WORK/$name.sound" "$WORK/$name.out" "the boot disk" "$WORK/$name.img"); then
+        unsound="$unsound${unsound:+, }a leak the kernel counted (the boot disk: $c)"
+        "$UNTOUCHED" "$site" "$WORK/$u.img" "$WORK/$name.img" > "$WORK/$name.untouched" 2>&1 ||
+          why="$why, the volume lost a file the request does not touch ($(head -1 "$WORK/$name.untouched" | sed 's/^ *//'))"
+      else why="$why, the volume is not sound"; fi
     fi
   fi
   if [ -n "${VOLUME_SITE:-}" ] && changed "$WORK/$name.vol" && ! cmp -s "$WORK/$name.vol" "$VOLUME_SITE"; then
@@ -743,14 +747,16 @@ verdict() {
         why="$why, a stop left the attached volume more than one operation's worth ($c)"
       fi
     else
-      case " $knobs" in
-        *" VOLUME_CACHE=lie"*) [ -n "$volume_cut$exit_cut" ] && lie_lost volume "$name" && unsound="$unsound${unsound:+, }VOLUME_CACHE=lie (the attached volume left unsound)" || why="$why, the attached volume is not sound" ;;
-        *) if c=$(counted_leak "$WORK/$name.vsound" "$WORK/$name.out" "the volume" "$WORK/$name.vol"); then
-             unsound="$unsound${unsound:+, }a leak the kernel counted (the attached volume: $c)"
-             "$UNTOUCHED" "$VOLUME_SITE" "$WORK/$u.vol" "$WORK/$name.vol" > "$WORK/$name.vuntouched" 2>&1 ||
-               why="$why, the attached volume lost a file the request does not touch ($(head -1 "$WORK/$name.vuntouched" | sed 's/^ *//'))"
-           else why="$why, the attached volume is not sound"; fi ;;
-      esac
+      # As the boot disk's, above (QUEUE 203(e)).
+      local vlied=""
+      case " $knobs" in *" VOLUME_CACHE=lie"*) [ -n "$volume_cut$exit_cut" ] && lie_lost volume "$name" && vlied=1 ;; esac
+      if [ -n "$vlied" ]; then
+        unsound="$unsound${unsound:+, }VOLUME_CACHE=lie (the attached volume left unsound)"
+      elif c=$(counted_leak "$WORK/$name.vsound" "$WORK/$name.out" "the volume" "$WORK/$name.vol"); then
+        unsound="$unsound${unsound:+, }a leak the kernel counted (the attached volume: $c)"
+        "$UNTOUCHED" "$VOLUME_SITE" "$WORK/$u.vol" "$WORK/$name.vol" > "$WORK/$name.vuntouched" 2>&1 ||
+          why="$why, the attached volume lost a file the request does not touch ($(head -1 "$WORK/$name.vuntouched" | sed 's/^ *//'))"
+      else why="$why, the attached volume is not sound"; fi
     fi
   fi
   # **A DURABLE SHAPE KEEPS WHAT IT WAS TOLD IT KEPT** (QUEUE 125), judged
