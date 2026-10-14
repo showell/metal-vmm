@@ -151,6 +151,15 @@ pub const Scsi = struct {
     /// Reads and SYNCHRONIZE CACHE still answer. `protected` counts the
     /// writes refused.
     read_only_at: ?u64 = null,
+    /// **READ-ONLY FROM THE NTH WRITE** (`VOLUME_READ_ONLY_AT_WRITE=n`,
+    /// metal-vmm QUEUE 203(c)): as `read_only_at`, from the command that is
+    /// the nth WRITE on, which is always inside an operation that writes:
+    /// where a refused write leaves clusters to give back, and the give-back
+    /// is refused too. It sets `read_only_at` there, so the line, the
+    /// counts and the fired line are `VOLUME_READ_ONLY_AT`'s.
+    read_only_at_write: ?u64 = null,
+    /// The WRITE commands asked, answered or not.
+    write_commands: u64 = 0,
     /// **A TRANSFER THAT MOVES HALF** (`VOLUME_SHORT_AT=n`): the nth READ
     /// or WRITE moves the first half of its bytes and answers GOOD with the
     /// rest as its residual (virtio 1.2 §5.6.6.1), a legal underrun. A
@@ -336,6 +345,12 @@ pub const Scsi = struct {
             self.gone_answered += 1;
             return .{ .response = response_bad_target };
         };
+        if (cdb[0] == op_write) {
+            self.write_commands += 1;
+            if (self.read_only_at_write) |n| if (self.read_only_at == null and self.write_commands == n) {
+                self.read_only_at = self.commands;
+            };
+        }
         if (self.read_only_at) |n| if (self.commands >= n and cdb[0] == op_write) {
             self.protected += 1;
             return self.check(key_data_protect, asc_write_protected);
@@ -988,6 +1003,32 @@ test "VOLUME_GONE_AT: from the nth command, BAD_TARGET, and nothing written" {
     try testing.expectEqual(@as(u64, 4), vol.gone_answered);
     var buf: [256]u8 = undefined;
     try testing.expect(std.mem.indexOf(u8, vol.line(&buf), "; gone from command 2, 4 commands answered BAD_TARGET") != null);
+}
+
+test "VOLUME_READ_ONLY_AT_WRITE: read-only from the nth WRITE, however many reads came before; as VOLUME_READ_ONLY_AT from that command" {
+    var image: [16 * 512]u8 = @splat('o');
+    var vol = Scsi{ .image = &image, .attention = null, .read_only_at_write = 2 };
+    var d = vol.device();
+    var g = FakeDriver{};
+    g.open(&d);
+    @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
+    // Reads first, any number: none of them counts.
+    for (0..5) |_| try testing.expect(FakeDriver.good(g.rw(&d, false, 1, 1)));
+    try testing.expectEqual(@as(?u64, null), vol.read_only_at);
+    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
+    const refused = g.rw(&d, true, 2, 1);
+    try testing.expectEqual(status_check_condition, refused.status);
+    try testing.expectEqual(key_data_protect, refused.key);
+    try testing.expectEqual(@as(u8, 'o'), image[2 * 512]);
+    // From that command on, as VOLUME_READ_ONLY_AT: reads answer, writes don't.
+    try testing.expect(vol.read_only_at != null);
+    try testing.expect(FakeDriver.good(g.rw(&d, false, 1, 1)));
+    try testing.expectEqual(status_check_condition, g.rw(&d, true, 3, 1).status);
+    try testing.expectEqual(@as(u64, 2), vol.protected);
+    var buf: [256]u8 = undefined;
+    var want: [64]u8 = undefined;
+    try testing.expect(std.mem.indexOf(u8, vol.line(&buf), try std.fmt.bufPrint(&want, "; read-only from command {d}, 2 writes refused", .{vol.read_only_at.?})) != null);
+    try testing.expectEqual(@as(u64, 3), vol.write_commands);
 }
 
 test "VOLUME_READ_ONLY_AT: from the nth command WP is said, writes are DATA PROTECT, and reads still answer" {

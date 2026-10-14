@@ -1248,6 +1248,9 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         if (turned.get("VOLUME_READ_ONLY_AT")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
             volume.read_only_at = n;
         };
+        if (turned.get("VOLUME_READ_ONLY_AT_WRITE")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
+            volume.read_only_at_write = n;
+        };
         if (turned.get("VOLUME_SHORT_AT")) |text| if (std.fmt.parseInt(u64, text, 10) catch null) |n| if (n > 0) {
             volume.short_at = n;
         };

@@ -58,7 +58,10 @@
 //! 2026-10-09, metal-vmm QUEUE 119), and in one seed in eight one of
 //! `VOLUME_GONE_AT`, `VOLUME_READ_ONLY_AT` and `VOLUME_SHORT_AT` (a write
 //! refused, QUEUE 135), and in one seed in sixteen that drew none of those,
-//! `VOLUME_GONE_AT` in the first 60 commands (the boot's, QUEUE 203(a)); it never draws `VOLUME_LATENCY_US`,
+//! `VOLUME_GONE_AT` in the first 60 commands (the boot's, QUEUE 203(a)),
+//! and in one seed in four that lost the volume no way above,
+//! `VOLUME_READ_ONLY_AT_WRITE` at one of its first 16 writes (a give-back
+//! refused, QUEUE 203(c)); it never draws `VOLUME_LATENCY_US`,
 //! `VOLUME_SYNC_US`, `VOLUME_CUT_AT_EXIT`, `VOLUME_SECTOR`,
 //! `VOLUME_MODE_PAGES`, `VOLUME_MAX_TRANSFER` (a disk that takes less in a
 //! command; one smaller than a cluster is refused at mount, by design),
@@ -88,7 +91,7 @@ pub const names = [_][]const u8{
     "VOLUME_ATTENTION_AT", "VOLUME_GONE_AT",     "VOLUME_READ_ONLY_AT", "VOLUME_SYNC_US",
     "VOLUME_CUT_AT_EXIT",  "VOLUME_CACHE_KEEPS", "VOLUME_SECTOR",       "VOLUME_MODE_PAGES",
     "RTC_ABSENT",          "RTC_STUCK",          "PIT_FROZEN",          "VOLUME_SHORT_AT",
-    "VOLUME_WCE_FIXED",    "VOLUME_RESET_AT",    "VOLUME_MAX_TRANSFER",
+    "VOLUME_WCE_FIXED",    "VOLUME_RESET_AT",    "VOLUME_MAX_TRANSFER", "VOLUME_READ_ONLY_AT_WRITE",
 };
 
 fn index(comptime name: []const u8) usize {
@@ -215,6 +218,16 @@ pub const Knobs = struct {
         // is what it was.
         const lost = self.get("VOLUME_GONE_AT") != null or self.get("VOLUME_READ_ONLY_AT") != null or self.get("VOLUME_SHORT_AT") != null;
         if (!lost and chance(r, 16)) self.number(index("VOLUME_GONE_AT"), r.intRangeAtMost(u64, 1, 60));
+        // **A GIVE-BACK REFUSED, ON PURPOSE** (metal-vmm QUEUE 203(c)): a
+        // volume that turns read-only at a command count lands inside an
+        // operation that allocates about once in 300-600 seeds, so the
+        // counted leak of a give-back the disk refused (and the plant
+        // `counted_leak_short`) was rarely judged. In 1 seed in 4 that lost
+        // nothing above, it turns read-only at one of its first 16 WRITEs:
+        // always inside an operation that writes. Last, so every draw
+        // above is what it was.
+        const lost_now = lost or self.get("VOLUME_GONE_AT") != null;
+        if (!lost_now and chance(r, 4)) self.number(index("VOLUME_READ_ONLY_AT_WRITE"), r.intRangeAtMost(u64, 1, 16));
     }
 
     fn word(self: *Knobs, i: usize, text: []const u8) void {
@@ -332,7 +345,8 @@ test "different seeds turn different knobs, and every knob is turned by some see
             !std.mem.eql(u8, n, "VOLUME_MODE_PAGES") and !std.mem.eql(u8, n, "RTC_ABSENT") and
             !std.mem.eql(u8, n, "RTC_STUCK") and !std.mem.eql(u8, n, "PIT_FROZEN") and
             !std.mem.eql(u8, n, "VOLUME_SHORT_AT") and !std.mem.eql(u8, n, "VOLUME_WCE_FIXED") and
-            !std.mem.eql(u8, n, "VOLUME_RESET_AT") and !std.mem.eql(u8, n, "VOLUME_MAX_TRANSFER"))
+            !std.mem.eql(u8, n, "VOLUME_RESET_AT") and !std.mem.eql(u8, n, "VOLUME_MAX_TRANSFER") and
+            !std.mem.eql(u8, n, "VOLUME_READ_ONLY_AT_WRITE"))
         {
             std.debug.print("never turned: {s}\n", .{n});
             return error.TestUnexpectedResult;
@@ -453,12 +467,22 @@ test "seeds 1-300 lose the volume during boot, so every 300-seed sweep judges th
     try testing.expect(early >= 8);
 }
 
+test "seeds 1-300 turn the volume read-only at a write in about a fifth of them, so every 300-seed sweep refuses give-backs (metal-vmm QUEUE 203(c))" {
+    var at_write: u32 = 0;
+    for (1..301) |seed| {
+        var with = Knobs.fromSeed(seed);
+        with.withVolume(seed);
+        if (with.get("VOLUME_READ_ONLY_AT_WRITE") != null) at_write += 1;
+    }
+    try testing.expect(at_write >= 40);
+}
+
 test "a volume's knobs are drawn only with a volume, on dice of their own" {
     var buf_a: [1024]u8 = undefined;
     var buf_b: [1024]u8 = undefined;
     // With the three that refuse a write (metal-vmm QUEUE 135): one of
     // them at most a seed, at a command from 1 to 250.
-    const vol = [_][]const u8{ "VOLUME_CACHE", "VOLUME_CUT_AFTER", "VOLUME_SYNC_FAIL", "VOLUME_SYNC_FAIL_FOR", "VOLUME_ATTENTION_AT", "VOLUME_CACHE_KEEPS", "VOLUME_GONE_AT", "VOLUME_READ_ONLY_AT", "VOLUME_SHORT_AT" };
+    const vol = [_][]const u8{ "VOLUME_CACHE", "VOLUME_CUT_AFTER", "VOLUME_SYNC_FAIL", "VOLUME_SYNC_FAIL_FOR", "VOLUME_ATTENTION_AT", "VOLUME_CACHE_KEEPS", "VOLUME_GONE_AT", "VOLUME_READ_ONLY_AT", "VOLUME_SHORT_AT", "VOLUME_READ_ONLY_AT_WRITE" };
     var turned = [_]bool{false} ** vol.len;
     for (0..500) |seed| {
         const plain = Knobs.fromSeed(seed);
@@ -476,6 +500,11 @@ test "a volume's knobs are drawn only with a volume, on dice of their own" {
             try inRange(v, 1, 250);
         };
         try testing.expect(refusing <= 1);
+        // Read-only at a write only where nothing else refuses one.
+        if (with.get("VOLUME_READ_ONLY_AT_WRITE")) |v| {
+            try testing.expectEqual(@as(u32, 0), refusing);
+            try inRange(v, 1, 16);
+        }
         _ = plain.format(&buf_a);
         _ = with.format(&buf_b);
     }
