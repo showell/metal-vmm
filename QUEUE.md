@@ -1799,6 +1799,98 @@ the build, the port); stay off those, and merge master in as it lands.
     arena and the caller's buffers, and nothing that assumes threads.
     After 198. The box runs the module's tests and the runner on your branch before merging.
 
+200. **Steve's (2026-10-14): the Shale endpoint, on Linux and on metal.**
+    Shale (199, yours) is merged into zig-webbox master once its check-cc
+    passes. The box merged master into it and removed one stderr print in
+    `interp_test.zig`: `zig build` takes a test's stderr as a failure. This
+    item puts it behind a route on lynrummy.com. It was the box's in 199's
+    brief; Steve has given it to you. Background is
+    `notes/scripts-on-the-unikernel.md`, sections "Signing" and "Linux and
+    metal". **This brief overrides the essay:** there is no dry-run flag.
+    A script just runs, and you explore by sending a script that only reads.
+
+    **The shape:**
+    - **The route is `POST /admin/script`, in angry-gopher.** The reusable
+      parts live in zig-webbox: verifying the envelope, the sequence file,
+      the run, and the reply. Dog Park can mount the same route later.
+      Both hosts serve it, Linux and metal, with the same code.
+    - **The reply is one HTTP response:**
+      - the body is the printed output (`out`), then the effects log, then
+        how the run ended (finished, or the line, column, class and budget);
+      - give it the same layout as the Linux runner, so a script reads the
+        same on the box as on prod;
+      - it is a **200** for any run that started, finished or stopped (the
+        body says which). It is a 4xx only when the request was refused
+        before running, with the reason in the body.
+      - `out` is the caller's buffer at the output budget (256 KiB). A
+        static buffer on metal is fine.
+    - **Two locks, both required:**
+      - the existing admin bearer key, the one `/admin/host` takes;
+      - an **Ed25519 signature** (`std.crypto`), checked against a public
+        key the server holds. The private key never reaches the server.
+    - **What is signed:** the script's bytes, the **target** host name
+      (`lynrummy.com`, or a test name, so a script signed for a test volume
+      cannot be replayed on prod), a **sequence number**, and an
+      **expiry**. You choose the envelope format, as long as it is simple
+      and its bytes are unambiguous.
+    - **The sequence number must rise.**
+      - The server keeps the last accepted number on the store, so it
+        survives a restart.
+      - It is written durably BEFORE the script runs. A crash mid-run
+        therefore can't let the same signed request run twice.
+      - A replay, an old number or an expired request is refused, and so is
+        a request with the wrong target.
+      - If no public key is configured, the route is refused. It never
+        falls open.
+    - **Every run is logged on the store:** the time, the sequence number,
+      the script's hash, its effects and how it ended. Logging the source
+      too is your call. A run whose log can't be written fails loudly; it
+      does not pass quietly.
+    - **The turn.** On metal a run occupies the turn, and the whole site
+      waits for it.
+      - Measure the worst case at the default budgets on metal-vmm: steps,
+        reads and writes.
+      - Set the endpoint's budgets so a run fits within about one second of
+        wall time on the droplet. Write the numbers down.
+      - The budgets are the endpoint's, passed into `run`. The module's
+        defaults stay as they are.
+    - **The catch (a real decision; it's yours, and say it plainly):** a
+      script's changes leave angry-gopher's in-memory state stale (the
+      search index, the feed, the counts, and whatever else is loaded at
+      start).
+      - The rule: after any run with a successful effect, nothing in memory
+        may disagree with the store.
+      - The preferred way is to rebuild the derived state through the same
+        path as start-up.
+      - If that is too costly for the turn, find the cheapest honest
+        alternative, for example a restart the reply announces.
+      - A test changes the store with a script and then checks a read
+        route.
+    - **The signing tool, in zig, on the box:**
+      - it signs a `.shale` file for a target, with the next sequence
+        number, and either prints the request or sends it;
+      - its key pair is made once by the same tool;
+      - the private key lives at `~/.shale_signing_key` (mode 600) and is
+        never printed;
+      - the public key goes into the server's config, the way the admin key
+        does today.
+      - Installing it on prod is a release step for Steve. Say exactly what
+        he does, in the README's release notes.
+    - **Fault testing:** add a metal-vmm story with a script run whose disk
+      fails mid-run. The reply and the log must say exactly what was done
+      and what was not, and the restart must find the sequence number
+      already used. Add a shape for check-cc (`requests/shapes/`).
+    - **Tests, on Linux and on the guest:**
+      - refused: a bad signature, the wrong target, a replay, an expired
+        request, no bearer, no key configured;
+      - accepted: a read-only script, a script that deletes, and a script
+        that stops on a budget with some effects already done.
+
+    **Not in this item:** a page or UI for scripts; Dog Park's route.
+
+    **Steve's go is needed before it reaches prod** (v31 or later). The box
+    runs check-cc and the gates on your branch before merging.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
