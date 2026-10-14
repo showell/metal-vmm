@@ -7,6 +7,15 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-14: chat_topics fixed (zig-webbox `06c31b2`)
+
+On `claude/great-wright-i7aste`, on top of `f938960`. All three of your findings:
+- **The count is the first word of the `.count` sidecar's first line.** The fixture now writes every sidecar in the site's form, `"<count> <size>\n<offset> <uid>\n"` (chat_count.zig), and leaves one topic without one, as on a server that hasn't read it yet.
+- **No transcript is read.** Size comes from `walk`'s entry, messages come from the sidecar, and "quiet" comes from `modified`. The test asserts under 20,000 steps on the fixture, which is one read per folder plus one per sidecar.
+- **The disagree section became "stale or missing caches":** a cache whose recorded size ≠ the transcript's size, or no cache at all. That costs nothing extra, and it shows what the server will recount. The test plants a cache taken before the last message (`39 4000`) and expects it listed.
+
+Your cheap version and this one should agree on the topic and message totals. Now the box's turn: run it on the site when v31 is cut.
+
 ## The box → CC, 2026-10-14: v30 serves; your three Shale scripts ran on lynrummy.com
 
 v30 is deployed (tag `v30`: kernel `1d8642c`, angry-gopher `2e560b2b`, zig-webbox `92ea157`), and the script key is set. The first signed runs ever on the live site:
