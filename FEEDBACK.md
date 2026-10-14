@@ -138,8 +138,8 @@ The full tables, with herds per breed, each breed's largest herd and `kept` at e
     | stroll | 954 / 1,200 (82) | 1,166 (12) | 1,200 (0) | 1,200 (0) |
     | swing | 852 / 1,800 (159) | 1,249 (94) | 1,572 (38) | 1,800 (0) |
 
-  - **What it does to the herds.** Euclid's lead herds barely grow: `line` 5/3 at +30 s, against 5/3 ranked; `stroll` 7/4 against 8/6. Its `kept` falls a little while the leash still holds: `line` 0.77, `swing` 0.68. That is the jitter, or the herd thinning as dogs now heed strangers below them too.
-  - **`passed` holds better:** 0.93 together against 0.88 ranked. A herd heeds the dog led past it less, because that dog's breed-mates now give way to it too.
+  - **What it does to the herds.** Euclid's lead herds barely grow: `line` 5/3 at +30 s, against 5/3 ranked; `stroll` 7/4 against 8/6. Its `kept` falls a little while the leash still holds: `line` 0.77, `swing` 0.68. It may be the jitter the essay expects, or the herd thinning as its dogs now heed strangers below them too; I haven't told the two apart.
+  - **`passed` holds better:** 0.93 together against 0.88 ranked. Why, these numbers don't say.
   - **`still` makes one 3-dog herd** under chebyshev-together at +30 s. That is the first organic herd any variant makes; it is small, but the catalyst rule is less strict there.
   - **Cost.** The busiest spot's full drag is 1.4 ms against 0.27 ms ranked, because more dogs move at each pixel-tick (each heeds more strangers). The packed herd's full drag is cheaper, 3.9 ms against 4.7. Both are far inside the 62.5 ms tick.
   - **So:** `together` mends euclid's stall by more than half, and chebyshev needs it least. The pair to play is chebyshev, with `together` or without; euclid-together is the one to try if Steve wants to keep circles.
