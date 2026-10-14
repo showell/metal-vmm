@@ -126,6 +126,11 @@ printf 'pristine volume' > "$T/site.img"
 #           lost, and a FAIL that is no read's (the volume not the one
 #           served): FAIL. 68: 65's stop, no volume fault: FAIL. 69: 60's
 #           stop, but a client was answered first: FAIL.
+#   70-73   a lying cache, no cut, and a disk fsck finds one cluster leaked
+#           (metal-vmm QUEUE 203(e): a give-back the disk refused beside
+#           VOLUME_CACHE=lie). 70: the boot disk, the kernel counted 1:
+#           allowed. 71: the same, the kernel counted 0: FAIL. 72: the
+#           attached volume, counted 1: allowed. 73: counted 0: FAIL.
 # A run with PEER_REQUEST (a shape's) and no seed above has for its page the
 # request file's own bytes, so each shape's page is its own.
 # With FAKE_UNHURT_NO_PAGE set, the unhurt run's page is not written either.
@@ -136,7 +141,7 @@ s="${FAULT_SEED:-}"
 L='"location":{"class":"tcp","function":"f","file":"tcp.zig","begin_line":1,"begin_column":1}'
 ev() { echo "{\"antithesis_assert\":{\"hit\":$3,\"must_hit\":true,\"assert_type\":\"x\",\"display_type\":\"$1\",\"message\":\"$2\",\"condition\":$4,\"id\":\"$2\",$L}}" >> "$COVERAGE_OUT"; }
 knobs="none"
-case "$s" in 23 | 25 | 26) knobs="DISK_CACHE=lie DISK_CUT_AFTER=2" ;; 27) knobs="WIRE_EAT=3" ;; 28) knobs="PEER_RESET_AT=500" ;; 29) knobs="DISK_REFUSE=4" ;; 30) knobs="WIRE_EAT=3" ;; 31 | 32 | 33) knobs="DISK_CUT_AFTER=2" ;; 36 | 48) knobs="VOLUME_CACHE=lie" ;; 46) knobs="PEER_RESET_AT=500" ;; 39 | 42 | 50 | 51) knobs="PEER_RESET_AT=500" ;; 40) knobs="PEER_VANISH_AFTER=3" ;; 53 | 54 | 55) knobs="DISK_ROT=4093,20" ;; 52) knobs="DISK_CUT_AFTER=2" ;; 45) knobs="DISK_REFUSE=4" ;; 58) knobs="VOLUME_READ_ONLY_AT=3" ;; 60 | 62 | 64 | 65 | 66 | 67 | 69) knobs="VOLUME_GONE_AT=9" ;; 63) knobs="VOLUME_CUT_AFTER=1" ;; 24) knobs="DISK_CACHE=lie" ;; 18 | 19) knobs="WIRE_EAT=3" ;; 16) knobs="PEER_RESET_AT=500" ;; 17) knobs="WIRE_EAT=17" ;; 3) knobs="PEER_RESET_AT=500" ;; 12) knobs="DISK_REFUSE=4" ;; 13) knobs="PEER_RESET_AT=500" ;; 14) knobs="DISK_REFUSE=4" ;; 15) knobs="PEER_RESET_AT=500" ;; 4) knobs="DISK_WRITES_ONLY=1" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
+case "$s" in 70 | 71) knobs="DISK_CACHE=lie" ;; 72 | 73) knobs="VOLUME_CACHE=lie" ;; 23 | 25 | 26) knobs="DISK_CACHE=lie DISK_CUT_AFTER=2" ;; 27) knobs="WIRE_EAT=3" ;; 28) knobs="PEER_RESET_AT=500" ;; 29) knobs="DISK_REFUSE=4" ;; 30) knobs="WIRE_EAT=3" ;; 31 | 32 | 33) knobs="DISK_CUT_AFTER=2" ;; 36 | 48) knobs="VOLUME_CACHE=lie" ;; 46) knobs="PEER_RESET_AT=500" ;; 39 | 42 | 50 | 51) knobs="PEER_RESET_AT=500" ;; 40) knobs="PEER_VANISH_AFTER=3" ;; 53 | 54 | 55) knobs="DISK_ROT=4093,20" ;; 52) knobs="DISK_CUT_AFTER=2" ;; 45) knobs="DISK_REFUSE=4" ;; 58) knobs="VOLUME_READ_ONLY_AT=3" ;; 60 | 62 | 64 | 65 | 66 | 67 | 69) knobs="VOLUME_GONE_AT=9" ;; 63) knobs="VOLUME_CUT_AFTER=1" ;; 24) knobs="DISK_CACHE=lie" ;; 18 | 19) knobs="WIRE_EAT=3" ;; 16) knobs="PEER_RESET_AT=500" ;; 17) knobs="WIRE_EAT=17" ;; 3) knobs="PEER_RESET_AT=500" ;; 12) knobs="DISK_REFUSE=4" ;; 13) knobs="PEER_RESET_AT=500" ;; 14) knobs="DISK_REFUSE=4" ;; 15) knobs="PEER_RESET_AT=500" ;; 4) knobs="DISK_WRITES_ONLY=1" ;; "") ;; *) knobs="WIRE_EAT=$s" ;; esac
 [ -n "$s" ] && echo "metal-vmm: FAULT_SEED=$s is $knobs" >&2
 # What fired, as metal-vmm says it (reports.zig `fired`): every fault the
 # seed drew, but for 28 and 29, whose faults never came.
@@ -176,6 +181,8 @@ case "$s" in
     lost=3; [ "$s" != 26 ] || lost=0
     [ "$s" = 24 ] || echo "metal-vmm: disk: a write cache, write-back, though the guest did not negotiate FLUSH (DISK_CACHE=lie); 4 writes held, 0 flushes; the power cut lost $lost sectors never flushed" >&2 ;;
   28) page=""; status=0 ;;
+  70 | 71) printf 'LEAK1' > "$img"; echo "  the boot disk: $(( s == 70 )) clusters left a counted leak, 0 long-name parts left orphaned, 0 FAT copy writes failed (1 cleanups failed)" ;;
+  72 | 73) printf 'LEAK1' > "$VOLUME"; echo "  the volume: $(( s == 72 )) clusters left a counted leak, 0 long-name parts left orphaned, 0 FAT copy writes failed (1 cleanups failed)" ;;
   31) printf 'STOPLEFT LOSTFILE' > "$img"; echo "metal-vmm: the power was cut after the guest's write 2 (sector 9, 1 sectors)" >&2 ;;
   33) [ -z "${VOLUME:-}" ] || printf 'STOPLEFT' > "$VOLUME"; echo "metal-vmm: the power was cut after the guest's write 2 (sector 9, 1 sectors)" >&2 ;;
   52) printf 'LOSTFILE' > "$img"; echo "metal-vmm: the power was cut after the guest's write 2 (sector 9, 1 sectors)" >&2 ;;
@@ -249,6 +256,7 @@ EOF
 cat > "$T/sound" <<'EOF'
 #!/bin/bash
 if grep -q UNSOUND "$1"; then echo "  1 complaint"; exit 1; fi
+if grep -q LEAK1 "$1"; then echo "  1 files, 3/100 clusters"; echo "  Reclaimed 1 unused cluster (512 bytes)."; exit 1; fi
 if grep -q STOPLEFT "$1" && [ -n "${STOP_LEAVES:-}" ]; then echo "  sound but for what a stop leaves (2)"; exit 0; fi
 if grep -q STOPLEFT "$1"; then echo "  2 complaints"; exit 1; fi
 echo "  sound"
@@ -363,6 +371,11 @@ expect "seed 23" '^23 .*differs (allowed: DISK_CACHE=lie (the volume left unsoun
 expect "seed 24" '^24 .*FAIL: the volume is not sound' "$lied"
 expect "seed 25" '^25 .*FAIL: not the page (status 200)' "$lied"
 expect "seed 26" '^26 .*FAIL: the volume is not sound' "$lied"
+leaked=$(VOLUME_SITE="$T/site.img" VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 70 73 2>&1)
+expect "seed 70" '^70 .*allowed: a leak the kernel counted (the boot disk: 1 of 1 clusters' "$leaked"
+expect "seed 71" '^71 .*FAIL: the volume is not sound' "$leaked"
+expect "seed 72" '^72 .*allowed: a leak the kernel counted (the attached volume: 1 of 1 clusters' "$leaked"
+expect "seed 73" '^73 .*FAIL: the attached volume is not sound' "$leaked"
 limit2=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 27 27 2>&1)
 unfired=$(VMM="$T/vmm" SOUND="$T/sound" KERNEL="$T/kernel.elf" SITE="$T/site.img" "$HERE/sweep.sh" 28 29 2>&1)
 expect "seed 28" '^28 .*FAIL: not the page (status 0)' "$unfired"

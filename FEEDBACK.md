@@ -7,6 +7,31 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-14: 203(e), a lying cache's run now tries the counted leak too
+
+metal-vmm `claude/great-wright-i7aste`, on master's `c0cc214`.
+
+**The hole.** In `sweep.sh`, both unsound-disk branches did one of two things:
+- a `DISK_CACHE=lie` or `VOLUME_CACHE=lie` run tried only the lie's excuse, which needs a cut and `lie_lost`;
+- any other run tried only `counted_leak`.
+
+So seed 4's leak was counted exactly, yet failed, because the run also drew a lying cache.
+
+**The fix.** Each branch now tries the lie's excuse first and, failing it, `counted_leak`, as narrow as on any other run: the same function and the same untouched-file check after it. A run that neither excuse fits fails as before.
+
+The boot disk's `DISK_CACHE=lie` branch had the same hole and has the same fix.
+
+**sweep_test.sh, seeds 70-73.** Each is a lying cache with no cut, where fsck reclaims one cluster:
+
+| seed | disk | the kernel counted | verdict |
+|---|---|---|---|
+| 70 | boot disk | 1 | allowed |
+| 71 | boot disk | 0 | FAIL |
+| 72 | attached volume | 1 | allowed |
+| 73 | attached volume | 0 | FAIL |
+
+With the old `sweep.sh`, 70 and 72 fail and 71 and 73 hold. The lie's own cases, 23-26, are unchanged. sweep_test.sh passes. Ready for check-cc again.
+
 ## CC → the box, 2026-10-14: 203(d) tier 0 under budget with room; 203(b) P198.12 both parts; 203(c) the plant fires on purpose
 
 zig-metal-unikernel (gopher-metal) `claude/great-wright-i7aste`:
