@@ -1971,6 +1971,27 @@ Steve builds Dog Park by playing it on the box's :9103. The box redeploys there;
 
     **Order:** 198.12 (v30 waits on it), then 200, then 201 and 202 for the overnight part of your session. If 200 blocks on anything, go on to 201.
 
+203. **The box's look at 198.12-202 (2026-10-14): all merged to master; one judge gap, found past seed 300.**
+    - **Merged:** zig-webbox `bad92d1`, angry-gopher `2e560b2b`, zig-metal-unikernel `e28f4b3`, metal-vmm `49d424c`; dog-park `a8a9935` (live on the box's :9103; Steve: "the game looks good"; ReleaseSafe stays, Steve's call). check-cc: every shape's unhurt run, seeds 1-10, and the plants all held, except that `counted_leak_short` never fired in seeds 1-300. Over seeds 301-900 it fired once (seed 714) and was caught: rare, not dead.
+    - **On top, the box's fixes from a cold review of 200** (each test seen red with its fix removed alone; read them, and say if you disagree):
+      - `storeChange` reserves its effects entry before asking the store, so a change on the disk is always in `effects` (a sweep over every arena limit);
+      - `lastSequence` answers `NoSequenceFile`, never 0 (refused, `sequence_unreadable`); `script_route.installKey` is the one way a key is set: the sequence first, raised to the clock's seconds and never lowered, then the config (`/admin/script-key` uses it; `script_story.sh` writes the file beside its key);
+      - `handle` refuses (`bad_config`) when the auth and data roots nest, by their spellings. Symlinks inside a Linux data root are not checked; metal has none.
+      - Steve kept your 500 for a run whose end went unlogged.
+      - The review's nits, yours to take or leave: a reply cut off silently when `reply_buf` fills (100 changes to long paths after a full output); refusals leave no trace and failed bearers on this route aren't throttled; `shale_sign` `minutes * 60` overflows on a huge argument, `keygen` leaves a partial file if the write fails; `max_ahead_s`'s doc says minutes but allows 24 h; `app_start.refresh` builds a search index even when none was built yet.
+    - **(a) THE GAP: a volume lost during boot fails a clean kernel.** Seeds 301-900 (`PLANTS=counted_leak_short FIRST=301 LAST=900 ./plants.sh`), clean kernel e28f4b3: **9 seeds fail**, 326 419 451 593 605 615 708 892 894, every one `VOLUME_GONE_AT` (4-37) or `VOLUME_CUT_AFTER` (1-45) landing before the mount finished. The kernel does what 198.3 says (a disk dead at boot fails the mount, which halts): "FAIL: the FAT could not be held in memory", "a disk's partition (table) cannot be read", "the volume controller or its disk would not come up"; exit 1 against the unhurt run's 0. The judge has no excuse for it. Seeds 1-300 never drew a loss that early (their smallest `VOLUME_GONE_AT` is 119), so no sweep we run has seen it. Please:
+      - add the excuse, as narrow as the others: a volume fault fired before serving began, the boot's FAIL line names the volume, no answer given, and nothing else broken; a plant or a test shows a boot stop with no volume fault still fails;
+      - say whether a boot disk fault needs the same (seed 326 also had DISK_ROT);
+      - widen the seeds the gates and long.sh sweep, or draw the early losses on purpose, so a whole class doesn't hide past seed 300 again.
+      - The failed seeds' files are on the box (`~/runs/plant-rerun/out/clean-failed/`); ask in FEEDBACK for any log.
+    - **(b) P198.12, both parts** (`aliasFor` linear in a directory of similar names; the FAT32 mount's count not a call per entry): taken, on the box's call (zero bugs; a big chat topic would feel the first on prod). Each with its numbers, and the volume's tests and plants as always.
+    - **(c) A rarer plant:** `counted_leak_short` fires in about 1 run in 300-600. Make it fire more often (a shape or a fault that fails a give-back on purpose), so the standing 300-seed check sees it every time.
+
+204. **Steve's (2026-10-14): Shale, first use, and v31's features.** Write in FEEDBACK, no code:
+    - **(a) Two or three scripts to run on lynrummy.com right after v30 is installed.** The main goal is to try the Shale experience itself: sign, send, read the reply, and judge the reply's layout and the effects log. Each should also report something useful about the site (topics by size or message count, the biggest files, what the data folder holds and how it has grown, anything stale). Read-only first. If one changes anything, make it small, say what it changes, and make it easy to check afterwards. Give each script in full, what it should print, and the box's command to sign and send it.
+    - **(b) Shale features for v31,** ranked, each with the script it makes easier. Steve's example: counting a file's lines. Today it's `#split(read(p), "\n")`, which answers 4 for a three-line file (the trailing newline leaves an empty last piece), and `count()` refuses a list. A `lines()` builtin, or `split` with a "drop the last empty" rule, would fix it. Think about what an operator reaching for a script actually wants: line and word counts, a date from `now()` and file times, sizes in human units, a sort by key, a simple pattern match, formatting a table, a dry-run flag.
+    - **Order:** 203(a), then 204 (it's short), then 203(b) and (c).
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
