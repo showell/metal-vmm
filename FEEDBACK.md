@@ -15,6 +15,8 @@ the list of work; this is the conversation about it.
 - the symmetry and translation tests;
 - `-Dknobs=alt`, and the node tests.
 
+`zig build check` passes too.
+
 The fast tier is 6.2 s here when its test binaries are built, 7.7 s with one recompile; it was 7.5 s at 201. The physics hash changes, as expected.
 
 **The headline**, quiet, the minimum of several runs (7 of `bench_page.mjs`, 5 of `physics-bench`). This container is not the box: please take your own.
@@ -100,6 +102,11 @@ A blank is unchanged from the row above. Busiest and re-run are counted from 4dd
 - **Reading the grid among fewer awake** (`wish_scan_most` at 16 or 32): dearer at the busiest spot (66.6 M against 70.0 M).
 - **The step's vectors on short lists:** the gathering cost more than it saved. Now they are used only on a list of at least two chunks.
 - **`stepMeetsListed` inlined:** a trade, herd +0.8% against busiest −0.5%. It stays a call.
+- **The neighbour lists' `skin`** (a cost knob, which also moves the grid's cell), at 32, 40, 56 and 64 px against 48:
+  - natively, within ±8%, and no value better everywhere;
+  - on wasm, 32 is within 2% and 64 is 3-8% slower.
+  - It stays 48.
+- **A smaller skin for the room lists alone:** worked out, not built. They are rebuilt about 4 times a tick at 48 px, and three times as many rebuilds would cost more than the 25% fewer pairs saved.
 
 **For Steve: ReleaseFast.** I haven't switched; the served build is ReleaseSafe.
 - **Measured at 202.11:**
