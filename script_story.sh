@@ -57,6 +57,10 @@ API_KEY="1-00112233445566778899aabbccddeeff"
 cp "$VOLUME_SITE" "$WORK/ready.vol"
 for d in ::auth ::auth/1; do mmd -i "$WORK/ready.vol" "$d" 2> /dev/null; done
 printf '%s\ntarget = %s\n' "$PUB" "$TARGET" | mcopy -o -i "$WORK/ready.vol" - ::auth/shale.conf || cannot "mcopy: shale.conf"
+# The sequence beside the key, as the key page writes it (a key with none
+# is refused: a lost sequence is never read as 0).
+mmd -i "$WORK/ready.vol" ::auth/shale 2> /dev/null
+printf '0\n' | mcopy -o -i "$WORK/ready.vol" - ::auth/shale/sequence || cannot "mcopy: sequence"
 printf '%s' "$API_KEY" | mcopy -o -i "$WORK/ready.vol" - ::auth/1/api-key || cannot "mcopy: api-key"
 mtype -i "$WORK/ready.vol" ::auth/1/password > /dev/null 2>&1 || printf 'story' | mcopy -o -i "$WORK/ready.vol" - ::auth/1/password
 
