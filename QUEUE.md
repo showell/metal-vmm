@@ -2004,6 +2004,20 @@ Steve builds Dog Park by playing it on the box's :9103. The box redeploys there;
 
     Your 17.5 s for the unit binary is 25.0 here: the box is about 1.4 times slower, so the total sits at 72 of 75 too. The budgets are judged on the box, so they have to hold here with room. The box won't move them: cut the unit binary (or split it, as you did the FAT tests) until both budgets hold with a margin on these numbers, and say which seeds or sizes moved and where they still run in full. If you think the budget itself should be the box's number and not a cut, argue it in FEEDBACK and Steve decides.
 
+205. **Dog Park: herds you can measure, and a progression toward simpler rules (Steve, 2026-10-14).** github.com/showell/dog-park, `main` (`a8a9935` + your 201-202). Read the essay first: https://github.com/showell/essay-repl-server/blob/master/notes/dog-park-neighbours.md (its last three sections are Steve's answers, a herd measure, and the progression). Steve's points, verbatim in spirit:
+    - **Rank order is a misfeature:** dogs look paralysed by an alpha/beta status nobody can see. You may relax it; a dog chain must still follow the leashed dog, not clump into one mass.
+    - **The leashed dog is the catalyst:** herds shouldn't form on their own. Once formed, a herd should be fairly stable.
+    - **Hidden physics is bad game design** unless it can be discovered: whatever decides who follows whom should be visible or plainly inferable.
+    - **Try Chebyshev distance.**
+    - **Measure herd length.** Steve sees herds at a glance but has no definition; the essay proposes one (the same-breed graph within the band plus slack, its components, length as the diameter in hops, chain-or-clump, stability after let-go). Refine it.
+
+    **This chunk:**
+    - (a) **The herd numbers** (a bench or tool mode, not the fast tier) and **a few fixed play scripts** (recorded drags) that every variant is judged on.
+    - (b) **`-Dmetric=euclid|chebyshev`** (Manhattan only if it's free), as a build knob with today's rules otherwise unchanged; numbers for both; the properties tests under both. The box deploys the variant for Steve to play.
+    - (c) **Your refinement of steps 3-6** in FEEDBACK (everyone thinks at once; follow upstream to a visible head; bounded attention; the to-do-set speed pass), with what the numbers from (a) suggest. Build step 3 behind a knob if (a) and (b) leave time.
+    - **Rules as in 201-202:** `zig build slow` before every commit; a rule change updates `physics_reference.zig` in the same commit; tests state properties; the fast tier stays under about 7 s.
+    - **Order:** after 203(d), 203(a) and 204. Before 203(b)-(c) if it's the overnight part of your session.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
