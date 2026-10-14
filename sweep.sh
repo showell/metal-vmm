@@ -507,6 +507,46 @@ lie_lost() {
 # changed <image>: whether its modification time moved since it was copied.
 changed() { [ "$(stat -c %y "$1")" != "$(cat "$1.copied")" ]; }
 
+# **A VOLUME LOST BEFORE THE MACHINE SERVED** (metal-vmm QUEUE 203(a)):
+# a disk dead at boot fails the mount, which halts (198.3), and no
+# client is answered. boot_stop_of <run> <fired> names the fault and the
+# stop when every one of these holds, else nothing:
+#   - its last FAIL is one of boot's, all before the machine serves: the
+#     mount's read failures (the controller or its disk would not come up,
+#     the partition table or the partition cannot be read, the FAT could
+#     not be held in memory), or the application's setup failing, which
+#     reads the volume after "listening on port 80" and before the first
+#     request;
+#   - the stop is the volume's: the controller's own line, or a FAIL after
+#     the volume came up ("  a volume: SCSI target"), which is after the
+#     boot disk's mount;
+#   - a fault that loses the volume fired (VOLUME_GONE_AT, VOLUME_CUT_AFTER);
+#     the run ended at the FAIL, so it fired before.
+# A boot disk's stop has no excuse: no fault drawn for it can stop a boot
+# (DISK_REFUSE refuses one request and boot tries each read 3 times;
+# DISK_CUT_AFTER cuts after a write; DISK_BAD_SECTOR is never drawn), so
+# one is a bug. It excuses the exit and a client's missing answer, and
+# nothing else: what the run broke and how it left the disks are judged
+# as ever.
+boot_stop_of() {
+  local name="$1" fired="$2" out="$WORK/$1.out" fail at up f by=""
+  fail=$(grep -n '^FAIL: ' "$out" | tail -1)
+  [ -n "$fail" ] || return 0
+  at="${fail%%:*}"
+  fail="${fail#*:FAIL: }"
+  case "$fail" in
+    "the volume controller or its disk would not come up") ;;
+    "a disk's partition table cannot be read" | "a disk's partition cannot be read" | "the FAT could not be held in memory" | "the host contract's setup (app.site.start) failed")
+      up=$(grep -n '^  a volume: SCSI target' "$out" | head -1)
+      [ -n "$up" ] && [ "${up%%:*}" -lt "$at" ] || return 0 ;;
+    *) return 0 ;;
+  esac
+  for f in VOLUME_GONE_AT VOLUME_CUT_AFTER; do
+    case "$fired" in *" $f "*) by="$by${by:+, }$f" ;; esac
+  done
+  [ -z "$by" ] || echo "$by, before the machine served (the boot stopped: $fail)"
+}
+
 # answer_excuse <run> <k> <status> <unhurt status> <page> <unhurt page>
 # <fired>: what excuses client k's answer differing from the same client's
 # unhurt one, comma-separated, or nothing.
@@ -546,9 +586,15 @@ answer_excuse() {
       [ "$f" != PEER_RESET_AT ] || [ "$k" = 1 ] || continue
       case "$fired" in *" $f "*) excuse="$excuse${excuse:+, }$f" ;; esac
     done
-    local gone
+    local gone stop
     gone=$(peer_end_of "$name")
     [ -z "$gone" ] || excuse="$excuse${excuse:+, }the peer $gone"
+    stop=$(boot_stop_of "$name" "$fired")
+    # A fault already named above, not named again.
+    for f in VOLUME_GONE_AT VOLUME_CUT_AFTER; do
+      case ", $excuse," in *", $f,"*) stop="${stop//$f, /}" ;; esac
+    done
+    [ -z "$stop" ] || excuse="$excuse${excuse:+, }$stop"
     # The guest's own word that its stop cut a response: a run with a
     # request limit (the site volume serves one) ends 2 s after it,
     # wherever the client is; a machine with no limit never stops.
@@ -593,6 +639,11 @@ verdict() {
       { [ -z "$status" ] || [ "$status" = 0 ]; } &&
       { case "$fired" in *" PEER_RESET_AT "* | *" PEER_VANISH_AFTER "*) true ;; *) [ -n "$(peer_end_of "$name")" ] ;; esac; }; then
       excuse="$excuse${excuse:+, }an idle end after the client left"
+    # A boot the volume's loss stopped (boot_stop_of) exits 1 too, when no
+    # client was answered.
+    elif [ "$exit" = 1 ] && { [ -z "$status" ] || [ "$status" = 0 ]; } &&
+      ! grep -qE '^peer [0-9]+: [1-9]' "$WORK/$name.out" && [ -n "$(boot_stop_of "$name" "$fired")" ]; then
+      excuse="$excuse${excuse:+, }the boot stopped on the volume's loss"
     else
       why="$why, exit $exit (unhurt: $(cat "$WORK/$u.exit"))"
     fi

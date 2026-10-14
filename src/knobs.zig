@@ -57,7 +57,8 @@
 //! turns the cache on again, which zig-metal-unikernel turns off again since
 //! 2026-10-09, metal-vmm QUEUE 119), and in one seed in eight one of
 //! `VOLUME_GONE_AT`, `VOLUME_READ_ONLY_AT` and `VOLUME_SHORT_AT` (a write
-//! refused, QUEUE 135); it never draws `VOLUME_LATENCY_US`,
+//! refused, QUEUE 135), and in one seed in sixteen that drew none of those,
+//! `VOLUME_GONE_AT` in the first 60 commands (the boot's, QUEUE 203(a)); it never draws `VOLUME_LATENCY_US`,
 //! `VOLUME_SYNC_US`, `VOLUME_CUT_AT_EXIT`, `VOLUME_SECTOR`,
 //! `VOLUME_MODE_PAGES`, `VOLUME_MAX_TRANSFER` (a disk that takes less in a
 //! command; one smaller than a cluster is refused at mount, by design),
@@ -204,6 +205,16 @@ pub const Knobs = struct {
             };
             self.number(which, r.intRangeAtMost(u64, 1, 250));
         }
+        // **AND A VOLUME LOST AT BOOT, ON PURPOSE** (metal-vmm QUEUE
+        // 203(a)): drawn as above, 1 seed in 24 loses the volume, and only
+        // about 1 in 7 of those before the mount is done (commands 1-37 of
+        // 250), so seeds 1-300 drew none, and the boot's stop, a class of
+        // its own, went unjudged until seed 326. In 1 seed in 16 that drew
+        // none of the three, the volume goes in its first 60 commands: the
+        // boot's reads, and the first requests'. Last, so every draw above
+        // is what it was.
+        const lost = self.get("VOLUME_GONE_AT") != null or self.get("VOLUME_READ_ONLY_AT") != null or self.get("VOLUME_SHORT_AT") != null;
+        if (!lost and chance(r, 16)) self.number(index("VOLUME_GONE_AT"), r.intRangeAtMost(u64, 1, 60));
     }
 
     fn word(self: *Knobs, i: usize, text: []const u8) void {
@@ -424,6 +435,22 @@ test "no seed and no knobs: nothing is turned" {
     var buf: [64]u8 = undefined;
     try testing.expectEqualStrings("none", k.format(&buf));
     for (names) |n| try testing.expect(k.get(n) == null);
+}
+
+test "seeds 1-300 lose the volume during boot, so every 300-seed sweep judges the boot's stop (metal-vmm QUEUE 203(a))" {
+    // The mount is done within about the first 40 commands to the volume;
+    // the box's failed seeds lost it at 4-37 (VOLUME_GONE_AT). Before the
+    // draw on purpose, seeds 1-300 lost it no earlier than 119; with it,
+    // 12 of them by 37.
+    var early: u32 = 0;
+    for (1..301) |seed| {
+        var with = Knobs.fromSeed(seed);
+        with.withVolume(seed);
+        if (with.get("VOLUME_GONE_AT")) |v| if ((std.fmt.parseInt(u64, v, 10) catch unreachable) <= 37) {
+            early += 1;
+        };
+    }
+    try testing.expect(early >= 8);
 }
 
 test "a volume's knobs are drawn only with a volume, on dice of their own" {
