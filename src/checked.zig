@@ -102,6 +102,7 @@ pub const table = [_]Setting{
     .{ .name = "VOLUME_RESET_AT", .kind = any_number, .needs_volume = true },
     .{ .name = "VOLUME_GONE_AT", .kind = any_number, .needs_volume = true },
     .{ .name = "VOLUME_READ_ONLY_AT", .kind = any_number, .needs_volume = true },
+    .{ .name = "VOLUME_READ_ONLY_AT_WRITE", .kind = at_least_one, .needs_volume = true },
     .{ .name = "VOLUME_SYNC_US", .kind = micros, .needs_volume = true },
     .{ .name = "VOLUME_CUT_AT_EXIT", .kind = .flag, .needs_volume = true },
     .{ .name = "VOLUME_CACHE_KEEPS", .kind = any_number, .needs_volume = true },

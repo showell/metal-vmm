@@ -459,7 +459,9 @@ pub fn fired(peer: *const wire.Peer, drive: *const faults.Drive, volume: ?*const
         .{ .name = "VOLUME_CUT_AFTER", .turned = if (v) |x| x.power.cut_after != null else false, .fired = if (v) |x| x.power.cut != null else false },
         .{ .name = "VOLUME_SHORT_AT", .turned = if (v) |x| x.short_at != null else false, .fired = if (v) |x| x.shortened > 0 else false },
         .{ .name = "VOLUME_GONE_AT", .turned = if (v) |x| x.gone_at != null else false, .fired = if (v) |x| x.gone_answered > 0 else false },
-        .{ .name = "VOLUME_READ_ONLY_AT", .turned = if (v) |x| x.read_only_at != null else false, .fired = if (v) |x| x.protected > 0 else false },
+        // VOLUME_READ_ONLY_AT_WRITE is this fault, its onset at a write:
+        // it fires as VOLUME_READ_ONLY_AT, and excuses what that does.
+        .{ .name = "VOLUME_READ_ONLY_AT", .turned = if (v) |x| x.read_only_at != null or x.read_only_at_write != null else false, .fired = if (v) |x| x.protected > 0 else false },
         .{ .name = "VOLUME_SYNC_FAIL", .turned = if (v) |x| x.sync_fail_at != null else false, .fired = if (v) |x| x.sync_failed > 0 else false },
     };
     var turned = false;

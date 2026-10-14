@@ -7,6 +7,628 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-14: 203(d) tier 0 under budget with room; 203(b) P198.12 both parts; 203(c) the plant fires on purpose
+
+zig-metal-unikernel (gopher-metal) `claude/great-wright-i7aste`:
+- `2dfafd3` and `e0c3492`: 203(d);
+- `c34024d`: 203(b).
+
+metal-vmm: `8cac224`, 203(c).
+
+### 203(d): tier 0, 52 s → 36 s of CPU here
+
+Measured with `-Dtest-cpu-dir` and `tools/test_budget.py`, here. The box column is these times × 1.43, your 25.0 / 17.5:
+
+| binary | before | now | the box, estimated | budget |
+|---|---|---|---|---|
+| src/unit_tests.zig | 18.7 s | 12.4 s | about 18 s | 25 |
+| disk_fat_lies_test | 9.5 s | 9.4 s | about 13 s | 25 |
+| disk_fat_test | 13.7 s | 6.5 s | about 9 s | 25 |
+| disk_fat_faults_test | 6.9 s | 6.1 s | about 9 s | 25 |
+| all 11 | 52 s | 36 s | about 51 s | 75 |
+
+Repeated runs here move by about 1 s on the unit binary. The margins are about 7 s on the largest binary and about 24 s on the total.
+
+**What moved, and where it still runs in full.**
+
+- **fat_sim:** one seed in tier 0, from several. `zig build properties` still sweeps 20, unchanged.
+- **store_sim:** one seed in tier 0, seed 5, the one that fills the volume (it kills S4 in MUTATION.md). `zig build properties` still sweeps 1,000.
+- **tcp_sim's "revival changes nothing":** 5 seeds, from more.
+- **The FAT32 uncached configuration** of the fault and lie sweeps is skipped in tier 0. Under `-Dfault-sweep-full` (long.sh) it runs as before.
+- **"A tree removes whole … past 4,096 entries"** removes 600 entries in tier 0 and 4,100 under `-Dfault-sweep-full`. The test is quadratic, because `removeTree` re-lists each round, and the bound it guards is the old 4,096-round one. long.sh now runs `disk_fat_test` with `-Dfault-sweep-full` too (its own lap, `fat-long`).
+- **serial.zig's `captureForTest`** makes one copy a call, not one a byte. A test holds it to a byte-at-a-time model.
+- **No test was cut for speed, but one was made cheaper:** tcp_sim's full-table seed, 2.8 s → 0.35 s.
+  - 97% of its time (callgrind) was `Sim.slotOf`, the simulator's own lookup, called for every client against every slot on every frame.
+  - `slotsOf` finds every client's slot in one pass, since a crowd's client i has port 40000 + i.
+  - A new test holds every 16th call to the old per-client lookup.
+  - This also cuts `zig build properties`' full-table sweeps.
+- **Tried and reverted:** a smaller middle of `nextStop`. It saved little and broke a floor test.
+
+**The budget stays as it is.** I don't argue for moving it: the cuts hold with room on your numbers.
+
+**One finding, not mine:** `zig build properties` ends with "78 properties not satisfied, 0 of them broken invariants". Master `e28f4b3` does the same, with the same 78 MISS lines (I diffed them). They are Reachables only the unit tests reach (mount refusals, FAT weighing, rename undo, …), so the step fails on its own. If properties is meant to pass alone, the report should take the unit tests' coverage as well; if not, say so and I'll leave it.
+
+### 203(b): P198.12, both parts
+
+**(1) `aliasFor` in one listing** (`disk_fat_dir.zig`).
+- **The change.** It now marks every `~N` its name's aliases already hold in a single listing, then takes the first free one.
+  - For each `~` in an entry's 8-character part, it reads the number after it and builds that candidate (`aliasCandidate`, which is the old loop's body).
+  - It marks the number only if the candidate equals the entry exactly. So it is the old answer by construction: a name's own characters may hold a `~` too.
+- **Numbers.** 300 `session-NNNN.md` names in one directory, written on an uncached disk, cost 60,356 disk requests, against 3,429,806 before (57 times fewer). The whole `disk_fat_test` binary ran about 6 s faster here with the change than without it.
+- **Tests:**
+  - **Agreement with the old probing:** over directories with holes, other bases and extensions, a name that is itself an alias, and names holding a `~`. One round has 130 names alike, so its first free alias is past `~100`.
+  - **Cost:** an alias among 300 alike costs exactly the reads of one alone in its base.
+- **Mutations that turned the tests red:**
+  - ignoring `~10` and up: the agreement test, the cost test and the existing "every alias taken" test;
+  - ignoring `~100` and up: all three, once the 130-name round was in.
+- **One mutation that can't matter:** not scanning position 7 of the 8-character part. A tail is at least two characters, so a `~` never sits at position 7.
+
+**(2) The FAT's free count, a vector at a time** (`disk_fat.zig`).
+- **The change.** `deriveFrom` counts a run of FAT sectors through `freeEntries`, which takes 16 entries at a time (u16 or u32 lanes, masked with FAT32's 28 bits). It falls back to one at a time on a big-endian host, and at the ends.
+- **What it saved.** `disk_fat_faults_test` went from 7.0 s to 6.1 s of CPU, and `disk_fat_lies_test` barely moved: the mount's count was a smaller share than 198.12 thought.
+- **The test** holds it to `entryIn`'s count over both kinds, random bounds and FAT32 free entries with the reserved top bits set. Mutations that turned it red: dropping the mask; taking the vector's first free as its first lane.
+
+**Not done here:** a plants run. plants.sh needs KVM, which this container doesn't have. Neither change touches what a plant plants, but please run it as always before merging.
+
+### 203(c): `counted_leak_short` fires on purpose
+
+**Why it was rare.** The plant fires only in `notGivenBack`: an operation's write failed after it allocated, and its give-back's write failed too.
+- With the kernel's held FAT, that needs the volume to stop taking writes between the allocation and the give-back.
+- The only seed seen, 714, drew `VOLUME_READ_ONLY_AT=126` (I printed its knobs).
+- `VOLUME_READ_ONLY_AT` counts every SCSI command, the boot's reads included. So its onset seldom lands inside an operation that allocates: about 1 in 300 to 600 seeds.
+
+**The new knob:** `VOLUME_READ_ONLY_AT_WRITE=n`, read-only from the command that is the nth WRITE.
+- **It always lands inside an operation that writes,** whether that write is an allocation's FAT link, its data or its entry. A refused link or data write leaves clusters to give back, and the give-back is refused too.
+- **The judge needs nothing new.** scsi.zig sets `read_only_at` at that command, so the volume line, the counts, the fired line and `During` all say `VOLUME_READ_ONLY_AT`.
+- **How often it is drawn.** `withVolume` draws it last, so every earlier draw is what it was: in 1 seed in 4 that lost the volume no other way, at one of its first 16 writes. That is 68 of seeds 1-300, about 40 of them in a shape that writes.
+- **Tests:**
+  - scsi.zig: reads don't count, and the volume is read-only from that command on;
+  - knobs.zig: at least 40 of seeds 1-300; never with another write-refusing loss; range 1-16.
+- **Docs:** KNOBS.md and knobs.zig's header say it.
+
+**What I couldn't check here, so please do, in this order:**
+1. `PLANTS=counted_leak_short ./plants.sh` over seeds 1-300 should now see it fire, and be caught, many times.
+2. check-cc's clean run of seeds 1-300 should still pass. About 40 of those seeds now refuse writes mid-request where before they didn't. That is new ground for the excuses, though `VOLUME_READ_ONLY_AT` already covers it in kind.
+
+If either fails, the knob is the place to look (narrow it to fewer seeds, or to the write shapes), or the excuse.
+
+## CC → the box, 2026-10-14: 205(a) and (b), the herds as numbers and the metric knob (dog-park)
+
+dog-park `claude/great-wright-i7aste`, on `a8a9935`:
+- `67ddc4f`: the census, the scripts and `-Dmetric`;
+- `1986e3f`: one more script, `passed`;
+- `b36a860`: step 3 behind `-Dthink=together`, numbers under (c).
+
+`zig build slow` passed before the first commit. That covers the full fuzz, the identity test, wasm ReleaseSafe and every node test, plus the physics' tests and the identity test under each other metric. The fast tier is 7.7 s wall here, compile included.
+
+### What to deploy for Steve
+
+- **`zig build -Dmetric=chebyshev`** is the one worth playing; the numbers are below.
+- **`manhattan`** builds and passes every test, but its numbers are poor (also below), so I would not spend Steve's time on it.
+- **The metric's name joins the physics hash** (as `-Dknobs=alt` does), so a page and a server built differently never agree.
+- **The euclid hash moves too**, because physics.zig's source changed. The rules don't: on every script, euclid plays exactly as `a8a9935` did. I checked that by running the census on the old physics in a worktree and diffing the output.
+
+### (b) `-Dmetric=euclid|chebyshev|manhattan`
+
+**What it changes.** Every rule that reaches goes through three functions, `measure`, `measureOf` and `lengthOf`. That covers the awake sphere, `wary`, `follow`, the herd band, `cow_room`, the speed cap and the dead zone. The three metrics:
+- **euclid** compares squares and takes the one `isqrt`;
+- **chebyshev** uses the larger axis;
+- **manhattan** adds the axes.
+
+**What it keeps.** A wish keeps its direction: each axis is `v × length / |v|`, where `|v|` is in the metric. So `quotientAlong`'s premise, |axis| ≤ length, holds under all three, and chebyshev and manhattan take no root at all.
+
+**Not the metric's:**
+- the overlap test (squares);
+- the drag's budget (per axis);
+- a jump's nearest clear spot, which stays by straight line, so jumps keep their few ties.
+
+**The exactness proofs:**
+- **The room lists.** `drift_nearer` replaces the hard-coded 3 in `roomsServe`: 3 under euclid (2√2 < 3), 2 under chebyshev, 4 under manhattan.
+- **The anchor's rings.** They stop on `measureOf(least)`, because a ring's least distance is a lower bound on the larger axis, so it holds under every metric.
+- **The f64 vector path** takes the larger axis, or the sum, exactly in i32.
+
+**The reference.** physics_reference.zig follows with its own plain versions of the three functions. The identity test passes under all three metrics.
+
+**Tests that pinned straight-line values.** Each now states its property under every metric:
+- the herd band's diagonal case moves 10 px past the edge;
+- the seam's wary case is 100 px each way, not 150, which was past `wary` under manhattan;
+- the pixel-tick bound is `measure(moved) ≤ measureOf(N + speed)`;
+- the tile-subscription walk takes seeds from 1 until two of them bump and let go (it was seeds 1 and 2);
+- the i64-extremes checksum has a golden per metric;
+- the minimal scene's pinned point is euclid's, with its orientations held under all three;
+- the worked example's tests skip off euclid, as they skip off the played knobs.
+
+**Cost** (`zig build physics-bench`, ReleaseSafe, here):
+
+| | euclid | chebyshev | manhattan |
+|---|---|---|---|
+| busiest spot, full drag | 271 µs (35 awake) | 281 µs (41 awake: the sphere is a square) | 98 µs (23 awake: a diamond) |
+| packed herd, wishes alone | 330 µs | 326 µs | 315 µs |
+| packed herd, full drag | 4.7 ms | 5.9 ms | 6.9 ms |
+| a server's 32-tick re-run | 2.0 ms | 6.0 ms | 1.0 ms |
+
+So chebyshev is not cheaper. Its reaches are squares, so more critters fall inside each one: 41 awake where euclid has 35. The win the essay expected from dropping roots is smaller than that. Speed is not why to choose it.
+
+### (a) The herds as numbers: `zig build herds`
+
+**src/play/herds.zig** takes a census of a board:
+- **Links.** Two dogs of one breed are linked within the band's outer edge plus 20 px (120 px).
+- **Two rulers.** `.rules` measures in the build's metric. `.eye` measures in a straight line whatever the metric, so two metrics are compared on one ruler.
+- **A herd** is a component of 3 or more dogs, with:
+  - a **size**;
+  - a **length**, its diameter in hops;
+  - **links a dog**: 2 for a chain, 4 or more for a clump.
+- **Stability (`kept`).** Each earlier herd is matched to the later herd holding most of its dogs. It scores the dogs both hold over the dogs either holds, weighted by size.
+- **Tests** (in the physics' root, so under every metric) hold its properties: a band-spaced line is one chain of length n − 1, a 4 × 4 block is a clump, breeds never join, a split herd keeps a half, and the laid-out park has no herds.
+
+**src/play/herd_bench.zig** plays fixed scripts from the laid-out park. Each leashes dog 220 (breed 0, the middle tile) and drags it with one displacement a tick, 6 px (96 px/s).
+- **A bump ends the drag but not the leash.** The script grabs again on the next tick, as a human does, and reports how far the dog went of what it asked.
+- **The census is taken three times:** at the let-go, at +10 s and at +30 s.
+- **The scripts:**
+  - `line`: east 1,200 px;
+  - `stroll`: the same line at 3 px a tick;
+  - `swing`: east, north, then west, 600 px each;
+  - `through`: south-east 1,500 px on the diagonal;
+  - `still`: leashed and held 30 s without a move;
+  - `passed`: `through`, then 220 released and the nearest breed-2 dog led back up the diagonal past the herd.
+
+The lead herd is dog 220's: size / length, then links a dog. "–" means 220 is in no herd. The "eye" columns are the same lead on the straight-line ruler.
+
+| script | euclid: drag (bumps) | euclid lead, let go → +30 s | chebyshev: drag (bumps) | chebyshev lead, let go → +30 s (eye) | manhattan: drag (bumps) |
+|---|---|---|---|---|---|
+| line | 472 of 1,200 px (122) | – → 5/3, 1.60 | 1,200 (0) | 11/8, 2.36 → 11/8 (eye 10/7), kept 0.88 | 160 (174) |
+| stroll | 954 (82) | 3/1 → 8/6, 2.00 | 1,200 (0) | 11/5, 3.8 → 11/4, 4.7: a clump | 307 (301) |
+| swing | 852 of 1,800 (159) | 7/5 → 7/4, 2.29 | 1,572 (38) | 12/7 → 15/9 (eye 13/7), kept 0.67 | 882 (156) |
+| through | 3,000 of 3,000 (0) | 11/9, 2.00 → same: a perfect chain | 3,000 (0) | 13/7 → 14/7 (eye: 220 in none) | 3,000 (0), lead 7/5 |
+| still | 0 (0) | no herds at all | 0 (0) | no herds at all | no herds at all |
+| passed | as through | kept 0.88 while breed 2 is led past | as through | kept 0.72 | |
+
+The full tables, with herds per breed, each breed's largest herd and `kept` at each time, are what `zig build herds -Dmetric=…` prints.
+
+### What the numbers say
+
+1. **Bumps are the paralysis, more than rank.**
+   - A dog's own speed is 7.5 px a second. A herd keeps up only through the pixel-ticks, while the leashed dog moves. So every bump freezes the whole chain, not just the leashed dog.
+   - Under euclid, `line` bumps 122 times in 200 ticks and gets 472 of its 1,200 px. The dogs ahead of it are other breeds fleeing straight along its line. Each is stopped by a dog behind it that it does not yield to, and the leashed dog presses into it.
+   - Chebyshev's line and stroll never bump. Its diagonal step is √2 longer, so a fleeing dog clears the lane sideways.
+   - I think much of what Steve sees as dogs paralysed by rank is this: the leash stalls, and the herd, at 7.5 px/s, waits.
+2. **The catalyst holds today.** `still` forms no herd under any metric in 30 s. Herds form only behind a drag.
+3. **A herd that forms is stable while nobody touches it.** With no dog leashed, nothing moves, so after the release (20 s after the let-go) `kept` is 1 by construction. Between the let-go and the release it is 0.75 to 1.0.
+   - `passed` is the honest test: does a herd hold while another dog is led past it? Euclid's keeps 0.88, chebyshev's 0.72.
+4. **Chebyshev herds more but looser.**
+   - Its chains are longer and it never stalls on a straight drag.
+   - Its stroll makes a clump (4.7 links a dog), not a chain, and its herds hold less when another is led past.
+   - It is the one to play, with this in mind.
+5. **The diagonal suits euclid.** `through` gives euclid an 11-dog chain: length 9, 2.00 links a dog, no bump. The diagonal passes the corners where breed 0's dogs stand, without meeting another breed head-on. So the herds Steve sees are real, but they depend on the path.
+
+### (c) Steps 3 to 6, refined by these numbers
+
+**Step 3, everyone thinks at once.**
+- **Two halves.** The snapshot is one half: every awake dog's wish comes from the positions at the pixel-tick's start, and the moves follow. The other is which strangers a dog heeds.
+- **Symmetric wariness.** Today a dog is wary only of other breeds' dogs above it. Under step 3 it is wary of every stranger within `wary`, as the cows' room already is. That is what removes the visible pecking order.
+- **The anchor stays rank's until step 4.** Without rank, the nearest same-breed dog would be anchored to its own anchor, and pairs would clump everywhere on their own: organic herds, which Steve doesn't want.
+- **Rank's one remaining job** is the order the moves are swept in, which is who yields on contact. That is invisible.
+- **What to measure first** is the bumps on `line` and `swing`, since they are the stall. Symmetric wariness should clear a lane faster: the stranger the leashed dog presses also presses the one in front of it.
+- **The jitter Steve's essay warns of** would show as `kept` falling while the leash still holds (let-go to +10 s).
+- **The cost** is that the room lists and the grid hold every stranger, not just those above: about twice the room terms.
+- **Built: `-Dthink=ranked|together`** (dog-park `b36a860`, `zig build slow` passed with it).
+  - **What `together` does.** At each pixel-tick every awake dog comes out from under, then every wish is worked out from the same positions, then the steps are swept in rank order. A dog is wary of every stranger within `wary`; its anchor is still the one above it.
+  - **The reference follows,** and the identity test passes under it.
+  - **Two tests stated the ranked rule;** they now state each way's.
+  - **What it does to the stall.** Its numbers, against `ranked` (drag got of asked, with bumps):
+
+    | script | euclid ranked | euclid together | chebyshev ranked | chebyshev together |
+    |---|---|---|---|---|
+    | line | 472 / 1,200 (122) | 1,078 (21) | 1,200 (0) | 1,200 (0) |
+    | stroll | 954 / 1,200 (82) | 1,166 (12) | 1,200 (0) | 1,200 (0) |
+    | swing | 852 / 1,800 (159) | 1,249 (94) | 1,572 (38) | 1,800 (0) |
+
+  - **What it does to the herds.** Euclid's lead herds barely grow: `line` 5/3 at +30 s, against 5/3 ranked; `stroll` 7/4 against 8/6. Its `kept` falls a little while the leash still holds: `line` 0.77, `swing` 0.68. It may be the jitter the essay expects, or the herd thinning as its dogs now heed strangers below them too; I haven't told the two apart.
+  - **`passed` holds better:** 0.93 together against 0.88 ranked. Why, these numbers don't say.
+  - **`still` makes one 3-dog herd** under chebyshev-together at +30 s. That is the first organic herd any variant makes; it is small, but the catalyst rule is less strict there.
+  - **Cost.** The busiest spot's full drag is 1.4 ms against 0.27 ms ranked, because more dogs move at each pixel-tick (each heeds more strangers). The packed herd's full drag is cheaper, 3.9 ms against 4.7. Both are far inside the 62.5 ms tick.
+  - **So:** `together` mends euclid's stall by more than half, and chebyshev needs it least. The pair to play is chebyshev, with `together` or without; euclid-together is the one to try if Steve wants to keep circles.
+
+**Step 4, follow upstream.**
+- **"Nearer the head along the herd"** can be the herd graph's hop count from the head: a breadth-first search over one breed's awake dogs, O(n) a tick. herds.zig's graph is the same one, at the band plus slack.
+- **A dog's anchor** is its nearest linked dog one hop nearer the head, kept until another is nearer by 20 px, as the essay says.
+- **A dog in no led herd** keeps the anchor it had, and follows nothing new, so herds still need the catalyst.
+- **The head** is the last-leashed dog of the herd. That costs one u16 per herd, which the board then carries, and the wire's `state` line too, since page and server must agree.
+- **The mark on the head** is a page change only.
+
+**Step 5, bounded attention.** It matters less than the essay thought:
+- In the open park, a follower has 0 to 4 strangers within `wary`. I counted them on `line` with a scratch tool, tick by tick.
+- A cap of 3 changes almost nothing there. It changes the packed crowd, which no script plays.
+- I'd hold it until a crowd script asks for it, and add one (gather two breeds, then drag through both) before deciding.
+
+**Step 6, the to-do set.** Step 3 makes it easier:
+- Under a snapshot, a dog's wish depends only on positions within its reach at the pixel-tick's start, not on who moved before it in rank order. So "nothing within reach moved" is a sufficient condition, with no order to walk.
+- I'd still do it last, as the essay says, and measure first. The census tool can count the wishes that end in no step on every script.
+
+## CC → the box, 2026-10-14: 203(a), the boot the volume's loss stopped; 204, Shale's first scripts and v31
+
+### 203(a): done (metal-vmm `a68ac13`)
+
+**The excuse** (`sweep.sh`, `boot_stop_of`). All of these must hold:
+- the run's last FAIL is one of boot's, all of them printed before the first request:
+  - the mount's read failures: the controller or its disk would not come up; the partition table cannot be read; the partition cannot be read; the FAT could not be held in memory;
+  - or the application's setup failing (`app.site.start`, which reads the volume after "listening on port 80" and before the first request);
+- the stop is the volume's: either the controller's own line, or a FAIL after "  a volume: SCSI target" (the volume comes up only after the boot disk's mount);
+- `VOLUME_GONE_AT` or `VOLUME_CUT_AFTER` fired. The run ended at the FAIL, so it fired before.
+
+It excuses the exit 1, but only when no client was answered, and a client's missing answer. Nothing else: what the run broke, and the disks' soundness and untouched files, are judged as before.
+
+**Tests:** `sweep_test.sh` gains seeds 60-69.
+- **Allowed:** the FAT stop; the controller's stop; the setup's stop.
+- **Failed:** each of those stops with no volume fault; the fault drawn and never fired; the boot disk's partition stop with a volume fault fired; another property broken; a FAIL that is no read's (the volume not the one served); a client answered before the stop.
+- **Mutations:** removing the volume-up check fails the test, and so does removing the fired check.
+- **Not tested on a real kernel:** this container has no KVM, so the excuse is built from the kernel's own lines and checked on the fake machine. Please run `PLANTS=counted_leak_short FIRST=301 LAST=900 ./plants.sh`: the 9 seeds should now pass.
+
+**A boot disk's fault: no, not the same excuse.** No fault drawn for the boot disk can stop a boot:
+- `DISK_REFUSE` refuses one request, and boot tries every read 3 times;
+- `DISK_CUT_AFTER` cuts after a write, and boot only reads;
+- `DISK_BAD_SECTOR` is never drawn.
+
+So a boot disk's stop stays a FAIL, and one would be a bug. **Seed 326's `DISK_ROT`:** if its stop came after the volume came up, the volume's loss excuses it, whatever the rot did. If it stopped before, on the boot disk, it still fails, and I'd like its `.out` to see what the rot reached. Rot serves a wrong byte and an "ok", so a mount refusing it ("not FAT16 or FAT32") is a different FAIL, which the excuse doesn't cover on purpose.
+
+**So a class can't hide past seed 300:** losses at boot are now drawn on purpose (`knobs.zig`, last of `withVolume`'s draws, so every earlier draw is unchanged). One seed in 16 that drew none of the three refusals loses the volume in its first 60 commands.
+- **Before:** seeds 1-300 lost it no earlier than command 119.
+- **Now:** 12 of them lose it by command 37. A test holds at least 8.
+- **The cost:** about 6% of seeds now spend their run on a boot that stops. That seemed better than sweeping 1,000 seeds, since it hits the class every time. The other seeds' knobs are as they were.
+
+**A red that isn't mine:** `sweep_durable_test.sh` fails on master too (seeds 2, 5, 6; 5 expects "lost (allowed: VOLUME_SYNC_FAIL)"). Since `sweep.sh` decided that "a failed SYNCHRONIZE loses nothing by itself", its expectations look stale (f9c6d4e made it red on purpose). Yours to call.
+
+### 204(a): three scripts for lynrummy.com, right after v30
+
+**Sign and send each one, on the box:** (zig-webbox checkout; `SHALE_ADMIN_KEY` in the environment, the key set once by README's steps 1-3)
+
+    zig build shale-sign -- sign $PWD/<name>.shale lynrummy.com
+    # it writes <name>.shale.<sequence>.req and prints the line that sends it:
+    curl -sS --fail-with-body -H "Authorization: Bearer $SHALE_ADMIN_KEY" --data-binary @<name>.shale.<sequence>.req https://lynrummy.com/admin/script
+
+**Checked here:** all three ran under the Linux runner (`SHALE_ROOT=<a copy> zig build script -- <file>`) against a copy shaped like the site's data root. The outputs below are from that copy, not the site.
+
+**One limit shapes them:** the route's budgets (`admin_script.zig`) allow **500 store reads**, and `ls`, `stat`, `exists`, `is_dir` and `read` each count one. A whole-tree walk of the site may well run out, so each script counts its own reads and says where it stopped instead of ending in a budget stop. The scripts work around three things the v31 list below asks for:
+- **The count is a map passed in,** because a function sees no script locals.
+- **Sorting by size pads numbers into strings,** because `sort` takes no key.
+- **"Quiet since" compares RFC3339 strings,** because there is no date from `now()`.
+
+**Writing the second one found a Shale bug,** now fixed (zig-webbox `c66774a`, its test red before the fix). In `local s = f()`, the slot's address was taken before the call. The call's frame could move the locals' stack, so the value was written to freed memory and `s` stayed nil. It came and went with the stack's capacity: one more parameter or one fewer local hid it. Every run that stored a call's result in a local could have hit it. Please merge it before v30's scripts. Also: `stat`'s `kind` is `"file"`, `"directory"` or `"other"`, which the README didn't say (fixed there, `92ea157`).
+
+**1. `where_the_bytes_are.shale`** (read-only): each top-level folder's files, bytes and empty files, then the 15 largest files.
+
+```lua
+-- Where the data root's bytes are: each top-level folder's files and
+-- bytes, the empty files, and the 15 largest files. Reads only.
+--
+-- The route allows 500 store reads (ls and stat count one each), so the
+-- walk keeps its own count and says so if it stops short.
+
+local budget = {left = 480, cut = false}
+
+-- n as a string at least w wide, zeros in front: sort() takes no
+-- comparator, so "size path" strings padded alike sort by size.
+function pad(n, w)
+  local s = tostring(n)
+  while #s < w do s = "0" .. s end
+  return s
+end
+
+-- Each file under dir: its size into totals (a map: files, bytes,
+-- empty) and "padded-size path" into sized. A function sees only its
+-- parameters, so the reads left are a map passed in.
+function walk(dir, totals, sized, budget)
+  if budget.left <= 0 then
+    budget.cut = true
+    return 0
+  end
+  budget.left = budget.left - 1
+  local used = 0
+  for name in ls(dir) do
+    local path = name
+    if dir ~= "" then path = dir .. "/" .. name end
+    if budget.left <= 0 then
+      budget.cut = true
+      break
+    end
+    budget.left = budget.left - 1
+    local st = stat(path)
+    if st.kind == "directory" then
+      used = used + walk(path, totals, sized, budget)
+    else
+      totals.files = totals.files + 1
+      totals.bytes = totals.bytes + st.size
+      if st.size == 0 then totals.empty = totals.empty + 1 end
+      push(sized, pad(st.size, 12) .. " " .. path)
+    end
+  end
+  return used
+end
+
+local sized = {}
+local all = {files = 0, bytes = 0, empty = 0}
+print("folder", "files", "bytes", "empty files")
+budget.left = budget.left - 1
+for top in ls("") do
+  budget.left = budget.left - 1
+  if stat(top).kind == "directory" then
+    local t = {files = 0, bytes = 0, empty = 0}
+    walk(top, t, sized, budget)
+    print(top, t.files, t.bytes, t.empty)
+    all.files = all.files + t.files
+    all.bytes = all.bytes + t.bytes
+    all.empty = all.empty + t.empty
+  end
+end
+print("all", all.files, all.bytes, all.empty)
+
+sort(sized)
+print("")
+print("the largest files:")
+local i = #sized
+while i >= 1 and i > #sized - 15 do
+  local line = sized[i]
+  print(tonumber(sub(line, 1, 12)), sub(line, 14))
+  i = i - 1
+end
+if budget.cut then print("(the walk stopped at its read budget: the counts above are a part)") end
+```
+
+What it prints (the copy):
+
+    folder	files	bytes	empty files
+    chat	6	70332	0
+    lynrummy	3	15000	1
+    all	9	85332	1
+
+    the largest files:
+    70000	chat/channels/general/sessions/plans.uploads/photo.png
+    12000	lynrummy/p2/s9.log
+    ...
+    ── effects (0) ──
+    ── finished (7925 steps)
+
+If the site has more than about 480 entries, the last line before the effects is "(the walk stopped at its read budget: the counts above are a part)". That is itself worth knowing for v31.
+
+**2. `chat_topics.shale`** (read-only): every topic's messages, bytes and last date. Then the 15 busiest; the topics quiet since 2026-07-01; and any topic whose `<sid>.count` cache disagrees with its transcript, which is the "anything stale" this one can find.
+
+```lua
+-- The chat, topic by topic: messages, bytes and the last message's date;
+-- the 15 with the most messages; the topics quiet since a date; and any
+-- topic whose message-count cache (<sid>.count) disagrees with its
+-- transcript. Reads only.
+--
+-- A transcript is messages joined by a separator, each starting
+-- "MSG_<sid>_<n>", then "from: <name>", then "date: <RFC3339>". Dates in
+-- one zone compare as strings, so "quiet since" is a string compare:
+-- now() is seconds, and there is no builtin to make a date of it.
+
+local quiet_since = "2026-07-01"
+-- The route allows 500 store reads; each topic costs up to three (its
+-- transcript, its count, the folder's listing).
+local budget = {left = 450, cut = false}
+
+function pad(n, w)
+  local s = tostring(n)
+  while #s < w do s = "0" .. s end
+  return s
+end
+
+-- One transcript: {messages, last} where last is the last "date: " value.
+function scan(text)
+  local n = 0
+  local last = ""
+  for line in split(text, "\n") do
+    if starts_with(line, "MSG_") then n = n + 1 end
+    if starts_with(line, "date: ") then last = sub(line, 7) end
+  end
+  return {messages = n, last = last}
+end
+
+-- Every topic in one conversation's folder, into rows; how many.
+function topics(dir, label, rows, budget)
+  local sessions = dir .. "/sessions"
+  if budget.left < 3 then
+    budget.cut = true
+    return 0
+  end
+  budget.left = budget.left - 2
+  if not is_dir(sessions) then return 0 end
+  local seen = 0
+  for name in ls(sessions) do
+    if ends_with(name, ".md") then
+      if budget.left < 2 then
+        budget.cut = true
+        return seen
+      end
+      local sid = sub(name, 1, #name - 3)
+      local text = read(sessions .. "/" .. name)
+      budget.left = budget.left - 1
+      local s = scan(text)
+      local cached = -1
+      local count_path = sessions .. "/" .. sid .. ".count"
+      budget.left = budget.left - 1
+      if exists(count_path) then
+        budget.left = budget.left - 1
+        cached = tonumber(trim(read(count_path)))
+      end
+      push(rows, {topic = label .. " " .. sid, messages = s.messages, bytes = #text, last = s.last, cached = cached})
+      seen = seen + 1
+    end
+  end
+  return seen
+end
+
+local rows = {}
+budget.left = budget.left - 1
+for conv in ls("chat") do
+  if conv == "channels" then
+    budget.left = budget.left - 1
+    for ch in ls("chat/channels") do
+      if not ends_with(ch, ".channel") then
+        topics("chat/channels/" .. ch, "#" .. ch, rows, budget)
+      end
+    end
+  else
+    topics("chat/" .. conv, conv, rows, budget)
+  end
+end
+
+local by_count = {}
+local total_messages = 0
+local total_bytes = 0
+for i = 1, #rows do
+  local r = rows[i]
+  total_messages = total_messages + r.messages
+  total_bytes = total_bytes + r.bytes
+  push(by_count, pad(r.messages, 9) .. " " .. pad(i, 6))
+end
+print("topics", #rows, "messages", total_messages, "bytes", total_bytes)
+
+sort(by_count)
+print("")
+print("the most messages:", "messages", "bytes", "last message")
+local i = #by_count
+while i >= 1 and i > #by_count - 15 do
+  local r = rows[tonumber(sub(by_count[i], 11))]
+  print(r.topic, r.messages, r.bytes, r.last)
+  i = i - 1
+end
+
+print("")
+print("quiet since " .. quiet_since .. ":")
+local quiet = 0
+for r in rows do
+  if r.last ~= "" and r.last < quiet_since then
+    print(r.topic, r.messages, r.last)
+    quiet = quiet + 1
+  end
+end
+print("quiet topics", quiet)
+
+print("")
+print("count caches that disagree:", "transcript", "cache")
+local wrong = 0
+for r in rows do
+  if r.cached ~= -1 and r.cached ~= r.messages then
+    print(r.topic, r.messages, r.cached)
+    wrong = wrong + 1
+  end
+end
+print("disagreeing", wrong)
+if budget.cut then print("(stopped at its read budget: the counts above are a part)") end
+```
+
+What it prints (the copy, where I made one count cache wrong):
+
+    topics	2	messages	5	bytes	322
+
+    the most messages:	messages	bytes	last message
+    #general plans	3	203	2026-10-13T09:00:00Z
+    alice_bob t1	2	119	2026-03-02T11:00:00Z
+
+    quiet since 2026-07-01:
+    alice_bob t1	2	2026-03-02T11:00:00Z
+    quiet topics	1
+
+    count caches that disagree:	transcript	cache
+    #general plans	3	2
+    disagreeing	1
+    ── effects (0) ──
+    ── finished (4111 steps)
+
+A disagreeing cache on the site would be a real finding. A topic's count is what the sidebar shows.
+
+**3. `first_change.shale`** (one small change): a folder of its own, `shale-check/`, holding one file, `first-run.txt`, which says when it was written and how many conversations and channels the chat had.
+- **The first run's effects:** `mkdir shale-check: ok` and `replace shale-check/first-run.txt: ok`, then the site's "memory rebuilt" line.
+- **Checking it:** send it again (it needs a new signature: each request runs once). It prints what the last run wrote, then replaces it, with one effect; script 1 shows the folder too.
+- **Undoing it:** a one-line script, `remove_tree("shale-check")`.
+- **It touches nothing the application reads,** as far as I can see. The backup will carry the folder.
+
+```lua
+-- One small change, easy to check and to undo: a folder of its own at
+-- the data root, shale-check/, holding one file, first-run.txt, that says
+-- when it was written and what the chat held then. Run it again and it
+-- prints what the last run wrote before it replaces it. Nothing else is
+-- touched.
+--
+-- To undo: a script of one line, remove_tree("shale-check").
+
+local dir = "shale-check"
+local path = dir .. "/first-run.txt"
+
+-- What the chat holds, counted cheaply: its conversations and channels.
+local conversations = 0
+local channels = 0
+for name in ls("chat") do
+  if name == "channels" then
+    for ch in ls("chat/channels") do
+      if not ends_with(ch, ".channel") then channels = channels + 1 end
+    end
+  else
+    conversations = conversations + 1
+  end
+end
+
+if exists(path) then
+  print("the last run wrote:")
+  print(read(path))
+else
+  print("no " .. path .. " yet")
+end
+
+if not exists(dir) then mkdir(dir) end
+local text = "written by a signed Shale script, now() = " .. now() .. "\n" ..
+  "conversations " .. conversations .. ", channels " .. channels .. "\n"
+replace(path, text)
+print("wrote " .. path .. ":")
+print(read(path))
+```
+
+What it prints (the copy, the first run):
+
+    no shale-check/first-run.txt yet
+    wrote shale-check/first-run.txt:
+    written by a signed Shale script, now() = 1760400001
+    conversations 1, channels 1
+
+    ── effects (2) ──
+    mkdir shale-check: ok
+    replace shale-check/first-run.txt: ok
+    ── finished (961 steps)
+
+**On the reply's layout,** having read many: the output, the effects (`op path: outcome`), then how it ended. It reads well. Two things would help a person reading it on the box:
+- **A first line naming the run:** `seq N, sha256 <first 12>, now() = N`. Today the sequence appears only in a stop's position (`seq N:line:col`), and the log names runs by hash.
+- **A separator before the output,** as `── output ──`. A script that prints nothing leaves the reply starting at its effects, which reads as if the header were lost.
+
+### 204(b): Shale for v31, ranked, each with the script it makes easier
+
+1. **A dry run** (`shale-sign sign --dry-run`, a field in the envelope's second line, so the signature covers it). Every change is checked (its path, the parent's existence, a remove's target), logged as `would replace p`, and not done; `dry_run()` tells the script.
+   - **The script it eases:** script 3, and every later one that removes, such as `delete_topic.shale`. The operator reads the effects first, then signs the same source for real.
+   - **Why first:** an operator's first changing script is the riskiest.
+2. **Walking without spending a read a file.** `walk(p)` (or `ls(p, true)`): every entry under `p` as `{path, size, kind}`, charged one read per folder.
+   - **And one more builtin:** `budget()`, what's left of each budget, so a script can stop at a point of its own.
+   - **The script it eases:** scripts 1 and 2, whose hand-kept counts go, and which would no longer stop part-way on a site with more than about 480 entries.
+3. **`lines(s)`**, Steve's example: no last empty piece after a trailing newline. With it, `words(s)`, and `count` taking a list as `#` does.
+   - **What it fixes:** today `#split(read(p), "\n")` is 4 for three lines.
+   - **The script it eases:** a "lines of each log" report, and the topics script's scan.
+4. **Sorting by key:** `sort(list, key)` for a list of maps (`sort(rows, "messages")`) and `reverse(list)`.
+   - **The script it eases:** script 2's top 15, and script 1's largest files, which pad numbers into strings today.
+5. **Dates.**
+   - **`date(seconds)`:** `2026-10-14T03:00:00Z`, so `now()` can be compared with the transcripts' dates and printed.
+   - **`seconds(rfc3339)`:** the other way, so "older than 90 days" is arithmetic.
+   - **`stat(p).modified`,** the store's time (deterministic for a given volume).
+   - **The script it eases:** "quiet since", which takes a hand-typed date today, and "what grew this week".
+6. **Formatting.**
+   - **`human(bytes)`:** `1.2 MiB` by integer arithmetic.
+   - **`pad(s, width)`,** and padding to the left for numbers.
+   - **`table(rows, columns)`:** prints aligned columns instead of tabs.
+   - **The script it eases:** every report above: today the tabs leave long topic names misaligned.
+7. **A simple pattern:** `like(name, "*.md")`, with `*` and `?` only, not Lua's patterns. It is the commonest test the scripts make, and spelling it as `ends_with` and `sub` is noisy.
+8. **Constants a function can see:** top-level `const x = ...` readable in functions (still no globals that change). Scripts 1 and 2 pass their settings as arguments today.
+
+**Not wanted, after writing these:** `pairs` or general iteration over a map's values (`keys` serves), closures, floats.
+
 ## CC → the box, 2026-10-14: 202, the physics as fast as it goes, exact (dog-park)
 
 **Done:** dog-park `a8a9935` on `claude/great-wright-i7aste`: 26 changes on 201 (`75a9246`), one per commit, each with its numbers in its message. `zig build slow` passed before every commit, and `zig fmt --check` with it. That covers:
