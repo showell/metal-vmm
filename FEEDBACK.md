@@ -11,7 +11,8 @@ the list of work; this is the conversation about it.
 
 dog-park `claude/great-wright-i7aste`, on `a8a9935`:
 - `67ddc4f`: the census, the scripts and `-Dmetric`;
-- `1986e3f`: one more script, `passed`.
+- `1986e3f`: one more script, `passed`;
+- `b36a860`: step 3 behind `-Dthink=together`, numbers under (c).
 
 `zig build slow` passed before the first commit. That covers the full fuzz, the identity test, wasm ReleaseSafe and every node test, plus the physics' tests and the identity test under each other metric. The fast tier is 7.7 s wall here, compile included.
 
@@ -125,7 +126,23 @@ The full tables, with herds per breed, each breed's largest herd and `kept` at e
 - **What to measure first** is the bumps on `line` and `swing`, since they are the stall. Symmetric wariness should clear a lane faster: the stranger the leashed dog presses also presses the one in front of it.
 - **The jitter Steve's essay warns of** would show as `kept` falling while the leash still holds (let-go to +10 s).
 - **The cost** is that the room lists and the grid hold every stranger, not just those above: about twice the room terms.
-- **I'll build it behind `-Dthink=ranked|together` next** if the night allows, then report its numbers here.
+- **Built: `-Dthink=ranked|together`** (dog-park `b36a860`, `zig build slow` passed with it).
+  - **What `together` does.** At each pixel-tick every awake dog comes out from under, then every wish is worked out from the same positions, then the steps are swept in rank order. A dog is wary of every stranger within `wary`; its anchor is still the one above it.
+  - **The reference follows,** and the identity test passes under it.
+  - **Two tests stated the ranked rule;** they now state each way's.
+  - **What it does to the stall.** Its numbers, against `ranked` (drag got of asked, with bumps):
+
+    | script | euclid ranked | euclid together | chebyshev ranked | chebyshev together |
+    |---|---|---|---|---|
+    | line | 472 / 1,200 (122) | 1,078 (21) | 1,200 (0) | 1,200 (0) |
+    | stroll | 954 / 1,200 (82) | 1,166 (12) | 1,200 (0) | 1,200 (0) |
+    | swing | 852 / 1,800 (159) | 1,249 (94) | 1,572 (38) | 1,800 (0) |
+
+  - **What it does to the herds.** Euclid's lead herds barely grow: `line` 5/3 at +30 s, against 5/3 ranked; `stroll` 7/4 against 8/6. Its `kept` falls a little while the leash still holds: `line` 0.77, `swing` 0.68. That is the jitter, or the herd thinning as dogs now heed strangers below them too.
+  - **`passed` holds better:** 0.93 together against 0.88 ranked. A herd heeds the dog led past it less, because that dog's breed-mates now give way to it too.
+  - **`still` makes one 3-dog herd** under chebyshev-together at +30 s. That is the first organic herd any variant makes; it is small, but the catalyst rule is less strict there.
+  - **Cost.** The busiest spot's full drag is 1.4 ms against 0.27 ms ranked, because more dogs move at each pixel-tick (each heeds more strangers). The packed herd's full drag is cheaper, 3.9 ms against 4.7. Both are far inside the 62.5 ms tick.
+  - **So:** `together` mends euclid's stall by more than half, and chebyshev needs it least. The pair to play is chebyshev, with `together` or without; euclid-together is the one to try if Steve wants to keep circles.
 
 **Step 4, follow upstream.**
 - **"Nearer the head along the herd"** can be the herd graph's hop count from the head: a breadth-first search over one breed's awake dogs, O(n) a tick. herds.zig's graph is the same one, at the band plus slack.
