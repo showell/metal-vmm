@@ -3,7 +3,7 @@
 # derived but could not run (it has no KVM), run before anyone reads the code.
 #
 # CC's branch (or master, where a repo has none) of metal-vmm, zig-metal-unikernel,
-# angry-gopher, zig-webbox and dog-park, each in its own worktree, so no checkout here changes:
+# angry-gopher, zig-webbox and zig-coverage-sdk, each in its own worktree, so no checkout here changes:
 #   1. angry-gopher ported into zig-metal-unikernel, a -Dcoverage kernel built, and
 #      metal-vmm built;
 #   2. `sweep.sh 1 $SEEDS` over every shape: each shape's unhurt run and its
@@ -22,9 +22,8 @@ set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOS="${REPOS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 BRANCH="${CC_BRANCH:-claude/great-wright-i7aste}"
-# The repos CC works in: only these are taken from CC's branch. dog-park is
-# not one (Steve: CC works on it only when asked), and its CC branch is an
-# old line of work, not a change to judge.
+# The repos CC works in: only these are taken from CC's branch. (dog-park
+# is not checked here at all: the kernel neither builds nor judges it.)
 CC_REPOS="${CC_REPOS:-metal-vmm zig-metal-unikernel angry-gopher zig-webbox zig-coverage-sdk}"
 SEEDS="${SEEDS:-10}"
 PLANT_SEEDS="${PLANT_SEEDS:-300}"
@@ -61,7 +60,7 @@ echo "check-cc, $(date -u '+%F %T UTC'), in $OUT"
 # build.zig pins the SDK's commit, and CC moves the pin with its SDK change
 # (198.2), so the box's own checkout would fail the pin. build.zig.zon
 # finds it at ../zig-coverage-sdk.
-for r in metal-vmm zig-metal-unikernel angry-gopher zig-webbox dog-park zig-coverage-sdk; do checkout "$r" "$OUT/$r" || exit 2; done
+for r in metal-vmm zig-metal-unikernel angry-gopher zig-webbox zig-coverage-sdk; do checkout "$r" "$OUT/$r" || exit 2; done
 
 # angry-gopher's generated assets (wasm, built js) are untracked, so a
 # worktree lacks them: copied from the main checkout, as built there.
@@ -107,7 +106,7 @@ esac
 
 echo "== the plants"
 GOPHER="$OUT/zig-metal-unikernel" COVERAGE_SDK="$SDK" GUESTS="$OUT/zig-metal-unikernel/probe" \
-  ANGRY_GOPHER="$OUT/angry-gopher" WEBBOX="$OUT/zig-webbox" DOGPARK_ROOT="$OUT/dog-park" VOLUME_SITE="$VOLUME_SITE" LAST="$PLANT_SEEDS" \
+  ANGRY_GOPHER="$OUT/angry-gopher" WEBBOX="$OUT/zig-webbox" VOLUME_SITE="$VOLUME_SITE" LAST="$PLANT_SEEDS" \
   KERNELS="$OUT/kernels" OUT="$OUT/plants" "$OUT/metal-vmm/plants.sh"
 case $? in 0) ;; 1) bad=1 ;; *) echo "plants.sh could not run"; bad=2 ;; esac
 
