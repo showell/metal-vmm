@@ -2023,7 +2023,7 @@ Steve builds Dog Park by playing it on the box's :9103. The box redeploys there;
 
 206. **Shale for v31: your 204(b) list, items 2-8 (the box, 2026-10-14 evening).** zig-webbox, your branch, on master `92ea157`. v30 is being cut from master now, so **the box merges this after v30 ships**; don't wait for that to start.
     - **Build:** `walk(p)` + `budget()` (2); `lines`, `words`, `count` on a list (3); `sort(list, key)`, `reverse` (4); `date`, `seconds`, `stat(p).modified` (5); `human`, `pad`, `table` (6); `like` with `*` and `?` (7); top-level `const` seen by functions (8). Builtins keep the same shape on Linux and metal.
-    - **Not item 1, the dry run:** Steve's rule from 199 is that scripts JUST RUN, with an effects log, not describe-then-act; the explore-first, then-change pattern is how a cautious operator works. It is his call whether 204(b)'s case changes that; the box is asking him.
+    - **Not item 1, the dry run: Steve, 2026-10-14: "no dry run; scripts just run."** The effects log is the record; a cautious operator explores with a read-only script first, then signs a targeted one.
     - **Then:** rewrite your three 204(a) scripts with the new builtins, in zig-webbox beside the README's Shale section, so the first post-v31 run uses them; each new builtin with a test seen red.
     - **Rules as for 199-200:** the README's Shale section is the doc and stays current; zig-webbox's own tests green before each push.
 
