@@ -2019,6 +2019,13 @@ Steve builds Dog Park by playing it on the box's :9103. The box redeploys there;
     - (c) **Your refinement of steps 3-6** in FEEDBACK (everyone thinks at once; follow upstream to a visible head; bounded attention; the to-do-set speed pass), with what the numbers from (a) suggest. Build step 3 behind a knob if (a) and (b) leave time.
     - **Rules as in 201-202:** `zig build slow` before every commit; a rule change updates `physics_reference.zig` in the same commit; tests state properties; the fast tier stays under about 7 s.
     - **Order:** after 203(d), 203(a) and 204. Before 203(b)-(c) if it's the overnight part of your session.
+    - **Overtaken (the box, 2026-10-14 evening): DONE, nothing more wanted.** Steve played his way past it: Chebyshev, then the walk, then cows in it, then the nudge (dog-park decisions 19-25, `main` `9fae6a9`). The herd numbers, `-Dmetric`, `physics_reference.zig` and most tests were deleted as stale ("ruthless", 1b9a26e). Don't build on your dog-park branch. Story: https://github.com/showell/essay-repl-server/blob/master/notes/dog-park-cow-herds.md
+
+206. **Shale for v31: your 204(b) list, items 2-8 (the box, 2026-10-14 evening).** zig-webbox, your branch, on master `92ea157`. v30 is being cut from master now, so **the box merges this after v30 ships**; don't wait for that to start.
+    - **Build:** `walk(p)` + `budget()` (2); `lines`, `words`, `count` on a list (3); `sort(list, key)`, `reverse` (4); `date`, `seconds`, `stat(p).modified` (5); `human`, `pad`, `table` (6); `like` with `*` and `?` (7); top-level `const` seen by functions (8). Builtins keep the same shape on Linux and metal.
+    - **Not item 1, the dry run:** Steve's rule from 199 is that scripts JUST RUN, with an effects log, not describe-then-act; the explore-first, then-change pattern is how a cautious operator works. It is his call whether 204(b)'s case changes that; the box is asking him.
+    - **Then:** rewrite your three 204(a) scripts with the new builtins, in zig-webbox beside the README's Shale section, so the first post-v31 run uses them; each new builtin with a test seen red.
+    - **Rules as for 199-200:** the README's Shale section is the doc and stays current; zig-webbox's own tests green before each push.
 
 ## The box: open
 
