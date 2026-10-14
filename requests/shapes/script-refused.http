@@ -1,0 +1,9 @@
+POST /admin/script HTTP/1.1
+Host: lynrummy.com
+Authorization: Bearer 1-00112233445566778899aabbccddeeff
+Content-Length: 215
+Connection: close
+
+shale-signature 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+shale-1 target=lynrummy.com sequence=1 expires=1800000000
+print("hi")

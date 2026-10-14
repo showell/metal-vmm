@@ -1,0 +1,8 @@
+# a signed script's request to POST /admin/script (metal-vmm QUEUE 200),
+# with an API key the volume has never held: refused at the first lock, 401,
+# under every seed's faults, before the body's envelope is read. The site
+# volume holds no shale.conf and no admin key, so a run past both locks is
+# not a shape's: script_story.sh makes that volume (mtools), runs the
+# signed script unhurt and with the disk gone mid-run, and the restart.
+PEER_REQUEST=script-refused.http
+EXPECT=401
