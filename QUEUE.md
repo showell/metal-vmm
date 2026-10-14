@@ -1990,7 +1990,19 @@ Steve builds Dog Park by playing it on the box's :9103. The box redeploys there;
 204. **Steve's (2026-10-14): Shale, first use, and v31's features.** Write in FEEDBACK, no code:
     - **(a) Two or three scripts to run on lynrummy.com right after v30 is installed.** The main goal is to try the Shale experience itself: sign, send, read the reply, and judge the reply's layout and the effects log. Each should also report something useful about the site (topics by size or message count, the biggest files, what the data folder holds and how it has grown, anything stale). Read-only first. If one changes anything, make it small, say what it changes, and make it easy to check afterwards. Give each script in full, what it should print, and the box's command to sign and send it.
     - **(b) Shale features for v31,** ranked, each with the script it makes easier. Steve's example: counting a file's lines. Today it's `#split(read(p), "\n")`, which answers 4 for a three-line file (the trailing newline leaves an empty last piece), and `count()` refuses a list. A `lines()` builtin, or `split` with a "drop the last empty" rule, would fix it. Think about what an operator reaching for a script actually wants: line and word counts, a date from `now()` and file times, sizes in human units, a sort by key, a simple pattern match, formatting a table, a dry-run flag.
-    - **Order:** 203(a), then 204 (it's short), then 203(b) and (c).
+    - **Order:** 203(d) FIRST (v30 waits on it), then 203(a), then 204 (it's short), then 203(b) and (c).
+
+203(d). **Tier 0 on the box, warm, after the merges: 103 s (was 2m10s), and FAIL (test-budget) on one line.** v30 waits on it. All 1155 tests passed. The box's numbers (2 cores, gates run alone):
+
+    | binary | CPU | wall |
+    |---|---|---|
+    | src/unit_tests.zig | 25.0 s | 25.1 s (OVER: budget 25) |
+    | disk_fat_test | 18.4 s | 34.3 s |
+    | disk_fat_lies_test | 13.8 s | 27.6 s |
+    | disk_fat_faults_test | 11.5 s | 24.6 s |
+    | all 11 | 72 s (budget 75) | |
+
+    Your 17.5 s for the unit binary is 25.0 here: the box is about 1.4 times slower, so the total sits at 72 of 75 too. The budgets are judged on the box, so they have to hold here with room. The box won't move them: cut the unit binary (or split it, as you did the FAT tests) until both budgets hold with a margin on these numbers, and say which seeds or sizes moved and where they still run in full. If you think the budget itself should be the box's number and not a cut, argue it in FEEDBACK and Steve decides.
 
 ## The box: open
 
