@@ -7,6 +7,142 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-14: 205(a) and (b), the herds as numbers and the metric knob (dog-park)
+
+dog-park `claude/great-wright-i7aste`, on `a8a9935`:
+- `67ddc4f`: the census, the scripts and `-Dmetric`;
+- `1986e3f`: one more script, `passed`.
+
+`zig build slow` passed before the first commit. That covers the full fuzz, the identity test, wasm ReleaseSafe and every node test, plus the physics' tests and the identity test under each other metric. The fast tier is 7.7 s wall here, compile included.
+
+### What to deploy for Steve
+
+- **`zig build -Dmetric=chebyshev`** is the one worth playing; the numbers are below.
+- **`manhattan`** builds and passes every test, but its numbers are poor (also below), so I would not spend Steve's time on it.
+- **The metric's name joins the physics hash** (as `-Dknobs=alt` does), so a page and a server built differently never agree.
+- **The euclid hash moves too**, because physics.zig's source changed. The rules don't: on every script, euclid plays exactly as `a8a9935` did. I checked that by running the census on the old physics in a worktree and diffing the output.
+
+### (b) `-Dmetric=euclid|chebyshev|manhattan`
+
+**What it changes.** Every rule that reaches goes through three functions, `measure`, `measureOf` and `lengthOf`. That covers the awake sphere, `wary`, `follow`, the herd band, `cow_room`, the speed cap and the dead zone. The three metrics:
+- **euclid** compares squares and takes the one `isqrt`;
+- **chebyshev** uses the larger axis;
+- **manhattan** adds the axes.
+
+**What it keeps.** A wish keeps its direction: each axis is `v × length / |v|`, where `|v|` is in the metric. So `quotientAlong`'s premise, |axis| ≤ length, holds under all three, and chebyshev and manhattan take no root at all.
+
+**Not the metric's:**
+- the overlap test (squares);
+- the drag's budget (per axis);
+- a jump's nearest clear spot, which stays by straight line, so jumps keep their few ties.
+
+**The exactness proofs:**
+- **The room lists.** `drift_nearer` replaces the hard-coded 3 in `roomsServe`: 3 under euclid (2√2 < 3), 2 under chebyshev, 4 under manhattan.
+- **The anchor's rings.** They stop on `measureOf(least)`, because a ring's least distance is a lower bound on the larger axis, so it holds under every metric.
+- **The f64 vector path** takes the larger axis, or the sum, exactly in i32.
+
+**The reference.** physics_reference.zig follows with its own plain versions of the three functions. The identity test passes under all three metrics.
+
+**Tests that pinned straight-line values.** Each now states its property under every metric:
+- the herd band's diagonal case moves 10 px past the edge;
+- the seam's wary case is 100 px each way, not 150, which was past `wary` under manhattan;
+- the pixel-tick bound is `measure(moved) ≤ measureOf(N + speed)`;
+- the tile-subscription walk takes seeds from 1 until two of them bump and let go (it was seeds 1 and 2);
+- the i64-extremes checksum has a golden per metric;
+- the minimal scene's pinned point is euclid's, with its orientations held under all three;
+- the worked example's tests skip off euclid, as they skip off the played knobs.
+
+**Cost** (`zig build physics-bench`, ReleaseSafe, here):
+
+| | euclid | chebyshev | manhattan |
+|---|---|---|---|
+| busiest spot, full drag | 271 µs (35 awake) | 281 µs (41 awake: the sphere is a square) | 98 µs (23 awake: a diamond) |
+| packed herd, wishes alone | 330 µs | 326 µs | 315 µs |
+| packed herd, full drag | 4.7 ms | 5.9 ms | 6.9 ms |
+| a server's 32-tick re-run | 2.0 ms | 6.0 ms | 1.0 ms |
+
+So chebyshev is not cheaper. Its reaches are squares, so more critters fall inside each one: 41 awake where euclid has 35. The win the essay expected from dropping roots is smaller than that. Speed is not why to choose it.
+
+### (a) The herds as numbers: `zig build herds`
+
+**src/play/herds.zig** takes a census of a board:
+- **Links.** Two dogs of one breed are linked within the band's outer edge plus 20 px (120 px).
+- **Two rulers.** `.rules` measures in the build's metric. `.eye` measures in a straight line whatever the metric, so two metrics are compared on one ruler.
+- **A herd** is a component of 3 or more dogs, with:
+  - a **size**;
+  - a **length**, its diameter in hops;
+  - **links a dog**: 2 for a chain, 4 or more for a clump.
+- **Stability (`kept`).** Each earlier herd is matched to the later herd holding most of its dogs. It scores the dogs both hold over the dogs either holds, weighted by size.
+- **Tests** (in the physics' root, so under every metric) hold its properties: a band-spaced line is one chain of length n − 1, a 4 × 4 block is a clump, breeds never join, a split herd keeps a half, and the laid-out park has no herds.
+
+**src/play/herd_bench.zig** plays fixed scripts from the laid-out park. Each leashes dog 220 (breed 0, the middle tile) and drags it with one displacement a tick, 6 px (96 px/s).
+- **A bump ends the drag but not the leash.** The script grabs again on the next tick, as a human does, and reports how far the dog went of what it asked.
+- **The census is taken three times:** at the let-go, at +10 s and at +30 s.
+- **The scripts:**
+  - `line`: east 1,200 px;
+  - `stroll`: the same line at 3 px a tick;
+  - `swing`: east, north, then west, 600 px each;
+  - `through`: south-east 1,500 px on the diagonal;
+  - `still`: leashed and held 30 s without a move;
+  - `passed`: `through`, then 220 released and the nearest breed-2 dog led back up the diagonal past the herd.
+
+The lead herd is dog 220's: size / length, then links a dog. "–" means 220 is in no herd. The "eye" columns are the same lead on the straight-line ruler.
+
+| script | euclid: drag (bumps) | euclid lead, let go → +30 s | chebyshev: drag (bumps) | chebyshev lead, let go → +30 s (eye) | manhattan: drag (bumps) |
+|---|---|---|---|---|---|
+| line | 472 of 1,200 px (122) | – → 5/3, 1.60 | 1,200 (0) | 11/8, 2.36 → 11/8 (eye 10/7), kept 0.88 | 160 (174) |
+| stroll | 954 (82) | 3/1 → 8/6, 2.00 | 1,200 (0) | 11/5, 3.8 → 11/4, 4.7: a clump | 307 (301) |
+| swing | 852 of 1,800 (159) | 7/5 → 7/4, 2.29 | 1,572 (38) | 12/7 → 15/9 (eye 13/7), kept 0.67 | 882 (156) |
+| through | 3,000 of 3,000 (0) | 11/9, 2.00 → same: a perfect chain | 3,000 (0) | 13/7 → 14/7 (eye: 220 in none) | 3,000 (0), lead 7/5 |
+| still | 0 (0) | no herds at all | 0 (0) | no herds at all | no herds at all |
+| passed | as through | kept 0.88 while breed 2 is led past | as through | kept 0.72 | |
+
+The full tables, with herds per breed, each breed's largest herd and `kept` at each time, are what `zig build herds -Dmetric=…` prints.
+
+### What the numbers say
+
+1. **Bumps are the paralysis, more than rank.**
+   - A dog's own speed is 7.5 px a second. A herd keeps up only through the pixel-ticks, while the leashed dog moves. So every bump freezes the whole chain, not just the leashed dog.
+   - Under euclid, `line` bumps 122 times in 200 ticks and gets 472 of its 1,200 px. The dogs ahead of it are other breeds fleeing straight along its line. Each is stopped by a dog behind it that it does not yield to, and the leashed dog presses into it.
+   - Chebyshev's line and stroll never bump. Its diagonal step is √2 longer, so a fleeing dog clears the lane sideways.
+   - I think much of what Steve sees as dogs paralysed by rank is this: the leash stalls, and the herd, at 7.5 px/s, waits.
+2. **The catalyst holds today.** `still` forms no herd under any metric in 30 s. Herds form only behind a drag.
+3. **A herd that forms is stable while nobody touches it.** With no dog leashed, nothing moves, so after the release (20 s after the let-go) `kept` is 1 by construction. Between the let-go and the release it is 0.75 to 1.0.
+   - `passed` is the honest test: does a herd hold while another dog is led past it? Euclid's keeps 0.88, chebyshev's 0.72.
+4. **Chebyshev herds more but looser.**
+   - Its chains are longer and it never stalls on a straight drag.
+   - Its stroll makes a clump (4.7 links a dog), not a chain, and its herds hold less when another is led past.
+   - It is the one to play, with this in mind.
+5. **The diagonal suits euclid.** `through` gives euclid an 11-dog chain: length 9, 2.00 links a dog, no bump. The diagonal passes the corners where breed 0's dogs stand, without meeting another breed head-on. So the herds Steve sees are real, but they depend on the path.
+
+### (c) Steps 3 to 6, refined by these numbers
+
+**Step 3, everyone thinks at once.**
+- **Two halves.** The snapshot is one half: every awake dog's wish comes from the positions at the pixel-tick's start, and the moves follow. The other is which strangers a dog heeds.
+- **Symmetric wariness.** Today a dog is wary only of other breeds' dogs above it. Under step 3 it is wary of every stranger within `wary`, as the cows' room already is. That is what removes the visible pecking order.
+- **The anchor stays rank's until step 4.** Without rank, the nearest same-breed dog would be anchored to its own anchor, and pairs would clump everywhere on their own: organic herds, which Steve doesn't want.
+- **Rank's one remaining job** is the order the moves are swept in, which is who yields on contact. That is invisible.
+- **What to measure first** is the bumps on `line` and `swing`, since they are the stall. Symmetric wariness should clear a lane faster: the stranger the leashed dog presses also presses the one in front of it.
+- **The jitter Steve's essay warns of** would show as `kept` falling while the leash still holds (let-go to +10 s).
+- **The cost** is that the room lists and the grid hold every stranger, not just those above: about twice the room terms.
+- **I'll build it behind `-Dthink=ranked|together` next** if the night allows, then report its numbers here.
+
+**Step 4, follow upstream.**
+- **"Nearer the head along the herd"** can be the herd graph's hop count from the head: a breadth-first search over one breed's awake dogs, O(n) a tick. herds.zig's graph is the same one, at the band plus slack.
+- **A dog's anchor** is its nearest linked dog one hop nearer the head, kept until another is nearer by 20 px, as the essay says.
+- **A dog in no led herd** keeps the anchor it had, and follows nothing new, so herds still need the catalyst.
+- **The head** is the last-leashed dog of the herd. That costs one u16 per herd, which the board then carries, and the wire's `state` line too, since page and server must agree.
+- **The mark on the head** is a page change only.
+
+**Step 5, bounded attention.** It matters less than the essay thought:
+- In the open park, a follower has 0 to 4 strangers within `wary`. I counted them on `line` with a scratch tool, tick by tick.
+- A cap of 3 changes almost nothing there. It changes the packed crowd, which no script plays.
+- I'd hold it until a crowd script asks for it, and add one (gather two breeds, then drag through both) before deciding.
+
+**Step 6, the to-do set.** Step 3 makes it easier:
+- Under a snapshot, a dog's wish depends only on positions within its reach at the pixel-tick's start, not on who moved before it in rank order. So "nothing within reach moved" is a sufficient condition, with no order to walk.
+- I'd still do it last, as the essay says, and measure first. The census tool can count the wishes that end in no step on every script.
+
 ## CC → the box, 2026-10-14: 203(a), the boot the volume's loss stopped; 204, Shale's first scripts and v31
 
 ### 203(a): done (metal-vmm `a68ac13`)
