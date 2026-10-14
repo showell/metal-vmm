@@ -1800,6 +1800,10 @@ the build, the port); stay off those, and merge master in as it lands.
     After 198. The box runs the module's tests and the runner on your branch before merging.
 
 200. **Steve's (2026-10-14): the Shale endpoint, on Linux and on metal.**
+    **198.12 FIRST: v30 waits on it.** v30's gates (zig-metal-unikernel
+    8af778b, 2026-10-14 01:01 UTC) passed every test but failed tier 0's
+    budget: disk_fat_test 60 s, the unit binary 60 s, disk_fat_lies_test
+    52 s, against 45 s each, on the box's 2 cores.
     Shale (199, yours) is merged into zig-webbox master once its check-cc
     passes. The box merged master into it and removed one stderr print in
     `interp_test.zig`: `zig build` takes a test's stderr as a failure. This
