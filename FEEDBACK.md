@@ -7,6 +7,390 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-14: 203(a), the boot the volume's loss stopped; 204, Shale's first scripts and v31
+
+### 203(a): done (metal-vmm `a68ac13`)
+
+**The excuse** (`sweep.sh`, `boot_stop_of`). All of these must hold:
+- the run's last FAIL is one of boot's, all of them printed before the first request:
+  - the mount's read failures: the controller or its disk would not come up; the partition table cannot be read; the partition cannot be read; the FAT could not be held in memory;
+  - or the application's setup failing (`app.site.start`, which reads the volume after "listening on port 80" and before the first request);
+- the stop is the volume's: either the controller's own line, or a FAIL after "  a volume: SCSI target" (the volume comes up only after the boot disk's mount);
+- `VOLUME_GONE_AT` or `VOLUME_CUT_AFTER` fired. The run ended at the FAIL, so it fired before.
+
+It excuses the exit 1, but only when no client was answered, and a client's missing answer. Nothing else: what the run broke, and the disks' soundness and untouched files, are judged as before.
+
+**Tests:** `sweep_test.sh` gains seeds 60-69.
+- **Allowed:** the FAT stop; the controller's stop; the setup's stop.
+- **Failed:** each of those stops with no volume fault; the fault drawn and never fired; the boot disk's partition stop with a volume fault fired; another property broken; a FAIL that is no read's (the volume not the one served); a client answered before the stop.
+- **Mutations:** removing the volume-up check fails the test, and so does removing the fired check.
+- **Not tested on a real kernel:** this container has no KVM, so the excuse is built from the kernel's own lines and checked on the fake machine. Please run `PLANTS=counted_leak_short FIRST=301 LAST=900 ./plants.sh`: the 9 seeds should now pass.
+
+**A boot disk's fault: no, not the same excuse.** No fault drawn for the boot disk can stop a boot:
+- `DISK_REFUSE` refuses one request, and boot tries every read 3 times;
+- `DISK_CUT_AFTER` cuts after a write, and boot only reads;
+- `DISK_BAD_SECTOR` is never drawn.
+
+So a boot disk's stop stays a FAIL, and one would be a bug. **Seed 326's `DISK_ROT`:** if its stop came after the volume came up, the volume's loss excuses it, whatever the rot did. If it stopped before, on the boot disk, it still fails, and I'd like its `.out` to see what the rot reached. Rot serves a wrong byte and an "ok", so a mount refusing it ("not FAT16 or FAT32") is a different FAIL, which the excuse doesn't cover on purpose.
+
+**So a class can't hide past seed 300:** losses at boot are now drawn on purpose (`knobs.zig`, last of `withVolume`'s draws, so every earlier draw is unchanged). One seed in 16 that drew none of the three refusals loses the volume in its first 60 commands.
+- **Before:** seeds 1-300 lost it no earlier than command 119.
+- **Now:** 12 of them lose it by command 37. A test holds at least 8.
+- **The cost:** about 6% of seeds now spend their run on a boot that stops. That seemed better than sweeping 1,000 seeds, since it hits the class every time. The other seeds' knobs are as they were.
+
+**A red that isn't mine:** `sweep_durable_test.sh` fails on master too (seeds 2, 5, 6; 5 expects "lost (allowed: VOLUME_SYNC_FAIL)"). Since `sweep.sh` decided that "a failed SYNCHRONIZE loses nothing by itself", its expectations look stale (f9c6d4e made it red on purpose). Yours to call.
+
+### 204(a): three scripts for lynrummy.com, right after v30
+
+**Sign and send each one, on the box:** (zig-webbox checkout; `SHALE_ADMIN_KEY` in the environment, the key set once by README's steps 1-3)
+
+    zig build shale-sign -- sign $PWD/<name>.shale lynrummy.com
+    # it writes <name>.shale.<sequence>.req and prints the line that sends it:
+    curl -sS --fail-with-body -H "Authorization: Bearer $SHALE_ADMIN_KEY" --data-binary @<name>.shale.<sequence>.req https://lynrummy.com/admin/script
+
+**Checked here:** all three ran under the Linux runner (`SHALE_ROOT=<a copy> zig build script -- <file>`) against a copy shaped like the site's data root. The outputs below are from that copy, not the site.
+
+**One limit shapes them:** the route's budgets (`admin_script.zig`) allow **500 store reads**, and `ls`, `stat`, `exists`, `is_dir` and `read` each count one. A whole-tree walk of the site may well run out, so each script counts its own reads and says where it stopped instead of ending in a budget stop. The scripts work around three things the v31 list below asks for:
+- **The count is a map passed in,** because a function sees no script locals.
+- **Sorting by size pads numbers into strings,** because `sort` takes no key.
+- **"Quiet since" compares RFC3339 strings,** because there is no date from `now()`.
+
+**Writing the second one found a Shale bug,** now fixed (zig-webbox `c66774a`, its test red before the fix). In `local s = f()`, the slot's address was taken before the call. The call's frame could move the locals' stack, so the value was written to freed memory and `s` stayed nil. It came and went with the stack's capacity: one more parameter or one fewer local hid it. Every run that stored a call's result in a local could have hit it. Please merge it before v30's scripts. Also: `stat`'s `kind` is `"file"`, `"directory"` or `"other"`, which the README didn't say (fixed there, `92ea157`).
+
+**1. `where_the_bytes_are.shale`** (read-only): each top-level folder's files, bytes and empty files, then the 15 largest files.
+
+```lua
+-- Where the data root's bytes are: each top-level folder's files and
+-- bytes, the empty files, and the 15 largest files. Reads only.
+--
+-- The route allows 500 store reads (ls and stat count one each), so the
+-- walk keeps its own count and says so if it stops short.
+
+local budget = {left = 480, cut = false}
+
+-- n as a string at least w wide, zeros in front: sort() takes no
+-- comparator, so "size path" strings padded alike sort by size.
+function pad(n, w)
+  local s = tostring(n)
+  while #s < w do s = "0" .. s end
+  return s
+end
+
+-- Each file under dir: its size into totals (a map: files, bytes,
+-- empty) and "padded-size path" into sized. A function sees only its
+-- parameters, so the reads left are a map passed in.
+function walk(dir, totals, sized, budget)
+  if budget.left <= 0 then
+    budget.cut = true
+    return 0
+  end
+  budget.left = budget.left - 1
+  local used = 0
+  for name in ls(dir) do
+    local path = name
+    if dir ~= "" then path = dir .. "/" .. name end
+    if budget.left <= 0 then
+      budget.cut = true
+      break
+    end
+    budget.left = budget.left - 1
+    local st = stat(path)
+    if st.kind == "directory" then
+      used = used + walk(path, totals, sized, budget)
+    else
+      totals.files = totals.files + 1
+      totals.bytes = totals.bytes + st.size
+      if st.size == 0 then totals.empty = totals.empty + 1 end
+      push(sized, pad(st.size, 12) .. " " .. path)
+    end
+  end
+  return used
+end
+
+local sized = {}
+local all = {files = 0, bytes = 0, empty = 0}
+print("folder", "files", "bytes", "empty files")
+budget.left = budget.left - 1
+for top in ls("") do
+  budget.left = budget.left - 1
+  if stat(top).kind == "directory" then
+    local t = {files = 0, bytes = 0, empty = 0}
+    walk(top, t, sized, budget)
+    print(top, t.files, t.bytes, t.empty)
+    all.files = all.files + t.files
+    all.bytes = all.bytes + t.bytes
+    all.empty = all.empty + t.empty
+  end
+end
+print("all", all.files, all.bytes, all.empty)
+
+sort(sized)
+print("")
+print("the largest files:")
+local i = #sized
+while i >= 1 and i > #sized - 15 do
+  local line = sized[i]
+  print(tonumber(sub(line, 1, 12)), sub(line, 14))
+  i = i - 1
+end
+if budget.cut then print("(the walk stopped at its read budget: the counts above are a part)") end
+```
+
+What it prints (the copy):
+
+    folder	files	bytes	empty files
+    chat	6	70332	0
+    lynrummy	3	15000	1
+    all	9	85332	1
+
+    the largest files:
+    70000	chat/channels/general/sessions/plans.uploads/photo.png
+    12000	lynrummy/p2/s9.log
+    ...
+    ── effects (0) ──
+    ── finished (7925 steps)
+
+If the site has more than about 480 entries, the last line before the effects is "(the walk stopped at its read budget: the counts above are a part)". That is itself worth knowing for v31.
+
+**2. `chat_topics.shale`** (read-only): every topic's messages, bytes and last date. Then the 15 busiest; the topics quiet since 2026-07-01; and any topic whose `<sid>.count` cache disagrees with its transcript, which is the "anything stale" this one can find.
+
+```lua
+-- The chat, topic by topic: messages, bytes and the last message's date;
+-- the 15 with the most messages; the topics quiet since a date; and any
+-- topic whose message-count cache (<sid>.count) disagrees with its
+-- transcript. Reads only.
+--
+-- A transcript is messages joined by a separator, each starting
+-- "MSG_<sid>_<n>", then "from: <name>", then "date: <RFC3339>". Dates in
+-- one zone compare as strings, so "quiet since" is a string compare:
+-- now() is seconds, and there is no builtin to make a date of it.
+
+local quiet_since = "2026-07-01"
+-- The route allows 500 store reads; each topic costs up to three (its
+-- transcript, its count, the folder's listing).
+local budget = {left = 450, cut = false}
+
+function pad(n, w)
+  local s = tostring(n)
+  while #s < w do s = "0" .. s end
+  return s
+end
+
+-- One transcript: {messages, last} where last is the last "date: " value.
+function scan(text)
+  local n = 0
+  local last = ""
+  for line in split(text, "\n") do
+    if starts_with(line, "MSG_") then n = n + 1 end
+    if starts_with(line, "date: ") then last = sub(line, 7) end
+  end
+  return {messages = n, last = last}
+end
+
+-- Every topic in one conversation's folder, into rows; how many.
+function topics(dir, label, rows, budget)
+  local sessions = dir .. "/sessions"
+  if budget.left < 3 then
+    budget.cut = true
+    return 0
+  end
+  budget.left = budget.left - 2
+  if not is_dir(sessions) then return 0 end
+  local seen = 0
+  for name in ls(sessions) do
+    if ends_with(name, ".md") then
+      if budget.left < 2 then
+        budget.cut = true
+        return seen
+      end
+      local sid = sub(name, 1, #name - 3)
+      local text = read(sessions .. "/" .. name)
+      budget.left = budget.left - 1
+      local s = scan(text)
+      local cached = -1
+      local count_path = sessions .. "/" .. sid .. ".count"
+      budget.left = budget.left - 1
+      if exists(count_path) then
+        budget.left = budget.left - 1
+        cached = tonumber(trim(read(count_path)))
+      end
+      push(rows, {topic = label .. " " .. sid, messages = s.messages, bytes = #text, last = s.last, cached = cached})
+      seen = seen + 1
+    end
+  end
+  return seen
+end
+
+local rows = {}
+budget.left = budget.left - 1
+for conv in ls("chat") do
+  if conv == "channels" then
+    budget.left = budget.left - 1
+    for ch in ls("chat/channels") do
+      if not ends_with(ch, ".channel") then
+        topics("chat/channels/" .. ch, "#" .. ch, rows, budget)
+      end
+    end
+  else
+    topics("chat/" .. conv, conv, rows, budget)
+  end
+end
+
+local by_count = {}
+local total_messages = 0
+local total_bytes = 0
+for i = 1, #rows do
+  local r = rows[i]
+  total_messages = total_messages + r.messages
+  total_bytes = total_bytes + r.bytes
+  push(by_count, pad(r.messages, 9) .. " " .. pad(i, 6))
+end
+print("topics", #rows, "messages", total_messages, "bytes", total_bytes)
+
+sort(by_count)
+print("")
+print("the most messages:", "messages", "bytes", "last message")
+local i = #by_count
+while i >= 1 and i > #by_count - 15 do
+  local r = rows[tonumber(sub(by_count[i], 11))]
+  print(r.topic, r.messages, r.bytes, r.last)
+  i = i - 1
+end
+
+print("")
+print("quiet since " .. quiet_since .. ":")
+local quiet = 0
+for r in rows do
+  if r.last ~= "" and r.last < quiet_since then
+    print(r.topic, r.messages, r.last)
+    quiet = quiet + 1
+  end
+end
+print("quiet topics", quiet)
+
+print("")
+print("count caches that disagree:", "transcript", "cache")
+local wrong = 0
+for r in rows do
+  if r.cached ~= -1 and r.cached ~= r.messages then
+    print(r.topic, r.messages, r.cached)
+    wrong = wrong + 1
+  end
+end
+print("disagreeing", wrong)
+if budget.cut then print("(stopped at its read budget: the counts above are a part)") end
+```
+
+What it prints (the copy, where I made one count cache wrong):
+
+    topics	2	messages	5	bytes	322
+
+    the most messages:	messages	bytes	last message
+    #general plans	3	203	2026-10-13T09:00:00Z
+    alice_bob t1	2	119	2026-03-02T11:00:00Z
+
+    quiet since 2026-07-01:
+    alice_bob t1	2	2026-03-02T11:00:00Z
+    quiet topics	1
+
+    count caches that disagree:	transcript	cache
+    #general plans	3	2
+    disagreeing	1
+    ── effects (0) ──
+    ── finished (4111 steps)
+
+A disagreeing cache on the site would be a real finding. A topic's count is what the sidebar shows.
+
+**3. `first_change.shale`** (one small change): a folder of its own, `shale-check/`, holding one file, `first-run.txt`, which says when it was written and how many conversations and channels the chat had.
+- **The first run's effects:** `mkdir shale-check: ok` and `replace shale-check/first-run.txt: ok`, then the site's "memory rebuilt" line.
+- **Checking it:** send it again (it needs a new signature: each request runs once). It prints what the last run wrote, then replaces it, with one effect; script 1 shows the folder too.
+- **Undoing it:** a one-line script, `remove_tree("shale-check")`.
+- **It touches nothing the application reads,** as far as I can see. The backup will carry the folder.
+
+```lua
+-- One small change, easy to check and to undo: a folder of its own at
+-- the data root, shale-check/, holding one file, first-run.txt, that says
+-- when it was written and what the chat held then. Run it again and it
+-- prints what the last run wrote before it replaces it. Nothing else is
+-- touched.
+--
+-- To undo: a script of one line, remove_tree("shale-check").
+
+local dir = "shale-check"
+local path = dir .. "/first-run.txt"
+
+-- What the chat holds, counted cheaply: its conversations and channels.
+local conversations = 0
+local channels = 0
+for name in ls("chat") do
+  if name == "channels" then
+    for ch in ls("chat/channels") do
+      if not ends_with(ch, ".channel") then channels = channels + 1 end
+    end
+  else
+    conversations = conversations + 1
+  end
+end
+
+if exists(path) then
+  print("the last run wrote:")
+  print(read(path))
+else
+  print("no " .. path .. " yet")
+end
+
+if not exists(dir) then mkdir(dir) end
+local text = "written by a signed Shale script, now() = " .. now() .. "\n" ..
+  "conversations " .. conversations .. ", channels " .. channels .. "\n"
+replace(path, text)
+print("wrote " .. path .. ":")
+print(read(path))
+```
+
+What it prints (the copy, the first run):
+
+    no shale-check/first-run.txt yet
+    wrote shale-check/first-run.txt:
+    written by a signed Shale script, now() = 1760400001
+    conversations 1, channels 1
+
+    ── effects (2) ──
+    mkdir shale-check: ok
+    replace shale-check/first-run.txt: ok
+    ── finished (961 steps)
+
+**On the reply's layout,** having read many: the output, the effects (`op path: outcome`), then how it ended. It reads well. Two things would help a person reading it on the box:
+- **A first line naming the run:** `seq N, sha256 <first 12>, now() = N`. Today the sequence appears only in a stop's position (`seq N:line:col`), and the log names runs by hash.
+- **A separator before the output,** as `── output ──`. A script that prints nothing leaves the reply starting at its effects, which reads as if the header were lost.
+
+### 204(b): Shale for v31, ranked, each with the script it makes easier
+
+1. **A dry run** (`shale-sign sign --dry-run`, a field in the envelope's second line, so the signature covers it). Every change is checked (its path, the parent's existence, a remove's target), logged as `would replace p`, and not done; `dry_run()` tells the script.
+   - **The script it eases:** script 3, and every later one that removes, such as `delete_topic.shale`. The operator reads the effects first, then signs the same source for real.
+   - **Why first:** an operator's first changing script is the riskiest.
+2. **Walking without spending a read a file.** `walk(p)` (or `ls(p, true)`): every entry under `p` as `{path, size, kind}`, charged one read per folder.
+   - **And one more builtin:** `budget()`, what's left of each budget, so a script can stop at a point of its own.
+   - **The script it eases:** scripts 1 and 2, whose hand-kept counts go, and which would no longer stop part-way on a site with more than about 480 entries.
+3. **`lines(s)`**, Steve's example: no last empty piece after a trailing newline. With it, `words(s)`, and `count` taking a list as `#` does.
+   - **What it fixes:** today `#split(read(p), "\n")` is 4 for three lines.
+   - **The script it eases:** a "lines of each log" report, and the topics script's scan.
+4. **Sorting by key:** `sort(list, key)` for a list of maps (`sort(rows, "messages")`) and `reverse(list)`.
+   - **The script it eases:** script 2's top 15, and script 1's largest files, which pad numbers into strings today.
+5. **Dates.**
+   - **`date(seconds)`:** `2026-10-14T03:00:00Z`, so `now()` can be compared with the transcripts' dates and printed.
+   - **`seconds(rfc3339)`:** the other way, so "older than 90 days" is arithmetic.
+   - **`stat(p).modified`,** the store's time (deterministic for a given volume).
+   - **The script it eases:** "quiet since", which takes a hand-typed date today, and "what grew this week".
+6. **Formatting.**
+   - **`human(bytes)`:** `1.2 MiB` by integer arithmetic.
+   - **`pad(s, width)`,** and padding to the left for numbers.
+   - **`table(rows, columns)`:** prints aligned columns instead of tabs.
+   - **The script it eases:** every report above: today the tabs leave long topic names misaligned.
+7. **A simple pattern:** `like(name, "*.md")`, with `*` and `?` only, not Lua's patterns. It is the commonest test the scripts make, and spelling it as `ends_with` and `sub` is noisy.
+8. **Constants a function can see:** top-level `const x = ...` readable in functions (still no globals that change). Scripts 1 and 2 pass their settings as arguments today.
+
+**Not wanted, after writing these:** `pairs` or general iteration over a map's values (`keys` serves), closures, floats.
+
 ## CC → the box, 2026-10-14: 202, the physics as fast as it goes, exact (dog-park)
 
 **Done:** dog-park `a8a9935` on `claude/great-wright-i7aste`: 26 changes on 201 (`75a9246`), one per commit, each with its numbers in its message. `zig build slow` passed before every commit, and `zig fmt --check` with it. That covers:
