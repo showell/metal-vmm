@@ -1895,6 +1895,82 @@ the build, the port); stay off those, and merge master in as it lands.
     **Steve's go is needed before it reaches prod** (v31 or later). The box
     runs check-cc and the gates on your branch before merging.
 
+**Dog Park, for CC's overnight (Steve, 2026-10-14).** github.com/showell/dog-park, branch `main`; push to your usual branch in that repo, and the box merges after `zig build slow` passes there. It depends on zig-webbox by path (a sibling checkout). Read `docs/PHYSICS.md` (the spec; its decisions section is the history), the README's test tiers, and `notes/dog-park-tests.md` and `notes/dog-park-math-study.md` in essay-repl-server. The tiers:
+- `zig build test`, about 7 s;
+- `zig build check`, about 18 s;
+- `zig build slow`, about 100 s. It holds the physics against `physics_reference.zig` (the identity test), runs the full fuzz, the physics tests under `-Dknobs=alt` (every knob moved by about half), and the wasm as served.
+
+Steve builds Dog Park by playing it on the box's :9103. The box redeploys there; you don't need to.
+
+201. **The torus, chunk 3b: the critters wrap.**
+    - Done on main already:
+      - chunk 1 (`9ca2492`): the grids are seam-ready;
+      - chunk 2 (`1dd1dfa`): the page draws, scrolls and subscribes across the seam;
+      - chunk 3a (`b2ae2f1`): the tiles and regions wrap.
+    - Read their commit messages and decision 14, which maps every change.
+    - The brief is below.
+
+    **What 3a (`b2ae2f1`) left for 3b:**
+    - A critter across the seam from the leashed dog is in the Scene now (its tile is in the region), but `delta` doesn't wrap yet, so it looks about 31,800 px away and sleeps.
+    - `Rect`-based checks still compare absolute coordinates: the region rect, the jump's `ctx.region.holds`, `world_rect`.
+    - Anything that loops over a span goes through `TileSpan.at` (a span's hi can be 64 or more).
+    - The comptime assert "the world is wider than the region plus its reaches" is already in (3a); keep it satisfied.
+
+    **What the page (chunk 2, `1dd1dfa`) now relies on:**
+    - Critter positions from the wasm stay in [0, world). The page draws any value at its nearest copy.
+    - `regionTiles` may give a wrapped range in any naming (raw 64 or -1); the page wraps each tile mod 64.
+    - The server must accept the page's `view` and `held` lines with wrapped tile numbers, such as `63,0` beside `0,0`.
+    - The page orders its display tiles around the viewport's centre (north before south, west before east), which only decides which tiles survive the 64-tile cap. The wire's tile lists are sets.
+    - The world must stay wider than any viewport or overview window.
+
+    **Deliverable (3b): critters on a torus**, in physics.zig, physics_jump.zig, the wire/judge/page/server where tiles and positions are parsed, and **physics_reference.zig identically** (the identity test in `zig build slow` must still hold):
+    - `delta(a, b)` takes the short way round on each axis (a difference in [-world/2, world/2)); every centre-to-centre difference already goes through it.
+    - `inWorld`, `room()`, `world_rect` and every clamp go; every move (`Scene.put`, `moved`, a jump's landing) wraps its result into [0, world) with `@mod`.
+    - `Rect`'s `holds`/`overlaps` (the region, the swept area, the jump's obstacles and candidates) compare relative to one anchor point (the leashed dog's, or the pushed critter's), not absolute corners.
+    - The jump (`gapOn`, `wayOut`, the candidate box, `offer`) works in coordinates relative to the pushed critter, and its landing wraps.
+    - The cows' edge rules (the shortened step and the lane's side switch at an edge) go: there is no edge.
+    - The parse keeps positions in [0, world).
+    - solo/pointer.js's comment (about line 51) lists "the world's edge" among the drag stops: there is none now.
+    - Update PHYSICS.md: decision 14 becomes "done" with what changed (its page bullet too: chunk 2 did it), and every edge rule in the spec is rewritten or removed.
+
+    **Tests:**
+    - **Translation invariance (the torus' signature property):** a whole scene shifted by any vector (mod world), including one that puts the action across the seam and the corner, plays out exactly shifted. Add it beside physics_symmetry_test.zig's transforms (same scenes and fuzz).
+    - Seam cases: a dog dragged across x = 0, y = 0 and the corner; a herd following across; a cow scooted across; a jump that lands across the seam; a region straddling the seam (its tiles, its subscription).
+    - The existing tests that relied on an edge (a clamp, a cow's edge rule) are rewritten as the torus behaviour or removed, said in the report.
+    - `-Dknobs=alt` still compiles and passes.
+
+    **Checks before pushing:** `zig build check`, `zig build test -Dknobs=alt`, `zig build slow`. Bench (`zig build physics-bench`, one run each, before/after; the packed-herd drag is about 29.5 ms).
+
+    **Report (short):** commits; what changed per area; tests added and removed; bench before/after.
+
+202. **Make the physics as fast as it can go, with the normal tricks (Steve).** It must stay exact.
+    - **What counts:**
+      - the wasm in ReleaseSafe, as the page runs it. `tools/bench_page.mjs` times a full drag through the packed herd: about 38 ms a tick before the torus grids, against a 62.5 ms tick.
+      - natively, `zig build physics-bench`: the packed-herd drag is 29.5 ms after the torus grids (`9ca2492`, up from 25.4 ms, mostly the 125 px neighbour cell). The server re-runs every report with this build.
+      - also time the busiest spot and the wishes alone.
+    - **Measure first, then cut:** profile (perf natively; per-phase timers if useful), say where the time goes, and attack the biggest phase first. One change per commit, with before/after numbers for both the wasm and native benches, taken a few runs each, because the box's numbers differ from yours.
+    - **The normal tricks, as the profile justifies:**
+      - data layout: structure of arrays and hot/cold splitting;
+      - fewer passes, and incremental neighbour lists that refresh less often;
+      - comparing squared distances instead of taking roots;
+      - cheap rejects before exact tests;
+      - `@Vector` SIMD where wasm32 has it (simd128) and native too;
+      - avoiding i64 where i32 provably suffices;
+      - branch-light inner loops;
+      - allocation out of the tick;
+      - cutting bounds checks only where a proof makes them redundant. The served build stays ReleaseSafe unless Steve decides otherwise; if ReleaseFast for the page would buy a lot, measure it and ask.
+    - **Exactness is not negotiable:**
+      - `physics_reference.zig` stays the plain version, and the identity test must hold after every commit;
+      - the symmetry tests and (after 201) translation invariance hold;
+      - page and server agree to the bit;
+      - `-Dknobs=alt` compiles and passes.
+      - Each grid's cell sizes may change, but only within the seam rules: the cell divides the world and the fold divides the cells.
+      - The physics hash changes; that's expected.
+    - **Keep the tests fast:** the fast tier stays under about 7 s on the box. A new bench or proof that is slow goes in `slow` or stays a bench.
+    - **Report:** a table of each change and its gain, wasm and native; where the time goes now; what you tried that didn't pay.
+
+    **Order:** 198.12 (v30 waits on it), then 200, then 201 and 202 for the overnight part of your session. If 200 blocks on anything, go on to 201.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
