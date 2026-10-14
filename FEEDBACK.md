@@ -7,6 +7,130 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-14: 202, the physics as fast as it goes, exact (dog-park)
+
+**Done:** dog-park `a8a9935` on `claude/great-wright-i7aste`: 26 changes on 201 (`75a9246`), one per commit, each with its numbers in its message. `zig build slow` passed before every commit, and `zig fmt --check` with it. That covers:
+- the identity test against `physics_reference.zig` (which stays the plain version);
+- the full fuzz natively, and the physics' tests on wasm32 ReleaseSafe;
+- the symmetry and translation tests;
+- `-Dknobs=alt`, and the node tests.
+
+The fast tier is 6.2 s here when its test binaries are built, 7.7 s with one recompile; it was 7.5 s at 201. The physics hash changes, as expected.
+
+**The headline**, quiet, the minimum of several runs (7 of `bench_page.mjs`, 5 of `physics-bench`). This container is not the box: please take your own.
+
+| bench | 201 (`75a9246`) | now (`a8a9935`) |
+|---|---|---|
+| wasm, packed-herd full drag (`bench_page.mjs`) | 24.9 ms | 8.7 ms |
+| wasm, page tick | 65.9 µs | 43.5 µs |
+| native, packed-herd full drag (`physics-bench`) | 18.1 ms | 5.1 ms |
+| native, packed herd, wishes alone | 516 µs | 278 µs |
+| native, busiest spot, full drag | 300 µs | 185 µs |
+| native, busiest spot, wishes alone | 12.4 µs | 10.7 µs |
+| native, the server's re-run of a 32-tick report | 3.49 ms | 1.55 ms |
+| instructions, herd drag, 20 ticks | 2.880 G | 1.088 G |
+| instructions, busiest drag, 20 ticks | 90.6 M | 60.9 M |
+| instructions, re-run, 20 runs | 1,022 M | 500 M |
+
+`bench_page.mjs`'s herd drag here is bimodal from run to run (about 8.7 or about 11 ms, at both of the last commits). The box measured about 38 ms before the torus grids, against a 62.5 ms tick.
+
+**How I measured:**
+- **Per change:** instruction counts from callgrind, which are deterministic. They are from a native x86_64_v3 build, because valgrind can't run AVX-512, which this machine's native build uses.
+- **Wall time:** A/B against the commit before, alternated, for every change whose count alone could mislead.
+- **New bench modes:** `physics-bench` has three for a profiler, each running one tick alone 20 times: `-- herd` (202.1), `-- busiest` and `-- rerun` (`4dd72b6`).
+- **Wasm:** profiled with `node --cpu-prof` on an unstripped build.
+- **A finding worth knowing:** a ReleaseSafe build writes 0xaa over every `undefined` it declares. A 110 KB scene declared `undefined` was filled every tick, and that made the busiest spot's still tick slower than at 201 until 202.24. The scene is now built in place, and only its declaration has runtime safety off.
+
+**Each change**, in instructions over 20 runs. "Herd" is the packed herd's full drag, "busiest" is the busiest spot's drag (`run` only), and "re-run" is the server's re-run of a 32-tick report (`judge` only).
+
+| commit | change | herd | busiest | re-run | wall, where A/B'd |
+|---|---|---|---|---|---|
+| `75a9246` | 201, the start | 2.880 G | 90.6 M | 1,022 M | |
+| `2056802` | 202.1 `shortWay`: one add or subtract, not `@mod` | 2.595 G | 88.3 M | 914 M | |
+| `a0d3814` | 202.2 the wishes' grid buckets kept in rank order (a read stops early) | 2.487 G | | | |
+| `d2b6c34` | 202.3 room lists, built with the neighbour lists | 2.224 G | | | |
+| `9a3446c` | 202.4 `delta` inlined | 2.054 G | | | |
+| `e8cb368` | 202.5 `isqrt` inlined | 1.953 G | | | |
+| `40cc4f0` | 202.6 `stepMeets` inlined | 1.834 G | | | |
+| `ae345e1` | 202.7 the step's scan skips `earliest` on a miss | 1.705 G | | | |
+| `4dfdb43` | 202.8 pair checks counted once a scan | 1.680 G | | | |
+| `02bb8d3` | 202.9 `isqrt`: no correction below 2⁵² (proved) | 1.558 G | | | wasm herd 12.2 → 9.5-9.7 ms |
+| `d8b645c` | 202.10 `shortWay`: one unsigned compare when already short | 1.530 G | | | wasm herd 10.8-12.7 → 9.8-12.3 ms |
+| `2e546d7` | 202.11 a wish's divisions in 32 bits natively | 1.691 G | | | native herd 9.2-9.9 → 8.2-8.9 ms (more instructions, less time) |
+| `ba3f8cc` | 202.12 a neighbour-list build sorts only those within reach | 1.650 G | | | wasm 12.0 → 11.4, native 8.9 → 8.1 ms |
+| `4dd72b6` | bench: `-- busiest`, `-- rerun` | | 66.6 M | 806 M | |
+| `90ad7b8` | 202.13 the scanned wishes take one difference and root a pair | 1.638 G | 63.9 M | 794 M | |
+| `91c57eb` | 202.14 `overlaps` from the grid, not every pair | | | 677 M | re-run 3.5 → 3.0 ms |
+| `76ad677` | 202.15 `wire.same`: checked lines field for field | | | 568 M | re-run median 3.30 → 2.74 ms |
+| `4604a5b` | 202.16 a critter in the span from its point, not its tile | | 63.7 M | 558 M | re-run median 2.83 → 2.66 ms |
+| `859928f` | 202.17 the wire split by a plain scan | | | 547 M | re-run median 2.77 → 2.55 ms |
+| `ec281b9` | 202.18 the jump out from under in its own function | 1.632 G | 62.9 M | 543 M | |
+| `f6dc83e` | 202.19 `awayRooted`, `wishAlongRooted` inlined | 1.536 G | 63.1 M | 544 M | |
+| `c89b2d0` | 202.20 a wish's axis in magnitudes, its narrowings proved | 1.494 G | 61.1 M | 535 M | native herd 7.09 → 6.61 ms |
+| `e1cba56` | 202.21 room lists in two: strangers, then cows | 1.473 G | 61.0 M | 535 M | native herd 7.13 → 6.85 ms |
+| `07b18a0` | 202.22 the room lists' pushes in f64 vectors (exact) | 1.237 G | 61.0 M | 537 M | native herd 7.20 → 5.73 ms |
+| `b3f1bc3` | 202.23 the step's scan rejects in vectors | 1.088 G | 61.6 M | 539 M | native herd 5.67 → 5.35 ms |
+| `80aa62a` | 202.24 the scene built in place, unfilled | 1.088 G | 61.2 M | 517 M | busiest wishes alone 17.7 → 11.2 µs, re-run 2.48 → 1.86 ms |
+| `b0a81f6` | 202.25 the judge's tick lines, one a report | | | 507 M | within noise |
+| `a8a9935` | 202.26 the neighbours' grid kept in the scene | 1.088 G | 60.9 M | 500 M | |
+
+A blank is unchanged from the row above. Busiest and re-run are counted from 4dd72b6, and at 201 and 202.1 with the bench copied in. The wasm A/Bs are interleaved in one node process (median of 15); the native ones alternate builds (min of 5). Each commit message has its own.
+
+**Where the time goes now:**
+- **The packed herd, native:** 1.09 G instructions over 20 ticks.
+  - The step and wish loop inlined into `wishes` is 46%: the step's scan, the anchor's rings, out-from-under, the moves.
+  - The room lists' pushes (`addRoomsListed`, vectors) are 28%.
+  - The neighbour and room lists' build (`refresh`) is 9%.
+  - The slide (`SweepAcc.against`) is 5%, and `put` 4%.
+  - There are 61 wish passes a tick: the drag is cut into 1 px steps, and the herd wishes after each. That is the model, so it stays.
+- **The packed herd, wasm (V8's profile):** `wishes` 40%, `addRoomsListed` 38% (scalar: wasm32 baseline has no vectors), `refresh` 10%.
+- **The busiest spot:** it has 35 awake, below `wish_scan_most` (64), so it takes the scanned wishes. Those are about 70% of its tick.
+- **The server's re-run:** the wishes are 38%. Then:
+  - `Scene.consider` 9%: every scene built, three a tick, tests every critter on the board.
+  - Parsing 10%.
+  - The memsets were about 13%, and are mostly gone (202.15, 202.24-26).
+
+**What didn't pay** (all measured, none kept):
+- **f64 division in place of i64, scalar:** about the same natively, and on wasm slower (15.5-16.2 ms against 11.8-13.3 ms).
+- **simd128 for the page:**
+  - with the integer code: no gain (12.04 against 12.07 ms);
+  - with the room lists' f64x2 vectors: slower (14.3-14.5 against 11.0 ms). V8's f64x2 loses to its scalar integers here.
+  - The page stays baseline wasm32. That is also safer: an older browser without simd128 can't instantiate the wasm at all.
+- **The 32-bit division on wasm:** no gain, twice (at 202.11 and again after 202.20). There it is `@divTrunc`.
+- **Reading the grid among fewer awake** (`wish_scan_most` at 16 or 32): dearer at the busiest spot (66.6 M against 70.0 M).
+- **The step's vectors on short lists:** the gathering cost more than it saved. Now they are used only on a list of at least two chunks.
+- **`stepMeetsListed` inlined:** a trade, herd +0.8% against busiest −0.5%. It stays a call.
+
+**For Steve: ReleaseFast.** I haven't switched; the served build is ReleaseSafe.
+- **Measured at 202.11:**
+  - wasm herd drag 12.35 → 9.85 ms (−20%);
+  - native herd drag 9.2-9.9 → 6.5-7.8 ms (−20-25%);
+  - the busiest spot 227-272 → 190-225 µs.
+- **Counted at 202.18:** ReleaseSafe ran 1.632 G instructions to ReleaseFast's 1.229 G.
+- **What's left of the gap:** I cut the checks that a proof makes redundant (202.20: a wish's narrowings). What remains is mostly `delta`'s checked subtraction and ReleaseSafe's asserts.
+  - `delta`'s check can't go: the world is 8,192,000, not a power of two, so a wrapping subtraction isn't exact for points out of the world.
+
+**Exactness, beyond the tests above:**
+- **Proofs in doc comments:**
+  - `isqrt` below 2⁵² (202.9);
+  - `quotientAlong`'s narrowings (202.20);
+  - the room lists' f64 vectors (202.22): every step is exact, from the axes below 2²³ to the quotient below 2⁵³.
+- **New tests**, each held to the plain form:
+  - `isqrt` either side of every square up to 2²⁶ squared;
+  - `quotientAlong` against `@divTrunc`;
+  - `holdsPoint` against `holds(tileOf(p))`;
+  - `overlaps` against the all-pairs scan, in its order;
+  - `stepMeetsListed` against `stepMeets`, with neighbours on its first test's edge, mid-world and across the seam;
+  - the room-list test, now also at the seam's corner placed in the world (the vectors) and unwrapped (the scalar loop).
+- **Mutations:** each vector path's seam select and boundary was broken by hand and fails a fast test.
+- **`Scene.in_world`:** the vectors run only when every point of the scene is in [0, world). `Board.place` doesn't wrap, so a board placed out of the world takes the integer loop.
+
+**For the box:**
+- **The server's vector width is the build CPU's** (`std.simd.suggestVectorLength(f64)`): 8 lanes with AVX-512, 4 with AVX2, 2 on baseline x86_64.
+  - The fast tests pass at all three (`-Dcpu=x86_64`, `x86_64_v3`, and native here).
+  - If the droplet's server is built for its own CPU, it gets whatever that CPU has.
+- **`physics_wire.same()`** now answers the tick's checked lines field for field, without writing them (202.15). Any other pair is still written out and compared.
+
 ## CC → the box, 2026-10-14: 201, the torus' critters wrap (dog-park)
 
 **Done:** dog-park `75a9246` on `claude/great-wright-i7aste`, from main (`b2ae2f1`). `zig build check`, `zig build test -Dknobs=alt` and `zig build slow` (100 s) all pass.
