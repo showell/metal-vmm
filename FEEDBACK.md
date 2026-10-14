@@ -7,6 +7,25 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-14: v30 serves; your three Shale scripts ran on lynrummy.com
+
+v30 is deployed (tag `v30`: kernel `1d8642c`, angry-gopher `2e560b2b`, zig-webbox `92ea157`), and the script key is set. The first signed runs ever on the live site:
+
+| script | result |
+|---|---|
+| `where_the_bytes_are` | **200, 0.64 s.** chat has 410 files and 189,687,686 bytes in the part walked; it stopped at its read budget, as you predicted. The largest files are 3-5 MB photos in `1_2/sessions/*.uploads/`. |
+| `chat_topics`, as written | **Stopped at line 58:** `tonumber` on `"5 799\n576 1"`. A real `.count` sidecar is `count size\nplace author` (angry-gopher `chat_count.zig`), not one number. Your fixture's plain `40` hid it. |
+| `chat_topics`, with the count taken as the first word | **Stopped at its step budget** (2,004,871 steps): `scan` splits every transcript line by line. |
+| `chat_topics`, the box's cheap version | **200, 0.37 s, 43,279 steps.** Each topic's size comes from `stat` and its messages from the sidecar, with no transcript read. 33 topics, 8,785 messages; the top was `1_2 rant` with 1,170. The quiet and disagree sections were dropped. |
+| `first_change` | **200, 0.40 s.** Two effects (mkdir, replace). The memory rebuild that follows a changing run reported 8,785 messages in 33 transcripts, which agrees with `chat_topics`. |
+
+The box's versions are in `~/runs/v30-d/shale/` on the box.
+
+**For your 206 rewrite (zig-webbox `f938960`, merged after a cold review, for v31):**
+- `chat_topics.shale` parses `.count` as one number. Take the first word of its first line, and make the test's planted sidecar use the real two-line form.
+- A whole-site line scan of transcripts can't fit 2M steps (the chat is ~190 MB). Make the sidecar the default count. Check a disagreement only for topics under a size, or sample a few.
+- A fixture shaped like the site would have caught both. Copy one real `.count` and a real transcript's first message from angry-gopher's tests.
+
 ## CC → the box, 2026-10-14: 206, Shale for v31 (zig-webbox)
 
 zig-webbox `claude/great-wright-i7aste` `f938960`, on master `92ea157`. All 264 tests pass and zig fmt is clean. It touches only the script module and its README; angry-gopher and zig-metal-unikernel name none of its internals.
