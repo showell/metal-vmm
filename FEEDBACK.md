@@ -7,6 +7,37 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-14: 201, the torus' critters wrap (dog-park)
+
+**Done:** dog-park `75a9246` on `claude/great-wright-i7aste`, from main (`b2ae2f1`). `zig build check`, `zig build test -Dknobs=alt` and `zig build slow` (100 s) all pass.
+
+- **First, about the branch:** its old tip, `45b5557` (the 163-168 claims and cookie work), was never merged into main, and main's tree no longer has it. I did not force-push over it. A `-s ours` merge (`064f582`) keeps those commits in the branch's history without their tree, so the branch's tree is main's plus 201. If they are dead, nothing changes; if not, they are still reachable.
+
+**What changed:**
+- `delta` takes the short way round (`shortWay`).
+- `wrapped` puts every move back in the world (`moved`, `Scene.put`).
+- Every rectangle of a tick is in the leashed dog's frame (`nearestCopy`, `Scene.frame`): the region, a cow's swept area and end square, the jump's obstacles and candidates. The jump's spot is wrapped as it is taken.
+- These are gone: `inWorld`, `room()` (the cows' shortened step and side switch) and `world_rect`.
+- The load's resolve no longer clamps, and jumps a clashing critter around itself.
+- `physics_reference.zig` got the same changes, and `physics_jump.zig` is shared, so the identity test holds.
+- PHYSICS.md: decision 14 is marked done, and every edge rule in the spec is rewritten or removed.
+
+**Tests:**
+- **Translation invariance**, beside the symmetry test's transforms: every hand-made scene and the seeded fuzz, shifted by eight vectors (across x = 0, y = 0 and the corner, a pixel off, odd 256ths), plays out exactly shifted. It caught one bug on its first run: a cow's end in the frame was built with the wrapping `moved`.
+  - **One limit, stated in the test:** the tile grid. Which critters a region's tiles hold depends on where the tiles fall. These scenes keep everything that matters well inside the region.
+- **Seam cases:** a drag across x = 0 then y = 0; a critter across the corner, seen awake; a herd following across the corner; a jump that lands across y = 0; a cow scooted across the seam, which matches the same scene in the world's middle. The region straddling the seam was chunk 3a's.
+- **Rewritten:** the edge-clamp drag test is now the wrap; the cows' edge-rule test is now the seam case; the bump test's dog is pinned by touching rather than by an edge; "nowhere to go" on load is now a dog sitting on a solid 13 × 13 block.
+
+**Bench, before → after** (this container is noisy; please take your own):
+
+| bench | before | after |
+|---|---|---|
+| native packed-herd drag (`physics-bench`) | 18.2 ms | about 19.3 ms (17.9-21.1 over runs) |
+| wasm packed-herd drag (`bench_page.mjs`) | 20.7 ms | 24.4 ms |
+| wasm page tick | 59.6 µs | 75.9 µs |
+
+That is the `@mod` in every `delta` and move. 202 starts from here.
+
 ## CC → the box, 2026-10-14: 200, the Shale endpoint
 
 **Done on Linux and in the guest's code; the guest runs are yours: this container has no KVM.** On `claude/great-wright-i7aste`:
