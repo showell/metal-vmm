@@ -7,6 +7,91 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-14: 203(d) tier 0 under budget with room; 203(b) P198.12 both parts; 203(c) the plant fires on purpose
+
+zig-metal-unikernel (gopher-metal) `claude/great-wright-i7aste`:
+- `2dfafd3` and `e0c3492`: 203(d);
+- `c34024d`: 203(b).
+
+metal-vmm: `8cac224`, 203(c).
+
+### 203(d): tier 0, 52 s → 36 s of CPU here
+
+Measured with `-Dtest-cpu-dir` and `tools/test_budget.py`, here. The box column is these times × 1.43, your 25.0 / 17.5:
+
+| binary | before | now | the box, estimated | budget |
+|---|---|---|---|---|
+| src/unit_tests.zig | 18.7 s | 12.4 s | about 18 s | 25 |
+| disk_fat_lies_test | 9.5 s | 9.4 s | about 13 s | 25 |
+| disk_fat_test | 13.7 s | 6.5 s | about 9 s | 25 |
+| disk_fat_faults_test | 6.9 s | 6.1 s | about 9 s | 25 |
+| all 11 | 52 s | 36 s | about 51 s | 75 |
+
+Repeated runs here move by about 1 s on the unit binary. The margins are about 7 s on the largest binary and about 24 s on the total.
+
+**What moved, and where it still runs in full.**
+
+- **fat_sim:** one seed in tier 0, from several. `zig build properties` still sweeps 20, unchanged.
+- **store_sim:** one seed in tier 0, seed 5, the one that fills the volume (it kills S4 in MUTATION.md). `zig build properties` still sweeps 1,000.
+- **tcp_sim's "revival changes nothing":** 5 seeds, from more.
+- **The FAT32 uncached configuration** of the fault and lie sweeps is skipped in tier 0. Under `-Dfault-sweep-full` (long.sh) it runs as before.
+- **"A tree removes whole … past 4,096 entries"** removes 600 entries in tier 0 and 4,100 under `-Dfault-sweep-full`. The test is quadratic, because `removeTree` re-lists each round, and the bound it guards is the old 4,096-round one. long.sh now runs `disk_fat_test` with `-Dfault-sweep-full` too (its own lap, `fat-long`).
+- **serial.zig's `captureForTest`** makes one copy a call, not one a byte. A test holds it to a byte-at-a-time model.
+- **No test was cut for speed, but one was made cheaper:** tcp_sim's full-table seed, 2.8 s → 0.35 s.
+  - 97% of its time (callgrind) was `Sim.slotOf`, the simulator's own lookup, called for every client against every slot on every frame.
+  - `slotsOf` finds every client's slot in one pass, since a crowd's client i has port 40000 + i.
+  - A new test holds every 16th call to the old per-client lookup.
+  - This also cuts `zig build properties`' full-table sweeps.
+- **Tried and reverted:** a smaller middle of `nextStop`. It saved little and broke a floor test.
+
+**The budget stays as it is.** I don't argue for moving it: the cuts hold with room on your numbers.
+
+**One finding, not mine:** `zig build properties` ends with "78 properties not satisfied, 0 of them broken invariants". Master `e28f4b3` does the same, with the same 78 MISS lines (I diffed them). They are Reachables only the unit tests reach (mount refusals, FAT weighing, rename undo, …), so the step fails on its own. If properties is meant to pass alone, the report should take the unit tests' coverage as well; if not, say so and I'll leave it.
+
+### 203(b): P198.12, both parts
+
+**(1) `aliasFor` in one listing** (`disk_fat_dir.zig`).
+- **The change.** It now marks every `~N` its name's aliases already hold in a single listing, then takes the first free one.
+  - For each `~` in an entry's 8-character part, it reads the number after it and builds that candidate (`aliasCandidate`, which is the old loop's body).
+  - It marks the number only if the candidate equals the entry exactly. So it is the old answer by construction: a name's own characters may hold a `~` too.
+- **Numbers.** 300 `session-NNNN.md` names in one directory, written on an uncached disk, cost 60,356 disk requests, against 3,429,806 before (57 times fewer). The whole `disk_fat_test` binary ran about 6 s faster here with the change than without it.
+- **Tests:**
+  - **Agreement with the old probing:** over directories with holes, other bases and extensions, a name that is itself an alias, and names holding a `~`. One round has 130 names alike, so its first free alias is past `~100`.
+  - **Cost:** an alias among 300 alike costs exactly the reads of one alone in its base.
+- **Mutations that turned the tests red:**
+  - ignoring `~10` and up: the agreement test, the cost test and the existing "every alias taken" test;
+  - ignoring `~100` and up: all three, once the 130-name round was in.
+- **One mutation that can't matter:** not scanning position 7 of the 8-character part. A tail is at least two characters, so a `~` never sits at position 7.
+
+**(2) The FAT's free count, a vector at a time** (`disk_fat.zig`).
+- **The change.** `deriveFrom` counts a run of FAT sectors through `freeEntries`, which takes 16 entries at a time (u16 or u32 lanes, masked with FAT32's 28 bits). It falls back to one at a time on a big-endian host, and at the ends.
+- **What it saved.** `disk_fat_faults_test` went from 7.0 s to 6.1 s of CPU, and `disk_fat_lies_test` barely moved: the mount's count was a smaller share than 198.12 thought.
+- **The test** holds it to `entryIn`'s count over both kinds, random bounds and FAT32 free entries with the reserved top bits set. Mutations that turned it red: dropping the mask; taking the vector's first free as its first lane.
+
+**Not done here:** a plants run. plants.sh needs KVM, which this container doesn't have. Neither change touches what a plant plants, but please run it as always before merging.
+
+### 203(c): `counted_leak_short` fires on purpose
+
+**Why it was rare.** The plant fires only in `notGivenBack`: an operation's write failed after it allocated, and its give-back's write failed too.
+- With the kernel's held FAT, that needs the volume to stop taking writes between the allocation and the give-back.
+- The only seed seen, 714, drew `VOLUME_READ_ONLY_AT=126` (I printed its knobs).
+- `VOLUME_READ_ONLY_AT` counts every SCSI command, the boot's reads included. So its onset seldom lands inside an operation that allocates: about 1 in 300 to 600 seeds.
+
+**The new knob:** `VOLUME_READ_ONLY_AT_WRITE=n`, read-only from the command that is the nth WRITE.
+- **It always lands inside an operation that writes,** whether that write is an allocation's FAT link, its data or its entry. A refused link or data write leaves clusters to give back, and the give-back is refused too.
+- **The judge needs nothing new.** scsi.zig sets `read_only_at` at that command, so the volume line, the counts, the fired line and `During` all say `VOLUME_READ_ONLY_AT`.
+- **How often it is drawn.** `withVolume` draws it last, so every earlier draw is what it was: in 1 seed in 4 that lost the volume no other way, at one of its first 16 writes. That is 68 of seeds 1-300, about 40 of them in a shape that writes.
+- **Tests:**
+  - scsi.zig: reads don't count, and the volume is read-only from that command on;
+  - knobs.zig: at least 40 of seeds 1-300; never with another write-refusing loss; range 1-16.
+- **Docs:** KNOBS.md and knobs.zig's header say it.
+
+**What I couldn't check here, so please do, in this order:**
+1. `PLANTS=counted_leak_short ./plants.sh` over seeds 1-300 should now see it fire, and be caught, many times.
+2. check-cc's clean run of seeds 1-300 should still pass. About 40 of those seeds now refuse writes mid-request where before they didn't. That is new ground for the excuses, though `VOLUME_READ_ONLY_AT` already covers it in kind.
+
+If either fails, the knob is the place to look (narrow it to fewer seeds, or to the write shapes), or the excuse.
+
 ## CC → the box, 2026-10-14: 205(a) and (b), the herds as numbers and the metric knob (dog-park)
 
 dog-park `claude/great-wright-i7aste`, on `a8a9935`:
