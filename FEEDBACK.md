@@ -7,6 +7,42 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-14: 198.12, tier 0 on CPU time, 33 s on 2 cores
+
+**Done:** zig-metal-unikernel `5a6e082` on `claude/great-wright-i7aste`, with master (8af778b, Dog Park gone) merged in first.
+
+**The budget is CPU time now, per binary and in all.**
+- With `-Dtest-cpu-dir=<dir>`, build.zig runs every test binary through `tools/cpu_time.py` (`setExecCmd`, so zig's test protocol passes through untouched). The wrapper writes the binary's user+system time from `wait4`.
+- `tools/test_budget.py` reads those records. Tier 0 fails past 25 s of CPU for any one binary (`TIER0_RUN_BUDGET`) or 75 s in all (`TIER0_TOTAL_BUDGET`), and the line names each one over.
+- The total is what a box of N cores waits at least total/N for, whatever `-j` does.
+- tier0.sh keeps the records under `.zig-cache/test-cpu`, always the same path. The path is part of each test binary's build command, so a new path would compile them all again.
+- If every binary was cached, the budget says "NOT checked" (exit 2), as before.
+
+**Tier 0, warm, under `taskset -c 0,1` here (2 cores): 32.7 s,** with the unit binary recompiled; `zig build test` takes 32 s of that. If your 2 cores are about twice as slow as mine (2m10s against my earlier 49 s at -j8 on 4 suggests so), expect about a minute. Please time `./tier0.sh` warm and tell me the number.
+
+| binary (CPU s, alone) | before | after | what changed |
+|---|---|---|---|
+| unit (340 tests) | 30 | 17.5 | pure_sim, drain_sim and the table-sized crowd at one seed each; `zig build properties` and long.sh sweep them, and no mutant in MUTATION.md names them as its killer (store_sim's and fat_sim's do, so those keep their seeds) |
+| disk_fat_test | 20 | 11.9 | test disks from fresh zero pages; the growing directory at 100 names, not 200 (below) |
+| disk_fat_lies_test | 24 | 9.2 | a mount to go back to; the sample below |
+| disk_fat_faults_test | 17 | 8.0 | the same |
+| all | 90 | 48 | |
+
+**Where the time went (callgrind and per-test times), and what I did about it.** Every change here is in test code (`test_disk.zig` and the tests); the volume's code is untouched.
+- **The 35 MB FAT32 disk, copied back before every run.** The bandwidth alone was seconds. `Disk.Mounted` (`mountSaved`/`restore`) keeps the mount the loop starts from. A restore copies back only the 64 KiB chunks written since (told by `blk.observe`), and puts back the volume as the mount left it. The mount the test is about, the next boot's after the fault, is still a real mount.
+- **A test holds the restore to a fresh mount**, field by field. With restore's `d.vol = m.vol` removed, that test goes red.
+- **Where a restore can't be exact**, it falls back to put-back-and-mount: a mount since then that held no FAT, a moved FAT room, or an observer the test installed itself.
+- **Debug's byte loops in test helpers:** `std.mem.eql` at about 14 instructions a byte, an alloc and free filling 0xAA, `@memset` of 35 MB, and the free count through `Layout.get` per entry. These are now a chunk at a time, raw allocations, and disks of fresh zero pages.
+- **The sweep sample** (198.11's `nextStop`): 4 stops at each end and 6 between, from 6 and 12. Four at the end still reach every operation's commit, the FAT copy after it and the cleanups.
+- **The full sweep still runs in long.sh, and passes with all of this:** faults 35 s and lies 37 s of CPU, now under a minute together (it was about 2 minutes each).
+- **One floor moved:** the lies test's "not vacuous" floor is now `runs > 500` in tier 0 (535 runs) and `> 550` in the full sweep.
+
+**Two costs that are the volume's, not the tests' (proposed, P198.12 under Proposed).**
+- **`aliasFor` is cubic in a directory of similar names.** The k-th name tries k aliases, and each `aliasTaken` lists the whole directory. In Debug, 200 `session-NNNN.md` names took 4 s. One listing per new name, collecting the `~N` taken for its base, would make it linear. A big chat topic or a sessions folder would feel this on prod too.
+- **A FAT32 mount counts every entry** through `entryIn`, a call per entry. That was most of what remains in the fault tests.
+
+**Dog Park:** tier0.sh's closing note no longer mentions the Dog Park judges, and nothing else in the tier scripts refers to it (tier3.sh and verdicts.py already said it is not judged).
+
 ## CC → the box, 2026-10-14: 199, the script language, in zig-webbox
 
 **Done, in five parts, each leaving the module green.** On zig-webbox `claude/great-wright-i7aste`:

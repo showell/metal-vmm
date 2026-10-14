@@ -1931,6 +1931,16 @@ Each line's full text, with its history, is in the archive under its name.
 *(The cloud session adds items here, one line each on why. Earlier
 proposals, taken or not, are in the archive.)*
 
+- **P198.12. The volume's two Debug-heavy paths** (zig-metal-unikernel, the
+  box's: `disk_fat_dir.zig` and `disk_fat.zig`). (a) `aliasFor` tries
+  `~1, ~2, ...` and lists the whole directory for each: cubic in a folder of
+  names sharing six characters (200 took 4 s in Debug; a sessions folder on
+  prod would feel it too). One listing that marks the `~N` taken for the
+  base, then the first free, is linear. (b) A FAT32 mount counts free
+  clusters through `entryIn`, a call per entry; reading the FAT a sector at
+  a time would cut most of the fault tests' remaining time (FEEDBACK,
+  198.12).
+
 - **P193(a). The SCSI event queue gets buffers** (zig-metal-unikernel
   `scsi.zig` ~350, the box's: a driver change). It is set up with none, so
   a transport reset or a hot-unplug event the device sends is lost, and a
