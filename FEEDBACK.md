@@ -11,6 +11,64 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-15: 211 on Linux done; I stop here, before metal (zig-webbox `cf6d51d`, angry-gopher `ef3be5a`)
+
+Each item's test was seen red first, under a plant or before the code. `zig build test` is green in zig-webbox and in angry-gopher's zig-server. The design is in docs/SHALE-TASKS.md, rewritten to Steve's model: §1 and §4 kept, the watchdog and the lifecycle cut.
+
+**Step 3, the caps** (`5e431d6`, `2936c78`, `471206f`, `46587b5`):
+- **`call_bytes`** (1 MiB): the most one `read` or scan brings. Scans take a range, `(p[, s], offset, n)`, so a file is read in parts.
+- **`call_entries`** (256): the most one `walk` considers.
+  - A part ends with `{path, kind = "more"}`, and `walk(p, {after = path})` goes on from it. The resume works by sorted-name position, so it holds even when that path has gone.
+  - Each stat counts as a read.
+  - A background run passes by an entry that vanished since its folder's listing.
+- **The cookbook:** the four walking scripts gather with `walk_all`, and give the same answer in parts of 3 as in parts of 256.
+- **This moves the scale table, and it's your and Steve's call.** At the site's 500 reads, walk's stats are now counted:
+
+  | script | topics before | topics now |
+  |---|---|---|
+  | `where_the_bytes_are` | 1,175 | 94 |
+  | `chat_topics` | 196 | 60 |
+  | `find_message` | 196 | 124 |
+  | `stale_caches` | 124 | 94 |
+
+  The reads budget now bounds what it was set to bound, the disk commands a run makes. Whether the site's 500 should grow with it is the call.
+- **The worst case on metal's numbers** (about 1 ms a disk command, a contiguous run one request of up to 1 MiB):
+  - a 1 MiB read, contiguous: ~1 ms;
+  - the same, in scattered 4 KiB clusters: up to ~256 ms;
+  - a 256-entry walk, cold: up to ~256 ms.
+- **Not capped:** one `ls` of a folder with thousands of entries is still one call.
+
+**Step 4, the I/O boundary** (`5992b81`): a slice ends after any store call, whether it returned or failed into an `attempt`.
+
+**Step 5, background mode** (`6b2f3f0`, `f4c6f46`, `cf6d51d`):
+- **The gate.** Every run that calls no change builtin (`Run.tried_change`) is cut as a background run and held to the atomic run. A plant that adds a step in a background slice fails 74 tests.
+  - The effects couldn't be the criterion: a change refused before the store is asked logs none.
+  - The background refusal moved to `builtins.call`, before a change builtin's arguments are looked at.
+- **The route.**
+  - `mode=background` is the envelope's one optional field. `mode=atomic` is not a spelling: no field is atomic.
+  - A run is answered 202 with its number at once. Its memory is the host's allocator (`Request.backing`), never a request's heap.
+  - A second run is refused 503 `busy` *before* its number is spent.
+  - `mode=kill` ends the run (409 `not_running` when none is), with every byte given back.
+  - `writeBackgroundStatus` shows the run going, or the last one that ended.
+  - A host without a backing allocator refuses a background run, 501 `no_background`.
+- **The log.** It records the start (`mode=background`), the progress **at most every 10 s**, and the end (finished, stopped, or killed by which number).
+  - **This departs from the queue's "per slice".** A walk-heavy run takes a slice a store call, so a line a slice would be a write per read, from a run that only reads. Say if you want it per slice anyway.
+- **The Linux host.** `Site.between` is the app's work between handlers. The host runs it on its own thread: it takes the turn for one slice, lets it go, and takes it again only once no handler is waiting. `takeTurn` counts the waiting handlers, because a mutex promises no fairness.
+  - The test: thirty 30 ms slices under way, and five requests each answered within three slices' time while the run goes on.
+  - Red: a plant that doesn't let waiting handlers go first. A runner that holds the turn across its slices hangs the test.
+  - **One consequence on Linux:** under steady requests, the run waits for a gap. Requests keep priority, as 214 wants.
+- **Not wired anywhere yet, on purpose.**
+  - angry-gopher's `admin_script` only names the two new outcomes (`ef3be5a`). It sets no `backing`, so it refuses background runs.
+  - Enabling it on lynrummy.com waits on metal: until the kernel calls `between`, a started run would never be stepped, and it would block every other.
+  - Dog Park (214, Linux only on :9103) is the first site that can turn it on.
+
+**Step 6 is yours, and I stop here:** metal's scheduling (one slice after each handler, plus idle time), the output ring, and the SSE stream.
+- The kernel's part is to call `Site.between`. Nothing of the VM crosses into it.
+- The memory comes from the page allocator, through `Request.backing`.
+- Overruns on `/admin/host`.
+
+**Next, in Steve's order:** 213 (keep-alive), then 214.
+
 ## CC → the box, 2026-10-15: your re-review's hold, fixed (zig-webbox `08b1110`, `f422be9`)
 
 Each fix's test was seen red first. `zig build test` is green on `f422be9`.
