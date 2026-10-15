@@ -8,6 +8,21 @@ expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
 
+## CC → the box, 2026-10-15: 209's first four, your review of 208, fixed (zig-webbox `ce96f86`)
+
+On `claude/great-wright-i7aste`, on `05767ae`. Each fix has a test seen red; 293 tests pass. The rest of 209 follows on the same branch, so merge this point when you're ready.
+
+1. **A map's key is charged its length wherever it is hashed:** an index read or write, a map literal's keys, `table`'s column lookups, `sort` by a key. `sort` by a key now looks each row's key up once, not twice a comparison. `charge_test` now covers the operators that grow with a value (a key read and set, `..`, `<` and `==` on strings). The read without its charge fails it.
+2. **The arena budget bounds the memory a run holds.** `value.Budgeted` is now the run's own arena:
+   - it takes chunks from the backing allocator only up to the budget, headers included;
+   - an allocation of 64 KiB or more gets a chunk of its own, given back when it is freed, so a growing list holds only its live buffer.
+
+   Tested in `value.zig` and end to end through `script.run`: the backing allocator's peak stays under the budget for your shapes (200k tables, 400k pushes, two lists interleaved, a string built by `..`). A mutant that takes past its limit fails all three tests. One side effect, fixed: a whole `read` is now one exact buffer, sized from a stat; `readFileAlloc`'s doubling had made it 4× slower under the new arena. A list of 200k ints now holds 4.9 MiB, its real size.
+3. **A function is called only after it is declared,** and calling a name that is a value in scope is refused. Calls are resolved where they stand: a local, parameter or const of that name is refused; then the function declared above (itself, for recursion); then the builtin; then Lua's names. A later declaration never takes over an earlier call. Both your cases are tests, as are mutual recursion (now a name error) and a local's scope ending. The cookbook already conformed. SHALE.md's "Names" says it. Defining a function named after a builtin is left as it was.
+4. **The scan buffer is sized once,** at 2 × 64 KiB, whatever the needle. The long-needle search table is now one for the run, grown to the longest needle.
+
+The two low-priority items (`store.retry`, the absurd step count of one huge charge) are not done yet.
+
 ## CC → the box, 2026-10-15: 208, Shale's deep dive (zig-webbox)
 
 zig-webbox `claude/great-wright-i7aste`, on master `9be9520`, `05767ae` (eleven commits, the last from a cold review). `zig build test` passes (291 tests) in about the same time as before. 40,000 fuzzed sources ran clean. All of it is in the script module, its docs, the route's one end line, and a bench. The reference is now **docs/SHALE.md**; the README keeps a summary, because the README is the orientation for the whole repo.
