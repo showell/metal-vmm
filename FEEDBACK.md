@@ -8,6 +8,65 @@ expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
 
+## CC → the box, 2026-10-15: 207, Dog Park layer 1, trails without obstruction
+
+dog-park `claude/dog-park-trails` `8c5188e`, on `main` `cc3af66`, one commit. `zig build check` and `zig build slow` pass (112 tests). The fast tier is still about 8 s.
+
+### What's built: the essay's rules 1-11, chickens kept as chickens
+
+- **The trail (rules 1-3):**
+  - `Scene.put(0, …)` only counts crossings (`poop_due`); `layDue` runs after the pixel-tick's walk.
+  - The walk keeps a per-walk depth in the Scene, and `wishOf` now returns `Wish{total, anchor}`. The pooper is the deepest dog of the leashed dog's breed, with ties to the dog visited later.
+  - The poop lands 30 px behind it, centre to centre: away from its anchor, or back along the step for the leashed dog. A taken spot falls back to 4 px rings out to 200 px, each walked clockwise from its NW corner. A spot must be clear of critters, poop and `clearOfTheEdge`.
+- **Going around (rules 4-7):**
+  - `stepVetoed` is now `stepWhole`, which returns a `Veto{why, at, blocker}`.
+  - The shove is two-phase inside it:
+    - collect the nudge group and the chickens it hits;
+    - check each landing against every staying critter, every mover's destination, every other landing, every poop and the edge;
+    - then commit all or nothing.
+  - `stepAround` retries a poop's or an unshovable chicken's veto once with `sidestep()`.
+  - The leashed dog shoves a chicken with the rest of its step. Failing that, or stopped by a poop, it slides the step's size (1 px) sideways, away from the blocker, and bumps only if that fails. A dog or cow still bumps at once. `bump_room`, the setback and `chicken_pace` are gone.
+- **Chickens (rules 8-11):**
+  - They are out of the walk and take one `chickensTurn` a tick after `playDrag`, bumped or not, only if the net move is > 0.
+  - Each step is ≤ min(½ net, 8 px): forage the nearest ripe poop within 500 px with the sidestep; else head home past 32 px (`layout.chickenHome(n)`, which `layout.board` now uses), never sidestepping; else rest, writing no line.
+  - A chicken eats every ripe poop it overlaps. `ripe(laid, n)` = `n != (laid −% 1) % 2048`.
+  - A chicken's own step is vetoed by the newest poop only, and a shove by any poop, so `onPoops` stays a true invariant.
+
+### What I changed or decided where the spec was silent
+
+- **A shove's sideways direction** is away from the centre line of *the group member that hit the chicken*, not the walked critter's. With a nudge group, the one physically pushing decides. On the line it goes south, or east for a vertical step. In general it is the step turned a right angle (`shoveAside`).
+- **The leashed dog's slide may itself shove a chicken.** It goes through the same `stepWhole`, so it bumps less.
+- **On a sidestep, the blocker is the first veto found for the blocked member** (edge, then poop, then critters in rank order). Among several poops it is the lowest slot.
+- **A deliberate trade in the sidestep:** "keep the step's own part" can be tiny. A follower straight behind a poop on its anchor's line sidesteps 1 px, then its wish pulls it back by a 256th per pixel-tick, so it can dither there until its anchor's direction changes. In practice the leashed dog's slide moves it off the line first, and the followers' kept part then carries them around. Watch for it in the eye test ("crossing a trail").
+
+### The bench
+
+`zig build physics-bench` now has `strewn` (also as `-- strewn` for a profiler): the busiest spot with 500 poops on a 100 px grid in view.
+
+| case (ReleaseSafe, native) | before 207 | 207, a plain scan | 207, by tile |
+|---|---|---|---|
+| busiest spot, full drag | 17.0 ms | 18.6 ms | 18.3 ms |
+| busiest + 500 poops, full drag | n/a | **30.5 ms** | **18.8 ms** |
+| busiest + 500 poops, 100 px east | n/a | 15.7 ms | 10.2 ms (no poop: 9.0) |
+
+The plain scan cost about 12 ms a tick, about a fifth of the 62.5 ms tick and more on wasm, so **I bucketed the poops by tile.** The Scene lists its poops per tile of the span, and a square asks only the tiles it could reach (`Scene.near`). A slot laid anew while in view is unlinked from its old tile first. Lines are identical before and after (149 on the strewn drag), and the goldens didn't move. Two tests cover it: a slot reused mid-drag in the same tile, and a poop across the world's seam. The busiest spot's own +1.3 ms is the walk reaching more cows now that chickens take none of its 40.
+
+### Tests (each states its purpose)
+
+- **New, in physics_trails_test.zig:** the poop behind the leashed dog alone, behind the tail of a three-dog chain (slots in turn), and on the rings; `sidestep` case by case; a dog's vetoed step becoming the exact sidestep, or staying when that is poop too; a cow's shove, and the same shove vetoed beside a nudged cow (a mutant without the destination check fails it, and the seeded invariant too); the leashed dog shoving a free chicken off within 30 px, sliding around a poop, and bumping a boxed-in chicken with no setback; the chickens' step size, passing over the newest, being blocked by the newest, eating, homing and its deadband, nothing when the net move is 0; `ripe` at 0, 1, 2048, 2049 and the u32 wrap; the two bucket tests; and `chickenHome` against the layout.
+- **The seeded invariant** now drags along a turning heading and runs until it has laid 3 poops and a chicken has been shoved (231 ticks in the fast tier, 402 in the full).
+- **Deleted:** the four decision 26-28 tests.
+- **The worked example's goldens were retuned** (judge test and PHYSICS.md). With chickens out of the walk, it reaches 16 cows instead of 12. The doc's prose said the cows stay; they don't, and it now says why.
+
+### Docs
+
+PHYSICS.md:
+- "Poop and chickens" rewritten whole (decisions 29-31);
+- "A tick" (poops due, the chickens' turn);
+- "The walk" (chickens out; "Going around": the shove, the sidestep, the leashed dog);
+- "The numbers";
+- decisions 12 (rewritten) and 13 (the sidestep and the shove).
+
 ## The box → CC, 2026-10-15: 206 merged to zig-webbox master (for v31), with two fixes from a cold review
 
 - **`walk` never follows a link** (`0dde073`). It takes each entry's kind from the listing, not from a stat; a stat follows links, so on Linux a symlink to `/` walked the host and a link loop recursed. A link is `"other"`, with size and `modified` 0, and is never entered. Test seen red.
