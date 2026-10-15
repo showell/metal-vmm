@@ -2303,6 +2303,34 @@ Steve builds Dog Park by playing it on the box's :9103. The box redeploys there;
     - **Angry-gopher's Linux build uses this host too:** run its tests, and say what changes for it. The metal host is untouched.
     - **Then** FEEDBACK. The box merges after a cold review, and Dog Park's report rate can go back to 250 ms once :9103 keeps connections.
 
+214. **Dog Park mounts the signed Shale route, for monitoring (Steve, 2026-10-15; after 211's background mode).** github.com/showell/dog-park `main` (`91fe211` or later), a new branch `claude/dog-park-shale`. Steve: "We'll almost certainly use SHALE scripts to monitor logs."
+    - **Why:** Dog Park now keeps a debugging record per game:
+      - `data/game-<slot>/physics/`: a snapshot plus logs `log-<start ms>`, rotated at 1 MiB and kept for an hour, 25 MB a game;
+      - 80 accounts (`data/players`).
+
+      Monitoring it from outside means reading those files, which is what Shale is for. The logs are plain text, framed entries (`entry report N`, `entry load`, findings), each report as the page wrote it. See dog-park's docs/PHYSICS.md, "The log is rotated" and "Who may play", and notes/dog-park-capacity.md.
+    - **Mount webbox's `script_route` in dog-park's app.zig,** as angry-gopher does on metal:
+      - the same signed envelope and sequence numbers;
+      - its own key: a public key file in Dog Park's auth folder, set the way lynrummy's is, never shared with lynrummy;
+      - its store scoped to Dog Park's data folder;
+      - its budgets stated in the README.
+
+      Use the atomic/background modes as 211 builds them:
+      - **background, read-only, for monitoring:** the default, and the mode the scripts below use;
+      - **atomic:** only if the route needs it for writes. Say whether Dog Park needs writes at all. Probably not yet: an operator resets a game through the game.
+    - **It must not starve play:** background slices run between handlers, and Dog Park's own requests (`/report`, at a report a second per player) keep priority. Measure a background scan of every game's logs beside a scripted player, and report the worst wait a report saw.
+    - **A starter cookbook,** in dog-park (`tools/shale/` or where webbox's cookbook convention puts them), each run under the route's budgets on a site-shaped fixture made from REAL files (copy a game folder from the box's ~/dogpark-test/play/data, read-only):
+      - `games.shale`: per game, its last activity (newest log's start and size), its kept tick (from the snapshot), its log bytes;
+      - `trouble.shale`: per game over the last hour, counts of `differ`, findings (overlaps, idle drags), `req ?`, and stuck marks, from the log entries;
+      - `accounts.shale`: the `players` count against 80, and games started vs accounts.
+    - **Tests:**
+      - the route refuses an unsigned or replayed script, through dog-park's real host;
+      - a background script can't write;
+      - the cookbook runs on the fixture with the expected output;
+      - play continues while a scan runs.
+    - **Docs:** dog-park's README "Deploying" says how to set the key and run a script. PHYSICS.md's "Who may play" gains the route.
+    - **Then** FEEDBACK. The box merges and deploys to :9103, and Steve sets the key.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
