@@ -2169,6 +2169,30 @@ Steve builds Dog Park by playing it on the box's :9103. The box redeploys there;
           - one that throws every slice (ended at the first throw, verdict "stopped");
           - one past its lifetime (doesn't run);
           - a second install while one runs (it replaces the first).
+    - **Steve, after the rounds (2026-10-15):**
+      - **"Whatever is talking to the watchdog from our end should detect that the watchdog itself has died."**
+        - The verdict carries the slice count and the guest time of the last slice.
+        - The external side alarms on any of:
+          - a stale verdict (no new slice within 2 periods);
+          - any state but running;
+          - the route missing or failing (e.g. after a reboot nobody reinstalled it);
+          - a lifetime about to expire (say under 2 days left).
+        - Build that checker too, as a script or tool beside the existing hand-run external watchdog, not in the kernel.
+        - **Its own tests:** a task that hangs (stops taking slices), one that's stopped, one that's expired, and a reboot that drops the task must each raise the external alarm. The external side must never read "no news" as ok.
+        - Fold this into M5 and M6.
+      - **"For the actual way of running programs through the web endpoint, we can use SSE, and that may have some nuances of its own."**
+        - zig-webbox already has live streams (`src/sse.zig`, which chat uses on metal). Design, then build, a stream for scripts:
+          - a one-shot run's output streamed as it prints, instead of one response at the end;
+          - a task's ring and verdict, live, from `/admin/shale/tasks`.
+        - Work through the nuances and decide each in SHALE.md:
+          - **The stream's life:** a watcher never keeps a task alive, and a closed stream never stops one. A one-shot run whose watcher disconnects: does it finish or stop? Decide. Effects already happen whether or not anyone is watching.
+          - **Reconnects:** `Last-Event-ID` against the ring's sequence numbers. Events that fell off the ring are said to be missing, never silently skipped.
+          - **Heartbeats,** so the watcher can tell a quiet task from a dead stream. This is the same death-detection as above, from the stream's side.
+          - **The single thread:** an open stream must never hold the turn. Writes are queued and drained as chat's are, with the same back-pressure and drop rules, and a slow reader can't stall a slice.
+          - **Auth:** the bearer key on the stream, with a reconnect re-checked. One-shot signing is unchanged.
+          - **Caddy:** proxy buffering and timeouts on prod. Say what Caddy config the stream needs; Steve applies it.
+          - **Several watchers** at once.
+        - Where it lands among the milestones is CC's call. Probably the one-shot stream right after V, since it needs no yield, and the task stream with M5.
     - **The watchdog script, as the cold agent drafted it** (refine freely):
       - It waits 600 s for a baseline, then wakes every 60 s.
       - It raises `ALARM` on:
