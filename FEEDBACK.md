@@ -8,6 +8,96 @@ expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
 
+## CC → the box, 2026-10-15: 208, Shale's deep dive (zig-webbox)
+
+zig-webbox `claude/great-wright-i7aste`, on master `9be9520`, `05767ae` (eleven commits, the last from a cold review). `zig build test` passes (291 tests) in about the same time as before. 40,000 fuzzed sources ran clean. All of it is in the script module, its docs, the route's one end line, and a bench. The reference is now **docs/SHALE.md**; the README keeps a summary, because the README is the orientation for the whole repo.
+
+### (a) Internals
+
+- **One way to declare a builtin.** `builtins.zig` is now a registry. Each topic's file lists its builtins as `Spec`s (name, arity, function): store, text, lists, time and the host, formatting, and numbers. A comptime table checks that every builtin is declared exactly once. `arity()`, the two dispatch switches and `builtins_v31.zig` are gone. Every file is under 1,000 lines (the largest is interp.zig, 740).
+- **Hot paths, measured** (`zig build script-bench`, ReleaseSafe): 7-15 ns a step for a loop's iteration, a list, a map and calls.
+  - **`s = s .. x` was quadratic** in steps and arena: 5,000 lines ran out of 100M steps. A `..` chain is now joined once, and extends in place the string the last chain built. That case is now 0.8 ms and 146 KiB. No string ever changes; an alias and a `sub()` prefix of the growing buffer are tested, and the mutant without the whole-string check is killed. *Named change:* a chain charges the bytes it writes, which is less than the nested joins charged.
+  - **`for x in l` copied the list** each time a loop began, so a loop over a list inside another cost arena every pass. It now runs in place. *Named change:* an item changed during the loop is seen changed.
+- **Allocation:**
+  - **Found:** `Budgeted` credited frees that the arena doesn't reclaim (an arena reclaims only its last buffer). A growing list's old buffers stayed held, so the arena's true size could be about twice its budget, which on metal is a memory bound. It now never credits a free: `used` is an upper bound. A 200k-item list now counts 9.4 MiB, its true footprint.
+  - **Fixed:** `portable_test.zig` hadn't listed `builtins_v31.zig`; it now proves its list is every source of the module.
+
+### (b) Reading and traversing efficiently
+
+| builtin | gives | costs |
+|---|---|---|
+| `read(p, offset[, n])` | part of a file; **0-based offsets**, as the sidecars count | a read; only those bytes (`store.readAt`, which metal's Io has) |
+| `count_lines(p)`, `count_in(p, s)`, `find_in(p, s)` | a scan of the file, 64 KiB at a time in one buffer, matches carried across the seams; `find_in` gives a `read` offset | a read a call; every byte a read byte and a step; ≤ 64 KiB of arena |
+| `walk(p, {depth, like, kind})` | `depth = 1` is `ls` with each entry's stat, and stops the walk; `like` and `kind` filter, and an entry left out is never stat'ed | fewer folder reads |
+
+The scans are checked against the whole file's own counts on planted seams. The two seam mutants are killed: a solid run of `a` catches the double count that random data missed.
+
+**"Stat in bulk"** is `walk(p, {depth = 1})`; no separate builtin.
+
+### (c) The language: decided, each tested
+
+- **The rule for new builtin names** (your open item): a script's own names may take a builtin's. A local is the value; a call goes to the script's own function first (declared anywhere), then to the builtin. **So a new builtin never breaks a script.** The exceptions are Lua's library names (kept for their "write this instead" messages) and `attempt`.
+- **`continue`**, the one new keyword.
+- **Escapes:** `\r`, `\0` and `\xHH` added; `\ddd`, `\u{}`, `\z` and the rest refused by name.
+- **`attempt(f, ...)`**, the pcall-like way to survive one bad file. It returns `{ok, value}` or `{ok = false, error, class, line, column, in_function}`. The arguments are evaluated outside the attempt; a **budget is never caught**, and nothing is undone. `pcall`'s refusal now points to it.
+- **A stop names its function**, in the report and in the route's end line: `stopped at s:3:9 (in \`f\`): ...`.
+- **`seconds`** now gives only what `date` can write, 1970 to 9999 (your open item).
+- **The smallest integer** can be written as `-9223372036854775808`. **Found writing it:** `-(-9223372036854775808)` panicked in the parser's minus fold. It is fixed, and the fuzzer has the fragments.
+- **Added for real scripts:** `min`, `max`, `abs`, `rep(s, n)`, and `substitute(s, old, new)` (plain text).
+- **Refused, and why, in the doc:** nested functions, closures, floats, patterns, list or map removal (a list only grows, which is what lets `for x in` run in place), and `goto`.
+
+### (d) Docs and the cookbook
+
+- **docs/SHALE.md** has a first script step by step, then:
+  - the language (statements, values, operators by precedence, names, the error classes, `attempt`, what's refused, the grammar);
+  - every builtin with what it gives, its cost and its errors;
+  - the store and its paths;
+  - the budgets, the default and the site's side by side;
+  - the Zig stack, the runner and the bench, the signed route;
+  - the cookbook;
+  - what was decided and refused.
+- **The fixture now uses the site's real shapes**, from angry-gopher's sources. A `.count` sidecar's offset is where the last block begins, the separator before it (`chat_store.zig`'s `new_size - stored.len`).
+- **Two new scripts:**
+  - `stale_caches.shale` checks every cache against its transcript's own separators, with `count_in`, counting only transcripts under 1 MiB;
+  - `find_message.shale` finds a phrase per topic, with the message's id, sender and date, and stops cleanly at the read budget, saying how far it got.
+- **Every read-only cookbook script is run under the site's own budgets** (`admin_script.zig` at v30) and changes nothing. These are ready for you to run on lynrummy.com once v31 ships:
+  - `where_the_bytes_are`
+  - `chat_topics`
+  - `stale_caches`
+  - `find_message`
+  - `topics` (small sites only)
+  - `big_files`
+
+### (e) Tests with purposes
+
+- **`charge_test.zig`:** every builtin whose work grows must charge at least a step for each byte or item more (its own steps at N and at 4N, less its setup's). Each constant builtin says why. A comptime check makes the table name every builtin, and a mutant `trim` without its charge fails it.
+- **The fuzzer** knows all of 208.
+- **Linux and metal agreement:** not runnable here (no metal store in webbox). What makes it hold is that every new store builtin is only `store` calls (`readAt`, `list`, `stat`), plus the portable test.
+
+### The cold review (an adversarial agent, before this note)
+
+It found, each demonstrated by a script, all fixed in `05767ae` and tested:
+- **Searches cost haystack × needle while charged per haystack byte:** `count_in` with a 30,000-byte near-match needle ran 75 s inside the step budget. `find`, `contains`, `split` and `substitute` had the same flaw. Every search now goes through one `Finder`: std's search for needles up to 16 bytes, Knuth-Morris-Pratt beyond that. It is tested against std on random long needles.
+- **Each scan took a fresh 64 KiB of arena:** scanning the chat's topics would have run the site's 8 MiB out. There is now one buffer a run, and the mutant is killed.
+- **A `..` chain of more than 8 parts allocated its parts every time it ran.** They now live on one stack.
+- **`attempt(f 41)` parsed.** It now needs its commas.
+- **A middle part's error named the wrong `..`.**
+- **Three doc claims were wrong:** the arena bound (it is give or take the arena's own slack, about an eighth), whether Lua's names may be locals (they may; only functions and calls are refused), and the scan's buffer.
+
+The review found nothing wrong in:
+- the in-place `..` (no string ever changed);
+- the list loop;
+- `attempt`'s restore, and that it never catches a budget;
+- 128 adversarial seam files for the scans;
+- `read`'s parts and `walk`'s options;
+- name resolution;
+- the escapes.
+
+### For you to decide
+
+- **The price of a byte.** A step a byte keeps the rule simple, but the bench says a byte of a whole read costs 0.4 ns and a byte scanned 3.7 ns, against 7-15 ns for an interpreted step. With the site's 2M steps, one run can scan or read only about 2 MB, though its read budget is 16 MiB. Two ways out, neither taken: raise the site's steps for read-only scripts, or price bulk byte work at a step per 8 or 16 bytes (`charge_test`'s property would hold, with its factor).
+- **`remove_tree`** is charged as one change, whatever the tree holds; the store bounds it. Say if you want it charged by what it removes (it would need a walk first).
+
 ## CC → the box, 2026-10-15: 207, Dog Park layer 1, trails without obstruction
 
 dog-park `claude/dog-park-trails` `8c5188e`, on `main` `cc3af66`, one commit. `zig build check` and `zig build slow` pass (112 tests). The fast tier is still about 8 s.
