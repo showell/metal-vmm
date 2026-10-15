@@ -9,6 +9,54 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-15: 211 (V), the VM's checkpoint: the gate holds (zig-webbox `ba406a6`)
+
+On `claude/great-wright-i7aste`, after 209. Four commits:
+- `bb390ce`: the machine's memory beside the arena;
+- `7b48c9e`: the walker's semantics as helpers;
+- `085f896`: the VM and the gate;
+- `ba406a6`: the cold review's fix.
+
+`zig build test` passes, 306 tests.
+
+**What it is.**
+- **`compile.zig`:** the AST to one array of ops for a stack machine.
+- **`vm.zig`:** runs those ops on the walker's own `interp.Run`. Every operator, index, builtin and charge is the walker's code, called from an op.
+- **The VM's own parts:** the operand stack; the frames (`Frame{func, ret_pc, base, walk, sp}`); loop state in hidden frame slots; `attempt` as a frame marked with its answer. An error that is not a budget's unwinds to the marked frame.
+- **No recursion:** a run's state is data, ready for M1's yield.
+- **Every stop keeps its place:** each op carries its position, which serves as the pc→Pos table.
+- **Production runs the VM:** `script.run` (the route, the runner). `script.runOn(.walker, ...)` keeps the walker.
+
+**Step parity, exact.**
+- The walker charges a step on entering each node and checks the depth budget there.
+- The compiler keeps those enters in the walker's order, each with its place and its static depth, and hangs each run on the op whose work follows. A label flushes pending enters first, so a jump neither repeats nor skips one.
+- The VM charges a run at once when it fits the budgets, and node by node when it doesn't, so a stop names the same node.
+- A callee's walk starts where the walker's would.
+
+**One change to the walker, so the two can agree on the arena.** The frames' slots, the `..` chains' parts and a long call's arguments moved out of the run's arena into `Run.machine`, the caller's allocator. The VM's operands, frames and code live there too. The arena now holds only what the script makes. The machine memory is bounded by the call-depth and depth budgets and freed at the run's end. The arena-peak test allows it beside the arena (68 KB measured for its shapes). This changes the arena figures a run reports, slightly downward; nothing else.
+
+**The oracle, `gate_test.zig`.**
+- In the tests every `script.run` runs twice: the VM on the store it was given, and the walker on a copy made before. The copy has the same path length (a store path is made in the arena) and the same file times, with links kept as links.
+- They must agree on the output, the effects, the stop (class, budget, line, column, function, message), the steps, the work counted, the arena held, and the store left. A difference panics with both runs.
+- So every interpreter, builtin, example, cookbook, error-corpus, property, doc-snippet and route test holds the VM to the walker. So do 40,000 fuzzed sources (`-Dscript-fuzz=40000`).
+- **Planted defects that fire it:** `<` compiled as `<=` (6 tests); a step lost when reading a local (55).
+
+**A cold review found one divergence, now fixed.** It compared the two engines directly on 69 adversarial scripts and 20,000 generated programs, sweeping the step, depth, call-depth, arena and output budgets: about 537,000 runs.
+
+The bug: in a `..` chain whose part is itself a chain, a map literal or a `print`, the part's own entries landed between the chain's in the code's position table. So the VM named the wrong column for a part of the wrong type, and an `attempt` printed that wrong column. The 40,000 fuzzed sources missed it, because token soup seldom builds such a chain.
+
+The fix keeps the chain's places apart until its op. A test of the review's cases went red through the gate first. With the fix, the reviewer's sweeps found no difference.
+
+Not covered by its sweeps: the store builtins and the read and change budgets. The ordinary tests do run those through the gate.
+
+**Measured** (`zig build script-bench`, ReleaseSafe, now on both engines): the VM takes 0.64-0.98× the walker's time where the interpreter's own work dominates, and about the same where a builtin's does (a scan, a whole read).
+
+**Not done yet, and why:**
+- **The AST in its own arena.** It sits in the run's arena today, for both engines, and parity needs the same arena. It belongs with M1's copy-at-yield, where it matters.
+- **The walker's retirement.** It stays in the test tree as the second implementation until Steve says otherwise.
+
+Next: M1 (`yield` and copy-at-yield memory) after you've looked at this. Or the one-shot SSE stream, which needs no yield, if you'd rather see that first.
+
 ## CC → the box, 2026-10-15: 210 done, the walk's speed (dog-park `claude/dog-park-speed`, `9130db4`)
 
 Three commits on `main` `663322c`. `zig build check` and `slow` pass.
