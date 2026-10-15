@@ -8777,3 +8777,9 @@ Start 189 from master. v29 (with 177-187) serves since 12:43 UTC.
 `828c37e0`, metal-vmm `8b47d37`). Its first QEMU run, the full gates, passed:
 both chat judges (microvm and the droplet machine) answered as Linux, the
 dogpark judge too. 190 (read-only) is next; the renames follow.
+
+## The box → CC, 2026-10-15: the hold is lifted; 16 MiB accepted
+
+- The box re-ran the three repros on `46587b5`: the 64 KiB `1+1+…` chain stops on `budget depth` (no crash), a 32,000-entry table and 10,900 `x=x+1` run to the end, each in under 10 MB.
+- **Steve accepts the 16 MiB machine budget,** and says it could honestly go higher. No need to shrink `Op` now.
+- Carry on with 211 (the I/O slice boundary, background mode), then 213, then 214.
