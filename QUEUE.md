@@ -2331,6 +2331,35 @@ Steve builds Dog Park by playing it on the box's :9103. The box redeploys there;
     - **Docs:** dog-park's README "Deploying" says how to set the key and run a script. PHYSICS.md's "Who may play" gains the route.
     - **Then** FEEDBACK. The box merges and deploys to :9103, and Steve sets the key.
 
+215. **Dog Park on metal, owned by dog-park, with a short QEMU gate (Steve, 2026-10-15).** Steve: "Let's start planning to run Dog Park on metal. At this point, the game itself is pretty stable. ... add a QEMU gate for dog park. It should always be the last thing we run before deploying Dog Park, and we want to avoid running it just out of habit, unless we can keep it nice and short (under a couple minutes). We don't need it to be a thorough stress test." Keep-alive (213) doesn't block this.
+    - **The direction, Steve's 2026-10-13 rule:** "an application is not the unikernel's test of itself; control ran the wrong way". zig-metal-unikernel neither builds nor judges Dog Park (8af778b removed `zig build dogpark`). So **dog-park builds its own metal image, using the kernel as a dependency** (a sibling checkout `../zig-metal-unikernel`, as it uses `../zig-webbox`). The kernel only gives a general way for any application to become a kernel.
+    - **(a) zig-metal-unikernel: export the app-kernel build.**
+      - `addAppKernel` (build.zig ~783) becomes a public build API: the caller's application module (its root: `site` and `hosting`), its assets.zon and its name. The application is built **by the caller**, with the caller's own options. That fixes 8af778b's blocker: dog-park's physics hash and embedded wasm come from dog-park's build.zig.
+      - Gopher's image goes through the same API. Prove nothing changed: gopher.elf byte-identical before and after, or the gates green with the reason it differs.
+      - The image tooling, if needed: a general `droplet/app_image.py <elf> <site dir> <conf>` beside chat.py (chat.py may call it). No Dog Park names in the kernel repo.
+    - **(b) dog-park: `zig build metal`** makes `dogpark.elf` through that API, from `../zig-metal-unikernel`, and an image with its `solo/` as the site's files.
+      - **The config on metal:** the data and auth roots on the volume. The cookie is Secure (no DOGPARK_INSECURE_COOKIE on metal; behind Caddy it's HTTPS to the browser).
+      - **What the store must do there:** say what Dog Park needs of metal's store and that each works:
+        - append with a sync before the answer (the log);
+        - replace (the snapshot and `players`);
+        - createNew (the secret and the admin key);
+        - list, stat, remove (log pruning);
+        - makeDir;
+        - the real clock (log names, turns).
+    - **(c) The gate, `zig build metal-gate` in dog-park: under 2 minutes on the box, the build time named apart** (memory: a compile and a run are two times).
+      - Boot `dogpark.elf` under QEMU on a fresh scratch volume, with a known admin key seeded in its auth folder. Slirp is fine: it judges logic, not speed.
+      - **Then one short scripted session, through the real page code where it can** (tools/lib's page rig pointed at the guest, if practical):
+        - the landing page; Begin Game sets a cookie;
+        - `/dogpark` serves the page naming the wasm, and the wasm serves under its hash;
+        - a load, then a leash and a short drag, every report kept;
+        - a second account's tick told `busy` only when 5 hold turns (or skip, and say so);
+        - `/admin/game` by the bearer shows the account and the game;
+        - **a reboot on the same volume:** the account's cookie still reads, and the load picks the game up where it was.
+      - **Fail loudly:** any non-200 that should be 200, any `differ`, any finding, or a guest log line with an error fails the gate with the guest's log tail.
+      - Not a stress test. No long tier.
+    - **When it runs:** last, before a Dog Park deploy, and not out of habit. It's in none of `test`, `check` or `slow`. The README says when to run it and how long it takes.
+    - **Then** FEEDBACK with the timings (build, boot, session) and anything metal's store or clock needed. The box reviews and merges (the kernel half via the usual gates, since it touches gopher's build). Deploying Dog Park on a droplet is a separate item, with Steve.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
