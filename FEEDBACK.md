@@ -9,6 +9,40 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-15: 210 done, the walk's speed (dog-park `claude/dog-park-speed`, `9130db4`)
+
+Three commits on `main` `663322c`. `zig build check` and `slow` pass.
+
+- **The seen critters by cell.** Each seen index is set in the bitset of its cell, kept by `Scene.put` on every move:
+  - a cell is a tile cut 2 ways a side, 250 px; 1 and 4 measured slower;
+  - a critter past the span goes in a set of its own, which every query includes.
+
+  `stepWhole` (the group and a shove's landing), `sweep` and `poopFits` ask only the cells they could reach, and walk the bits in seen-index order, which is the old scan's order.
+- **`lineUp` ring by ring,** with the bound in the queue item, comparing (distance, index) explicitly.
+- **The poop lines** walk only the slots seen at the start and those laid (the "if cheap" item); `run` no longer copies all 2,048 slots each tick.
+
+**The proof that nothing changed:**
+- **The lines dump:** `zig build physics-bench -- lines` (new) prints every line of 898 ticks: each of the 400 dogs with the full drag, on the park as laid out and on the park moved across the seam; 96 ticks of the strewn spot (poops laid, eaten, slots reused); the herd; the 8-tick report. All 106,298 lines are byte-identical before and after. The bench's counts are unchanged (94 lines and 149).
+- **A cold review's differential run:** origin/main's physics against the branch's on about 94,000 ticks of adversarial boards (the seam, span edges, cell boundaries, ties on a grid, `laid` near its wraps). It compared every line and the whole board and found no difference, and each of its four planted mutations was caught. Its three notes are applied: a comptime check of the half-world assumption, a symmetric empty-range guard, a comment.
+- **Planted defects, seen red:** a shove that doesn't move its bit trips the bucket check, which runs in the tests after every pixel-tick and every chicken's turn. The slot-reuse test now checks the reused slot's line; the planted `was = at` passed every test before that check was added.
+
+| native, ReleaseSafe (`zig build physics-bench`) | before | after |
+|---|---|---|
+| the busiest spot's full drag | 18.9 ms | ~5.9 ms |
+| strewn with 500 poops, full drag | 19.6 ms | ~7.0 ms |
+| strewn, 100 px east | 10.2 ms | ~3.8 ms |
+| the busiest spot, 100 px east | 9.9 ms | ~3.0 ms |
+| a packed herd's full drag | 9.2 ms | ~6.3 ms |
+| a server's re-run of 8 ticks | 22.9 ms | ~8.0 ms |
+
+| wasm under node (`node tools/bench_page.mjs`) | before | after |
+|---|---|---|
+| a page tick | 1.10-1.15 ms | 0.235 ms |
+| a 32-tick replay | 34.5-35.8 ms | 8.0 ms |
+| the packed herd's full drag | 21.8-24.3 ms | 12.2 ms |
+
+The packed herd gains least: 45 px apart, every cell is full. A finer cell helps it (4.1 ms at 4 per tile) but costs the park, so I kept 2. The reviewer's estimate was 6-8 ms for the busiest tick, and it measured about 6. Ready for you to merge and deploy to :9103.
+
 ## CC → the box, 2026-10-15: 209 done, Shale solid (zig-webbox `393a066`)
 
 On `claude/great-wright-i7aste`, on master `ce96f86`, nine commits (`eecd8d0`..`393a066`). `zig build test` passes, 305 tests. Each change had its test seen red first. The one judge loosening, the byte price, had its own cold review, and its findings are fixed (below).
