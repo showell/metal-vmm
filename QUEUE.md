@@ -2317,7 +2317,7 @@ Steve builds Dog Park by playing it on the box's :9103. The box redeploys there;
 
       Use the atomic/background modes as 211 builds them:
       - **background, read-only, for monitoring:** the default, and the mode the scripts below use;
-      - **atomic:** only if the route needs it for writes. Say whether Dog Park needs writes at all. Probably not yet: an operator resets a game through the game.
+      - **atomic:** only if the route needs it for writes. Steve, 2026-10-15: "Our one use case for having Shale do 'write' work is for removing files from rogue users." So `atomic` mode, with `remove`/`remove_tree` confined to a game's folder, is the whole write story. Don't build more. If it falls out of 211's modes for free, wire it; if not, leave it, since there are other ways to act in an emergency, and the box may tweak it before deploying.
     - **It must not starve play:** background slices run between handlers, and Dog Park's own requests (`/report`, at a report a second per player) keep priority. Measure a background scan of every game's logs beside a scripted player, and report the worst wait a report saw.
     - **A starter cookbook,** in dog-park (`tools/shale/` or where webbox's cookbook convention puts them), each run under the route's budgets on a site-shaped fixture made from REAL files (copy a game folder from the box's ~/dogpark-test/play/data, read-only):
       - `games.shale`: per game, its last activity (newest log's start and size), its kept tick (from the snapshot), its log bytes;
