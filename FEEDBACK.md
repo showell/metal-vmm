@@ -9,6 +9,76 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-15: 209 done, Shale solid (zig-webbox `393a066`)
+
+On `claude/great-wright-i7aste`, on master `ce96f86`, nine commits (`eecd8d0`..`393a066`). `zig build test` passes, 305 tests. Each change had its test seen red first. The one judge loosening, the byte price, had its own cold review, and its findings are fixed (below).
+
+**Steve's two decisions.**
+- **A step for 16 bytes** of bulk byte work: `read`, the scans, and the haystack of the string searches. `charge_test` holds with its factor.
+- **`remove_tree` stays one change,** documented with what the effects log records when the store fails partway.
+
+The byte price's cold review found per-match work uncharged: `substitute(s, "a", "")` over a megabyte ran 661 ms inside 2M steps, 713 ns a step. Every search is now one `Finder`, which charges a step per place it stops and the bytes it compares. The review's worst shapes now run at 10-24 ns a step (the interpreter's own: 7-15).
+
+Steps on one site-shaped store of 3.9 MB (40 topics of 450 messages), before the price (`f51b3ba`) and now, ReleaseSafe runner:
+
+| script | before | now |
+|---|---|---|
+| `topics` | ran out of 5M steps | 1,997,612 |
+| `stale_caches` | 3,997,894 | 491,430 |
+| `find_message` | 4,165,114 | 376,010 |
+| `chat_topics` | 36,893 | 34,645 |
+| `where_the_bytes_are` | 24,356 | 22,748 |
+| `big_files` | 15,095 | 15,095 |
+
+**(a) A store error is never "missing."** Only FileNotFound is missing now; a symlink loop is named as one.
+
+**(b) SHALE.md's snippets run as tests.** Every shale block has its `-- prints:` or `-- stops:` beside it. A block with neither, an unfenced block, a block with no language, or (new tonight) a fence indented inside a list fails the build. The indented fence had been silently never run.
+
+**(c) Steps bound the work from above.** A test-only counter (`Run.tally`) counts the work in every builtin's and operator's inner loops. `charge_test` holds all of them, and ten hard shapes, to at most 40 units of work a step; the worst today is 30.3. A planted mis-charge fails it.
+
+**(d) The golden corpus,** `src/script/errors_test.zig`: 108 wrong scripts, each pinned to its class, line:column, function and exact message, with every class covered. The weak messages are rewritten to say what to write instead:
+- "takes 1 arguments" is now singular;
+- store errors are in plain words with a hint: "`read(\"none.txt\")`: not found (FileNotFound): `exists(p)` asks first";
+- arithmetic errors name the operator and the side, and point a string to `tonumber`;
+- writing a list past its end names the one index that appends, and `push`;
+- the lexer quotes the character it rejects and gives the integer range;
+- `goto` points to `break` and `continue`, and `^` to `x * x`;
+- the budgets give their numbers;
+- the parser quotes the tokens it names.
+
+**(e) Property tests,** `src/script/props_test.zig`, on random inputs from fixed seeds:
+- pieces read and joined equal the whole `read`;
+- `count_in` equals `#split - 1`, and Zig's own count;
+- `find_in` + 1 equals `find`;
+- `split` then `join` round-trips;
+- a sort by B then by A equals one stable sort by (A, B);
+- `seconds(date(x)) = x` from 1970 to 9999;
+- `table()` puts every cell at its place.
+
+Haystacks of up to 360 KB cross the scans' 64 KiB seams. Six planted defects each turn a property red: a read shifted by one byte, a match lost at a seam, an unstable sort, 2000 not a leap year, integers aligned left, split stepping a byte early.
+
+**(f) Doc nits.**
+- How `table` (a builtin and a Lua name) and `type` resolve.
+- A callout on 0-based file offsets against 1-based string positions, as a snippet.
+- The sidecars reconciled with angry-gopher: `.lastauthor` is an older server's, which nothing writes or reads now but `chat_retire.zig` and `delete_topic.shale` remove. A channel's members are `chat/channels/<name>.channel`, beside its folder; the doc had them next to the topics.
+- Your note: mutual recursion is a name error, said plainly, with one recursive function and a parameter as the way to write it. Both are runnable snippets.
+
+**(g) The site's real scale:** `zig build shale-scale` generates angry-gopher-shaped sites and grows them until each read-only script stops fitting the site's budgets. The table is in SHALE.md. **The news is bad.**
+- A script that reads transcripts fits 124-343 small topics, and 17-72 topics of 215 KiB.
+- Reads, not bytes, run out first.
+- `chat_topics` stops near 196 topics: it makes an `exists` and a `read` per topic.
+- `where_the_bytes_are` stops near 1,175 topics (about 3,500 files) on its arena: it holds every entry, as maps.
+- `big_files` fits 46 topics.
+
+At angry-gopher's scale (a chat of about 190 MB), no cookbook script that looks at every topic finishes in one run. Choices for you and Steve, none taken:
+- a higher read count on the site (the steps and bytes have room for it);
+- `chat_topics` without its `exists` (`attempt(read)`), which halves its reads;
+- scripts that take a folder or a range as their scope.
+
+**Also:** one huge charge (`rep("ab", 2^62)`) now stops one step past the budget instead of reporting 2^63 steps. The decision itself is unchanged.
+
+**Not done:** `store.retry`'s re-listing on a case-folding miss (Linux only). The fix is a cache of folder listings in `src/store.zig`, invalidated on every write. That is the host's store, which the site shares, so I'd rather you decide whether it's worth it. Next for me: 210 (Dog Park's speed), then 211.
+
 ## The box → CC, 2026-10-15: 208 and 209's first four merged to zig-webbox master (`ce96f86`)
 
 Fast-forward, pushed. Checked on the box: `zig build test` green (53 s). The review's two attacks, replayed through the ReleaseSafe runner: the 900 KB map key stops on the step budget at once (it ran 11 s), and 200k tables stop on the arena budget. Carry on with the rest of 209 on the same branch, then 210 and 211. Note for SHALE.md if it isn't there: mutual recursion is now a name error. Say so plainly, with the way to write it instead.
