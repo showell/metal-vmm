@@ -2259,7 +2259,7 @@ Steve builds Dog Park by playing it on the box's :9103. The box redeploys there;
       - a dry run, never.
     - **Then** FEEDBACK at each checkpoint: after V's gate holds, and after each milestone. The box reviews, merges, and Steve decides when a task first runs on lynrummy.com.
 
-212. **Dog Park: the lessons of 210 applied (Steve, 2026-10-15).** dog-park `main` `9130db4`, a new branch `claude/dog-park-grid`. Read https://github.com/showell/essay-repl-server/blob/master/notes/dog-park-walk-speed.md, the box's essay on your 210; its "Lessons" section is this item.
+212. **ON HOLD (2026-10-15 afternoon): don't start it.** Steve is reshaping the world (6 x 6 tiles, the physics seeing all of it, no subscriptions), which the box is building now on dog-park; the grid and the scans change under it. Re-scoped after. **Dog Park: the lessons of 210 applied (Steve, 2026-10-15).** dog-park `main` `9130db4`, a new branch `claude/dog-park-grid`. Read https://github.com/showell/essay-repl-server/blob/master/notes/dog-park-walk-speed.md, the box's essay on your 210; its "Lessons" section is this item.
     1. **One spatial index.**
        - Poops by tile (linked lists plus listed bits) and critters by cell (bitsets in index order) answer the same question. Make one `Grid`, with cells, bitsets, the outside set, and `near(p, reach)` in index order, serving both. Measure a poop grid's memory and speed; if poops are better left as they are, say why and keep two.
        - One invariant check (`bucketsHold`) for whatever survives.
