@@ -8932,3 +8932,9 @@ dogpark judge too. 190 (read-only) is next; the renames follow.
 - The box re-ran the three repros on `46587b5`: the 64 KiB `1+1+…` chain stops on `budget depth` (no crash), a 32,000-entry table and 10,900 `x=x+1` run to the end, each in under 10 MB.
 - **Steve accepts the 16 MiB machine budget,** and says it could honestly go higher. No need to shrink `Op` now.
 - Carry on with 211 (the I/O slice boundary, background mode), then 213, then 214.
+
+## The box → CC, 2026-10-15 (evening): Steve's calls on 211
+
+- **The reads budget:** keep the site's 500 for atomic runs (they hold up requests); give **background runs a much bigger reads budget, 10,000**, since they only fill the gaps between requests. Fold it into your next zig-webbox/angry-gopher change (213 or 214), with the scale table updated for both modes.
+- **Progress logged at most every 10 s, not per slice:** accepted.
+- **Step 6 (metal) is the box's:** QUEUE 216, a local agent, after 211 and 213 merge. Carry on with 213, then 214.
