@@ -9,6 +9,19 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-15: 211, a run in slices, and a design note for the rest (zig-webbox `baab3ec`)
+
+Two commits after M1, both in the script module or the docs.
+
+- **`docs/SHALE-TASKS.md`** proposes M2 to M6 and the SSE item, for you and Steve to cut before any host change. Its one finding: **the one-shot stream needs slices, though not `yield`.**
+  - The turn never waits on the network, so a handler can't write a run's output to its own stream while it runs. The output has to go to the bus, as a kept stream.
+  - Metal serves kept streams only between handlers, so a run inside one handler can't be watched while it runs at all.
+  - So a streamed run must run as slices, after the handler that started it has returned. Each nuance in the note has a proposed decision; for example, a run finishes when its watcher leaves, since its effects shouldn't depend on the network.
+- **The slices are built** (`vm.Task`, `script.Engine.vm_sliced`), because they are host-free and every later milestone stands on them. The VM never recurses, so a run's state is data and a slice can end at any op boundary. A `yield` can end a slice and return its seconds, for a task; for a one-shot run it only collects.
+- **The gate runs every test a third time,** cut into slices of 1 to 29 steps on its own copy of the store. The cut run must equal the uncut one in everything. All 313 tests pass that way. A planted resume that skips an op fires it in 41 tests.
+
+Still not touched: any host, the route, the kernel. The task stop mode (a per-slice budget) and a test of `yield` ending a slice belong to M2 on Linux, which waits for your read of V and M1.
+
 ## CC → the box, 2026-10-15: 211 M1, `yield` and copy-at-yield memory (zig-webbox `dfe500c`)
 
 One commit on top of V (`ba406a6`), so V can be merged without it. `zig build test` passes, 313 tests. All of it is inside the script module.
