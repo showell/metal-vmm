@@ -2272,6 +2272,37 @@ Steve builds Dog Park by playing it on the box's :9103. The box redeploys there;
     4. **The fast tier.** Attribute `zig build test`'s wall time per test binary and per heavy test (README says ~12 s after an edit; it was ~6 s). The seeded invariant test running `overlaps` every tick in Debug is a suspect. Get it back toward 6 s without dropping what the tests prove. Update the README's numbers.
     5. **The proof, as for 210:** `physics-bench -- lines` byte-identical before and after, quoted in FEEDBACK with the bench, native and wasm.
 
+213. **webbox's Linux host: keep-alive (Steve, 2026-10-15).** zig-webbox, your branch. Today `linux_host.zig` (~324) sets `req.head.keep_alive = false` on every request ("force `connection: close` without touching each handler"), so every request is its own TCP connection.
+    - **Why it matters:** Dog Park's page, served plain-http on the box's :9103 for development, sent ~4 reports a second, each a new connection. Steve's home router hands out sequential source ports over a range of ~1,000, so it wrapped every 4-5 minutes. Twice, right after a wrap (ports 51001-51015), the server's replies on reused ports were dropped on the way back:
+      - the handshake and the request arrived;
+      - the reply was retransmitted 8 times and never acknowledged (`ss -tnoi`);
+      - Steve's long-lived ssh from the same address was fine.
+
+      The box cut Dog Park to one report a second as a stopgap (dog-park `9596874`), and a capture is running to confirm (~/runs/dogpark-net). Production behind Caddy doesn't see it: HTTP/2 to Caddy, local hops behind. But any webbox app served directly churns connections. Steve: "even if production doesn't have the issue, it's gonna be a cry-wolf/broken-windows kinda thing in development."
+    - **First, find out why close is forced, and write it down:** git log/blame on that line, and HOST.md ("One handler at a time", the slots, the body read before the turn, 170's cold review). The likely candidates:
+      - the per-connection read state and slots (`Progress`, `giveBackSlot`, `body_mem`, the arena freed when the connection is done);
+      - a kept stream (SSE) holding its connection;
+      - fairness under the turn;
+      - the idle-connection limit.
+
+      If a reason makes keep-alive wrong, say so in FEEDBACK and stop. Don't fight it.
+    - **Then make keep-alive the default for plain requests:**
+      - several requests on one connection, each with its own arena and body memory, freed per request, not per connection;
+      - an idle connection closed after a timeout (named, with a default; say what);
+      - a cap on requests per connection and on idle open connections, so one client can't hold slots;
+      - a request whose handler keeps a stream ends the reuse;
+      - `connection: close` from the client honoured;
+      - errors before the turn still close.
+    - **Tests, each seen red:**
+      - two requests on one socket both answered;
+      - memory back to its figure after each;
+      - an idle connection closed at the timeout;
+      - a slow or stalled second request never holding the turn;
+      - a pipelined pair handled in order or refused, as decided;
+      - the existing host tests green.
+    - **Angry-gopher's Linux build uses this host too:** run its tests, and say what changes for it. The metal host is untouched.
+    - **Then** FEEDBACK. The box merges after a cold review, and Dog Park's report rate can go back to 250 ms once :9103 keeps connections.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
