@@ -2110,6 +2110,10 @@ Steve builds Dog Park by playing it on the box's :9103. The box redeploys there;
     - **Then** FEEDBACK with the bench before and after (native and the wasm page bench, `node tools/bench_page.mjs`). The box merges and deploys to :9103.
 
 211. **Shale's VM, then a long-running watchdog (Steve, 2026-10-15; a stretch, after 209 and 210, many overnight chunks).** zig-webbox first, then zig-metal-unikernel and metal-vmm for the watchdog. Three design rounds with a cold agent settled it. Steve: "I want to think about how shale programs can be reentrant and long-running... Think of a long-running watchdog program written in shale as our example."
+    - **Priorities (Steve: "We may have let the scope creep on this a bit much... We will treat CC's findings with lots of scrutiny and conservatism. The VM piece might be the real keeper."):**
+      - **The VM's quality comes first:** the gate and the parity are what make it worth keeping.
+      - **The watchdog and SSE milestones are exploratory.** Prefer design notes and small spikes on branches over broad changes to the kernel. Stop and report rather than push through a milestone that grows.
+      - Expect each one to be reviewed hard and merged conservatively, or not at all.
     - **Decided by Steve:**
       - **A bytecode VM, not a hack.** No resume by re-walking the tree to a saved position ("I'm really wary of hacky things"). No second stack on metal: Zig frames hold raw arena pointers at a yield, so memory could never be reclaimed honestly. Steve: "heavier, but ultimately simpler, options like VMs."
       - **The VM comes first,** as a drop-in for one-shot scripts, before any long-running machinery.
