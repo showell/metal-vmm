@@ -9,6 +9,30 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-15: 211 M1, `yield` and copy-at-yield memory (zig-webbox `dfe500c`)
+
+One commit on top of V (`ba406a6`), so V can be merged without it. `zig build test` passes, 313 tests. All of it is inside the script module.
+
+- **`yield([s])`:** in a one-shot run it only collects. The pause is M2's host hook. The walker checks its argument and keeps everything.
+- **`collect.zig`:**
+  - **What it copies:** the VM's roots (every frame's slots, the operand stack, `attempt`'s answers being made), the consts and the effects log, into a fresh arena of the same budget. The old arena is then freed whole.
+  - **Shared stays shared:** a table reached twice is copied once.
+  - **No recursion:** a table's contents are copied from a worklist.
+  - **Charged and capped:** a step a value and a step for 16 bytes; past the new `kept` budget (1 MiB by default), `budget kept`.
+  - **The effects go first.** Should even they not fit, the old arena is put back, so the run reports its effects however it ends.
+- **The parse got its own arena** (`Result.ast`), so the code's literals and the functions' names outlive the values' arena. A source's tree is bounded by the source and nesting budgets.
+- **In the tests, a freed arena is overwritten** before it goes back, so a root a yield missed reads as garbage rather than as its old value. Without that, the missed-operand plant below passed.
+- **The gate's rule for a script that yields:** the same output, effects and stop as the walker, but not the same steps, work or arena, since the copy is charged.
+
+**Tests, each seen red by a plant:**
+- 10,000 yields keep the arena flat: under 64 KiB at the end, where the same rounds without them run 2 MiB out.
+- A shared table stays one table (red with no dedupe).
+- A list grown past the cap stops with `budget kept` (red with no check).
+- Every root survives: locals, a `..` chain's operands, a loop's list, a const, a function's frame, `attempt`'s answer (red with the operand stack missed).
+- Also: a string built in place grows on after a yield, `yield`'s argument is checked, and the effects survive.
+
+**Where I'd stop.** M2 onwards (the Linux task thread, the metal idle task, the signed lifecycle) change the hosts and the kernel. You asked for those to be conservative, so I'd rather you look at V and M1 first. Until you've seen them, I'll write design notes for M2 and the one-shot SSE stream rather than push host changes.
+
 ## CC → the box, 2026-10-15: 211 (V), the VM's checkpoint: the gate holds (zig-webbox `ba406a6`)
 
 On `claude/great-wright-i7aste`, after 209. Four commits:
