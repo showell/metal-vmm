@@ -11,6 +11,50 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-15: 213 done, keep-alive in webbox's Linux host (zig-webbox `1e3ed80`, angry-gopher `edaa943`)
+
+**Why close was forced, written down.** The line (`req.head.keep_alive = false; // force connection: close without touching each handler`) came in with angry-gopher's first import (`7ee35bf`, July), and moved with the host into zig-webbox unchanged. Its only stated reasons are its comments:
+- "without touching each handler": a shortcut, not a constraint;
+- "the bare-metal host serves one request per connection too, so the two hosts answer alike": still true of metal, which 213 leaves alone.
+
+None of the candidates made keep-alive wrong. A per-request arena, body memory, slot and charge just need to be per request; a kept stream ends the connection anyway; fairness is the turn's, untouched; and the idle limit is new. So I built it.
+
+**What a connection does now** (`handleConn` loops over `serveOne`):
+- **Each request owns its state.** It has its own arena, body memory, upload slot and small-body charge, all given back when it is answered, not when the connection closes. Pipelined requests are answered in order: std's reader keeps what follows a request in its buffer.
+- **The connection closes when any of these holds:**
+  - the client says `connection: close`;
+  - a handler does;
+  - a body was left unread (a stranger's upload);
+  - the answer was a kept stream;
+  - a refusal or an error came before the turn;
+  - it has served `requests_most`, **1000**, whose last answer says close;
+  - the kept-open connections are at `kept_open_most`, **64**, as many as the streams held. Past it an answer says close, as every answer did before, so a client that opens many holds no task from anyone.
+- **The idle timeout** is `idle_ms` = **10 s**, the same as a first head's deadline. From an answer to the whole of the next head, so a connection waiting for its next request is held no longer than one waiting for its first. An idle connection with no byte of a next head is closed with no answer and counted (`idle_closed`). One with half a head gets the 408 a first head would.
+- **A handler's close is seen in its answer's head.** A handler may close with `req.head.keep_alive = false` or with respond's own `keep_alive = false`, and RFC 9112 then requires the server to close.
+  - Respond's own leaves std's reader `.ready` after a body read through std's reader, so the state can't say it.
+  - So a pass-through writer (`HeadWatch`) reads each answer's head lines as they go out and notes `connection: close`.
+- **The turn is untouched.** Heads and bodies are read before it, as before, so a slow or stalled second request holds only its own connection.
+
+**Tests, each seen red:**
+
+| plant | caught by |
+|---|---|
+| close forced again (the old line) | two on one socket, the pipelined pair, memory, the idle close, kept-open |
+| no request cap | the requests_most test |
+| ignore the client's close | the close test, and an older body test |
+| ignore the head watch | the close test's case of a handler that reads through std's reader (added once the plant passed without it) |
+| no kept-open cap | the kept_open_most test |
+| body memory kept per connection | two older body tests, as leaks |
+| an idle close answered 408 | the idle-timeout test |
+| the turn held across a second head | a hang: the build times out |
+
+**What it changes for angry-gopher's Linux build:** its tests are green against it (`zig build test` in zig-server), with one addition. Its request-edges scan reads zig-webbox's source too, and found the keep-alive tests' answer-counting client parsing a number, so that is now listed as reached by no request (`edaa943`). Production is metal, untouched, so lynrummy.com sees no change. On the Linux build, browsers and curl now reuse connections. **One thing to know if a Linux webbox ever sits behind Caddy:**
+- A proxy keeping idle upstream connections longer than our 10 s will sometimes send a request on one the server is closing at that moment.
+- Go's transport, which Caddy uses, retries that only for idempotent methods, so a POST would get a 502.
+- The usual rule is that the proxy's upstream idle timeout is below the server's, for example `keepalive 5s` in Caddy's transport. Browsers retry such a request themselves, so Dog Park's reports are safe.
+
+Dog Park's report rate can go back to 250 ms once `:9103` runs this.
+
 ## CC → the box, 2026-10-15: 211 on Linux done; I stop here, before metal (zig-webbox `cf6d51d`, angry-gopher `ef3be5a`)
 
 Each item's test was seen red first, under a plant or before the code. `zig build test` is green in zig-webbox and in angry-gopher's zig-server. The design is in docs/SHALE-TASKS.md, rewritten to Steve's model: §1 and §4 kept, the watchdog and the lifecycle cut.
