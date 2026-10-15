@@ -2272,6 +2272,94 @@ Steve builds Dog Park by playing it on the box's :9103. The box redeploys there;
     4. **The fast tier.** Attribute `zig build test`'s wall time per test binary and per heavy test (README says ~12 s after an edit; it was ~6 s). The seeded invariant test running `overlaps` every tick in Debug is a suspect. Get it back toward 6 s without dropping what the tests prove. Update the README's numbers.
     5. **The proof, as for 210:** `physics-bench -- lines` byte-identical before and after, quoted in FEEDBACK with the bench, native and wasm.
 
+213. **webbox's Linux host: keep-alive (Steve, 2026-10-15).** zig-webbox, your branch. Today `linux_host.zig` (~324) sets `req.head.keep_alive = false` on every request ("force `connection: close` without touching each handler"), so every request is its own TCP connection.
+    - **Why it matters:** Dog Park's page, served plain-http on the box's :9103 for development, sent ~4 reports a second, each a new connection. Steve's home router hands out sequential source ports over a range of ~1,000, so it wrapped every 4-5 minutes. Twice, right after a wrap (ports 51001-51015), the server's replies on reused ports were dropped on the way back:
+      - the handshake and the request arrived;
+      - the reply was retransmitted 8 times and never acknowledged (`ss -tnoi`);
+      - Steve's long-lived ssh from the same address was fine.
+
+      The box cut Dog Park to one report a second as a stopgap (dog-park `9596874`), and a capture is running to confirm (~/runs/dogpark-net). Production behind Caddy doesn't see it: HTTP/2 to Caddy, local hops behind. But any webbox app served directly churns connections. Steve: "even if production doesn't have the issue, it's gonna be a cry-wolf/broken-windows kinda thing in development."
+    - **First, find out why close is forced, and write it down:** git log/blame on that line, and HOST.md ("One handler at a time", the slots, the body read before the turn, 170's cold review). The likely candidates:
+      - the per-connection read state and slots (`Progress`, `giveBackSlot`, `body_mem`, the arena freed when the connection is done);
+      - a kept stream (SSE) holding its connection;
+      - fairness under the turn;
+      - the idle-connection limit.
+
+      If a reason makes keep-alive wrong, say so in FEEDBACK and stop. Don't fight it.
+    - **Then make keep-alive the default for plain requests:**
+      - several requests on one connection, each with its own arena and body memory, freed per request, not per connection;
+      - an idle connection closed after a timeout (named, with a default; say what);
+      - a cap on requests per connection and on idle open connections, so one client can't hold slots;
+      - a request whose handler keeps a stream ends the reuse;
+      - `connection: close` from the client honoured;
+      - errors before the turn still close.
+    - **Tests, each seen red:**
+      - two requests on one socket both answered;
+      - memory back to its figure after each;
+      - an idle connection closed at the timeout;
+      - a slow or stalled second request never holding the turn;
+      - a pipelined pair handled in order or refused, as decided;
+      - the existing host tests green.
+    - **Angry-gopher's Linux build uses this host too:** run its tests, and say what changes for it. The metal host is untouched.
+    - **Then** FEEDBACK. The box merges after a cold review, and Dog Park's report rate can go back to 250 ms once :9103 keeps connections.
+
+214. **Dog Park mounts the signed Shale route, for monitoring (Steve, 2026-10-15; after 211's background mode).** github.com/showell/dog-park `main` (`91fe211` or later), a new branch `claude/dog-park-shale`. Steve: "We'll almost certainly use SHALE scripts to monitor logs."
+    - **Why:** Dog Park now keeps a debugging record per game:
+      - `data/game-<slot>/physics/`: a snapshot plus logs `log-<start ms>`, rotated at 1 MiB and kept for an hour, 25 MB a game;
+      - 80 accounts (`data/players`).
+
+      Monitoring it from outside means reading those files, which is what Shale is for. The logs are plain text, framed entries (`entry report N`, `entry load`, findings), each report as the page wrote it. See dog-park's docs/PHYSICS.md, "The log is rotated" and "Who may play", and notes/dog-park-capacity.md.
+    - **Mount webbox's `script_route` in dog-park's app.zig,** as angry-gopher does on metal:
+      - the same signed envelope and sequence numbers;
+      - its own key: a public key file in Dog Park's auth folder, set the way lynrummy's is, never shared with lynrummy;
+      - its store scoped to Dog Park's data folder;
+      - its budgets stated in the README.
+
+      Use the atomic/background modes as 211 builds them:
+      - **background, read-only, for monitoring:** the default, and the mode the scripts below use;
+      - **atomic:** only if the route needs it for writes. Steve, 2026-10-15: "Our one use case for having Shale do 'write' work is for removing files from rogue users." So `atomic` mode, with `remove`/`remove_tree` confined to a game's folder, is the whole write story. Don't build more. If it falls out of 211's modes for free, wire it; if not, leave it, since there are other ways to act in an emergency, and the box may tweak it before deploying.
+    - **It must not starve play:** background slices run between handlers, and Dog Park's own requests (`/report`, at a report a second per player) keep priority. Measure a background scan of every game's logs beside a scripted player, and report the worst wait a report saw.
+    - **A starter cookbook,** in dog-park (`tools/shale/` or where webbox's cookbook convention puts them), each run under the route's budgets on a site-shaped fixture made from REAL files (copy a game folder from the box's ~/dogpark-test/play/data, read-only):
+      - `games.shale`: per game, its last activity (newest log's start and size), its kept tick (from the snapshot), its log bytes;
+      - `trouble.shale`: per game over the last hour, counts of `differ`, findings (overlaps, idle drags), `req ?`, and stuck marks, from the log entries;
+      - `accounts.shale`: the `players` count against 80, and games started vs accounts.
+    - **Tests:**
+      - the route refuses an unsigned or replayed script, through dog-park's real host;
+      - a background script can't write;
+      - the cookbook runs on the fixture with the expected output;
+      - play continues while a scan runs.
+    - **Docs:** dog-park's README "Deploying" says how to set the key and run a script. PHYSICS.md's "Who may play" gains the route.
+    - **Then** FEEDBACK. The box merges and deploys to :9103, and Steve sets the key.
+
+215. **DONE BY THE BOX, 2026-10-15** (zig-metal-unikernel `4f42e0d`: addAppKernel public, gopher.elf byte-identical; dog-park `main`: `zig build metal`, and `zig build metal-gate` PASS in ~5.5 s warm, two boots and a reboot pick-up). Kept for the record: **Dog Park on metal, owned by dog-park, with a short QEMU gate (Steve, 2026-10-15).** Steve: "Let's start planning to run Dog Park on metal. At this point, the game itself is pretty stable. ... add a QEMU gate for dog park. It should always be the last thing we run before deploying Dog Park, and we want to avoid running it just out of habit, unless we can keep it nice and short (under a couple minutes). We don't need it to be a thorough stress test." Keep-alive (213) doesn't block this.
+    - **The direction, Steve's 2026-10-13 rule:** "an application is not the unikernel's test of itself; control ran the wrong way". zig-metal-unikernel neither builds nor judges Dog Park (8af778b removed `zig build dogpark`). So **dog-park builds its own metal image, using the kernel as a dependency** (a sibling checkout `../zig-metal-unikernel`, as it uses `../zig-webbox`). The kernel only gives a general way for any application to become a kernel.
+    - **(a) zig-metal-unikernel: export the app-kernel build.**
+      - `addAppKernel` (build.zig ~783) becomes a public build API: the caller's application module (its root: `site` and `hosting`), its assets.zon and its name. The application is built **by the caller**, with the caller's own options. That fixes 8af778b's blocker: dog-park's physics hash and embedded wasm come from dog-park's build.zig.
+      - Gopher's image goes through the same API. Prove nothing changed: gopher.elf byte-identical before and after, or the gates green with the reason it differs.
+      - The image tooling, if needed: a general `droplet/app_image.py <elf> <site dir> <conf>` beside chat.py (chat.py may call it). No Dog Park names in the kernel repo.
+    - **(b) dog-park: `zig build metal`** makes `dogpark.elf` through that API, from `../zig-metal-unikernel`, and an image with its `solo/` as the site's files.
+      - **The config on metal:** the data and auth roots on the volume. The cookie is Secure (no DOGPARK_INSECURE_COOKIE on metal; behind Caddy it's HTTPS to the browser).
+      - **What the store must do there:** say what Dog Park needs of metal's store and that each works:
+        - append with a sync before the answer (the log);
+        - replace (the snapshot and `players`);
+        - createNew (the secret and the admin key);
+        - list, stat, remove (log pruning);
+        - makeDir;
+        - the real clock (log names, turns).
+    - **(c) The gate, `zig build metal-gate` in dog-park: under 2 minutes on the box, the build time named apart** (memory: a compile and a run are two times).
+      - Boot `dogpark.elf` under QEMU on a fresh scratch volume, with a known admin key seeded in its auth folder. Slirp is fine: it judges logic, not speed.
+      - **Then one short scripted session, through the real page code where it can** (tools/lib's page rig pointed at the guest, if practical):
+        - the landing page; Begin Game sets a cookie;
+        - `/dogpark` serves the page naming the wasm, and the wasm serves under its hash;
+        - a load, then a leash and a short drag, every report kept;
+        - a second account's tick told `busy` only when 5 hold turns (or skip, and say so);
+        - `/admin/game` by the bearer shows the account and the game;
+        - **a reboot on the same volume:** the account's cookie still reads, and the load picks the game up where it was.
+      - **Fail loudly:** any non-200 that should be 200, any `differ`, any finding, or a guest log line with an error fails the gate with the guest's log tail.
+      - Not a stress test. No long tier.
+    - **When it runs:** last, before a Dog Park deploy, and not out of habit. It's in none of `test`, `check` or `slow`. The README says when to run it and how long it takes.
+    - **Then** FEEDBACK with the timings (build, boot, session) and anything metal's store or clock needed. The box reviews and merges (the kernel half via the usual gates, since it touches gopher's build). Deploying Dog Park on a droplet is a separate item, with Steve.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.

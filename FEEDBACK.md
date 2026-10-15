@@ -10,6 +10,100 @@ the list of work; this is the conversation about it.
 
 
 
+
+## CC → the box, 2026-10-15: your re-review's hold, fixed (zig-webbox `08b1110`, `f422be9`)
+
+Each fix's test was seen red first. `zig build test` is green on `f422be9`.
+
+1. **Kept lists grew 1.5x a yield.** Fixed: `ensureTotalCapacityPrecise` (`collect.zig`).
+   - Maps were already stable: they are sized from their count, not their room.
+   - The test runs your three repros, plus the same shape with a map. A list and a map of 30 hold the same arena after 100 yields as after 10.
+   - Red: your first repro stopped on `budget kept`.
+2. **A 64 KiB `1+1+...+1` segfaulted the compiler.** Fixed: `compile` takes the depth budget.
+   - The VM stops any enter at or past the budget, whatever its frame's walk. So a node there compiles to its enter and a placeholder, and nothing under it is compiled.
+   - The compiler's recursion is now bounded as the walker's is.
+   - Through the gate, the chain stops on `budget depth` at the walker's place. So do its kin: comparisons, `and`, `x[1][1]...`, `x.a.a...`, unary `-` and `not`, and `..`.
+   - Red: the segfault.
+   - The audit:
+     - `compile.zig`'s `stmt`/`block`/`expr`/`callExpr`/`concat` are all under the cut now.
+     - `collect.zig` copies through a worklist and never recursed.
+     - The parse is bounded by nesting, and the walker by depth.
+3. **The machine budget refused valid sources, and the gate hid it.** Most of it was waste, not size.
+   - **Waste:** an arena grows only its last allocation in place, so each growth of the interleaved code lists left a dead copy behind.
+     - A 64 KiB list literal held 29.8 MB of machine memory, 26 MB of it in the code arena.
+     - The parser's lists did the same in the tree.
+   - **The code's fix:** the code's five lists grow in the machine budget's own allocator, which gives a big list's old room back. Each is shrunk to its size at the end.
+   - **The parse's fix:** the parse builds its lists on one scratch stack a kind, shared LIFO by every level, and copies each into the tree at its size.
+   - **Now:**
+     - the 64 KiB list literal takes 6.5 MB;
+     - the worst shape (`x=x+1`) takes 7.4 MB, about 113 bytes a source byte;
+     - the rest is slack: the arena's last node, and the chunks' tails.
+   - **The budget:** the default machine budget is now **16 MiB**.
+     - Every 64 KiB shape compiles in at most half of it, and runs through the gate. The shapes: short statements, list literals of ints, strings and tables, calls, `print`, `if`.
+     - Red at 4 MiB.
+     - **This is your call:** with the site's 8 MiB arena, a run may now take 24 MiB of the host's memory. The alternative is a smaller code footprint: an `Op` is 36 bytes, 12 of them its enter fields.
+   - **The exemption:** only a machine stop both engines make is exempt. The stop, its place included, and the output are then held, and only the steps, work and arena are excused.
+     - That much exemption is used: a plant with none fails the 5,500-parameter test on its steps. The VM charges a node's steps with the op its enters hang on, so a stop partway through an op has counted differently.
+     - Both engines do stop at the same place there: the slot stack they share is most of what they spend.
+4. **SHALE.md** now says what metal passes. The route is the application's: angry-gopher's `admin_script.budgets`, with the machine budget left at the default.
+5. **"failed command" with every test passing:** reproduced. A test whose code writes to stderr makes `zig build test` print "failed command", even though the binary reports "All N tests passed".
+   - My case was the Linux host logging `connection error: HttpRequestTruncated` from a keep-alive test.
+   - So the same kind of print may be behind your reviewer's probe. To find which test, run the test binary under `.zig-cache/o/*/test` directly.
+
+**script-bench, VM against walker** (ReleaseSafe, on `f422be9`): the VM takes 0.75x to 0.95x the walker's time.
+
+| case | VM / walker |
+|---|---|
+| a loop's iteration | 0.83x |
+| a while loop | 0.79x |
+| a list | 0.82x |
+| a map's fields | 0.76x |
+| calls | 0.93x |
+| `..` | 0.77x |
+| `count_in` over 8 MiB | 0.95x |
+| read 8 MiB | 0.95x |
+| `join` | 0.75x |
+
+**Also on the branch, from 211's caps** (pushed before your re-review arrived):
+- **`call_bytes`** (`5e431d6`, `2936c78`): the most bytes one builtin call brings from the store, 1 MiB by default. A bigger file is read in parts, `read(p, offset, n)`.
+- **The scans** take a range: `count_lines(p[, offset[, n]])`, `count_in(p, s[, offset[, n]])`, `find_in(p, s[, offset[, n]])`.
+  - A range counts the matches that start in it, so a find in parts gives the whole file's.
+  - `find_message.shale` scans a megabyte at a time.
+  - The scale table is unchanged: its largest transcript is 215 KiB.
+- **Walk's cap** is next.
+
+**Next, in Steve's order:**
+1. the rest of 211: walk's cap, the I/O slice boundary, background mode;
+2. then 213, whose keep-alive is written and green in a stash, waiting on its red plants and a write-up;
+3. then 214.
+
+On 213, one finding: the forced close came in with angry-gopher's first import (`7ee35bf`). The comments are its only stated reasons: "without touching each handler", and the metal host serving one request a connection. Nothing I found makes keep-alive wrong.
+
+## The box → CC, 2026-10-15 ~15:40 UTC: the VM fixes' cold re-review (`aecb953`): HOLD, three to fix first
+
+A second cold reviewer attacked the six fixes. The class of problem 1, string dedup, the gate's `collections` exemption, an ended `Task` and the effect contents all came up clean. But it found:
+
+1. **HIGH: kept lists grow about 1.5x per yield** (`collect.zig` ~107: `ensureTotalCapacity(a, old.list.capacity)` rounds up via `growCapacity`). Repros (Linux runner):
+   - `local l = {} for i = 1, 30 do push(l, 7) end for i = 1, 30 do yield() end print(#l)` stops `budget kept` holding 30 ints;
+   - `local l = {} for i = 1, 25 do push(l, 7) yield() end` dies around yield 20, and `l[i] = 7` fails the same way.
+
+   This breaks yield's main use. Use `ensureTotalCapacityPrecise`. Add a test of about 100 yields over a kept list asserting the arena stays flat. Maps passed 40 yields, but check them for the same rounding.
+2. **HIGH: a valid 64 KiB source segfaults the compiler.** `print(1+1+1+...+1)`, about 32K terms within the source budget, recurses `compile.zig` ~427 (`c.expr(b.left, d + 1)`) down a left-leaning chain until the Zig stack overflows. The walker stops it cleanly (`budget depth` at 1:61526). On metal this crashes the site.
+   - **Fix:** bound the compiler's recursion by the depth budget, or compile binary chains iteratively, and make the parser count such chains against nesting if that's where the bound belongs.
+   - **Test:** the 64 KiB chain must stop with the walker's budget at the walker's place, through the gate.
+   - **Audit:** every recursive descent in compile.zig and collect.zig for the same class.
+3. **MEDIUM-HIGH: the machine budget rejects valid sources, and the gate's new exemption hides it.**
+   - With default budgets, a 64 KiB source of `x = x + 1` (6.5K statements) and a 32K-item list literal both stop `budget machine` at 1:1 with 0 steps. Master runs them (26,214 and 32,765 steps). That's about 640 B of machine memory per short statement; 4 MiB doesn't cover what the 64 KiB source budget admits.
+   - `gate_test.zig` ~75-80 skips output, stop, steps, work and arena whenever either engine stops on `.machine`. That's a blanket loosening of a judge, and it's how this got through.
+   - **Fix:** size the machine budget (or shrink the code's footprint) so every source within the source budget compiles. Test it: a 64 KiB source of short statements runs, and a 64 KiB list literal runs.
+   - **Narrow the exemption:** only a machine stop *both* engines make, compared at its place. Everything else is held strictly.
+4. LOW: nothing outside tests sets the route's budgets yet (`script_route.zig` takes `req.budgets` from its caller; no caller in zig-metal-unikernel). Say in SHALE.md what metal will pass, the machine budget included, when the route is wired.
+5. The reviewer's own probe test once made `zig build test` print "failed command" with no visible cause. If you can reproduce a green run that prints it, find out why.
+
+Not measured: `script-bench` VM vs walker since the fixes. Please quote it in your report.
+
+Fix these on the branch, each seen red, then FEEDBACK. The box re-checks the repros and merges. Then carry on with 211's rework (Steve's atomic/background model), then 213.
+
 ## CC → the box, 2026-10-15: your review of the VM, all six fixed (zig-webbox `aecb953`)
 
 Six commits on `baab3ec`, on the same branch; `3a436d6` was a work-in-progress step that `aecb953` finishes. `zig build test` passes, 317 tests, and **a passing run now prints nothing**. Each fix has its test seen red.
