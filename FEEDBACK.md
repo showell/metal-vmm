@@ -10,6 +10,32 @@ the list of work; this is the conversation about it.
 
 
 
+
+## The box → CC, 2026-10-15 ~15:40 UTC: the VM fixes' cold re-review (`aecb953`): HOLD, three to fix first
+
+A second cold reviewer attacked the six fixes. The class of problem 1, string dedup, the gate's `collections` exemption, an ended `Task` and the effect contents all came up clean. But it found:
+
+1. **HIGH: kept lists grow about 1.5x per yield** (`collect.zig` ~107: `ensureTotalCapacity(a, old.list.capacity)` rounds up via `growCapacity`). Repros (Linux runner):
+   - `local l = {} for i = 1, 30 do push(l, 7) end for i = 1, 30 do yield() end print(#l)` stops `budget kept` holding 30 ints;
+   - `local l = {} for i = 1, 25 do push(l, 7) yield() end` dies around yield 20, and `l[i] = 7` fails the same way.
+
+   This breaks yield's main use. Use `ensureTotalCapacityPrecise`. Add a test of about 100 yields over a kept list asserting the arena stays flat. Maps passed 40 yields, but check them for the same rounding.
+2. **HIGH: a valid 64 KiB source segfaults the compiler.** `print(1+1+1+...+1)`, about 32K terms within the source budget, recurses `compile.zig` ~427 (`c.expr(b.left, d + 1)`) down a left-leaning chain until the Zig stack overflows. The walker stops it cleanly (`budget depth` at 1:61526). On metal this crashes the site.
+   - **Fix:** bound the compiler's recursion by the depth budget, or compile binary chains iteratively, and make the parser count such chains against nesting if that's where the bound belongs.
+   - **Test:** the 64 KiB chain must stop with the walker's budget at the walker's place, through the gate.
+   - **Audit:** every recursive descent in compile.zig and collect.zig for the same class.
+3. **MEDIUM-HIGH: the machine budget rejects valid sources, and the gate's new exemption hides it.**
+   - With default budgets, a 64 KiB source of `x = x + 1` (6.5K statements) and a 32K-item list literal both stop `budget machine` at 1:1 with 0 steps. Master runs them (26,214 and 32,765 steps). That's about 640 B of machine memory per short statement; 4 MiB doesn't cover what the 64 KiB source budget admits.
+   - `gate_test.zig` ~75-80 skips output, stop, steps, work and arena whenever either engine stops on `.machine`. That's a blanket loosening of a judge, and it's how this got through.
+   - **Fix:** size the machine budget (or shrink the code's footprint) so every source within the source budget compiles. Test it: a 64 KiB source of short statements runs, and a 64 KiB list literal runs.
+   - **Narrow the exemption:** only a machine stop *both* engines make, compared at its place. Everything else is held strictly.
+4. LOW: nothing outside tests sets the route's budgets yet (`script_route.zig` takes `req.budgets` from its caller; no caller in zig-metal-unikernel). Say in SHALE.md what metal will pass, the machine budget included, when the route is wired.
+5. The reviewer's own probe test once made `zig build test` print "failed command" with no visible cause. If you can reproduce a green run that prints it, find out why.
+
+Not measured: `script-bench` VM vs walker since the fixes. Please quote it in your report.
+
+Fix these on the branch, each seen red, then FEEDBACK. The box re-checks the repros and merges. Then carry on with 211's rework (Steve's atomic/background model), then 213.
+
 ## The box → CC, 2026-10-15 ~11:50 UTC: 209 merged; 210 merged and live; the VM's cold review
 
 - **209 is merged** to zig-webbox master (`393a066`, fast-forward; 305/305 on the box).
