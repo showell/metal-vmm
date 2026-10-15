@@ -2110,6 +2110,49 @@ Steve builds Dog Park by playing it on the box's :9103. The box redeploys there;
     - **Then** FEEDBACK with the bench before and after (native and the wasm page bench, `node tools/bench_page.mjs`). The box merges and deploys to :9103.
 
 211. **Shale's VM, then a long-running watchdog (Steve, 2026-10-15; a stretch, after 209 and 210, many overnight chunks).** zig-webbox first, then zig-metal-unikernel and metal-vmm for the watchdog. Three design rounds with a cold agent settled it. Steve: "I want to think about how shale programs can be reentrant and long-running... Think of a long-running watchdog program written in shale as our example."
+    - **SUPERSEDES M2-M6, the watchdog and the task lifecycle below (Steve, 2026-10-15 midday, after a cold critique of his model).** Keep V, M1 and the slices, and finish the box's review fixes (FEEDBACK 93ef298) first. Then build this instead:
+      - **Steve's model:** "There should always be one primary process, but it would be nice if shale programs could be handled intelligently... if our VM holds state for any running shale program in a nice clean way, then we could let the kernel swap it out on any I/O request, and then we might not even need yield for most programs." And: "We should try not to box ourselves in to a monolith. **The kernel should try to treat the shale VM as just an opaque black box as much as possible.**"
+      - **Two modes in the signed envelope:**
+        - `atomic`: today's route, whole inside one handler, and it may write.
+        - `background`: run in slices between handlers, **read-only**. A change builtin is an `argument` error naming `atomic`. Steve: "it's fair to assume most background tasks could be made read-only." A script that finds and then deletes is a background run to find, then an atomic one to act.
+      - **A slice ends after any store call, or after N steps, whichever comes first.** Store calls are synchronous, so "swap on I/O" is a slice boundary after the call. About two lines in vm.zig's builtin case. **`yield` loses its scheduling meaning:** pure computation is preempted by steps. Delete `yield(seconds)`, `Outcome.yielded`, `Slice.yield_returns` and `Machine.yield_returns`. `yield()` stays only as a collection point, or goes, if collecting at a slice boundary can be made safe (the list-literal class says not without care).
+      - **Builtins stay atomic, with each call's work capped** (Steve: "builtins actually do the heavy lifting in nearly every shale program"):
+        - a cap on bytes per `read` and on chunks per scan;
+        - a cap on entries per `walk`, whose per-entry stats count as reads;
+        - `remove_tree` as is, since background runs can't call it.
+        - Scripts loop, and the VM parks between iterations.
+        - Design the caps so one builtin call is a bounded, measured slice of wall time. Report the worst case on metal's numbers (a disk command ~1 ms).
+        - Background runs tolerate an entry vanishing between `ls` and `stat`.
+      - **One background run at a time.** A second is refused (503 `busy`), with no queue. Steve: "refuse the second job for now. We should try not to box ourselves in to a monolith, though."
+      - **The VM is an opaque black box to the kernel.** A run is one heap-owned `Process` holding:
+        - the AST arena, the code, the value arena, the run and machine state;
+        - an output ring;
+        - its own backing allocator, never the request heap, under the budgets (including machine memory, per the review).
+
+        The host-facing interface is a handful of calls, roughly: `start(source, mode, budgets) -> Process`, `step(slice limits) -> paused|finished|stopped`, `output()`, `kill()`, and a small `status()` for the admin route. The kernel never reaches inside. Nothing about VM internals (frames, arenas, ops) appears in kernel code. A second Process later should need no kernel change but a count. Put that interface in one file and say in SHALE.md that it is the contract.
+      - **Scheduling:**
+        - On metal, one slice after each handler, plus slices in idle time. A request then waits at most one slice, and the run never starves under load, so no 60 s floor.
+        - On Linux, one runner thread takes the turn for each slice.
+        - Overruns (a slice past its wall-time target) show on `/admin/host`, as idle steps' do.
+      - **The log:** effects and slice counts are appended per slice, not only at the end, so a reboot mid-run leaves an honest log. The end line is finished, stopped or killed. `now()` is per slice, not frozen at the start.
+      - **Output and the endpoint:** a background POST is checked and recorded as today, then returns the run's id. Output goes to the ring. `GET .../runs/<id>/stream` is a kept SSE stream served between handlers, with `Last-Event-ID` against the ring. `.../runs/<id>/kill` is signed. Keep the SSE nuances from the section below that still apply (heartbeats, a watcher never keeps a run alive, reconnects, Caddy).
+      - **Cut** (SHALE-TASKS.md's M2 sleeping thread, M3's floor, M4's month-long lifetimes, M5's `host()`/`status`, M6's simulated week, the external task checker, the long-running watchdog itself): a background run is a long scan, not a forever-program. Rewrite SHALE-TASKS.md to this model, keeping its §1 and §4.
+      - **The order:**
+        1. the review fixes;
+        2. `Process` and the opaque interface (Linux only);
+        3. the caps;
+        4. the I/O slice boundary;
+        5. the background mode on Linux, with the sliced gate holding a background run to the atomic run of the same read-only script;
+        6. then metal's scheduling and the stream.
+
+        **Stop and report before any kernel change**, as before.
+      - **Tests that prove it**, each seen red:
+        - a background run that tries to write is refused;
+        - a request arriving mid-run waits at most one slice (Linux and metal-vmm);
+        - a capped builtin can't make a slice run long;
+        - kill frees everything (the page heap back to its figure);
+        - a second background run is refused;
+        - a background run's output equals the atomic run's.
     - **Priorities (Steve: "We may have let the scope creep on this a bit much... We will treat CC's findings with lots of scrutiny and conservatism. The VM piece might be the real keeper."):**
       - **The VM's quality comes first:** the gate and the parity are what make it worth keeping.
       - **The watchdog and SSE milestones are exploratory.** Prefer design notes and small spikes on branches over broad changes to the kernel. Stop and report rather than push through a milestone that grows.
@@ -2215,6 +2258,19 @@ Steve builds Dog Park by playing it on the box's :9103. The box redeploys there;
       - non-blocking I/O (nothing a watchdog reads blocks for long; the kernel has no outbound network);
       - a dry run, never.
     - **Then** FEEDBACK at each checkpoint: after V's gate holds, and after each milestone. The box reviews, merges, and Steve decides when a task first runs on lynrummy.com.
+
+212. **Dog Park: the lessons of 210 applied (Steve, 2026-10-15).** dog-park `main` `9130db4`, a new branch `claude/dog-park-grid`. Read https://github.com/showell/essay-repl-server/blob/master/notes/dog-park-walk-speed.md, the box's essay on your 210; its "Lessons" section is this item.
+    1. **One spatial index.**
+       - Poops by tile (linked lists plus listed bits) and critters by cell (bitsets in index order) answer the same question. Make one `Grid`, with cells, bitsets, the outside set, and `near(p, reach)` in index order, serving both. Measure a poop grid's memory and speed; if poops are better left as they are, say why and keep two.
+       - One invariant check (`bucketsHold`) for whatever survives.
+    2. **The invariant check, no longer quadratic.**
+       - `physics.overlaps` compares every pair (~36k checks) after every tick the server re-runs (`physics_judge.zig` ~434), and builds a second `Scene` to do it.
+       - Make it use the grid, with each critter against its own and neighbouring cells, and reuse the tick's scene if the code allows.
+       - Same for `onPoops`, and `chickensTurn`'s walk of every seen critter to find the chickens.
+       - Prove it: the planted overlaps are still found, and the server finds the same `overlaps` count on the lines dump's boards.
+    3. **The remaining full scans:** any loop over every critter or slot inside a loop over moves either asks the grid or says in a comment why a full scan is right. Keep the index order, and make every tie-break explicit.
+    4. **The fast tier.** Attribute `zig build test`'s wall time per test binary and per heavy test (README says ~12 s after an edit; it was ~6 s). The seeded invariant test running `overlaps` every tick in Debug is a suspect. Get it back toward 6 s without dropping what the tests prove. Update the README's numbers.
+    5. **The proof, as for 210:** `physics-bench -- lines` byte-identical before and after, quoted in FEEDBACK with the bench, native and wasm.
 
 ## The box: open
 
