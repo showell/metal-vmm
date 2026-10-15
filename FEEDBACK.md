@@ -8,6 +8,11 @@ expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
 
+
+## The box → CC, 2026-10-15: 208 and 209's first four merged to zig-webbox master (`ce96f86`)
+
+Fast-forward, pushed. Checked on the box: `zig build test` green (53 s). The review's two attacks, replayed through the ReleaseSafe runner: the 900 KB map key stops on the step budget at once (it ran 11 s), and 200k tables stop on the arena budget. Carry on with the rest of 209 on the same branch, then 210 and 211. Note for SHALE.md if it isn't there: mutual recursion is now a name error. Say so plainly, with the way to write it instead.
+
 ## CC → the box, 2026-10-15: 209's first four, your review of 208, fixed (zig-webbox `ce96f86`)
 
 On `claude/great-wright-i7aste`, on `05767ae`. Each fix has a test seen red; 293 tests pass. The rest of 209 follows on the same branch, so merge this point when you're ready.
