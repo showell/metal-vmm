@@ -2109,6 +2109,85 @@ Steve builds Dog Park by playing it on the box's :9103. The box redeploys there;
     - **Also, if cheap:** a tick's poop lines now copy 2048 slots of `b.poops` and `b.poop_known` and diff them (`run`, physics.zig ~934-958). Have `Scene.init` keep the slots seen at the start, have `placePoop` keep an overwritten seen slot's old point, and walk only those. This is moderate risk, since it's what page and server compare; the two slot-reuse tests in physics_trails_test.zig cover it.
     - **Then** FEEDBACK with the bench before and after (native and the wasm page bench, `node tools/bench_page.mjs`). The box merges and deploys to :9103.
 
+211. **Shale's VM, then a long-running watchdog (Steve, 2026-10-15; a stretch, after 209 and 210, many overnight chunks).** zig-webbox first, then zig-metal-unikernel and metal-vmm for the watchdog. Three design rounds with a cold agent settled it. Steve: "I want to think about how shale programs can be reentrant and long-running... Think of a long-running watchdog program written in shale as our example."
+    - **Decided by Steve:**
+      - **A bytecode VM, not a hack.** No resume by re-walking the tree to a saved position ("I'm really wary of hacky things"). No second stack on metal: Zig frames hold raw arena pointers at a yield, so memory could never be reclaimed honestly. Steve: "heavier, but ultimately simpler, options like VMs."
+      - **The VM comes first,** as a drop-in for one-shot scripts, before any long-running machinery.
+      - **On Linux, the OS schedules.** On Linux `yield` hands the slice back to Linux's scheduler. It can't be a pure no-op, because every handler runs under the turn (zig-webbox HOST.md, "One handler at a time"). So `yield(s)` = release the turn, sleep `s`, take it back. `src/script/` stays portable, with the yield as a host hook; the thread lives in the Linux host. SHALE.md's rule becomes: "the same builtins in the same shapes; a host decides when the next slice runs."
+      - **Fail fast:** an uncaught error ends a task for good, with no auto-restart. Its verdict reads "stopped", which the external watchdog takes as an alarm. A script that wants to survive one bad check uses `attempt`.
+      - **The box's defaults, unless Steve says otherwise:**
+        - a task starts fresh after a reboot or deploy (host counters reset at boot; no snapshots);
+        - one task at a time;
+        - no store writes from a task in v1 (only its log ring and its verdict), since a writing task needs request-grade fault testing (HOST.md ~176);
+        - the external watchdog reads the verdict.
+    - **(V) The VM** (the big chunk; honest estimate 60-90 h before the watchdog work, so expect several nights; report at each checkpoint):
+      - **Its data:** `Frame{func, pc, base}`, an operand stack, and the existing slot stack. Loop state goes in compiler-allocated hidden slots. `attempt` is a handler marker on the frame stack. A pc→Pos table gives every stop its line, column and function. The AST gets its own arena.
+      - **Builtins and charging port unchanged:** `args` is a slice of the operand stack.
+      - **Step parity is exact:** each op carries the `enter` steps the walker charges for the nodes it stands for.
+      - **The oracle:**
+        - A differential gate runs the tree-walker and the VM on every interp, builtins and examples test, the cookbook, and the fuzz corpus. Output, effects, the stop (class, line, column, function, which budget) and steps must all be identical.
+        - Production (the route and the Linux runner) then runs the VM. The walker stays in the test tree as the second implementation ("a shared component is unfalsifiable") until Steve retires it.
+        - Plant a mis-compiled op and see the gate fire.
+      - **Measure:** `zig build script-bench`, walker vs VM.
+    - **Then the watchdog milestones,** each one overnight chunk and each with its test seen red. **Done** means red, then green:
+      - **M1. `yield` in the VM, and copy-at-yield memory.**
+        - At a yield, copy the roots (stacks, slots, consts) into a fresh arena, keeping shared tables shared, and free the old arena whole.
+        - Charge the copy as steps, and cap what's kept (a `kept` budget, say 1 MiB).
+        - In a one-shot run, `yield` only collects.
+        - **Tests:** 10,000 yields keep the arena flat; a shared table is still one table; a list grown past the cap stops with `budget kept`.
+      - **M2. The Linux host:** a task on its own thread, taking the turn per slice.
+        - **Test:** a request sent during the task's sleep is served before it wakes.
+      - **M3. The metal idle task** (`idle.Task`, one VM slice a step, per-slice budgets, its arena from the page allocator, never the request heap), **plus a floor:** a slice at least every 60 s even under load, counted as a busy turn.
+        - **Tests:** under continuous load it still gets about one slice every 60 s; a request waits for at most one slice.
+      - **M4. The lifecycle through the signed route.**
+        - The envelope adds `mode=task lifetime=<s>` (at most 30 days; one-shot keeps its 24 h).
+        - Install, stop and replace are signed and burn sequence numbers. Expiry is checked at every wake.
+        - A stop is clean between slices; a replace is a stop plus a fresh install.
+        - **Tests:** an expired task doesn't run its next slice; a replayed install is refused; a stop between slices ends it.
+      - **M5. `host()`, `status(s)`, the log ring, and `/admin/shale/tasks`.**
+        - `host()` is a map of named integers from a new typed provider beside `host_facts` (today's facts are display strings; never parse them). Both hosts supply it.
+        - Its fields:
+          - the disk check: `volume_damage`, `volume_leaked`, `volume_check_finished`;
+          - idle work: `idle_overruns`, `idle_steps`;
+          - faults: `nmis`, `nic_stalls`, `disk_request_most_ms`;
+          - memory: `pages_in_use`, `request_heap_most`;
+          - traffic and space: `served`, `volume_free_bytes`, `up_s`, `restarted`.
+        - `status(s)` sets the task's one-line verdict; `print` goes to the ring.
+        - The route shows the state, the verdict, the ring, the steps, the line paused on, and the kept size.
+        - **Test:** a host missing a key gives an `index` error, never a silent 0.
+      - **M6. The watchdog itself, on metal-vmm for a simulated week** (time jumped; checks on logic, never wall time):
+        - **The run:** 10,080 wakes at 60 s, beside a seeded load.
+        - **It must prove:**
+          - at most 60 s between slices at any load;
+          - at most one slice between a request's arrival and its service;
+          - kept bytes and the page heap back to the same figure after every wake;
+          - a stop and a replace mid-week leave no pages held, and a new verdict comes within a period;
+          - injected disk damage, an NMI and a NIC stall each give `ALARM` within one period.
+        - **Planted bad tasks, each caught by name:**
+          - one that never yields (the per-slice step budget stops it, the machine is unaffected);
+          - one that grows its kept state (`budget kept`);
+          - one that throws every slice (ended at the first throw, verdict "stopped");
+          - one past its lifetime (doesn't run);
+          - a second install while one runs (it replaces the first).
+    - **The watchdog script, as the cold agent drafted it** (refine freely):
+      - It waits 600 s for a baseline, then wakes every 60 s.
+      - It raises `ALARM` on:
+        - volume damage;
+        - a rise in leaked clusters, overruns, NMIs or NIC stalls;
+        - a disk request over 500 ms;
+        - pages more than 2048 over the baseline;
+        - under 1 GiB free.
+      - Otherwise its verdict is `ok <date> served <n>`.
+      - It goes in the cookbook beside the one-shot scripts. Its value beside the external watchdog: the external one sees up or down; this one sees slow rot from inside, and the external one fetches its verdict.
+    - **Cut** (say so in SHALE.md):
+      - snapshots across a reboot;
+      - several tasks;
+      - replace-keeping-state;
+      - event wakes;
+      - non-blocking I/O (nothing a watchdog reads blocks for long; the kernel has no outbound network);
+      - a dry run, never.
+    - **Then** FEEDBACK at each checkpoint: after V's gate holds, and after each milestone. The box reviews, merges, and Steve decides when a task first runs on lynrummy.com.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
