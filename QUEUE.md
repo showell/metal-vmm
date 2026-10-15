@@ -2046,6 +2046,62 @@ Steve builds Dog Park by playing it on the box's :9103. The box redeploys there;
     - **Not:** a dry run (Steve: scripts just run). No new effects beyond the store.
     - **Then** FEEDBACK: what changed, what you decided and refused, and the new builtins with their costs. The box runs the cookbook's read-only scripts on lynrummy.com once v31 ships.
 
+209. **Shale, solid and understandable (Steve, 2026-10-15; overnight, methodical).** zig-webbox, your branch, on your `05767ae` (208). The box cold-reviews 208 and merges it to master meanwhile; rebase onto master if it moves. Steve: "methodical overnight kind of work... more solid, reliable, and understandable." The list comes from a cold agent's read of 208, ranked; take it in order.
+    - **First, Steve's two decisions on 208's open items:**
+      - **The price of a byte: one step per 16 bytes** for bulk byte work. That is whole and partial `read`, `count_lines`, `count_in` and `find_in`, and the string searches (`find`, `contains`, `split`, `substitute`) over their haystack. `charge_test`'s property holds with its factor.
+      - SHALE.md's budgets say what this makes reachable: the site's 16 MiB of read bytes against 2M steps.
+      - **`remove_tree` stays as it is:** one change, bounded by the store. Say so in the doc, including what the effects log records if a run stops partway.
+    - **(a) A store error is never "missing"** (`builtins_store.zig` ~403: `statOrNull(...) catch null`): only FileNotFound is missing; any other error is the store's own, named, as the doc promises. Test seen red.
+    - **(b) SHALE.md's snippets run as tests.**
+      - Every code block in the reference runs against the examples fixture, with its expected output beside it in the doc (`-- prints:`).
+      - A block with no expected output fails the build. A planted broken snippet goes red.
+    - **(c) Steps bound the work: the upper bound.**
+      - `charge_test` proves a builtin charges *at least* in proportion to its work; 208's review found 75 s of work inside the budget.
+      - Add a test-only work counter in each builtin's inner loops (compares, bytes touched, entries). Then a test over adversarial shapes for every builtin asserts work ≤ c × steps charged.
+      - Count work, never time it. Keep the counter out of release builds. Plant one mis-charge and see it fire.
+    - **(d) A golden corpus of error messages.**
+      - About 100 wrong scripts, each pinned to its class, line:column, function and text, with every error class covered.
+      - Read each message as an operator would, and rewrite the weak ones: say what to write instead. On the live site the message is the only debugger.
+    - **(e) Property tests of the builtins:**
+      - reading in pieces with `read(p, o, n)` and joining gives the whole `read(p)`;
+      - `count_in` matches `#split(read(p), s) - 1`;
+      - `find_in` agrees with `find` on the whole text, offsets converted;
+      - `split` then `join` round-trips;
+      - `sort` is stable, so sorting by key B then key A equals sorting once by (A, B);
+      - `seconds(date(x)) = x` across the range;
+      - `table()` lines up for random rows.
+    - **(f) Doc nits:**
+      - **`table` and `type`:** both are on the refused Lua-name list (`parse.zig` ~19), but `table` is also a builtin. Say how that resolves, or fix it.
+      - **0-based vs 1-based:** `find_in` gives a 0-based offset where `find` is 1-based. Put a callout where an off-by-one would bite (feeding it to `sub`).
+      - **The sidecars:** the cookbook's sidecar list lacks `.lastauthor`, which `delete_topic.shale` removes. Reconcile them against angry-gopher's real sidecars.
+    - **Stretch (g): the site's real scale.**
+      - A fixture generator parameterised by topic count, upload folders and transcript sizes.
+      - For each cookbook script, the largest site that fits the site's budgets, as a table in SHALE.md. Bad news is fine; say it.
+    - **Not tonight (each needs Steve first):** JSON output or JSON lines; includes or libraries (the signature covers only the uploaded script); `rename`/`move` (store work across repos); a dry run, never.
+    - **Rules as before:**
+      - each change with its test seen red;
+      - `zig build test` green and fast before each push;
+      - the doc stays current;
+      - every judge loosening (a charge lowered, a budget raised) gets its own cold review before the FEEDBACK.
+    - **Then** FEEDBACK: what changed, what you found, and the before and after of anything you priced.
+
+210. **Dog Park: the walk's speed (after 209, or beside it if you're blocked).** github.com/showell/dog-park `main` `663322c`, on a new branch `claude/dog-park-speed`. A cold review profiled `zig build physics-bench -- strewn` (ReleaseSafe, native; the busiest spot, a full drag, is about 25-27 ms of the 62.5 ms tick, more on wasm):
+      - `lineUp` takes 42%: each walked critter scans all ~270 seen for its 3 nearest;
+      - `stepWhole` plus `squaresOverlap` take 42%: every step scans all seen for overlap;
+      - all the poop code together takes under 6%: the tile buckets work.
+    - **The fix to try:**
+      - Bucket the seen critters by tile, as the poops are: a bitset of seen indexes per tile of the span, kept by `Scene.put` on every move, shoves and seam crossings included.
+      - A step's square asks only the tiles it meets, ORing their bitsets and walking the set bits **in index order**. The j order decides who is nudged, who is shoved and which blocker steers the sidestep, so page and server agree only if it is kept.
+      - `lineUp` searches ring by ring outward, stopping once 3 are found and the next ring is farther than the third; ties compare (distance, index) explicitly.
+      - The same buckets fix the worst case in `layPoop`, where a boxed-in pooper tries ~10k ring spots, each scanning every critter.
+      - The reviewer estimates 6-8 ms a tick; measure it. (Inlining `squaresOverlap` measured no faster; don't bother.)
+    - **The proof that nothing changed:**
+      - the bench's lines are byte-identical before and after (94 on the full drag, 149 strewn), and the judge goldens don't move;
+      - the seeded invariant still holds;
+      - a planted missed bucket update (a shove that doesn't move its bit) must fail a test.
+    - **Also, if cheap:** a tick's poop lines now copy 2048 slots of `b.poops` and `b.poop_known` and diff them (`run`, physics.zig ~934-958). Have `Scene.init` keep the slots seen at the start, have `placePoop` keep an overwritten seen slot's old point, and walk only those. This is moderate risk, since it's what page and server compare; the two slot-reuse tests in physics_trails_test.zig cover it.
+    - **Then** FEEDBACK with the bench before and after (native and the wasm page bench, `node tools/bench_page.mjs`). The box merges and deploys to :9103.
+
 ## The box: open
 
 Each line's full text, with its history, is in the archive under its name.
