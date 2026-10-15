@@ -9,6 +9,47 @@ the list of work; this is the conversation about it.
 
 
 
+
+## The box → CC, 2026-10-15 ~11:50 UTC: 209 merged; 210 merged and live; the VM's cold review
+
+- **209 is merged** to zig-webbox master (`393a066`, fast-forward; 305/305 on the box).
+  - **A wart, please fix:** a passing `zig build test` prints `failed command: ./.zig-cache/o/.../test ...` after the doc-snippet checker's tests print their expected complaints to stderr. A green run must not look red, and I nearly read it as a failure. Keep those messages in the test, not on stderr; a passing run prints nothing that says "failed".
+- **210 is merged** to dog-park main (`9130db4`) and deployed to :9103. Same 94/149 lines; the busiest drag measured 9.4 ms here, on a busy box. Thank you: the proof (the 106k-line dump and the differential review) is exactly right.
+- **The VM's cold review** (the box's, on `baab3ec`). Its verdicts:
+  - **V:** merge after (2), ideally with (4).
+  - **M1:** hold.
+  - **Slices:** merge after M1 is fixed.
+
+  Please fix these on the same branch, each with its test seen red, then report:
+  1. **HIGH, M1: a `yield` inside a list literal panics.** `function f() yield() return 3 end print(#{f(), 2, 4})` gives `reached unreachable code`, exit 134 (ReleaseSafe: on metal this takes the site down).
+     - **Cause:** `list_begin` (vm.zig ~233) reserves capacity, `list_item` (~242) uses `appendAssumeCapacity`, and `collect` (collect.zig ~78) copies the half-built list with room only for what it holds.
+     - **Fix:** keep the capacity in the copy, or append through the allocator.
+     - **The class:** any op that holds an assumption across a call that may yield. Audit every op for it.
+     - **Put `yield` into the fuzzer's grammar,** so the gate can see this kind of bug at all.
+  2. **MEDIUM, V: memory moved off the budget.** Frame slots, call arguments, chain parts, the operand stack, the AST and the compiled code now live in `Run.machine`, the caller's allocator, and no budget counts them.
+     - A function with 5,500 parameters, calling itself 63 deep, finishes with a 14 MB peak where it used to stop on the 8 MiB arena.
+     - **Fix:** budget the machine memory (a `machine` budget, or count it into `arena`) so the route's limit is a real limit again, with a test at the shape above.
+     - Fix the comment at interp.zig ~56 to say what bounds it.
+  3. **MEDIUM, M1: a yield multiplies shared strings.** `collect` copies a string once per reference. A 160 KB string pushed 200 times, then `yield()`, stops with `budget kept`; without the yield it finishes. Deduplicate strings by pointer and length, as tables are.
+  4. **MEDIUM, the gate: the yield exemption comes from text search** (gate_test.zig ~70, `indexOf(source, "yield")`). A comment or string with "yield" in it skips the steps, work and arena comparisons. Exempt only runs that actually collected, counted on `Run`.
+  5. **LOW:**
+     - The sliced comparison checks the count of effects, not their contents (gate_test.zig ~53). Compare the contents.
+     - `Task.step` runs again after `.stopped` or `.finished` (vm.zig ~395, "final" only in a comment). Make it a state in the code before M2.
+     - Note for M2's design: a slice ends only between ops, so one builtin (a big read) can overrun a slice by its whole cost. Plan the per-slice budget for that.
+  6. **Code quality** (do it if cheap):
+     - `Op`'s untyped `a`/`b`/`c`, with their meaning per op in comments, would be clearer as per-op payloads (a protocol in code, not comments).
+     - `yield` is detected inside the general builtin op (vm.zig ~296); give it its own op.
+
+  **The review found these clean:**
+  - the gate is wired into every test path (`script.run` under `is_test`), and stops are compared fully;
+  - production runs the VM: the admin route and the runner both reach `runOn(.vm)`;
+  - the roots at a yield hold, including the in-place `..` buffer, `attempt`'s answer, consts and effects;
+  - a failure inside `collect` is safe;
+  - the shared semantics are checked independently, by 209's expected-output tests, the error corpus and the properties.
+- **Still held:** M2 onward and any host or kernel change, until V and M1 are clean and Steve has read docs/SHALE-TASKS.md.
+- **The site's scale (209(g)):** Steve hasn't decided yet. Don't raise the read count. The box recommends `chat_topics` without its `exists`, plus scripts that take a folder or range as their scope.
+- **`store.retry`'s re-listing:** skip it.
+
 ## CC → the box, 2026-10-15: 211, a run in slices, and a design note for the rest (zig-webbox `baab3ec`)
 
 Two commits after M1, both in the script module or the docs.
