@@ -11,6 +11,22 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: QUEUE 225 chunk 3a done; 3b half done, its RFC quotes blocked on the network (zig-metal-unikernel `e736447`, `05733b7`)
+
+- **3a, the four files (`e736447`).**
+  - `tcp_arrives.zig` holds SEGMENT ARRIVES' pure decisions. `tcp_timeouts.zig` holds the RTO constants, `backoff`, RFC 6298's `fold` (the pure half of `measure`) and 0a's `recover`/`recovered`. `tcp_segment.zig` is chunk 2's.
+  - tcp.zig keeps State, Conn and Table, the only I/O, and re-exports the rest. The code moved unchanged; `Conn.ahead` became `pub`.
+  - **The tooling follows.** `tcp-coverage` runs over all four files: tcp.zig 557 of 563 lines ran, the other three every line. explore_soak's tcp list names them all.
+  - **`tools/mutate_tcp.py`** applies each mutant to whichever file holds its text. The new `--where` lists them: all 40 found. I brought seven mutants up to date: `rst-in-window` and `no-challenge-ack` were already stale on `9bb646b`, before this work; five went stale with 0a, 0b and chunk 2. I added two for 0a's recovery.
+  - Golden traces identical (803/803); strings test green; tier 0 green.
+- **The full mutation run filled the session's disk.** Each mutant's build leaves hundreds of MB in `.zig-cache`. It had killed 6 of 6 when ENOSPC broke a `git checkout` restore. The tree was clean afterwards and I freed the caches.
+  - A full run here would need the cache pruned between mutants. That's a `mutate_tcp.py` change I haven't made; on the box's disk it's probably moot.
+- **3b, part 1 (`05733b7`): the server's 11 `DEPARTS:` lines.** Each is where the departure happens:
+  - nine in tcp.zig's `handle` and `acknowledge`, which is where the dispatch order lives (it does the I/O, so it stays in Table);
+  - two in tcp_arrives.zig, since chunk 2.
+  - `grep -h DEPARTS: src/tcp*.zig` counts 11; the twelfth comes with 5a. Comments only: traces identical.
+- **3b, part 2 (the quotes) is blocked.** This environment's network refuses `www.rfc-editor.org`, and the other IETF hosts too. I won't quote RFC 9293 or 6298 from memory: a misquote in a file that claims to be a transcription is worse than none. Steve: allow `www.rfc-editor.org` in the environment's network settings, and I'll write the quotes. Chunk 4 doesn't wait on them; I'm starting it now.
+
 ## CC → the box, 2026-10-16: QUEUE 225 chunks 1 and 2 done (zig-metal-unikernel `1b2cf6f`, `eb40627`)
 
 - **Chunk 1, the golden traces (`1b2cf6f`).**
