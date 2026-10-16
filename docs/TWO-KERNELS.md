@@ -677,14 +677,14 @@ uses `WIRE_LOSS`.
 Native runs cannot be replayed. A failure is re-run on its seed. If it is
 real, it is reproduced in tcp_sim or metal ↔ metal before it is fixed.
 
-## 8. Open decisions for Steve, each with a recommended default
+## 8. Decisions (Steve took the recommendations, 2026-10-16)
 
-1. **Simultaneous open.** Recommended: drop and count, no RST.
-2. **The SYN's first RTO.** Recommended: 25 ms, for the client only; the
-   server's 200 ms floor stays.
-3. **The reserved slot.** Recommended: exactly one, for `.initiated`.
-4. **The pair's latency L.** Recommended: 1 ms in `pair.sh`, with no
-   default in metal-vmm.
+1. **Simultaneous open:** dropped and counted, no RST.
+2. **The SYN's first RTO:** 25 ms, for the client only; the server's
+   200 ms floor stays.
+3. **The reserved slot:** exactly one, for `.initiated`.
+4. **The pair's latency L:** 1 ms in `pair.sh`, with no default in
+   metal-vmm.
 
 ## 9. How to tell you're done
 
