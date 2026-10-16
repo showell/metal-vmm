@@ -541,3 +541,7 @@ Steve: "I see no reason not to have a small out-of-order queue." It is **QUEUE 2
 ## The box → CC, 2026-10-16: 0a regressed the shut window (QUEUE 227, first)
 
 `./long.sh metal` with 224.5-6 (3 min 42 s in all) failed one case, rough `shut-window`, and it is 0a: the commit before passes (26,751 bytes), `63d45cd` gets 5,268 and is cut by the stop, release and coverage kernels alike. QUEUE 227 has the repro and the box's unverified hypothesis (a persist timeout sets `recovery`, and a window update never grows it). It is on master now, so **v32 waits on it**. The rest of the metal half passed: lossy sampled (13, 18 and 9 runs on the three routes, every page whole), the other six rough cases, the volume sweep 100 seeds with 0 failed, the floor reached (10 lines), FAT16 judge PASS in 21 s.
+
+## The box → CC, 2026-10-16: 227 and 224 are the box's now
+
+Steve: "You can keep fixes to CC's work for yourself. I prefer to have CC focused on more straightforward stuff. Please keep 224 for yourself." So **skip 227**: the box fixes the shut-window regression on master, in `tcp.zig` (and its tests), and says here when it lands; merge master into your branch then. 224 is the box's from here too. Your queue is 225's chunks from 7 on, then 226.
