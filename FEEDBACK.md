@@ -11,6 +11,30 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: 224.4 measured first. Formatting the volume isn't fat_sim's cost; reading every file back after every operation is. A proposal (your call)
+
+**The measurement:** a local trial, reverted, nothing pushed. 50 FAT seeds (100 runs, 52,896 operations), ReleaseSafe, with `verify` and the volume's making timed apart.
+
+| | s |
+|---|---|
+| fat_sim, all of it | 56.5 |
+| making each run's volume (`Disk.makeIn`: FAT32 `small32`, 35 MB) | 0.0 |
+| `verify` | 54.7 |
+| of it, `d.check()` (the whole-volume check) | 3.3 |
+| of it, free count, recount, FAT copies agree | 0.6 |
+| **of it, reading back every file the model holds** | **50.9** |
+
+- **So chunk 4's shared, pre-formatted image buys fat_sim nothing.** The volume costs nothing to make (store_sim's mmap churn is another story; its fix is the 50 seeds proposed above).
+- **The cost is that `check_every` is 1 for every scenario that isn't crowded.** After every operation, `verify` reads every file the model holds back off the volume and compares its bytes. A volume that fills holds many files, and they are all read every time.
+- **Tried:** the read-back on every 16th operation and the last one. The whole-volume check, the free counts and the FAT copies stay on every operation. fat_sim goes from 56.5 s to **15.1 s** (3.7x; 1.07 ms to 0.29 ms an operation). At long.sh's 300 FAT seeds, about 431 s becomes about 115 s. With FAT_SEEDS 150 as proposed above, about 58 s.
+- **What it gives up:**
+  - Wrong bytes are still found, but up to 15 operations later, so the report names a later operation than the one at fault.
+  - A wrong write that a later operation removes or overwrites before the next read-back is never seen. Leaks, cross-links and FAT damage are still caught on every operation, by `d.check()`.
+- **A gentler version, if you'd rather:** read back at once the file or files the operation just touched (fat_sim knows the path), and the rest every 16th operation. It keeps "what was just written reads back" at every operation. I haven't measured it, and it needs the touched paths kept per operation.
+- **Asking:** may I change fat_sim's read-back to every 16th operation (and the last), or the gentler version? With either, I'd measure that the floor is still reached at 300 FAT seeds before pushing. Until you say, fat_sim stays as it is.
+
+**Where the simulator phase would land:** store at 50 seeds, FAT at 150 with the 16th-operation read-back, drain at 20, the rest as now. About 30 s TCP, 58 s FAT, 8 s store, 24 s pure, 5 s drain, 6 s the rest: **about 130 s of running**, against 710 s today and over 16 minutes in v31. That's under chunk 3's 90 s goal only if pure (the kept log's boots) is also cut. Next, chunks 5-6 are KVM (yours); then chunk 7 under TCG, mine.
+
 ## CC → the box, 2026-10-16: 224.1 (events) and 224.3 pushed, gates running; what store_sim's 1,000 seeds buy (one line, at seed 5)
 
 **Pushed, zig-metal-unikernel `claude/great-wright-i7aste`.** **Gates, run on `7ec1545`:** tier 0's `zig build test` is green (56 s). The simulator phase at long.sh's new sizes (`-Dseeds=1000 -Dcrowd-seeds=500 -Dfat-seeds=300`, ReleaseSafe, the floor) is green too: floor 0 under it, 0 runs failed an oracle, 676 s run, 732 s with the build. The replays took 1.3 s and the six seeds-that-failed runs 1.1 s.
