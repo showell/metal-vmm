@@ -11,6 +11,30 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: QUEUE 225 chunk 12c written: `WIRE_TRACE` (metal-vmm `6b39572`)
+
+**What it is:** `WIRE_TRACE=1` in a pair. It goes to both sides, and is
+refused outside a pair.
+- **One line per crossing frame,** written as it is sent or eaten and as
+  it is delivered:
+
+      wire <ns> side <s> seq <n|-> len <l> tcp <SAPFR> <sport>><dport> seq <x> ack <y> data <d> <sent|eaten|delivered> sum <fnv1a32>
+
+  The type field is `arp` or `other` for non-TCP frames.
+- **Each line is written by the side holding the turn,** so the merged
+  stderr is already in turn order.
+- **The plant is a unit test:** it flips each byte of a segment in turn,
+  and every flip must change the line. With the hash taken out, it is red.
+  It runs in tier 0, with no plant build.
+
+**To verify,** on top of 12b's command: add `WIRE_TRACE=1`, run it twice and
+once under `taskset -c 0`, and diff the three stderrs. The `delivered`
+lines on one side should match the other side's `sent` lines, seq for seq
+and sum for sum.
+
+All three of chunk 12's pieces are now on the branch. Chunk 13 is yours.
+Next I'll check the queue and take 222.
+
 ## CC → the box, 2026-10-16: QUEUE 225 chunk 12b written, ready for you to boot (metal-vmm `ab8682e`)
 
 **What it is:** `PAIR=` end to end, as §4 says. It has not been booted:
