@@ -11,6 +11,35 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: 217 done, the review's fixes (zig-webbox `7946d33`, `61f8a9c`; dog-park `claude/dog-park-shale` `f43ccc3`, rebased on main `08ff9fc`)
+
+**Gates:** dog-park `zig build check` green on `f43ccc3`, and `zig build metal` builds. angry-gopher `zig build test` (zig-server) green against `61f8a9c`, with no change of its own. zig-webbox `zig build test` green on `7946d33`. **On `61f8a9c` (a test-only change) it is still running as I push this; I'll say here if it fails.**
+
+**Finding 1, one client freezes the Linux site: fixed** (zig-webbox `linux_host.zig`).
+- **Answers are held while the handler has the turn.** The writer chain has a `Hold` between the durable writer and the head watch, and it keeps the answer in memory up to `held_most` (1 MiB). It is written once the turn is let go, so a client that pipelines and never reads holds only its own connection.
+- **Every socket write has a deadline.** An answer past `held_most` is written in the turn, under `turn_write_deadline_ms` (5 s); any write after the turn is under `answer_write_deadline_ms` (30 s, a kept stream's).
+- **One watchdog thread** shuts a socket whose write is past its deadline. It is a table of writes under way, not a thread per connection. A connection so ended is counted (`writes_shut`), not logged as a connection error.
+- **Tests, both red first:**
+  - 40 × 512 KiB pipelined, never read: a second client is answered within 2 s. Red with the hold planted off.
+  - One 8 MiB answer, with the in-turn deadline at 300 ms: a second client is answered within 1.5 s. Red with the watchdog's shutdown planted off.
+- **One thing the gate found:** the 8 MiB test's shut write was logged as `connection error: WriteFailed`. The build runner fails a test that writes to stderr, and only on some runs. That is why the quiet end above exists.
+- **Its test route** takes its size from the test, not the request (`61f8a9c`). angry-gopher's request-edges lint was right to flag a test site's route that parsed a number.
+
+**Finding 2, `betweenLoop`'s spin: fixed.** It sleeps 1 ms while a handler waits for the turn.
+
+**Finding 3: dropped, as Steve said.** SHALE.md ("The store") now says one `ls`, or one walk's listing, reads a whole folder in one call, and that folder sizes are the application's to bound. SHALE-TASKS.md's "not capped yet" line says the same.
+
+**Finding 4, the script body read before the admin key: fixed** (dog-park `app.zig`).
+- `/admin/script`'s cap is `before_turn_most + 1`, which makes it an upload, and `uploader` names "admin" only for a request with the admin key. So a stranger's body is never read, nor charged to the small bodies' budget.
+- Both hosts ask: webbox's Linux host, and metal's (`probe/gopher.zig` calls `app.site.uploader`). The route still reads at most `shale.most_body`.
+- **Test:** a head with no key promises 60 KiB and sends none; it is answered 4xx at once (`test_shale.mjs`). Red with the old limit planted back: no answer in 2 s.
+
+**Finding 5, a cut status answered as if whole: fixed.** `shale.zig` writes post and status replies through `written`, which keeps room at the end and adds `── cut here: the rest is past this reply's room ──` on overflow. **Unit test:** red with the note planted out.
+
+**trouble.shale** has a `differs` column counting `req N differ at tick T`, matched before the stuck check. Its README line and the cookbook and scan tests are updated.
+
+Dog Park's report rate is untouched (one a second). Nothing here touches a kernel.
+
 ## CC → the box, 2026-10-16: 214 done, Dog Park's Shale route (dog-park `claude/dog-park-shale` `08edc62`; zig-webbox `049abed`, `070f765`, `8e69105`; angry-gopher `00a4f12`)
 
 Each item's test was seen red, under a plant or before the code. Green: dog-park `zig build check` (its new node test included) and `zig build metal`; zig-webbox `zig build test`; angry-gopher's zig-server `zig build test`.
