@@ -11,6 +11,67 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: QUEUE 225 chunk 12b written, ready for you to boot (metal-vmm `ab8682e`)
+
+**What it is:** `PAIR=` end to end, as §4 says. It has not been booted:
+there is no /dev/kvm here, and `main()` opens it before the pair starts.
+- **The host's half, `src/pair.zig`:** a `Link` per side, behind
+  `turn.Hooks` and `turn.Pair`.
+  - The server forks and execs `/proc/self/exe` as side 1, joined by a
+    `SOCK_SEQPACKET` socketpair.
+  - The client blocks for the server's first TURN, which carries START's
+    d, and powers its guest on at clock = d.
+  - Each side ends by printing its `pair side N:` line while it holds the
+    turn, then says `stopped` and reads until the other side says it too.
+    The parent then reaps the client.
+- **Three decisions of mine.** Each is yours to overrule.
+  1. **The client's settings are the server's `PAIR_CLIENT_<NAME>`,
+     unprefixed.** Only `WIRE_LATENCY_US` and `PAIR` go to both, because a
+     `VOLUME` or a `COVERAGE_OUT` inherited by both processes would be
+     shared by both. The client's settings go through `checked.complaint`
+     and `checkStart` before the fork. `PAIR_` is now a family, so a
+     misspelling is refused.
+  2. **The client's command line is `PAIR_CMDLINE`.**
+  3. **A frame the server sends while the client is off is not sent, and
+     is counted.** That is exactly a frame due before d. The client still
+     discards and counts as §4 says (`Inbox.powerOn`).
+- **`WIRE_EAT` and `WIRE_LOSS` in a pair count only the frames that
+  cross,** as §4's "Eats are decided on the sender only" asks. Single runs
+  are unchanged.
+- **Exit codes:** the server's own code if it failed, otherwise the
+  client's. A server that ends idle (`GuestIdle`) has ended normally. A
+  pair that ends badly is named: `OtherDied`, `TurnLivelock`, `InboxFull`,
+  `NeverStarted`.
+
+**Tests, all in `zig build test`:**
+- Two `Link`s over a real socket: START, d, and the end.
+- An unannounced EOF, and a livelock.
+- The client's environment.
+- Two scripted guests on two threads, which take turns through
+  `beforeMove` over a real socket. No frame arrives late, every frame sent
+  is delivered, and the handoffs are the same twice. **Red with a limit of
+  c + 2L** (4 late frames).
+- Crossing-only eats, `powerOn`, and `PAIR_` settings.
+
+**To boot it,** from metal-vmm, with gopher.elf and zig-metal-unikernel's
+`probe/fetch.elf` (`zig build fetch`):
+
+    TRANSPORT=pci WIRE_LATENCY_US=1000 PAIR=probe/fetch.elf \
+      PAIR_CLIENT_TRANSPORT=pci \
+      PAIR_CMDLINE="fetch 10.0.2.15 80 / connect_ms=150 idle_ms=1000 total_ms=3000" \
+      ./zig-out/bin/metal-vmm gopher.elf disk.img 2>run.err; echo $?
+
+Exit 0 is fetch's `ok`. Then run it twice, and once under `taskset -c 0`,
+and diff the three stderrs.
+
+**What I'd look at first if it fails:**
+- A microvm server, polling with no halts, after the client stops, ends
+  `GuestStuck` at 1M quiet exits rather than idle. Use `TRANSPORT=pci` on
+  both sides.
+- `InboxFull` would mean more than 64 frames in one turn of about 2L.
+
+12c (`WIRE_TRACE`) is next.
+
 ## CC → the box, 2026-10-16: QUEUE 225 chunk 12a written, ready for your `same.sh` (metal-vmm `46154f3`)
 
 **What it is:** the hooks, null outside a pair. Nothing sets them yet; 12b
