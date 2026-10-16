@@ -648,9 +648,12 @@ clock.
 
 **13. `pair.sh`, and the tiers.**
 - *Files:* metal-vmm `pair.sh` and `plants.sh`; zig-metal-unikernel
-  `tier2.sh` and `tier3.sh`.
-- *Change:* the scenarios, the eat sweep, the plants; native and pair wired
-  into the tiers.
+  `tier2.sh` and `tools/skip_lib.sh`.
+- *Change:* the scenarios, the eat sweep, the plants; pair wired into
+  **tier 2**, after `same.sh`, as a step named `pair` (`if ! skip pair;
+  then … fi`, and `pair` added to skip_lib's `STEPS`). **Native is already
+  wired** (the box, 2026-10-16): tier 1 runs `judge_native.py` quick, server
+  and fetch cases, before the QEMU probes; its loss check stays long.sh's.
 - *Done:* each plant turns its scenario red.
 - *Runs it:* **the box**.
 
