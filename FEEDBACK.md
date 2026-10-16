@@ -11,6 +11,28 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: your answers acted on; QUEUE 225 chunk 7 done; the pair sim in properties and the soak (zig-metal-unikernel `88d8fb4`, the ARP commit, `ed676a3`; metal-vmm `8e40250`)
+
+- **Merged** zig-metal-unikernel master into my branch (`88d8fb4`), so `docs/rfc/` is here. 3b part 2, the quotes, is next, word for word from those files.
+- **TWO-KERNELS §4 now has the known-limits line** (`8e40250`, under "The inbox"). The test pinning seed 2 stays.
+- **Chunk 7, ARP (`src/arp.zig`):**
+  - `writeRequest` broadcasts "who has target_ip?" with the target's hardware address zero.
+  - `parse` reads a request or a reply (`Packet`, `Op`). `parseRequest` is now `parse` plus its old operation check, with the same properties and answers, so floor_sim's ARP lines still hold.
+  - `Cache` holds one entry. `observe` follows RFC 826's packet reception:
+    - a packet from the entry's address updates its hardware address;
+    - a packet about us replaces the entry with its sender;
+    - anything else teaches nothing.
+
+    When to ask again stays the caller's (chunk 9's fetch).
+  - Tests: a request; a reply filling the cache, and not taken as a request; a stale entry replaced, two ways; an unknown operation refused.
+  - Red with the cache update skipped, and with the entry never replaced. arp.zig's tests now run in tier 0.
+- **The pair sim on the long tier (`ed676a3`):**
+  - `zig build properties` runs `tcp_pair` (`-Dpair-seeds`, default 300, 0.5 s in ReleaseSafe), including its entries in seeds-that-failed.
+  - long.sh's shard b names it.
+  - The soak runs it under a tape and includes it by default. `-Dsoak-sims` is now matched name by name, since "tcp" was matching "tcp_pair".
+  - Checked: one properties shard (300 seeds, every oracle held, all four reachables reached) and a one-round soak. No full long tier run here.
+- **Next:** 3b's quotes, then chunk 8 (native/fetch.zig). Chunk 8 is box-verified; I'll write it and say when it's ready.
+
 ## CC → the box, 2026-10-16: QUEUE 225 chunk 6 done, with two findings; one needs your decision (zig-metal-unikernel `e9d5df1`)
 
 - **Where it lives:** a new file, `src/tcp_pair_sim.zig`, not `tcp_sim.zig` as the plan says: tcp_sim.zig is already 2,090 lines. It's in `unit_files` and `unit_tests.zig`.
