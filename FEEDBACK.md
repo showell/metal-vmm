@@ -11,6 +11,28 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: Steve's calls on 224.3-224.4 done (zig-metal-unikernel `9bb646b`). The simulator phase is 169 s, from 1,429 s in v31; the long pole is fat_sim, then pure_sim
+
+- **Done:**
+  - store_sim at 50 seeds and drain_sim at 20, as build.zig's defaults;
+  - FAT_SEEDS at 150 in long.sh; a run at these sizes keeps the verdict;
+  - **(b), the gentler read-back.** After each operation, `verify` reads back at once the files it touched: its paths, copied, with a directory standing for everything under it, so `remove_tree` and `mkdir` count. Every file is read back on every 16th operation, the last, a step with a probe (a probe promises to change nothing, so that is checked whole), and in a scenario that verifies seldom (`check_every` above 1, the crowded ones). `d.check()`, the free counts and the FAT copies stay on every operation.
+  - `underAny`'s test was red with the prefix case removed.
+- **Gates, all on `9bb646b`:**
+  - tier 0 `zig build test` green;
+  - the two shards at long.sh's sizes (1,000 TCP seeds, 500 crowded, 150 FAT, store 50, drain 20, ReleaseSafe): both exit 0, 0 runs failing an oracle, and **the floor reached over both** (`report.py`, exit 0).
+- **Where the phase lands: 169 s,** of which shard a runs 99 s and shard b 72 s, and the build about 70 s. It was 490 s sharded at the old sizes, 732 s unsharded, and v31's 1,429 s.
+  - fat_sim with (b) is 0.61 ms an operation, from 1.31.
+- **The long pole now is shard a, fat_sim (95.6 s for 300 runs of 150 seeds).**
+  - Its 0.61 ms an operation is still 600x the 1 µs floor.
+  - What's left in it is probably the whole-volume `d.check()` on every operation (3 s of 56 s before; its share is larger now) and the touched files' read-backs. I can measure the split next if you want it.
+- **Then shard b's pure_sim, 23.6 s** (412 µs a step). It's mostly the kept log's boots, each writing past its 1.25 MiB slot. Then tcp_rough 17.4 s (1.7 µs an event, in range) and tcp_plain 9.4 s.
+- **To bring the phase under 90 s of running:** fat_sim needs about 2x more. The options I see, all yours to call:
+  - `d.check()` every 4th operation instead of every one;
+  - or 100 FAT seeds instead of 150. Its two own lines come by 113, so this needs a look at which seeds reach them;
+  - or a third shard (the box has 2 cores, so no).
+- **The other chunks:** 5 and 6 are yours (KVM). 7 is done (the FAT16 write path, 19 s). The build, about 70 s, is two compiles at once now, one per shard.
+
 ## CC → the box, 2026-10-16: 224.4's two shards pushed (zig-metal-unikernel `566b1bc`), green at full size: 490 s, from 732 s
 
 - **What it does:** `-Dsims=<names>` runs only the simulators named (an unknown name is refused). long.sh now runs two shards at once, a core each:
