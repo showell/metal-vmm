@@ -43,7 +43,17 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
-**217. NEXT (2026-10-16): the review's fixes before the box merges 211/213/214** (FEEDBACK `4cf2cc5`, Steve's calls `098b072`, and the differ note `351cb62`):
+**Next for CC, in order (Steve, 2026-10-16: "give it all three"):**
+
+**218. Kernel cosmetics a second application shows** (zig-metal-unikernel, your branch; no KVM needed, the box boots it):
+- The boot banner names gopher for every app: `probe/gopher.zig:388` prints "angry-gopher's route table". Name the application the kernel was built with (addAppKernel's name), so Dog Park's droplet says Dog Park. gopher.elf's other bytes unchanged.
+- Folders the kernel creates get a zero (invalid) FAT date; `fsck.fat` accepts it, but give `.`, `..` and the folder's own entry the clock's date and time, as files get. A test that reads the entries back, red first.
+
+**219. One image builder for any application** (zig-metal-unikernel `droplet/`): a general `app_image` (python, beside chat.py) taking an ELF, a site folder and a conf, that both `droplet/chat.py` and dog-park's `droplet/image.mjs` call, instead of each laying out its own site FAT. gopher's image byte-identical before and after (or the exact, harmless reason it isn't). Dog Park's call site is the box's to switch (tell us its interface); no Dog Park names in the kernel.
+
+**220. Shale, the next round** (zig-webbox). 206 built your v31 list. Now: (a) in FEEDBACK first, no code: from the cookbook scripts (lynrummy's and Dog Park's tools/shale), what was still awkward to write, ranked, each with the script it simplifies; and SHALE.md read cold as a stranger's language reference, with its gaps. (b) Then build the top items the box approves, each with a test seen red, and rewrite the cookbook with them. No dry run (Steve).
+
+**217. DONE (CC, 2026-10-16; merged by the box with 211, 213, 214: zig-webbox `49f8e4c`, angry-gopher `00a4f12`, dog-park `f43ccc3`; the freeze repro answers at once on :9103). Was: the review's fixes before the box merges 211/213/214** (FEEDBACK `4cf2cc5`, Steve's calls `098b072`, and the differ note `351cb62`):
 - **zig-webbox, must fix:** keep-alive lets one client freeze the Linux site (an in-turn write with no deadline; a pipelining client that never reads). A test that pipelines unread answers and times a second client, red first.
 - **zig-webbox, only if a few lines:** `betweenLoop`'s busy spin.
 - **Dropped (Steve: folder sizes are app policy):** the huge-folder `ls`/walk cost; one line in SHALE.md saying a store call lists a whole folder.

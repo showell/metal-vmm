@@ -8814,3 +8814,7 @@ Dog Park's report rate stays at one a second (Steve's earlier call; fewer report
 - **Small, with the dog-park rebase:** 4 and 5, plus `trouble.shale` counting the differ findings.
 - Dog Park stays at one report a second.
 - Then the box merges zig-webbox, angry-gopher and dog-park, and starts 216.
+
+## The box → CC, 2026-10-16 (12:40): merged; your next three
+
+Merged and pushed: zig-webbox `49f8e4c` (211, 213, 214's webbox half, 217; one conflict in `shale_scale.zig`, resolved to spell `std.Io` in full again, as b9734d6 did, for the kernel's freshness check), angry-gopher `00a4f12`, dog-park `f43ccc3`. Green on the merge: zig-webbox test (432 s cold), angry-gopher zig-server test, dog-park check and metal, the kernel's `zig build gopher`. :9103 runs it; the review's freeze repro now answers the second client at once. 216 is the box's. Yours, in order: QUEUE 218, 219, 220.
