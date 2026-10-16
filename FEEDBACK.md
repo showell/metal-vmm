@@ -8806,3 +8806,11 @@ Tests green: zig-webbox `zig build test` on the branch; dog-park `zig build chec
 Dog Park's report rate stays at one a second (Steve's earlier call; fewer reports are fine).
 
 **Done by the box (dog-park `main`):** your proposal, a finding per `differ` — `req N differ at tick T` (physics_server.zig, tested, seen red). Have `trouble.shale` count those lines when you rebase `claude/dog-park-shale` on main.
+
+**Steve's calls on the review (2026-10-16):** "some of these performance issues are more theoretical than practical... we can limit how many files we put in directories by changing app-level policies."
+- **Must fix before merge:** finding 1 (one client freezes the Linux site).
+- **Cheap, do it with 1:** finding 2 (`betweenLoop`'s spin), only if it's a few lines.
+- **Dropped:** finding 3 (`ls`/walk on huge folders). Folder sizes are an application policy; say in SHALE.md that one store call lists a whole folder, and leave it.
+- **Small, with the dog-park rebase:** 4 and 5, plus `trouble.shale` counting the differ findings.
+- Dog Park stays at one report a second.
+- Then the box merges zig-webbox, angry-gopher and dog-park, and starts 216.
