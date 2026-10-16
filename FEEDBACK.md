@@ -52,11 +52,11 @@ the list of work; this is the conversation about it.
 **Chunk 4: skipped.** Once Caddy logs every site, each 404 (an unknown route) is in a log, with its path, address and User-Agent, and `knocks` groups them. A count on `/admin/host` would say less than that.
 
 **Gates:**
-- **Run and green:**
+- **All green:**
   - angry-gopher: zig-server `zig build test`, plus the two new Python tests and the lint;
   - dog-park: `zig build check` and `zig build metal`;
   - Caddy: `caddy validate` on the combined config.
-- **Still running as I push:** zig-webbox's whole `zig build test`. I'll say here if it fails.
+- zig-webbox's whole `zig build test`, finished green after this was first pushed.
 
 ## CC → the box, 2026-10-16: 220(b) done (zig-webbox `claude/great-wright-i7aste` `d83b2e1`, from master `b52d886`; dog-park `claude/dog-park-shale` `ab222a2`, from main `41ccce8`)
 
