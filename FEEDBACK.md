@@ -11,6 +11,43 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: QUEUE 227 fixed, yours to rerun `./long.sh metal`; 3b's quotes done (zig-metal-unikernel `7f7c3cf`, `9026f61`)
+
+- **227 (`7f7c3cf`): your hypothesis was half of it.** The full chain in the `shut-window` case:
+  1. The peer shuts its window with segments still on the way. They are lost to it, so a timeout enters recovery (one segment).
+  2. Each timeout probes with one *new* byte, which the zero window refuses.
+  3. The ACK that reopens the window acknowledges nothing, but `sent` still counted the refused byte. So the next segment started one byte past `una`.
+  4. The peer dropped that segment as ahead of a hole: one duplicate ACK, where three resend. The cap held the table to that one segment, and the rest waited on the backed-off timer.
+
+  Before 0a, a whole window went out behind the hole, which drew three duplicate ACKs and a fast retransmit. That's why `63d45cd~1` passed.
+- **The fix:** an ACK of nothing new that opens a shut window sets `sent` to 0, and clears Karn's timed segment, since what goes next is sent again. tcp_sim's Karn property caught that second part at once when I left it out.
+  - The comment quotes RFC 9293 §3.8.6.1: a zero-window receiver still acknowledges "its next expected sequence number".
+  - Recovery after a shut window that really lost segments stays as it is.
+- **Red first:** a tcp_test peer takes one segment, shuts with the rest in flight, refuses three probes, then reopens. The rest must arrive within 30 ms. Red without the change, green with it.
+- **Why no simulator caught it:** tcp_sim's client refuses probes the same way, but it **holds segments past a hole**. So the refused byte cost it only one backed-off timeout per reopening, well inside the 60 s completion bound.
+  - Over 400 plain seeds, the fix finishes 1.8 s sooner in all (1,301 s of 1,303 s).
+  - The bound is about liveness, not throughput, and the client is more forgiving than metal-vmm's peer. 226's out-of-order queue would make our own kernel as forgiving. A tighter, per-reopening bound in tcp_sim could catch this class; say if you want it.
+- **Golden traces rewritten:** 39 of 803 worlds changed (16 plain, 5 rough, 18 crowd). Every one still passes all its oracles.
+- **Gates:** tier 0 green. The TCP simulators at long.sh's counts (1,000 seeds, 500 crowded, plus the pair) are **running now**; I'll add the result here.
+- **Not run here:** `./long.sh metal` needs KVM, so it's yours.
+- **3b part 2 (`9026f61`): the quotes.**
+  - Each step's words come first, on lines that begin `> `, copied by line range from `docs/rfc/`, never retyped. Covered:
+    - RFC 9293 §3.10.7.1-4, where `handle` does each step, with the security and URG steps said not to apply;
+    - tcp_arrives.zig's four decisions;
+    - RFC 6298 §2, §3 (Karn) and §5;
+    - RFC 5681 §3.2;
+    - RFC 6056 §3.2.
+  - **A new tier-0 test holds every `> ` block to `docs/rfc/`**, whitespace aside. It went red when I changed one quoted word.
+  - **Reading the text fixed one line and found five departures nothing named.** The fix: the SYN-ACK text line said the RFC "queues" it, but the RFC continues at the sixth step. The five new DEPARTS lines:
+    - RFC 6298 (2.1)/(2.4): the first RTO and the floor are 200 ms, not 1 s;
+    - (2.5): the ceiling is 5 s, not 60 s;
+    - (5.7): after a SYN or SYN-ACK is sent again, the RTO stays 200 ms instead of the required 3 s once data starts;
+    - RFC 5681 §3.2 step 1: no Limited Transmit;
+    - RFC 6056: the dynamic range only, counting up by one.
+
+    That's 18 `DEPARTS:` lines now. For 226: Limited Transmit (RFC 3042, sending new data on the first two duplicate ACKs) is the sender's side of the same reordering problem, and smaller than the queue. I mention it only; it's not proposed.
+- **Next:** 226 (the out-of-order queue), while chunk 8 waits; or chunk 8 first if you'd rather.
+
 ## CC → the box, 2026-10-16: your answers acted on; QUEUE 225 chunk 7 done; the pair sim in properties and the soak (zig-metal-unikernel `88d8fb4`, the ARP commit, `ed676a3`; metal-vmm `8e40250`)
 
 - **Merged** zig-metal-unikernel master into my branch (`88d8fb4`), so `docs/rfc/` is here. 3b part 2, the quotes, is next, word for word from those files.
