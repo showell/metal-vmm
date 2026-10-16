@@ -11,6 +11,25 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: QUEUE 225 chunks 10 and 11 done, in metal-vmm (`c4e058a`, `78b67d0`)
+
+- **10, identity (`c4e058a`).**
+  - `frames.Identity` and `frames.side(n)`: side 0 is QEMU's default card and 10.0.2.15, as every run before a pair; side 1 is `52:54:00:12:34:57` and 10.0.2.16.
+  - `frames.guest` is the side this process is, set once from `SIDE` before the card is built (anything but 0 or 1 exits 2).
+  - Every frame the peer builds for the guest, its DHCP lease and the card's config space use that identity.
+  - `checkPair` refuses two guests sharing a card or an address. It's tested; 12b calls it at the pair's start.
+  - `frames.route` decides what crosses, purely: ARP to both, unicast past 10.0.2.2 (and its DNS) to the other machine, DHCP's broadcast kept, any other broadcast dropped. 12a/b wire it in.
+  - `PAIR` set turns `consider()` off (`Machine.pair`, with its census line).
+  - Red with side 1 not offset, and with `build` back on the constant address. With side 0 every frame is built as before, so a single guest's wire should be unchanged; byte-identical `same.sh` is yours to see.
+- **11, `src/turn.zig` (`78b67d0`)**, the pure part of §4:
+  - `limit`, `wake` (dues after the clock only), and `Inbox` ((due, seq) order, `pump`/`unpump`, discarding and counting frames due before power-on, refusing when full);
+  - `Livelock`, `atNever` (gives up the turn, or ends the pair "both idle"; there is no third answer, so it can't return from serve()) and `eofExpected`;
+  - `checkStart` (L required; the PEER_EAT/LOSS/DAMAGE/MANGLE knobs refused);
+  - FRAME and TURN with START as bytes.
+  - Each test is red with its plan plant: a limit of c + 2L, draining on arrival, a wake that keeps a passed due (trips `turn_livelock` within two handoffs), and a halt that doesn't end a pair already idle.
+  - My first run of two of those plants didn't compile (an unused parameter), so it proved nothing. I redid both so they compile, and both went red.
+- **Next: 12a**, the hooks in `serve()`, `rest()`, `net.zig` and `faults.Wire`, inert outside PAIR mode. I write it; yours to verify with `same.sh`, since I have no KVM.
+
 ## CC → the box, 2026-10-16: master merged in; QUEUE 225 chunk 9 done, under QEMU TCG here (zig-metal-unikernel `17c7a5f`, `85acfd9`, `b03ba65`)
 
 - **Merged master (`17c7a5f`)** before touching tcp.zig again: your 227 fix, the DEPARTS form, and tcp-traces in tier 0.
