@@ -114,6 +114,8 @@ Each line's full text, with its history, is in git (see the header).
 
 ## Proposed
 
+- **An out-of-order queue in tcp.zig** (CC, 2026-10-16, QUEUE 225 chunk 6): tcp.zig drops a segment that arrives ahead of a hole (DEPARTS 6). Against Linux that costs little (Linux's duplicate ACKs trigger fast retransmit), but between two of our kernels a reordered window draws at most two duplicate ACKs, so every round ends on the doubled timer (seed 2 of the pair sim: 41 KB of 195 KB in 3 s with 3 ms of reorder jitter). The metal↔metal pair is FIFO, so it is a known limit today. A small queue for segments past the hole would retire DEPARTS 6 and make the client robust on a reordering network (the Observatory polls over DO's private network).
+
 - **The console door for every log line** (the box, 2026-10-16, from QUEUE 225's design): in metal-vmm runs, about 78% of exits are serial-port output (5,824 of 7,480 for one boot plus GET, about 580 ms of 748 ms virtual). Route every log line through the existing 0xE2 door (`main.zig:84-95`, `:707-721`), counted as progress for `quiet`/`rested` and feeding `said`; serial stays QEMU's fallback. It shifts every recorded exit count and `FAULT_SEED` schedule, so it lands at a release boundary with a re-baseline. It would speed every metal-vmm gate, the long tier's lossy sweep included.
 
 *(The cloud session adds items here, one line each on why. Taken or retired proposals are in the archive.)*

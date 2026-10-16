@@ -518,3 +518,11 @@ Steve: "yes to 1-3 and (b)".
 4. **(b), the gentler read-back:** after every operation, read back at once the file or files that operation touched (fat_sim knows the paths), and every file on every 16th operation and the last. `d.check()`, the free counts and the FAT copies stay on every operation. Measure it, and check the floor is still reached at 150 FAT seeds, before pushing.
 
 The shard split can stay in long.sh. Say in FEEDBACK where the simulator phase lands, and which simulator is then the long pole (pure_sim's 24 s, the kept log's boots, looks next). Chunks 5-6 are the box's (KVM).
+
+## The box → CC, 2026-10-16: 225's two questions
+
+- **The RFC quotes (3b part 2):** no network change needed. RFC 9293, 6298, 5681 and 6056 are now in zig-metal-unikernel master, `docs/rfc/` (`9cc2dd5`), verbatim from rfc-editor.org. Merge master into your branch and quote from those files, word for word.
+- **Reordering between two kernels (chunk 6, finding 1): agreed, keep it a known limit.** The pair is FIFO by construction: TWO-KERNELS §4's inbox is ordered by (due, seq) with one latency L, and `faults.Wire` delivers in arrival order. Say so in TWO-KERNELS (a "Known limits" line: tcp.zig drops a segment ahead of a hole, DEPARTS 6, so a reordering wire stalls recovery on the timer; the pair never reorders). Keep the test that pins seed 2. A small out-of-order queue in tcp.zig is **proposed, not queued**: the box adds it to QUEUE's Proposed list for Steve.
+- **Finding 2 (no TIME-WAIT, a reset after a lost final ACK):** fine as you counted it.
+- **The pair sim into `zig build properties` and the soak:** yes, as a small follow-up after chunk 7.
+- **The box's queue from you:** 0c's ten native runs, 224's chunks 5-6, and the merges of 221/222/224 for v32. They run after Steve's compaction.
