@@ -11,6 +11,53 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: 221 done, chunks 1-3; 4 skipped (angry-gopher `claude/great-wright-i7aste` `e64e055`; dog-park `claude/dog-park-shale` `f190057`; roc-apps `claude/great-wright-i7aste` `1a601d9`, a new branch; zig-webbox `claude/great-wright-i7aste` `46c09dd`)
+
+**Install order on prod** (you install; nothing here reached prod):
+1. angry-gopher's `deploy/Caddyfile`, as `/etc/caddy/Caddyfile`. It defines the `access_log` snippet the others import. The commands are in deploy/README.md step 5, and they make all four logs Caddy's before validate (the trap you hit).
+2. Dog Park's block, as before, as `/etc/caddy/sites/dogpark.lynrummy.com.caddy` (DEPLOY.md step 8).
+3. roc's block, by roc-apps' `site/deploy.sh`. It now refuses if prod's Caddyfile lacks `(access_log) {`, and makes `roc-access.log` Caddy's first.
+
+**Chunk 1, every site logs** (checked with Caddy 2.8.4 here, which I downloaded; I don't know prod's version, but it comes from Caddy's own stable repository, which ships 2.8 or later, so `{args[0]}` works):
+- `(access_log)` in deploy/Caddyfile: JSON to `/var/log/caddy/<name>-access.log`, 10 MiB × 5, Dog Park's block made shared. lynrummy.com imports it as `lynrummy`, Dog Park as `dogpark` (its inline block replaced, DEPLOY.md's copy too), roc as `roc`.
+- **The catch-all:** `http://162.243.1.123` and `https://162.243.1.123` (with `tls internal`) log to `knock-access.log` and answer 404.
+  - **I added a global `default_sni 162.243.1.123`.** A scanner hitting an IP sends no SNI, and Caddy then picks a certificate by the address the connection arrived on. Here that was 127.0.0.1, so the handshake failed. On prod it is probably the public address on its card, but `default_sni` doesn't depend on that, and it touches only handshakes without SNI (no browser's).
+  - The file says plainly that a handshake naming a host no site has still fails before any log.
+- **Run locally** under that config (with `local_certs`):
+  - lynrummy.com's, dogpark's and roc's plain http still get their 308s;
+  - the bare address's http and its https without SNI get 404 and a line in `knock-access.log`;
+  - an unknown host's https fails its handshake;
+  - each site writes its own file.
+- **The lint**, `deploy/check_caddy_logs.py`: every top-level site block (not the global options, not a snippet) must `import access_log <name>` directly in its block. Quotes and comments are skipped.
+  - It is in `ops/check_common`, and it checks Dog Park's and roc's files when named.
+  - Tests, seen red: an import deleted from the real Caddyfile, and roc's block as it was before this.
+
+**Chunk 2, `ops/knocks`** (Python standard library, no arguments, settings in `ops/knocks.conf`):
+- **One ssh:** every `/var/log/caddy/*-access*.log`, the rotated `.gz` ones too (sent as base64), and `journalctl -u ssh --since -24h`.
+- **The report:** per site, requests and status classes, top 10 addresses, 4xx families, and every 413 and 5xx with address, method, path and User-Agent. For ssh, failed *sessions*, counted by sshd pid, not by line: a key-only sshd writes "Invalid user" and "Connection closed … [preauth]" for one try. Plus their distinct sources.
+- **Exits 1** on a missing or empty log, a stale one, or an accepted login from an address not allowed. **Exits 2** when it can't run.
+- **The ssh allowlist ships empty, and knocks refuses to run until you fill in the dev box's address.** An empty list would make every login an alarm.
+- The stale limits are lynrummy 24 h, dogpark 24 h, roc 168 h, knock 72 h. Adjust to taste; `knock` may well be quiet for a while after the install.
+- **Tests:** a green fixture, and each alarm seen red with its line planted out.
+  - **One trap I fell into:** the test loads the extensionless `ops/knocks`, whose bytecode Python caches by mtime and size. A same-size plant in the same second ran the old code, so the test now writes no bytecode.
+  - **My own bug, fixed in chunk 2's commit:** chunk 1 had piped the lint's tests into `tail`, which would have hidden a failure from the gate. The tests now run unpiped.
+
+**Chunk 3, `/admin/log` for Dog Park:**
+- angry-gopher's `admin_log.zig` is now `webbox.admin_log`. The only application fact in it was the commit, so `render` takes what the application says of itself: angry-gopher passes `"commit " ++ <sha>`, and its header line is what it was (the kernel's judge fixture expects `# the application: commit abc`).
+- angry-gopher's zig-server tests pass as they are.
+- Dog Park routes `GET /admin/log` behind its admin key. The header says `Dog Park, physics <hash>`: Dog Park bakes in no commit, and the physics hash is what `/admin/host` shows.
+- **Test** (`test_players.mjs`): 403 without the key, with a player's cookie, or with a wrong bearer; 200 `text/plain` with the key and the header; 400 for a misspelled filter. Red with the route removed.
+- **On metal:** dogpark.elf builds with the route, and on metal it serves what the kernel's `host_facts` gives, the ring. Seeing it under QEMU is your gate's (`tools/metal_gate.mjs`).
+
+**Chunk 4: skipped.** Once Caddy logs every site, each 404 (an unknown route) is in a log, with its path, address and User-Agent, and `knocks` groups them. A count on `/admin/host` would say less than that.
+
+**Gates:**
+- **Run and green:**
+  - angry-gopher: zig-server `zig build test`, plus the two new Python tests and the lint;
+  - dog-park: `zig build check` and `zig build metal`;
+  - Caddy: `caddy validate` on the combined config.
+- **Still running as I push:** zig-webbox's whole `zig build test`. I'll say here if it fails.
+
 ## CC → the box, 2026-10-16: 220(b) done (zig-webbox `claude/great-wright-i7aste` `d83b2e1`, from master `b52d886`; dog-park `claude/dog-park-shale` `ab222a2`, from main `41ccce8`)
 
 **Gates, all green on these heads:**
