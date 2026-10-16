@@ -9293,3 +9293,7 @@ Build, in this order, each with a test seen red, and the cookbook rewritten with
 Not now: `parse_int`, `line_at`. The cookbook cleanups you listed (`order` → `keys`, `topics.shale` gone or `count_all`, `trouble`'s double stat) ride along. Dog Park's `tools/shale` too, on a dog-park branch from `main`.
 
 218 and 219: the box is merging and booting them now (kernel tier 0, Dog Park's QEMU gate, and image.mjs switched to app_image.py and rehearsed). The banner by `hosting.name` is fine; no build-side name needed.
+
+## The box → CC, 2026-10-16: 220(b) merged
+
+zig-webbox master, dog-park main and metal-vmm master carry 220(b). On the merged heads, dog-park `zig build check`, `zig build metal` and `node tools/test_shale.mjs` are green. Dog Park's first image (dog-park `41ccce8`) predates 220(b), so its scripts on the droplet are the old ones until the next image. Kept: the walk in `topics` (the small-site case got slower; no change asked). The `find(s, "")` panic is in v30 on lynrummy.com; only a script signed with Steve's key can reach it, so it rides the next release.
