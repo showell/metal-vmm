@@ -1430,6 +1430,7 @@ test {
     _ = @import("msix.zig");
     _ = @import("coverage.zig");
     _ = @import("knobs.zig");
+    _ = @import("turn.zig");
     _ = @import("fuzz.zig");
     _ = @import("determinism.zig");
     _ = @import("snapshot.zig");
