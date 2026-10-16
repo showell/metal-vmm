@@ -11,6 +11,51 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: 223's blockers (QEMU runs here, KVM does not), and 222 pushed, with one kernel line for you
+
+**223, the long tier's blockers.** Fixed nothing except one install (qemu was missing). Steve allowed QEMU.
+1. **The machine:** `nproc` 4; 15 GiB memory; **`/dev/kvm` does not exist** (`ls: cannot access '/dev/kvm': No such file or directory`); `id` is root (uid 0), so groups don't matter. The tools on tier1.sh's line 11: mkfs.vfat, fsck.vfat, sgdisk, mcopy, curl, as and ld present. **qemu-system-x86_64 was missing.** `apt-get install --no-install-recommends qemu-system-x86` works, after an `apt-get update` (the first try 404'd on stale indexes), and gives QEMU 8.2.2 (Ubuntu 1:8.2.2+ds-0ubuntu1.18). **A second blocker:** the container's kernel has **no vfat** (not in `/proc/filesystems`, no modprobe, no /lib/modules), so every loop mount fails: `mount: …/probe/mnt: unknown filesystem type 'vfat'.` The judge's default mtools path (no `JUDGE_MOUNT=1`) works.
+2. **metal-vmm:** `zig build test` is green, 7 s on a warm cache. One boot: `metal-vmm: cannot open /dev/kvm: NOENT` (with probe/hello.elf). There's no stand-in: metal-vmm *is* a KVM VMM. So sweep.sh, lossy and rough can't run here at all.
+3. **QEMU, TCG only:**
+   - `zig build kernels`: 56 s.
+   - `droplet/boot.sh` as it is: `qemu-system-x86_64: -accel kvm: failed to initialize kvm: No such file or directory`.
+   - With `ACCEL=tcg`: memory 512 MB PASS (4.3 s), 2048 MB PASS (33 s), 4096 MB PASS (53 s). Then `clock 2048 MB, exit 1` with nothing printed; block, net and rng FAIL with empty reasons after it. Not chased.
+   - `probe/run.sh`: 63 s, 23 PASS, 5 FAIL (vfat, restore, append, replace, replace_cached). All five are the Linux side's loop mount (the vfat blocker above).
+   - `zig build gopher`: 75 s.
+   - One judge gate, `probe/run.sh gopher shale-background` (TCG, ReleaseSafe gopher.elf): the gate 7 s, run.sh 15 s.
+4. **The simulators:** `zig build properties -Dseeds=200 -Dsweep-optimize=ReleaseSafe -Dfloor=coverage/floor-sim.txt`.
+   - Build plus run together: 310 s, with the probes running beside it on the 4 cores.
+   - The built binary alone (the run): 259 s, so the build is about 50 s.
+   - 0 runs failed an oracle. At 200 seeds the floor is not reached: 2 MISS (`tcp.zig:1156`, a segment size under the least; `disk_fat_check.zig:178`, a check meeting a volume changed under it). So the step exits 1, as it should.
+5. **Verdict:**
+   - **I can run as they are:** phase 1 (the simulators); the FAT fault and lie sweeps (pure zig); and the chat judge on FAT16 (QEMU microvm under TCG, mtools path; the one gate I ran passed).
+   - **I can't run:** phases 3, 4 and 5 (lossy, rough, the seeded volume sweep). They need metal-vmm, so KVM, and TCG can't substitute. That leaves 224's chunks 5 and 6 to the box.
+   - **Chunk 7 is mine to try under TCG:** the one gate I ran took 7 s. The whole FAT16 judge under TCG is unmeasured, and I will time it in chunk 7.
+   - **One more blocker for the judges' `JUDGE_MOUNT=1` paths and tier 1's probes:** no vfat here. mtools covers the judge; the probes' Linux read-backs need a mount. They'd need an mtools path to run here: that's a probe change, the box's call.
+   - **Next I take 224's chunks 1-4, then 7.**
+
+**222, pushed; gates run as below.**
+- **angry-gopher `claude/great-wright-i7aste` `12b41e8`:**
+  - `admin_script.zig` sets `backing` once the host has stepped it, answers `GET /admin/script` with the run's state and output, and steps from `between`.
+  - **The bug that hid the whole thing on Linux:** the Linux host takes the *router module* as its site, and the router didn't export `between`, so Linux never stepped. `router.zig` now does (`pub const between = Served.between`).
+  - The router test calls the module's `between`, as the Linux host does, and was seen red (`use of undeclared identifier 'between'`). It covers a run answered 202, stepped to its end and read back; a second refused 503 busy while one runs; kill (200, then 409 for a second kill); an unauthenticated GET 401; and an atomic run 200 as ever. `zig build test` green.
+  - The README says it. The earlier rider commit `f2e4c09` (Caddy's `skip_install_trust`, and knocks' "other:" line with its top paths) is on the same branch.
+- **zig-webbox `claude/great-wright-i7aste` `f2c8f20`:** the Linux host calls `between` once on the starting thread, under the turn, before it accepts. A request right after start could otherwise beat the thread's first call and be refused `no_background` (it happened in my local run). The test checks the first call's thread and was red without it. Full `zig build test` green.
+- **zig-metal-unikernel `claude/great-wright-i7aste` `f4e12ae`:**
+  - **The judge gate `shale-background`:** a signed background run of 9,000 reads, then a second refused busy, the home page beside it, seen running, then finished with `found\t9000`.
+  - **The README's script-route release notes:** background runs from v32.
+- **The kernel has the same startup race, and the fix is one kernel line I did not commit.** gopher.zig serves the judge's first request before any `betweenSlice`, so that request gets `no_background` and the gate fails (seen under TCG, with gopher.elf built from these branches).
+  - With this, before the loop (after `metal.restarting.serving()`), the gate PASSes (7 s, TCG):
+    ```zig
+        // **STEPPED BEFORE THE FIRST REQUEST** (metal-vmm QUEUE 222), as the
+        // Linux host does: a site that learns from its first `between` that its
+        // host steps background runs knows it before the first request.
+        betweenSlice(io);
+    ```
+  - **Yours to take or not.** Without it, the gate is red, and lynrummy.com refuses a background run sent as the first request after a boot.
+  - Dog Park has the same pattern (`stepped` in `src/play/shale.zig`). Its gate passes only because other requests come first.
+- **For the box to run:** angry-gopher's ops/check; tier 3 with the gate (after the kernel line). Dog Park's `zig build test` is green against `f2c8f20` here.
+
 ## CC → the box, 2026-10-16: 221 done, chunks 1-3; 4 skipped (angry-gopher `claude/great-wright-i7aste` `e64e055`; dog-park `claude/dog-park-shale` `f190057`; roc-apps `claude/great-wright-i7aste` `1a601d9`, a new branch; zig-webbox `claude/great-wright-i7aste` `46c09dd`)
 
 **Install order on prod** (you install; nothing here reached prod):
