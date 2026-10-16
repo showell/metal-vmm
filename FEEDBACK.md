@@ -11,6 +11,49 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: 218 and 219 done (zig-metal-unikernel `claude/great-wright-i7aste` `67faf97`, master `12901a1` merged in; dog-park `claude/dog-park-shale` `0496375`, restarted from main `5a9881c`)
+
+**218 was a kernel change.** I made it because the queue gave it to me by name; this says so, as my rule was to stop before one. Both halves are on my branch for you to boot.
+
+**218(a), the banner names the application: from its `hosting`, not from addAppKernel.**
+- An application's `hosting` may declare `name`. The banner says `"zig-metal-unikernel: <name>'s route table, with no Linux under it"`, and says angry-gopher when none is declared, so gopher.elf's banner is as before.
+- Dog Park declares `name = "Dog Park"` (dog-park `0496375`). dogpark.elf's banner now reads "Dog Park's route table"; before, it read angry-gopher's.
+- HOST.md lists `name` among what `hosting` says.
+- **Why not addAppKernel's name, as the queue said: I built that first and measured it.** An `App.title` reached the kernel through a new options module. gopher.elf's loaded bytes stayed equal, but its debug info changed, because a new module renumbers Zig's generated `__anon` names (215(a)'s effect). `hosting` is also where an application already says what only it can say (`data_name`). Your call if you want the build-side name anyway.
+- **What "gopher.elf's other bytes unchanged" turned out to mean, measured:**
+  - **Baked commit:** any new commit moves loaded bytes, because the commit hash is in `.rodata`, a merged-strings section, and strings after it shift. So I compared builds that bake in the same commit string, dddec33+dirty: the old tree with a harmless edit, against my diff.
+  - **One line moved:** a first version added an import line to probe/gopher.zig. Every coverage-catalog line number after it moved, a 1-byte difference. The import now sits on the banner's own line.
+  - **Result:** the loaded bytes are identical. The whole ELF differs only in `.strtab`, in Zig's generated symbol numbering (the `@hasDecl` renumbers by 8). Nothing loaded, nothing in the debug info's sizes.
+
+**218(b), folders' dates.**
+- `makeDirIn` wrote `.` and `..` with a zero date. They now carry the clock's date, written by one helper (`putStamp`) that also dates `writeEntry`'s entries.
+- The folder's own entry was already dated: `writeEntry` stamps every entry.
+- **Test** (disk_fat_test_paths.zig), red first: a folder made under a known clock has that date in `.` and `..` (created, accessed and written), its own entry is dated, and the volume checks clean.
+- **One detail:** the dots and the entry each read the clock once, so across a second boundary they could differ by a second, as two files would.
+- **Gates:** `zig build test` and `zig build check-apps` green, on my commits and again after merging master.
+
+**219, one image builder: `droplet/app_image.py`.**
+- **Interface:**
+  ```
+  droplet/app_image.py <kernel.elf> <site-dir> <conf> <out.img> [--disk-mib N] [--fat 16|32] [--label NAME]
+  ```
+  It is also `app_image.build(elf, site_dir, conf, out, disk_mib=64, fat=None, label="GOPHER")` for a Python caller.
+- **What it does:** it copies the site folder (times kept), adds the conf as `zig-metal-unikernel.conf`, and lays the site FAT out exactly as chat's always was. That is the judge's `build_disk` on a GPT disk of `--disk-mib`, sorted `mcopy -m`, with partition 1 cut out. Then it hands both to `image.sh`.
+- `build_disk` now takes the label (GOPHER by default).
+- **What stays chat.py's:** the verdicts, building gopher.elf, the trusted proxy, the volume serial and the admin reset, all written into its conf before it calls `build`.
+- **Byte-identical, measured** (with sgdisk, dosfstools and mtools installed here): chat.py before and after, on the same clean commit, differ in exactly the 10 bytes that two runs of the old chat.py also differ in. Those are the site FAT's random volume serial (the boot sector and its backup) and the creation and write times of two of its entries. No other byte differs.
+- **Dog Park's call, for you to switch `droplet/image.mjs`:** replace `sitePartition` and its `image.sh` call with
+  ```
+  python3 ../zig-metal-unikernel/droplet/app_image.py zig-out/bin/dogpark.elf <content> <conf> <out.img> --disk-mib 1024 --fat 16 --label DOGPARK
+  ```
+  where `<content>` holds `solo/` and `auth/_admin_key`, and `<conf>` the three lines image.mjs writes.
+  - I ran exactly that on a dummy key and conf. The image's partition 2 is 1023 MiB (the GPT's sectors come off the 1 GiB), FAT16, labelled DOGPARK, and `fsck.vfat` finds it clean.
+  - The rehearsal (QEMU) is yours; there's no QEMU here.
+- **No Dog Park names in the kernel:** the only one is in the README's example, and Dog Park's own repo carries its name.
+- **Docs:** README's deploy step names app_image.py, and image.sh's header no longer says the site is FAT16 (chat's is FAT32).
+
+**220 next.** (a) goes here first, no code.
+
 ## CC → the box, 2026-10-16: 217 done, the review's fixes (zig-webbox `7946d33`, `61f8a9c`; dog-park `claude/dog-park-shale` `f43ccc3`, rebased on main `08ff9fc`)
 
 **Gates:** dog-park `zig build check` green on `f43ccc3`, and `zig build metal` builds. angry-gopher `zig build test` (zig-server) green against `61f8a9c`, with no change of its own. zig-webbox `zig build test` green on `7946d33` and on `61f8a9c`; `zig fmt --check src` clean.
