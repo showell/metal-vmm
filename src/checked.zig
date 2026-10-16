@@ -134,6 +134,7 @@ pub const table = [_]Setting{
     .{ .name = "PAIR", .kind = .any },
     .{ .name = "PAIR_CMDLINE", .kind = .any },
     .{ .name = "PAIR_FD", .kind = any_number },
+    .{ .name = "WIRE_TRACE", .kind = .flag },
 };
 
 /// The families a misspelt setting would be in.

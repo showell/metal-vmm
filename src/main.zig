@@ -1406,6 +1406,10 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     var link: pair.Link = undefined;
     var turn_hooks: turn.Hooks = undefined;
     var client_pid: ?linux.pid_t = null;
+    if (!machine.pair and init.environ.getPosix("WIRE_TRACE") != null) {
+        std.debug.print("metal-vmm: WIRE_TRACE traces the frames that cross a pair: it needs PAIR\n", .{});
+        return 2;
+    }
     if (machine.pair) {
         const lookahead_ns = startPair(init.environ, init.environ.block.view().slice) orelse return 2;
         if (init.environ.getPosix("PAIR_FD")) |text| {
@@ -1428,6 +1432,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
             client_pid = spawned.pid;
         }
         link.bind();
+        if (init.environ.getPosix("WIRE_TRACE")) |v| if (std.mem.eql(u8, v, "1")) link.traceOn();
         card.pair = &link.pair;
         turn_hooks = link.hooks();
         machine.turns = &turn_hooks;

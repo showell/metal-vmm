@@ -267,6 +267,10 @@ pub const Pair = struct {
     first_sent_due: ?i96 = null,
     /// Frames the guest broadcast that neither side's peer takes.
     dropped_broadcasts: u64 = 0,
+    /// **`WIRE_TRACE=1`** (§4): one line for each frame that crosses, as it
+    /// is sent or eaten here and as it is delivered here, handed to this
+    /// with `ctx`. Null: no trace.
+    traceFn: ?*const fn (ctx: *anyopaque, line: []const u8) void = null,
 
     /// **A FRAME FROM THE GUEST**: across, to its own peer, to both, or
     /// dropped, as `frames.route` says. True when its own peer is to answer
@@ -277,11 +281,11 @@ pub const Pair = struct {
         switch (frames.route(frame)) {
             .local => return true,
             .cross => {
-                if (line.carries()) self.send(frame, now);
+                self.across(frame, now, line.carries());
                 return false;
             },
             .both => {
-                if (line.carries()) self.send(frame, now);
+                self.across(frame, now, line.carries());
                 return true;
             },
             .dropped => {
@@ -289,6 +293,19 @@ pub const Pair = struct {
                 return false;
             },
         }
+    }
+
+    fn across(self: *Pair, frame: []const u8, now: u64, carried: bool) void {
+        if (carried) {
+            self.trace(now, self.side, self.seq, frame, .sent);
+            self.send(frame, now);
+        } else self.trace(now, self.side, null, frame, .eaten);
+    }
+
+    fn trace(self: *Pair, at: u64, side: u8, seq: ?u64, frame: []const u8, fate: Fate) void {
+        const out = self.traceFn orelse return;
+        var buf: [trace_max]u8 = undefined;
+        out(self.ctx, traceLine(&buf, at, side, seq, frame, fate));
     }
 
     pub fn send(self: *Pair, bytes: []const u8, now: u64) void {
@@ -309,6 +326,7 @@ pub const Pair = struct {
                 self.inbox.unpump(f);
                 return;
             }
+            self.trace(now, f.side, f.seq, f.data(), .delivered);
         }
     }
 
@@ -318,6 +336,37 @@ pub const Pair = struct {
         return @intCast(at);
     }
 };
+
+/// What became of a frame that crosses, as the trace says it.
+pub const Fate = enum { sent, eaten, delivered };
+
+pub const trace_max = 160;
+
+/// **ONE LINE OF `WIRE_TRACE`** (§4): virtual time, the sending side, its
+/// seq (`-` for a frame eaten before it had one), the length, what it is
+/// (TCP's flags, seq and ack numbers and data length; ARP; other), its fate,
+/// and a hash of every byte, so a frame changed anywhere changes its line.
+pub fn traceLine(buf: *[trace_max]u8, at: u64, side: u8, seq: ?u64, frame: []const u8, fate: Fate) []const u8 {
+    var w: std.Io.Writer = .fixed(buf);
+    w.print("wire {d} side {d} seq ", .{ at, side }) catch {};
+    if (seq) |n| w.print("{d}", .{n}) catch {} else w.writeAll("-") catch {};
+    w.print(" len {d} ", .{frame.len}) catch {};
+    if (frames.tcpIn(frame)) |seg| {
+        var flags: [5]u8 = undefined;
+        var n: usize = 0;
+        for ([_]struct { u8, u8 }{ .{ frames.flag_syn, 'S' }, .{ frames.flag_ack, 'A' }, .{ frames.flag_psh, 'P' }, .{ frames.flag_fin, 'F' }, .{ frames.flag_rst, 'R' } }) |fl| {
+            if (seg.flags & fl[0] != 0) {
+                flags[n] = fl[1];
+                n += 1;
+            }
+        }
+        w.print("tcp {s} {d}>{d} seq {d} ack {d} data {d}", .{ if (n == 0) "-" else flags[0..n], seg.src_port, seg.dst_port, seg.seq, seg.ack, seg.data.len }) catch {};
+    } else if (frame.len >= 14 and frames.readBe16(frame[12..14]) == frames.ethertype_arp) {
+        w.writeAll("arp") catch {};
+    } else w.writeAll("other") catch {};
+    w.print(" {s} sum {x:0>8}\n", .{ @tagName(fate), std.hash.Fnv1a_32.hash(frame) }) catch {};
+    return w.buffered();
+}
 
 /// **WHAT THE RUN LOOP ASKS OF A PAIR** (main.zig's `Machine.turns`, null
 /// outside one): how far this side may run, the other side's status, and
@@ -757,4 +806,79 @@ test "a halt moves to its wake within the limit, and to the limit past it, never
     try testing.expectEqual(@as(?u64, null), capHalt(10, 50, null));
     try testing.expectEqual(@as(?u64, 40), capHalt(10, 50, 40));
     try testing.expectEqual(@as(?u64, 10), capHalt(10, 50, 5));
+}
+
+const Traced = struct {
+    lines: [8][trace_max]u8 = undefined,
+    lens: [8]usize = @splat(0),
+    n: usize = 0,
+    fn take(ctx: *anyopaque, text: []const u8) void {
+        const self: *Traced = @ptrCast(@alignCast(ctx));
+        @memcpy(self.lines[self.n][0..text.len], text);
+        self.lens[self.n] = text.len;
+        self.n += 1;
+    }
+    fn line(self: *const Traced, k: usize) []const u8 {
+        return self.lines[k][0..self.lens[k]];
+    }
+};
+
+/// A Pair whose sends land in `sent`'s list and whose trace lands in
+/// `traced`: one context for both, as the Link is.
+const Both = struct {
+    sent: Sent = .{},
+    traced: Traced = .{},
+    fn take(ctx: *anyopaque, f: *const Frame) void {
+        const self: *Both = @ptrCast(@alignCast(ctx));
+        Sent.take(&self.sent, f);
+    }
+    fn trace(ctx: *anyopaque, l: []const u8) void {
+        const self: *Both = @ptrCast(@alignCast(ctx));
+        Traced.take(&self.traced, l);
+    }
+};
+
+test "WIRE_TRACE: a line as each frame across is sent, eaten, and delivered" {
+    var both: Both = .{};
+    var pair: Pair = .{ .side = 1, .lookahead_ns = 1000, .sendFn = Both.take, .ctx = &both, .traceFn = Both.trace };
+    var carry: Carry = .{ .eat = &.{2} };
+    var buf: [128]u8 = undefined;
+    const seg = frames.fakeSegment(&buf, frames.flag_syn, 7, 0, "");
+    var out: [128]u8 = undefined;
+    @memcpy(out[0..seg.len], seg);
+    const f = out[0..seg.len];
+    @memcpy(f[0..6], &frames.side(0).mac);
+    @memcpy(f[30..34], &frames.side(0).ip);
+    _ = pair.route(f, 5000, &carry);
+    _ = pair.route(f, 6000, &carry); // eaten
+    const sum = std.hash.Fnv1a_32.hash(f);
+    var want: [trace_max]u8 = undefined;
+    try testing.expectEqualStrings(try std.fmt.bufPrint(&want, "wire 5000 side 1 seq 0 len {d} tcp S {d}>{d} seq 7 ack 0 data 0 sent sum {x:0>8}\n", .{ f.len, frames.tcpIn(f).?.src_port, frames.tcpIn(f).?.dst_port, sum }), both.traced.line(0));
+    try testing.expect(std.mem.indexOf(u8, both.traced.line(1), "wire 6000 side 1 seq - ") != null);
+    try testing.expect(std.mem.endsWith(u8, both.traced.line(1), try std.fmt.bufPrint(&want, " eaten sum {x:0>8}\n", .{sum})));
+    // On the other side, as it reaches the wire.
+    var other: Both = .{};
+    var theirs: Pair = .{ .side = 0, .lookahead_ns = 1000, .sendFn = Both.take, .ctx = &other, .traceFn = Both.trace };
+    _ = theirs.inbox.put(both.sent.list[0]);
+    var wire: Line = .{};
+    theirs.deliver(&wire, 6000);
+    try testing.expect(std.mem.startsWith(u8, other.traced.line(0), "wire 6000 side 1 seq 0 "));
+    try testing.expect(std.mem.endsWith(u8, other.traced.line(0), try std.fmt.bufPrint(&want, " delivered sum {x:0>8}\n", .{sum})));
+}
+
+test "WIRE_TRACE is planted: one byte of the frame changed, anywhere in it, changes its line" {
+    var buf: [128]u8 = undefined;
+    const seg = frames.fakeSegment(&buf, frames.flag_ack | frames.flag_psh, 1, 2, "data");
+    var line_buf: [trace_max]u8 = undefined;
+    const clean = traceLine(&line_buf, 1, 0, 3, seg, .delivered);
+    var clean_copy: [trace_max]u8 = undefined;
+    @memcpy(clean_copy[0..clean.len], clean);
+    var changed: [128]u8 = undefined;
+    for (0..seg.len) |at| {
+        @memcpy(changed[0..seg.len], seg);
+        changed[at] ^= 0x01;
+        var other: [trace_max]u8 = undefined;
+        const planted = traceLine(&other, 1, 0, 3, changed[0..seg.len], .delivered);
+        try testing.expect(!std.mem.eql(u8, clean_copy[0..clean.len], planted));
+    }
 }

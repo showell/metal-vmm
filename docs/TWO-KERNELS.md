@@ -645,6 +645,12 @@ clock.
 - *Files:* `src/turn.zig`, `src/main.zig`.
 - *Done:* the one-byte plant changes the trace (red).
 - *Runs it:* CC writes; **box verifies**.
+- *As written* (CC): `turn.traceLine`, from `Pair` as a frame is sent,
+  eaten (seq `-`: it never had one) or delivered:
+  `wire <ns> side <s> seq <n> len <l> tcp <flags> <sport>><dport> seq <x> ack <y> data <d> <fate> sum <fnv1a32>`.
+  The hash of every byte is what makes the plant hold: the test flips each
+  byte of a segment in turn, and every flip changes the line; with the hash
+  left out, it is red.
 
 **13. `pair.sh`, and the tiers.**
 - *Files:* metal-vmm `pair.sh` and `plants.sh`; zig-metal-unikernel

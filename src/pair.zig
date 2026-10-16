@@ -9,7 +9,8 @@
 //! **THE CLIENT'S OWN SETTINGS** are the parent's `PAIR_CLIENT_<NAME>`, as
 //! `<NAME>`: each process keeps its own environment, so a knob applies to
 //! its guest and to no other. `WIRE_LATENCY_US` (L, which both must agree
-//! on) and `PAIR` go to both; nothing else crosses. The client's PVH
+//! on), `WIRE_TRACE` (the pair's one trace) and `PAIR` go to both; nothing
+//! else crosses. The client's PVH
 //! command line is `PAIR_CMDLINE`.
 
 const std = @import("std");
@@ -17,6 +18,8 @@ const linux = std.os.linux;
 const turn = @import("turn.zig");
 
 pub const client_prefix = "PAIR_CLIENT_";
+/// The settings both sides take as the server has them.
+const shared = [_][]const u8{ "WIRE_LATENCY_US=", "WIRE_TRACE=", "PAIR=" };
 
 pub const Error = error{
     /// The other process ended with no `stopped`: it died.
@@ -69,6 +72,17 @@ pub const Link = struct {
     /// Points the Pair at this Link, where it now stays.
     pub fn bind(self: *Link) void {
         self.pair.ctx = self;
+    }
+
+    /// **`WIRE_TRACE=1`**: the pair's lines on stderr, each written while
+    /// this side holds the turn, so the two sides' lines interleave in
+    /// turn order and need no sorting.
+    pub fn traceOn(self: *Link) void {
+        self.pair.traceFn = writeTrace;
+    }
+
+    fn writeTrace(_: *anyopaque, text: []const u8) void {
+        std.debug.print("{s}", .{text});
     }
 
     pub fn hooks(self: *Link) turn.Hooks {
@@ -241,8 +255,7 @@ pub fn combined(server: u8, client: u8) u8 {
 }
 
 /// **THE CLIENT'S ENVIRONMENT**, as `NAME=value` lines: each
-/// `PAIR_CLIENT_<NAME>=v` as `<NAME>=v`, `WIRE_LATENCY_US` and `PAIR` as
-/// they are, then `SIDE=1` and `PAIR_FD=<fd>`. Into `out`, its lines into
+/// `PAIR_CLIENT_<NAME>=v` as `<NAME>=v`, `shared` as they are, then `SIDE=1` and `PAIR_FD=<fd>`. Into `out`, its lines into
 /// `lines`; the count of lines, or null when either is too small.
 pub fn childEnvironment(entries: []const [*:0]const u8, fd: linux.fd_t, out: []u8, lines: [][*:0]const u8) ?usize {
     var used: usize = 0;
@@ -255,7 +268,7 @@ pub fn childEnvironment(entries: []const [*:0]const u8, fd: linux.fd_t, out: []u
         const text: []const u8 = if (each < entries.len) blk: {
             const entry = std.mem.span(entries[each]);
             if (std.mem.startsWith(u8, entry, client_prefix)) break :blk entry[client_prefix.len..];
-            if (std.mem.startsWith(u8, entry, "WIRE_LATENCY_US=") or std.mem.startsWith(u8, entry, "PAIR=")) break :blk entry;
+            for (shared) |name| if (std.mem.startsWith(u8, entry, name)) break :blk entry;
             continue;
         } else tail[each - entries.len];
         if (n == lines.len or used + text.len + 1 > out.len) return null;
@@ -331,16 +344,16 @@ pub fn reap(pid: linux.pid_t) u8 {
 const testing = std.testing;
 
 test "the client's environment: its own settings unprefixed, L and PAIR shared, the rest the server's alone" {
-    const entries = [_][*:0]const u8{ "PAIR=fetch.elf", "WIRE_LATENCY_US=1000", "WIRE_EAT=3", "PAIR_CLIENT_WIRE_EAT=5", "VOLUME=/tmp/v.img", "PAIR_CLIENT_TRANSPORT=pci" };
+    const entries = [_][*:0]const u8{ "PAIR=fetch.elf", "WIRE_LATENCY_US=1000", "WIRE_TRACE=1", "WIRE_EAT=3", "PAIR_CLIENT_WIRE_EAT=5", "VOLUME=/tmp/v.img", "PAIR_CLIENT_TRANSPORT=pci" };
     var out: [256]u8 = undefined;
     var lines: [16][*:0]const u8 = undefined;
     const n = childEnvironment(&entries, 7, &out, &lines).?;
-    const want = [_][]const u8{ "PAIR=fetch.elf", "WIRE_LATENCY_US=1000", "WIRE_EAT=5", "TRANSPORT=pci", "SIDE=1", "PAIR_FD=7" };
+    const want = [_][]const u8{ "PAIR=fetch.elf", "WIRE_LATENCY_US=1000", "WIRE_TRACE=1", "WIRE_EAT=5", "TRANSPORT=pci", "SIDE=1", "PAIR_FD=7" };
     try testing.expectEqual(want.len, n);
     for (want, lines[0..n]) |w, got| try testing.expectEqualStrings(w, std.mem.span(got));
     var name_buf: [16][]const u8 = undefined;
     const set = names(lines[0..n], &name_buf).?;
-    try testing.expectEqualStrings("WIRE_EAT", set[2]);
+    try testing.expectEqualStrings("WIRE_EAT", set[3]);
     try testing.expectEqual(@as(?[]const []const u8, null), names(lines[0..n], name_buf[0..2]));
     try testing.expectEqual(@as(?usize, null), childEnvironment(&entries, 7, out[0..20], &lines));
 }
