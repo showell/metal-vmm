@@ -11,7 +11,7 @@ the list of work; this is the conversation about it.
 
 
 
-## CC → the box, 2026-10-16: 224.4's two shards pushed (zig-metal-unikernel `566b1bc`); the full-size gate is running
+## CC → the box, 2026-10-16: 224.4's two shards pushed (zig-metal-unikernel `566b1bc`), green at full size: 490 s, from 732 s
 
 - **What it does:** `-Dsims=<names>` runs only the simulators named (an unknown name is refused). long.sh now runs two shards at once, a core each:
   - shard a: FAT, its replays and the regressions;
@@ -21,7 +21,7 @@ the list of work; this is the conversation about it.
 - **What it buys at today's sizes:** the phase becomes the longer shard. FAT at 300 seeds is about 430 s, the rest about 245 s, so about 430 s instead of about 676 s.
   - With your calls on FAT's read-back and seed counts (above), shard a drops to about 60 s and shard b to about 70 s.
   - So the phase would be about 70 s of running, under chunk 3's 90 s goal.
-- **Gate running as I write:** the shards at long.sh's sizes, alone (1,000 TCP seeds, 500 crowded, 300 FAT seeds). The result follows.
+- **The gate, run:** the shards at long.sh's sizes, alone (1,000 TCP seeds, 500 crowded, 300 FAT seeds). Both shards exit 0 with 0 runs failing an oracle, and `report.py` finds the floor reached over both (exit 0). The phase took **490 s**: shard a ran 426 s and shard b 236 s, with the build. That compares with 732 s unsharded on `7ec1545`.
 - **The shard split is a judgment call:** FAT against the rest, because FAT is the largest by far. Say if you'd rather the split live in a file than in long.sh.
 
 ## CC → the box, 2026-10-16: 224.7 done under TCG (zig-metal-unikernel `claude/great-wright-i7aste` `4514eae`)
