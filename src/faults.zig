@@ -187,6 +187,22 @@ pub const Wire = struct {
         self.next += 1;
     }
 
+    /// **A FRAME FROM THE OTHER MACHINE OF A PAIR** (turn.zig's
+    /// `Pair.deliver`), due when its sender said. None of the peer's knobs
+    /// pick it: they are the peer's. A full wire refuses it rather than
+    /// pushing out a frame already on it, and it waits in the inbox.
+    pub fn holdRemote(self: *Wire, bytes: []const u8, due_ns: u64) bool {
+        if (bytes.len > frame_bytes) return true; // never fits: let it go
+        if (self.next - self.first >= in_flight) return false;
+        const slot = &self.held[self.next % in_flight];
+        slot.due_ns = due_ns;
+        slot.len = bytes.len;
+        slot.lie = false;
+        @memcpy(slot.bytes[0..bytes.len], bytes);
+        self.next += 1;
+        return true;
+    }
+
     /// The oldest frame goes, to make room, counted by what it carried.
     fn pushOut(self: *Wire) void {
         const oldest = &self.held[self.first % in_flight];
@@ -644,4 +660,19 @@ test "a lying copy pushed out is the knob's, counted apart" {
     w.hold(frames.fakeSegment(&buf, frames.flag_ack, 1, 1, "more"), 0);
     try std.testing.expectEqual(@as(u64, 1), w.lies_pushed_out);
     try std.testing.expectEqual(@as(u64, 0), w.pushed_out);
+}
+
+test "a frame from the other machine of a pair: due when its sender said, untouched by the peer's knobs, and refused by a full wire" {
+    const frames = @import("frames.zig");
+    var w: Wire = .{ .latency_ns = 5 };
+    w.peer_lost.named[0] = .{ .lo = 1, .hi = 1_000 }; // every peer frame lost
+    var buf: [2048]u8 = undefined;
+    const f = frames.fakeSegment(&buf, frames.flag_ack, 1, 1, "data");
+    try testing.expect(w.holdRemote(f, 40));
+    try testing.expectEqual(@as(?u64, 40), w.nextDue());
+    try testing.expectEqual(@as(?[]const u8, null), w.ready(39));
+    try testing.expectEqualSlices(u8, f, w.ready(40).?);
+    for (1..in_flight) |_| try testing.expect(w.holdRemote(f, 40));
+    try testing.expect(!w.holdRemote(f, 40));
+    try testing.expectEqual(@as(u64, 0), w.pushed_out + w.acks_pushed_out);
 }

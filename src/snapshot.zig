@@ -48,6 +48,7 @@ const coverage = @import("coverage.zig");
 const disk = @import("disk.zig");
 const scsi = @import("scsi.zig");
 const cache = @import("cache.zig");
+const turn = @import("turn.zig");
 const pci = @import("pci.zig");
 const virtio_pci = @import("virtio_pci.zig");
 const cost = @import("cost.zig");
@@ -123,7 +124,7 @@ pub const models = .{
     msix.Msix,           entropy.Entropy, faults.Wire,   faults.Drive,
     net.Net,             coverage.Serial, virtio.Device, virtio.Block,
     virtio_pci.Function, pci.Bus,         scsi.Scsi,     cost.Cost,
-    cache.Cache,
+    cache.Cache,         turn.Pair,       turn.Hooks,
 };
 
 /// **THE POINTERS A RESTORE IN PLACE KEEPS RIGHT**, each with why. A path is
@@ -147,6 +148,9 @@ pub const borrowed = .{
     .{ "net.Net.peer.plan.requests[]", "the same" },
     .{ "net.Net.peer.others[].request", "the same" },
     .{ "net.Net.peer.tcp.request", "the same: the first client's, from `Peer.ask`" },
+    .{ "net.Net.pair?", "a pair's wire to the other machine (`turn.Pair`, `PAIR=`), in `main`'s storage: one side's snapshot is not the pair's, and no pair is snapshotted (docs/TWO-KERNELS.md)" },
+    .{ "turn.Hooks.ctx", "the pair's socket and its last TURN, in `main`'s storage: as `turn.Pair.ctx`" },
+    .{ "turn.Pair.ctx", "where its frames across go: the pair's socket, in `main`'s storage, as `net.Net.pair?`" },
     .{ "cache.Cache.durable.metadata?", "the cache's map of sectors as they were durable, on the heap: saved apart, the map copied, by `Cache`" },
     .{ "cache.Cache.gpa.ptr", "the allocator the map lives in: the machine's one, the same across a restore" },
     .{ "cache.Cache.gpa.vtable", "the same allocator's code" },

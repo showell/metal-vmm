@@ -446,7 +446,7 @@ fn writeDhcp(out: []u8, request: Dhcp, kind: u8, lease_s: u32) []const u8 {
     bootp[2] = 6; // six bytes of it
     @memcpy(bootp[4..8], &request.xid);
     if (request.broadcast) writeBe16(bootp[10..12], 0x8000);
-    @memcpy(bootp[16..20], &guest_ip); // yiaddr: the address handed out
+    @memcpy(bootp[16..20], &frames.guest.ip); // yiaddr: this side's lease (frames.side)
     @memcpy(bootp[20..24], &server_ip); // siaddr
     @memcpy(bootp[28..34], &request.mac);
     @memcpy(bootp[236..240], &magic_cookie);

@@ -11,6 +11,195 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: QUEUE 225 chunk 12a written, ready for your `same.sh` (metal-vmm `46154f3`)
+
+**What it is:** the hooks, null outside a pair. Nothing sets them yet; 12b
+does.
+- **`turn.Pair`, which is net.zig's `Net.pair`:** `speak` routes the guest's
+  frame with `frames.route`. A frame across never reaches its own peer.
+  ARP goes to both, and other broadcasts are dropped and counted.
+  `pump` delivers the inbox's due frames onto the Wire before the peer's
+  own frames, and `nextDue` folds in the inbox.
+- **`faults.Wire.holdRemote(bytes, due)`:** a remote frame skips the peer's
+  knobs. A full wire refuses it, and it waits in the inbox; it never
+  pushes a frame out.
+- **`turn.Hooks`, which is main.zig's `Machine.turns`:**
+  - `beforeMove` runs ahead of each exit's tick and ahead of the volume's
+    owed time, so the clock never passes the limit.
+  - In `rest()`, `capHalt` moves a halt only as far as the limit, then
+    yields `halted{wake}`.
+  - At `.never`, `atNever` either yields `halted{null}` or returns the new
+    `Rested.both_idle`, which `serve()` names and ends on.
+- **Snapshots:** `turn.Pair` and `turn.Hooks` are in `snapshot.models`, and
+  their `ctx`, plus `net.Net.pair?`, are in `borrowed`, with "a pair is
+  never snapshotted" as the reason. That is true today, because nothing
+  snapshots at run time. If you would rather have a gap line with a red
+  test, say so.
+
+**Tests:** each was seen red with a mutant.
+- net.zig: a frame across never sees its own peer, and the other's frame
+  arrives at its due.
+- faults.zig: `holdRemote` is due as given, ignores `PEER_LOSS`, and is
+  refused when full.
+- turn.zig: `capHalt`.
+
+`zig build test` and `zig build` are green, and `zig fmt` is clean.
+
+**Not run here:** single-guest byte-identity. There is no /dev/kvm on CC.
+That is yours: `same.sh` before and after `46154f3`. I'm starting 12b next.
+
+## CC → the box, 2026-10-16: QUEUE 225 chunks 10 and 11 done, in metal-vmm (`c4e058a`, `78b67d0`)
+
+- **10, identity (`c4e058a`).**
+  - `frames.Identity` and `frames.side(n)`: side 0 is QEMU's default card and 10.0.2.15, as every run before a pair; side 1 is `52:54:00:12:34:57` and 10.0.2.16.
+  - `frames.guest` is the side this process is, set once from `SIDE` before the card is built (anything but 0 or 1 exits 2).
+  - Every frame the peer builds for the guest, its DHCP lease and the card's config space use that identity.
+  - `checkPair` refuses two guests sharing a card or an address. It's tested; 12b calls it at the pair's start.
+  - `frames.route` decides what crosses, purely: ARP to both, unicast past 10.0.2.2 (and its DNS) to the other machine, DHCP's broadcast kept, any other broadcast dropped. 12a/b wire it in.
+  - `PAIR` set turns `consider()` off (`Machine.pair`, with its census line).
+  - Red with side 1 not offset, and with `build` back on the constant address. With side 0 every frame is built as before, so a single guest's wire should be unchanged; byte-identical `same.sh` is yours to see.
+- **11, `src/turn.zig` (`78b67d0`)**, the pure part of §4:
+  - `limit`, `wake` (dues after the clock only), and `Inbox` ((due, seq) order, `pump`/`unpump`, discarding and counting frames due before power-on, refusing when full);
+  - `Livelock`, `atNever` (gives up the turn, or ends the pair "both idle"; there is no third answer, so it can't return from serve()) and `eofExpected`;
+  - `checkStart` (L required; the PEER_EAT/LOSS/DAMAGE/MANGLE knobs refused);
+  - FRAME and TURN with START as bytes.
+  - Each test is red with its plan plant: a limit of c + 2L, draining on arrival, a wake that keeps a passed due (trips `turn_livelock` within two handoffs), and a halt that doesn't end a pair already idle.
+  - My first run of two of those plants didn't compile (an unused parameter), so it proved nothing. I redid both so they compile, and both went red.
+- **Next: 12a**, the hooks in `serve()`, `rest()`, `net.zig` and `faults.Wire`, inert outside PAIR mode. I write it; yours to verify with `same.sh`, since I have no KVM.
+
+## CC → the box, 2026-10-16: master merged in; QUEUE 225 chunk 9 done, under QEMU TCG here (zig-metal-unikernel `17c7a5f`, `85acfd9`, `b03ba65`)
+
+- **Merged master (`17c7a5f`)** before touching tcp.zig again: your 227 fix, the DEPARTS form, and tcp-traces in tier 0.
+  - One conflict, in `acceptability`'s line: it takes your `DEPARTS (simpler):` with 226's text.
+  - The traces are rewritten on the merged code: 717 worlds differ from master, all 226's held segments, all passing.
+  - `./tier0.sh` PASS, and the native judge passes all 27 checks on the merged code.
+- **The client loop is now one pure `fetch.Client` (`85acfd9`)**, in src/fetch.zig. It does ARP, connect, the request, the answer into the caller's sink, our FIN, and the outcome. `native/fetch.zig` and the kernel both host it.
+  - A host test runs it against the kernel's own `tcp.Table` as the server over a loopback wire: a 200, no ARP, the connect deadline, the idle deadline, a short answer.
+- **Chunk 9 (`b03ba65`), `probe/fetch.zig`:** a DHCP lease, then the same Client on virtio-net.
+  - The target and deadlines come from the PVH command line (`fetch <ip> <port> <path> connect_ms= idle_ms= total_ms=`), read by `fetch.parseAsk`, with no defaults.
+  - It ends with the outcome's code through isa-debug-exit and prints the body's length and FNV-1a.
+  - Table tests: `parseAsk`, and `qemuExit`, every outcome to the code QEMU reports.
+- **Under QEMU TCG here, against python3 -m http.server through slirp's 10.0.2.2.** `probe/judge_fetch.py` (`probe/run.sh fetch`, also in `all`) passes in 9.8 s:
+  - a 200 in 11 ms;
+  - 300 KB in 21 ms, the kernel's hash equal to Python's;
+  - refused → QEMU 5;
+  - an address nobody has → `no_arp` (QEMU 19) at the 1 s connect deadline;
+  - a command line without its deadlines → refused at boot (QEMU 3).
+- **Next:** chunks 10-12c are metal-vmm (identity, turn.zig, hooks, `PAIR=`), several box-verified and KVM-only. I'll read them and write what needs no KVM first, saying which needs your run.
+
+## CC → the box, 2026-10-16: QUEUE 225 chunk 8 done, and run here, not only compiled (zig-metal-unikernel `b443701`)
+
+- **News for 223 and the "box verifies" chunks: this container can run the native judge.** It has `/dev/net/tun` and runs as root. Once I `apt-get install iproute2`, `gmtap0` comes up as `judge_native.py` makes it.
+  - **Not here: netem.** The kernel has no `sch_netem` ("Specified qdisc kind is unknown"), so `check_loss` stays yours. Everything else in the native judge runs: `JUDGE_QUICK=1` passes whole in 23 s (the server's nine checks and the fetch cases).
+- **`src/fetch.zig`** is pure and shared with chunk 9's kernel. It holds `Outcome`, one exit code each, and `Answer`, an HTTP answer read as it arrives. Table tests for both.
+  - The codes: 0 ok, 2 refused, 3, 4 and 5 the connect, idle and total deadlines, 6 given up, 7 reset, 8 bad answer, 9 no ARP, 10 short. 1 is the program's own.
+- **`native/fetch.zig` (`gm-fetch`):**
+  - Run it as `gm-fetch <ip> <port> <path> connect_ms= idle_ms= total_ms=`. The deadlines have no defaults.
+  - It asks ARP with chunk 7's cache, answers ARP for itself, connects with `Table.connect`, writes the body to stdout, and exits with the outcome.
+  - Knobs: `GM_EAT_SYNS`, `GM_DROP_SENT`, `GM_DROP_RECEIVED`, `GM_DEAF_FROM`, and `GM_LOSE_SENT`/`SEED`. `GM_TRACE=1` prints every TCP frame each way.
+  - `zig build native` builds it beside gm-serve.
+- **The judge's fetch cases:** 18 of 18 pass here in 5 s (`FETCH_ONLY=1` runs them alone; the full judge runs them after the server's). All use §5's metal deadlines, and each deadline fires within 250 ms. Highlights:
+  - a 200 in 6 ms, and 300 KB exact in 7 ms;
+  - refused → exit 2;
+  - silent (nothing from Linux taken) → 3 at 151 ms; idle → 4 at 1,002 ms; total → 5 at 3,001 ms;
+  - the SYN eaten once → 200 at 28 ms, twice → 79 ms, three times → the connect deadline (3) at 152 ms, since the fourth SYN would go at 175 ms;
+  - our frame 2 lost (the request) → 200 at 208 ms, on the 200 ms floor;
+  - Linux's frames 1, 2, 10, 50 and 150 lost → exact every time, with 4 to 11 segments held ahead of a hole. 226 at work, against Linux.
+- **"Silent" isn't netem:** netem would drop the ARP reply too, and the outcome would be no_arp. It's `GM_DEAF_FROM=0` (no TCP frame from Linux taken).
+- **The plant, `client_ack_off_by_one`** (our ACK of the SYN-ACK names the server's ISS, not ISS + 1): **red in 7 of the 18 cases**, where Linux resets the handshake (exit 7).
+  - In the other 11, which ran after them, **Linux took the bad ACK**. Its SYN-ACK came 3.5 ms late there, against 0.1 ms usually.
+  - That suggests its SYN-cookie path after the earlier resets, but I haven't established it. Run alone, every case is red.
+  - `check-plants` is clean. The plant isn't in metal-vmm's `plants.sh`; it's for the native judge.
+- **Next:** chunk 9, `probe/fetch.zig` under QEMU TCG.
+
+## CC → the box, 2026-10-16: QUEUE 226 done, segments ahead of a hole are held (zig-metal-unikernel `8964f40`; metal-vmm `868b29f`)
+
+- **No new buffer.** A segment ahead of RCV.NXT is written into the receive buffer at its own place past `end`. That is inside the window we already advertise, so the window never promises room the queue lacks.
+  - The new file `src/tcp_held.zig` keeps only where the pieces are. It is pure, with table-driven tests for `add`, `advance` and the held FIN.
+  - Up to 4 pieces a connection, merged where they touch or overlap. It costs 32 bytes and a FIN's offset per connection: 8 KB over 256 slots.
+  - A piece apart from four held is dropped as before and counted.
+- **Taking it:** when the next byte arrives, what it makes contiguous is taken in order, and one ACK names the new RCV.NXT. A held FIN is taken only once the bytes before it are. Overlaps and repeats are delivered once. Behind and beyond are as they were.
+  - Both RFC lines are quoted word for word from `docs/rfc/` (SHLD-31, and RFC 5681 §4.2), and the quote check covers tcp_held.zig.
+- **Compaction:** `consume` moves the held bytes with the buffer when it compacts and when it empties.
+- **Checked by tcp_check:** a new safety rule, `held_past_the_room`, and a free slot holds no pieces.
+- **Counted on the host line:** segments held, bytes delivered from them, and segments dropped with the pieces full.
+- **Red first, each red without its part:**
+  - the pair sim's seed 2 under reordering: it pinned the limit, and now must pass;
+  - a hole filled, with exactly one ACK;
+  - overlaps delivered once;
+  - a held FIN;
+  - the four-piece limit;
+  - compaction, red when it leaves the held bytes behind.
+- **What it buys between kernels:** with reordering, 0 of 144 jittered pair seeds fail. Before, 62 of 77 `single` seeds and 2 of 35 `random` seeds failed. The pair sim now reorders in half its jittered seeds.
+- **The revival ring:** two crowd witnesses (2305, 9769) now pass with the ring off, so they leave its list. Five are left.
+- **Golden traces rewritten:** 717 of 803 worlds changed (189 plain, 185 rough, 144 crowd, 199 full). That's nearly every world with loss, corruption or jitter, since each puts segments ahead of a hole. All still pass every oracle.
+- **DEPARTS:** the "ahead is not held" clause is gone from `acceptability`. **SYN-RECEIVED still drops a segment ahead**; its DEPARTS line stays, since the handshake's last ACK is the one that matters there. Say if you want that held too.
+- **Docs:** tcp.zig's header and debt list, docs/tcp.md's loss note, TCP_TESTING.md §3, and TWO-KERNELS §4. The known-limit paragraph is now "the pair is FIFO, and no longer has to be".
+- **Gates:** tier 0 green. The TCP simulators at long.sh's counts, ReleaseSafe: **0 runs failed an oracle and 0 invariants broke.**
+  - "a segment ahead of a hole is held" fired 13,424 times; "a hole filled delivers what was held" 7,388; "a FIN held ahead is taken" 1,406.
+  - "held pieces full" is never reached in the sims, only in its scripted test. Four pieces are plenty at these windows. A tcp_sim knob for many small segments past several holes would reach it; say if you want one.
+- **Yours:** rerun the 10 native seeds from your 226 note (300 KB, 5% loss in, 1 in 13 out) to see what the queue buys natively. Then `./long.sh metal` for 227 and this together.
+- **Next:** 225 chunk 8, native/fetch.zig.
+
+## CC → the box, 2026-10-16: QUEUE 227 fixed, yours to rerun `./long.sh metal`; 3b's quotes done (zig-metal-unikernel `7f7c3cf`, `9026f61`)
+
+- **227 (`7f7c3cf`): your hypothesis was half of it.** The full chain in the `shut-window` case:
+  1. The peer shuts its window with segments still on the way. They are lost to it, so a timeout enters recovery (one segment).
+  2. Each timeout probes with one *new* byte, which the zero window refuses.
+  3. The ACK that reopens the window acknowledges nothing, but `sent` still counted the refused byte. So the next segment started one byte past `una`.
+  4. The peer dropped that segment as ahead of a hole: one duplicate ACK, where three resend. The cap held the table to that one segment, and the rest waited on the backed-off timer.
+
+  Before 0a, a whole window went out behind the hole, which drew three duplicate ACKs and a fast retransmit. That's why `63d45cd~1` passed.
+- **The fix:** an ACK of nothing new that opens a shut window sets `sent` to 0, and clears Karn's timed segment, since what goes next is sent again. tcp_sim's Karn property caught that second part at once when I left it out.
+  - The comment quotes RFC 9293 §3.8.6.1: a zero-window receiver still acknowledges "its next expected sequence number".
+  - Recovery after a shut window that really lost segments stays as it is.
+- **Red first:** a tcp_test peer takes one segment, shuts with the rest in flight, refuses three probes, then reopens. The rest must arrive within 30 ms. Red without the change, green with it.
+- **Why no simulator caught it:** tcp_sim's client refuses probes the same way, but it **holds segments past a hole**. So the refused byte cost it only one backed-off timeout per reopening, well inside the 60 s completion bound.
+  - Over 400 plain seeds, the fix finishes 1.8 s sooner in all (1,301 s of 1,303 s).
+  - The bound is about liveness, not throughput, and the client is more forgiving than metal-vmm's peer. 226's out-of-order queue would make our own kernel as forgiving. A tighter, per-reopening bound in tcp_sim could catch this class; say if you want it.
+- **Golden traces rewritten:** 39 of 803 worlds changed (16 plain, 5 rough, 18 crowd). Every one still passes all its oracles.
+- **Gates:** tier 0 green. The TCP simulators at long.sh's counts, in ReleaseSafe, done: 1,000 plain and 1,000 rough seeds, 500 crowded, 20 full and the pair's 300. **0 runs failed an oracle and 0 invariants broke.** Not one TCP floor line was missed; the shard's 222 misses are all FAT, page and pure lines that other shards reach.
+- **Not run here:** `./long.sh metal` needs KVM, so it's yours.
+- **3b part 2 (`9026f61`): the quotes.**
+  - Each step's words come first, on lines that begin `> `, copied by line range from `docs/rfc/`, never retyped. Covered:
+    - RFC 9293 §3.10.7.1-4, where `handle` does each step, with the security and URG steps said not to apply;
+    - tcp_arrives.zig's four decisions;
+    - RFC 6298 §2, §3 (Karn) and §5;
+    - RFC 5681 §3.2;
+    - RFC 6056 §3.2.
+  - **A new tier-0 test holds every `> ` block to `docs/rfc/`**, whitespace aside. It went red when I changed one quoted word.
+  - **Reading the text fixed one line and found five departures nothing named.** The fix: the SYN-ACK text line said the RFC "queues" it, but the RFC continues at the sixth step. The five new DEPARTS lines:
+    - RFC 6298 (2.1)/(2.4): the first RTO and the floor are 200 ms, not 1 s;
+    - (2.5): the ceiling is 5 s, not 60 s;
+    - (5.7): after a SYN or SYN-ACK is sent again, the RTO stays 200 ms instead of the required 3 s once data starts;
+    - RFC 5681 §3.2 step 1: no Limited Transmit;
+    - RFC 6056: the dynamic range only, counting up by one.
+
+    That's 18 `DEPARTS:` lines now. For 226: Limited Transmit (RFC 3042, sending new data on the first two duplicate ACKs) is the sender's side of the same reordering problem, and smaller than the queue. I mention it only; it's not proposed.
+- **Next:** 226 (the out-of-order queue), while chunk 8 waits; or chunk 8 first if you'd rather.
+
+## CC → the box, 2026-10-16: your answers acted on; QUEUE 225 chunk 7 done; the pair sim in properties and the soak (zig-metal-unikernel `88d8fb4`, the ARP commit, `ed676a3`; metal-vmm `8e40250`)
+
+- **Merged** zig-metal-unikernel master into my branch (`88d8fb4`), so `docs/rfc/` is here. 3b part 2, the quotes, is next, word for word from those files.
+- **TWO-KERNELS §4 now has the known-limits line** (`8e40250`, under "The inbox"). The test pinning seed 2 stays.
+- **Chunk 7, ARP (`src/arp.zig`):**
+  - `writeRequest` broadcasts "who has target_ip?" with the target's hardware address zero.
+  - `parse` reads a request or a reply (`Packet`, `Op`). `parseRequest` is now `parse` plus its old operation check, with the same properties and answers, so floor_sim's ARP lines still hold.
+  - `Cache` holds one entry. `observe` follows RFC 826's packet reception:
+    - a packet from the entry's address updates its hardware address;
+    - a packet about us replaces the entry with its sender;
+    - anything else teaches nothing.
+
+    When to ask again stays the caller's (chunk 9's fetch).
+  - Tests: a request; a reply filling the cache, and not taken as a request; a stale entry replaced, two ways; an unknown operation refused.
+  - Red with the cache update skipped, and with the entry never replaced. arp.zig's tests now run in tier 0.
+- **The pair sim on the long tier (`ed676a3`):**
+  - `zig build properties` runs `tcp_pair` (`-Dpair-seeds`, default 300, 0.5 s in ReleaseSafe), including its entries in seeds-that-failed.
+  - long.sh's shard b names it.
+  - The soak runs it under a tape and includes it by default. `-Dsoak-sims` is now matched name by name, since "tcp" was matching "tcp_pair".
+  - Checked: one properties shard (300 seeds, every oracle held, all four reachables reached) and a one-round soak. No full long tier run here.
+- **Next:** 3b's quotes, then chunk 8 (native/fetch.zig). Chunk 8 is box-verified; I'll write it and say when it's ready.
+
 ## CC → the box, 2026-10-16: QUEUE 225 chunk 6 done, with two findings; one needs your decision (zig-metal-unikernel `e9d5df1`)
 
 - **Where it lives:** a new file, `src/tcp_pair_sim.zig`, not `tcp_sim.zig` as the plan says: tcp_sim.zig is already 2,090 lines. It's in `unit_files` and `unit_tests.zig`.

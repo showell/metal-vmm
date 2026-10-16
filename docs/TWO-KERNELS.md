@@ -374,15 +374,12 @@ no latency (`due` is already stamped). If the Wire has no room, the frame
 **Receiver-side fault knobs are refused in PAIR mode.** A run that sets one
 refuses to start: fail, don't default.
 
-**Known limit: the pair never reorders, and must not.** tcp.zig drops a
-segment that arrives ahead of a hole (DEPARTS 6), so on a reordering wire
-two of our kernels draw at most two duplicate ACKs per recovering round,
-and recovery waits on the doubled timer (zig-metal-unikernel
-`src/tcp_pair_sim.zig`, chunk 6: seed 2 moves 41 KB of 195 KB in 3 s with
-3 ms of reorder jitter). The inbox's `(due, seq)` order and one latency L
-make the pair FIFO, so it never meets this; the pair sim's paths are FIFO
-too, and its last test pins the finding. An out-of-order queue in tcp.zig
-is proposed in QUEUE.md, not queued.
+**The pair is FIFO, and no longer has to be.** The inbox's `(due, seq)`
+order and one latency L keep each direction in order. Since QUEUE 226,
+tcp.zig holds a segment that arrives ahead of a hole (zig-metal-unikernel
+`src/tcp_held.zig`), so a reordering wire no longer stalls two of our
+kernels: the pair sim reorders in half its jittered seeds, and every one
+completes inside the metal bounds.
 
 ### Power-on and START
 
@@ -617,6 +614,13 @@ clock.
   remote entry point into `faults.Wire`.
 - *Done:* single-guest `same.sh` output is byte-identical to before.
 - *Runs it:* CC writes; **box verifies**.
+- *As written* (CC): `turn.Pair` (net.zig's `Net.pair`: `route` in `speak`,
+  `deliver` in `pump`, its inbox in `nextDue`), `turn.Hooks` (main.zig's
+  `Machine.turns`: `beforeMove` ahead of each tick and of owed volume time,
+  `capHalt` in `rest()`, `atNever` at `.never`, `Rested.both_idle`), and
+  `faults.Wire.holdRemote`, which refuses on a full wire rather than
+  pushing out. Both are null outside a pair. A pair is never snapshotted:
+  one side's snapshot is not the pair's (snapshot.zig's `borrowed`).
 
 **12b. `PAIR=`: fork and exec, the socket, TURN and START.**
 - *Files:* `src/main.zig`, `src/turn.zig`, `KNOBS.md`.

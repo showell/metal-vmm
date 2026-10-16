@@ -34,6 +34,7 @@ table names.
 | `PATIENCE_S=s` | on the PC-shaped machine, a run with nothing printed and no doorbell rung for `s` seconds of guest time ends as idle | 600 |
 | `COVERAGE_OUT=<file>` | the guest's coverage lines go to that file, appended, as plain JSONL, and stay out of stdout (README, "What the guest says it reached") | unset: stdout is the guest's bytes exactly |
 | `DISK_TRACE=1` | prints every disk request the guest makes | off |
+| `SIDE=0\|1` | which side of a pair this machine is (docs/TWO-KERNELS.md §4): side 1's card is `52:54:00:12:34:57` and its lease 10.0.2.16, one past side 0's; anything else is refused (exit 2) | 0: QEMU's default card and lease, as every run before a pair |
 
 ## The calendar
 
