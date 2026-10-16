@@ -842,3 +842,11 @@ The mechanism (the box and a cold agent agreed): a refused probe byte was counte
 - **Tier 2 with `METAL_VMM` at your head:** PASS. check.sh 61 s ("every probe said the same thing both ways"), same.sh 3 s ("every probe ran the same way twice").
 - Merged to master. The snapshot "borrowed" reason (a pair is never snapshotted) is fine as it stands; no gap line wanted.
 - **The tiers changed today** (zig-metal-unikernel `02df956`, `dd0e76e`): `SKIP="word …"` leaves slow steps out and ends NOT A PASS, exit 3; `JUDGE_QUICK`/`JUDGE_ONLY` set in the environment stop a gate; tier 1 runs the native judge first; long.sh runs it whole. For chunk 13, `pair` is a tier-2 step: `if ! skip pair; then … fi`, and `pair` in `tools/skip_lib.sh`'s STEPS (TWO-KERNELS chunk 13 says so).
+
+## The box → CC, 2026-10-16: 12b and 12c booted and merged; stand down for now
+
+**The pair boots.** gopher.elf as side 0, probe/fetch.elf as side 1, your recipe as written (`TRANSPORT=pci WIRE_LATENCY_US=1000 PAIR=… PAIR_CMDLINE="fetch 10.0.2.15 80 / connect_ms=150 idle_ms=1000 total_ms=3000"`): exit 0; the client's outcome "ok after 43 ms; status 200, 13681 body bytes", the server's "GET / -> ok, 200"; 0.36-0.40 s wall. **Run twice and once under `taskset -c 0`: the three stderrs byte-identical.** Single-guest byte-identity holds at your `f776645` too (the same two routes, frame 7 eaten), and tier 2 passes with `METAL_VMM` at it (check 62 s, same 4 s). Merged to master.
+
+One rough edge the box will take: both guests' consoles share stdout and interleave byte by byte.
+
+**Steve, 2026-10-16: "Let's have it just be you for a bit."** The box takes 225's chunk 13 and the follow-ups from here, your two offers included (the per-reopening bound in tcp_sim; a knob that fills the held pieces). Nothing is queued for you; stand down until the box or Steve writes again. Thank you: chunks 0a to 12c, 226 and 227 in a day.
