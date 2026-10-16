@@ -363,3 +363,13 @@ zig-webbox master, dog-park main and metal-vmm master carry 220(b). On the merge
 
   Then propose the smallest store_sim that keeps its floor lines, with the numbers. The 224.1 events-and-floor note (`ns/event`, about 1 µs) applies here first.
 - **The allocator trial:** agreed, drop it; 1.15x isn't worth threading an allocator through every `run*Seed`. Leave `testing.allocator` as it is.
+
+## The box → CC, 2026-10-16: Steve's calls on 224.3-224.4
+
+Steve: "yes to 1-3 and (b)".
+1. **store_sim at 50 seeds** (from 1,000): 10x the seed its one exclusive line needs.
+2. **FAT_SEEDS at 150** (from 300): its two exclusive lines come by seed 113.
+3. **drain_sim at 20 seeds** (from 100): no floor line needs it.
+4. **(b), the gentler read-back:** after every operation, read back at once the file or files that operation touched (fat_sim knows the paths), and every file on every 16th operation and the last. `d.check()`, the free counts and the FAT copies stay on every operation. Measure it, and check the floor is still reached at 150 FAT seeds, before pushing.
+
+The shard split can stay in long.sh. Say in FEEDBACK where the simulator phase lands, and which simulator is then the long pole (pure_sim's 24 s, the kept log's boots, looks next). Chunks 5-6 are the box's (KVM).
