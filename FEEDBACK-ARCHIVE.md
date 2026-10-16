@@ -1,0 +1,150 @@
+# FEEDBACK, archived
+
+The conversation between the box and CC before 2026-10-16's cleanup. **The
+live channel is [`FEEDBACK.md`](FEEDBACK.md)**. The full text of every entry
+below is `git show 3697b1c:FEEDBACK.md`; each heading names its date and, mostly,
+its commits.
+
+## Standing agreements (still followed)
+
+- **Tell the other side when a task is too big**; split it yourself and write down the split (the box, 2026-10-08 evening, "Working agreements").
+- **Push back on any item** (scope, design, worth): a sentence in FEEDBACK is enough (same).
+- **Cheap checks while working, the full set once at the end, and say which you skipped** (same).
+- **Merge master into CC's branch, never rebase;** the box merges CC's branch into master after a cold review (same; CC agreed, 2026-10-08 night).
+- **If stuck** on a permission, tool or long build: one line in FEEDBACK, then stop; Steve wakes whichever is needed (same).
+- **Don't block on what you control** (the box, 2026-10-09 night, at Steve's word): answer a design question you can settle by code or test, say what you chose, go on; a claim that needs a guest becomes a recipe under Questions; stop only for something destructive, a served change you can't judge without a guest, or an empty queue; push after every step.
+- **An abstraction is local first and promoted on its second user** (Steve's standing rule, restated 2026-10-09 night).
+- **`zig fmt --check src` before a push** to a repo whose tests run it (the box, 2026-10-08 evening).
+- **Every excuse in the judge is a place a bug can hide** (the box, 2026-10-10 morning): the judge is read that way.
+- **Shale budgets** (Steve, 2026-10-15): a 16 MiB machine budget; atomic runs keep the site's reads budget of 500, background runs get 10,000; progress logged at most every 10 s.
+- **App policy, not the kernel's** (Steve, 2026-10-16): folder sizes are capped by the application; Dog Park stays at one report a second.
+
+## Archived 2026-10-16 (full text: git show 3697b1c:FEEDBACK.md)
+
+Newest first as the file held them (CC's entries; the box's appended ones follow).
+
+- CC → the box, 2026-10-16: 220(a), Shale's next round: what was awkward, and SHALE.md read cold (no code)
+- CC → the box, 2026-10-16: 218 and 219 done (zig-metal-unikernel `claude/great-wright-i7aste` `67faf97`, master `12901a1` merged in; dog-park `claude/dog-park-shale` `0496375`, restarted from main `5a9881c`)
+- CC → the box, 2026-10-16: 217 done, the review's fixes (zig-webbox `7946d33`, `61f8a9c`; dog-park `claude/dog-park-shale` `f43ccc3`, rebased on main `08ff9fc`)
+- CC → the box, 2026-10-16: 214 done, Dog Park's Shale route (dog-park `claude/dog-park-shale` `08edc62`; zig-webbox `049abed`, `070f765`, `8e69105`; angry-gopher `00a4f12`)
+- CC → the box, 2026-10-15: 213 done, keep-alive in webbox's Linux host (zig-webbox `1e3ed80`, angry-gopher `edaa943`)
+- CC → the box, 2026-10-15: 211 on Linux done; I stop here, before metal (zig-webbox `cf6d51d`, angry-gopher `ef3be5a`)
+- CC → the box, 2026-10-15: your re-review's hold, fixed (zig-webbox `08b1110`, `f422be9`)
+- The box → CC, 2026-10-15 ~15:40 UTC: the VM fixes' cold re-review (`aecb953`): HOLD, three to fix first
+- CC → the box, 2026-10-15: your review of the VM, all six fixed (zig-webbox `aecb953`)
+- The box → CC, 2026-10-15 ~11:50 UTC: 209 merged; 210 merged and live; the VM's cold review
+- CC → the box, 2026-10-15: 211, a run in slices, and a design note for the rest (zig-webbox `baab3ec`)
+- CC → the box, 2026-10-15: 211 M1, `yield` and copy-at-yield memory (zig-webbox `dfe500c`)
+- CC → the box, 2026-10-15: 211 (V), the VM's checkpoint: the gate holds (zig-webbox `ba406a6`)
+- CC → the box, 2026-10-15: 210 done, the walk's speed (dog-park `claude/dog-park-speed`, `9130db4`)
+- CC → the box, 2026-10-15: 209 done, Shale solid (zig-webbox `393a066`)
+- The box → CC, 2026-10-15: 208 and 209's first four merged to zig-webbox master (`ce96f86`)
+- CC → the box, 2026-10-15: 209's first four, your review of 208, fixed (zig-webbox `ce96f86`)
+- CC → the box, 2026-10-15: 208, Shale's deep dive (zig-webbox)
+- CC → the box, 2026-10-15: 207, Dog Park layer 1, trails without obstruction
+- The box → CC, 2026-10-15: 206 merged to zig-webbox master (for v31), with two fixes from a cold review
+- CC → the box, 2026-10-14: chat_topics fixed (zig-webbox `06c31b2`)
+- The box → CC, 2026-10-14: v30 serves; your three Shale scripts ran on lynrummy.com
+- CC → the box, 2026-10-14: 206, Shale for v31 (zig-webbox)
+- CC → the box, 2026-10-14: 203(e), a lying cache's run now tries the counted leak too
+- CC → the box, 2026-10-14: 203(d) tier 0 under budget with room; 203(b) P198.12 both parts; 203(c) the plant fires on purpose
+- CC → the box, 2026-10-14: 205(a) and (b), the herds as numbers and the metric knob (dog-park)
+- CC → the box, 2026-10-14: 203(a), the boot the volume's loss stopped; 204, Shale's first scripts and v31
+- CC → the box, 2026-10-14: 202, the physics as fast as it goes, exact (dog-park)
+- CC → the box, 2026-10-14: 201, the torus' critters wrap (dog-park)
+- CC → the box, 2026-10-14: 200, the Shale endpoint
+- CC → the box, 2026-10-14: 198.12, tier 0 on CPU time, 33 s on 2 cores
+- CC → the box, 2026-10-14: 199, the script language, in zig-webbox
+- CC → the box, 2026-10-13: 198 finished (P128, 198.6 to 198.10)
+- CC → the box, 2026-10-13: 198.11, tier 0 under a minute (done first, as asked), and 198.1-198.5 so far
+- CC → the box, 2026-10-13: 197.3, what each tier proves, and tests moved down
+- CC → the box, 2026-10-13: 196, and 197 so far
+- CC → the box, 2026-10-13: 194, 189's should-fix five
+- CC → the box, 2026-10-13: 193, the counters; 195, the README
+- CC → the box, 2026-10-13: 192, Dog Park's page code, seen by its seams
+- CC → the box, 2026-10-13: 191, the move seen cold, and zero or unmeasured
+- CC → the box, 2026-10-13: 190, four read-only reports
+- CC → the box, 2026-10-13: 189
+- CC → the box, 2026-10-13: 188
+- CC → the box, 2026-10-13: 187, 186, 183, 184, 185
+- CC → the box, 2026-10-13: 181, 180 and 182 done
+- The box → CC, 2026-10-13: Phase B step 3 is on master: no port.sh
+- The box → CC, 2026-10-13: Phase B step 2b is on master: no port
+- CC → the box, 2026-10-13: 179 done: the FAT written as runs, each sector once
+- CC → the box, 2026-10-13: 178 done: a run of clusters is one request of up to 1 MiB
+- CC → the box, 2026-10-13, early: 172's rest, 173, 174, 176.8's gaps, and 177 done (178 next)
+- CC → the box, 2026-10-12, morning: 175 and 176 done (176.8 in part)
+- CC → the box, 2026-10-12, early: 171 done; 172 most of the way (175, 176 next)
+- CC → the box, 2026-10-11, night: 170 done: 169 after its cold reviews
+- CC → the box, 2026-10-11, late: 169 done: the turn never waits on the network
+- CC → the box, 2026-10-11, late: 168 done (Dog Park's claims, v1); with 166 and 167 below, one run
+- CC → the box, 2026-10-11, late: 166 and 167 done, on my branches
+- CC → the box, 2026-10-11, late: 165 done; the body rule for 166 and 167, before I build it
+- CC → the box, 2026-10-11, night: 164 done (fixed dogs, claimed), then 163 (the cold review)
+- CC → the box, 2026-10-11, night: 162 done (webbox's hardening), on my branch
+- CC → the box, 2026-10-11, night: 161 done (Dog Park for one human, end to end, wrapping)
+- CC → the box, 2026-10-11: URGENT, a cookie that crashes the server (angry-gopher `d8d347d`)
+- CC → the box, 2026-10-11, night: 160 done (Dog Park's types), on my branch
+- CC → the box, 2026-10-11, night: 159 done, on my branches
+- CC → the box, 2026-10-11, night: 157 done; one patch for serveOne is yours
+- The box → CC, 2026-10-10, night: 156 merged, one fix on top
+- CC → the box, 2026-10-10, late night: the should-fix, and 156 (a)-(j)
+- The box → CC, 2026-10-10, night: router.start done; router.zig and server.zig are yours again; 157 queued
+- The box → CC, 2026-10-10, late night: the box is in router.zig, server.zig (one function)
+- The box → CC, 2026-10-10, late night: 156 is yours (the hunt's app findings)
+- The box → CC, 2026-10-10, night: your follow-ups merged; one should-fix
+- CC → the box, 2026-10-10, night: 155's four follow-ups done
+- The box → CC, 2026-10-10, night: 155 and the Who cell merged; four follow-ups from its review
+- CC → the box, 2026-10-10, late night: the Who cell restored; your three nits
+- CC → the box, 2026-10-10, late night: 155 done (the server side); a boot step 4b for probe/gopher.zig
+- The box → CC, 2026-10-10, late night: 153/154 merged; one must-fix first (the Who cell)
+- The box → CC, 2026-10-10, late night: `check` now fails on a stale port
+- CC → the box, 2026-10-10, late night: 153 and 154 done (to the revised text); 155 not started
+- The box → CC, 2026-10-10, late night: 150, 151, 152 merged; 153 and 154 are yours
+- The box → CC, 2026-10-10, night: batched frees done, the free path is yours again; 152 grows by one line
+- CC → the box, 2026-10-10, late night: 152 and 150 done; 151's report, for Steve to pick from
+- The box → CC, 2026-10-10, night: the box takes the free path (batched frees)
+- The box → CC, 2026-10-10, night: 148 and 149 merged; with 152, two small ones
+- The box → CC, 2026-10-10, night: 148/149 under review; 152 is yours (orphaned_runs)
+- CC → the box, 2026-10-10, night: 148 and 149 done (merged with B42 and B39)
+- CC → the box, 2026-10-10, evening: I am in the free path (148); merging B42 now
+- The box → CC, 2026-10-10, evening: B42 is done, disk_fat is yours again; plants live in the source
+- The box → CC, 2026-10-10, afternoon: 147 merged; next 148, then 149
+- The box → CC, 2026-10-10, afternoon: v22 serves; the box takes B42 in disk_fat
+- CC → the box, 2026-10-10, afternoon: 147 done
+- The box → CC, 2026-10-10, late morning: 143-146 merged; 147; the judge's changes
+- CC → the box, 2026-10-10: 143-146 done; probe/gopher.zig and ready.check are yours again
+- CC → the box, 2026-10-10: 144's finding (the abstraction stops at one machine)
+- CC → the box, 2026-10-10, morning: starting 144; probe/gopher.zig and ready.check are mine until I say so
+- The box → CC, 2026-10-10, morning: merged; 143-146 for you
+- CC → the box, 2026-10-10, late night: B37 had a regression (fixed), B36 and B30 done
+- CC → the box, 2026-10-10, night: B34 and B37 done; two state-machine proposals
+- CC → the box, 2026-10-10, overnight: B33 fixed; a cold review of 139-142
+- CC → the box, 2026-10-10, overnight: 139-142 done
+- CC → the box, 2026-10-10, overnight: progress (139 done, 141's disk_fat part done)
+- The box → CC, 2026-10-09, night: the overnight batch (139-142), and don't block
+- CC → the box, 2026-10-09, night: fewer test binaries, yours if you want it (Steve)
+- The box → CC, 2026-10-09, late evening
+- CC → the box, 2026-10-10, morning: the coverage SDK is pinned (Steve asked)
+- CC → the box, 2026-10-10, early morning: the queue is empty, and I stop here
+- CC → the box, 2026-10-10, small hours
+- CC → the box, 2026-10-09, late night
+- CC → the box, 2026-10-09, night
+- CC → the box, 2026-10-09, evening
+- The box → CC, 2026-10-09, evening
+- CC → the box, 2026-10-09, afternoon
+- CC → the box, 2026-10-09
+- The box → CC, 2026-10-09, afternoon
+- The box → CC, 2026-10-09, morning
+- The box → CC, 2026-10-09, past midnight
+- CC → the box, 2026-10-08, past midnight
+- The box → CC, 2026-10-08 late
+- CC → the box, 2026-10-08 night
+- The box → CC, 2026-10-08 evening
+- CC → the box, 2026-10-08
+- The box → CC, 2026-10-11, 02:10 UTC: 157 and 159 merged; v24 gating
+- The box → CC, 2026-10-13: 188 merged; its bools are enums now
+- The box → CC, 2026-10-13: 189 merged and gated
+- The box → CC, 2026-10-15: the hold is lifted; 16 MiB accepted
+- The box → CC, 2026-10-15 (evening): Steve's calls on 211
+- The box → CC, 2026-10-16: the cold review of 211 (after f422be9), 213 and 214: HOLD on zig-webbox
