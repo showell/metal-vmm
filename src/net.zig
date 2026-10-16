@@ -19,6 +19,7 @@ const virtio = @import("virtio.zig");
 const wire = @import("peer.zig");
 const frames = @import("frames.zig");
 const faults = @import("faults.zig");
+const turn = @import("turn.zig");
 
 /// VIRTIO_NET_F_MAC: the card's address is in config space. The guest asks for
 /// this one by name and refuses a device that does not offer it.
@@ -55,6 +56,10 @@ pub const Net = struct {
     /// **AND THE WIRE BETWEEN THEM**, which is allowed to be unhelpful — see
     /// faults.zig. Left alone it loses nothing and delays nothing.
     line: faults.Wire = .{},
+    /// **AND THE OTHER MACHINE, IN A PAIR** (`PAIR=`, docs/TWO-KERNELS.md):
+    /// what crosses to it, and its frames onto `line` as they come due.
+    /// Null, which is every run but a pair's, changes nothing.
+    pair: ?*turn.Pair = null,
     /// The machine's time as of this exit. The pump sets it at the top of
     /// every exit, so a doorbell handled later in the same exit has the right
     /// answer without being handed one.
@@ -102,7 +107,8 @@ pub const Net = struct {
         self.sent += 1;
         if (!self.line.carries()) return;
         const frame = buf[@sizeOf(Header)..];
-        if (self.peer.answer(frame, self.now)) |reply| self.answer(reply);
+        const own = if (self.pair) |p| p.route(frame, self.now) else true;
+        if (own) if (self.peer.answer(frame, self.now)) |reply| self.answer(reply);
         self.sendWaiting();
         // One frame arriving can mean more to send (`Peer.more`): as many as
         // the wire has room for, and `pump` sends the rest as the guest takes
@@ -147,6 +153,9 @@ pub const Net = struct {
         self.now = now;
         // Its answers that had no room first: they were said before the rest.
         self.sendWaiting();
+        // The other machine's frames that are due, as far as there is room:
+        // a full wire leaves them in the pair's inbox, never pushing out.
+        if (self.pair) |p| p.deliver(&self.line, now);
         // What the peer says unspoken to — a timer of its own, a flood, a
         // reset — goes on the wire first, at this instant, **AS FAR AS THE
         // WIRE HAS ROOM**: what is left waits for the guest to take frames,
@@ -174,6 +183,9 @@ pub const Net = struct {
             at = null;
         };
         if (self.line.nextDue()) |due| if (due > now) {
+            at = if (at) |a| @min(a, due) else due;
+        };
+        if (self.pair) |p| if (p.nextDue(now)) |due| {
             at = if (at) |a| @min(a, due) else due;
         };
         return at;
@@ -373,4 +385,40 @@ test "an answer to the guest while the wire is full waits for room too, none pus
         card.pump(&d, &ram, 0);
     }
     try testing.expect(got >= request.len);
+}
+
+const Across = struct {
+    n: usize = 0,
+    fn take(ctx: *anyopaque, _: *const turn.Frame) void {
+        const self: *Across = @ptrCast(@alignCast(ctx));
+        self.n += 1;
+    }
+};
+
+test "in a pair, a frame to the other machine crosses and its own peer never sees it; the other's frames arrive when due" {
+    var across: Across = .{};
+    var pair: turn.Pair = .{ .side = 0, .lookahead_ns = 1000, .sendFn = Across.take, .ctx = &across };
+    var card = Net{ .pair = &pair };
+    var ram = [_]u8{0} ** 256;
+    var d = card.device();
+    // The guest's SYN to the other machine, 10.0.2.16.
+    var theirs: [2048]u8 = undefined;
+    const seg = frames.fakeSegment(&theirs, frames.flag_syn, 1, 0, "");
+    var buf: [@sizeOf(Header) + 2048]u8 = @splat(0);
+    @memcpy(buf[@sizeOf(Header)..][0..seg.len], seg);
+    const frame = buf[@sizeOf(Header)..][0..seg.len];
+    @memcpy(frame[0..6], &frames.side(1).mac);
+    @memcpy(frame[30..34], &frames.side(1).ip);
+    card.speak(&d, &ram, buf[0 .. @sizeOf(Header) + seg.len]);
+    try testing.expectEqual(@as(usize, 1), across.n);
+    try testing.expectEqual(@as(?[]const u8, null), card.line.ready(1_000_000)); // no answer from the peer
+    // The other machine's frame, due at 500: not before, and then on the wire.
+    var f: turn.Frame = .{ .due = 500, .side = 1, .seq = 0, .len = @intCast(seg.len) };
+    @memcpy(f.bytes[0..seg.len], seg);
+    try testing.expect(pair.inbox.put(f));
+    card.pump(&d, &ram, 0);
+    try testing.expectEqual(@as(?u64, 500), card.nextDue(0));
+    try testing.expectEqual(@as(?[]const u8, null), card.line.ready(0));
+    card.pump(&d, &ram, 500);
+    try testing.expectEqualSlices(u8, seg, card.line.ready(500).?);
 }

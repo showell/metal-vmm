@@ -614,6 +614,13 @@ clock.
   remote entry point into `faults.Wire`.
 - *Done:* single-guest `same.sh` output is byte-identical to before.
 - *Runs it:* CC writes; **box verifies**.
+- *As written* (CC): `turn.Pair` (net.zig's `Net.pair`: `route` in `speak`,
+  `deliver` in `pump`, its inbox in `nextDue`), `turn.Hooks` (main.zig's
+  `Machine.turns`: `beforeMove` ahead of each tick and of owed volume time,
+  `capHalt` in `rest()`, `atNever` at `.never`, `Rested.both_idle`), and
+  `faults.Wire.holdRemote`, which refuses on a full wire rather than
+  pushing out. Both are null outside a pair. A pair is never snapshotted:
+  one side's snapshot is not the pair's (snapshot.zig's `borrowed`).
 
 **12b. `PAIR=`: fork and exec, the socket, TURN and START.**
 - *Files:* `src/main.zig`, `src/turn.zig`, `KNOBS.md`.

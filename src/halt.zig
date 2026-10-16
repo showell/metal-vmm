@@ -63,7 +63,9 @@ const msrFilter = processor.msrFilter;
 const ownTheMsrs = processor.ownTheMsrs;
 const deniedByFilter = processor.deniedByFilter;
 
-pub const Rested = enum { woken, never, off };
+/// `both_idle`: in a pair, this guest and the other's are halted with
+/// nothing that could wake either (turn.zig's `atNever`).
+pub const Rested = enum { woken, never, off, both_idle };
 
 /// What the processor says at a halt: whether interrupts are on (`sti`), and
 /// whether one can be injected at this instant.

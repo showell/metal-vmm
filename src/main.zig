@@ -54,6 +54,7 @@ const reports = @import("reports.zig");
 const loader = @import("loader.zig");
 const processor = @import("processor.zig");
 const halt = @import("halt.zig");
+const turn = @import("turn.zig");
 const tellTheFaults = settings.tellTheFaults;
 const count = settings.count;
 const knob = settings.knob;
@@ -316,6 +317,11 @@ pub const Machine = struct {
     /// In a pair (`PAIR`): the other machine is the client, so `consider`
     /// never connects this program's own.
     pair: bool = false,
+    /// **AND HOW IT TAKES TURNS** (turn.zig's `Hooks`; chunk 12b's socket
+    /// behind it): the clock never moves past the limit, and a halt with
+    /// nothing to wake it gives up the turn. Null outside a pair, where
+    /// nothing here changes.
+    turns: ?*const turn.Hooks = null,
     card: ?*net.Net = null,
     card_device: ?*virtio.Device = null,
     /// **THE PC-SHAPED MACHINE** (`TRANSPORT=pci`): the devices on a PCI bus,
@@ -531,6 +537,7 @@ const census = .{
     .{ "request", Holds.input, "the first request, read into `request_bufs` before the run's first exit; `asked` is what a restore must put back, and it is a value" },
     .{ "asked", Holds.value, "" },
     .{ "pair", Holds.value, "" },
+    .{ "turns", Holds.model, "" },
     .{ "card", Holds.model, "" },
     .{ "card_device", Holds.model, "" },
     .{ "bus", Holds.model, "" },
@@ -647,10 +654,34 @@ fn rest(vcpu: linux.fd_t, run: *kvm.Run, machine: *Machine) !Rested {
                 return .woken;
             },
             .move_to => |at| {
+                // In a pair, no further than the limit: there the turn
+                // goes to the other side, whose frames may wake this one
+                // sooner, and the halt asks again when it is back.
+                const t = machine.turns orelse {
+                    machine.time.ns = at;
+                    machine.pump();
+                    continue;
+                };
+                if (turn.capHalt(machine.time.ns, at, t.limit())) |cap| {
+                    machine.time.ns = cap;
+                    machine.pump();
+                    try t.yield(machine.time.ns, .{ .halted = at });
+                    machine.pump();
+                    continue;
+                }
                 machine.time.ns = at;
                 machine.pump();
             },
-            .never => return .never,
+            .never => {
+                const t = machine.turns orelse return .never;
+                switch (turn.atNever(t.other())) {
+                    .end_both_idle => return .both_idle,
+                    .give_up_turn => {
+                        try t.yield(machine.time.ns, .{ .halted = null });
+                        machine.pump();
+                    },
+                }
+            },
             .off => return .off,
         }
     }
@@ -688,6 +719,7 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
         // to the clock before the guest runs again: its spin on the used
         // ring would have counted that long.
         if (machine.volume) |v| {
+            if (machine.turns) |t| try t.beforeMove(machine.time.ns, v.owed_ns);
             machine.time.ns += v.owed_ns;
             v.owed_ns = 0;
         }
@@ -726,6 +758,8 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
         // **EVERY EXIT IS A TICK OF THIS MACHINE'S CLOCK.** The guest asked
         // the outside world for something, and in here that is the only thing
         // that makes time pass — see clock.zig.
+        // In a pair, not past the limit: the turn goes first (§4).
+        if (machine.turns) |t| try t.beforeMove(machine.time.ns, clock.per_question_ns);
         machine.time.asked();
         machine.exits += 1;
         machine.pump();
@@ -794,6 +828,10 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
                     },
                     .never => {
                         std.debug.print("metal-vmm: the guest halted with nothing that could wake it\n", .{});
+                        return machine.stopped orelse 0;
+                    },
+                    .both_idle => {
+                        std.debug.print("metal-vmm: both idle: this guest and the other's are halted with nothing that could wake either, so the pair ends\n", .{});
                         return machine.stopped orelse 0;
                     },
                     .off => {

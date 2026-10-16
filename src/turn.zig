@@ -10,6 +10,7 @@
 //! clock but the ones handed in: main.zig does those (chunk 12).
 
 const std = @import("std");
+const frames = @import("frames.zig");
 
 /// **WHERE THE OTHER SIDE IS**, as its last TURN said.
 pub const Status = union(enum) {
@@ -226,6 +227,127 @@ pub fn checkStart(latency_us: ?u64, set: []const []const u8) StartError!i96 {
     if (us == 0) return error.NoLookahead;
     for (set) |name| for (receiver_side) |r| if (std.mem.eql(u8, name, r)) return error.ReceiverSideFault;
     return @as(i96, us) * std.time.ns_per_us;
+}
+
+// ── the hooks main.zig and net.zig call (chunk 12a) ───────────────────────
+
+/// How many frames from the other machine may wait for their due.
+pub const inbox_frames = 64;
+
+/// **THE WIRE BETWEEN TWO MACHINES, AS ONE OF THEM SEES IT** (net.zig's
+/// `Net.pair`, null outside a pair): the frames its guest sends across, each
+/// due L after it is sent, and the inbox of the other's, delivered onto this
+/// side's Wire as they come due. Where each frame goes is `frames.route`'s.
+pub const Pair = struct {
+    side: u8,
+    lookahead_ns: u64,
+    /// Where a frame across goes: the socket (chunk 12b), or a test's list.
+    sendFn: *const fn (ctx: *anyopaque, f: *const Frame) void,
+    ctx: *anyopaque,
+    inbox: Inbox(inbox_frames) = .{},
+    seq: u64 = 0,
+    /// The due of the first frame sent across this turn: the other side's
+    /// wake, if it is halted (`limit`). The holder clears it at each turn.
+    first_sent_due: ?i96 = null,
+    /// Frames the guest broadcast that neither side's peer takes.
+    dropped_broadcasts: u64 = 0,
+
+    /// **A FRAME FROM THE GUEST**: across, to its own peer, to both, or
+    /// dropped, as `frames.route` says. True when its own peer is to answer
+    /// it.
+    pub fn route(self: *Pair, frame: []const u8, now: u64) bool {
+        switch (frames.route(frame)) {
+            .local => return true,
+            .cross => {
+                self.send(frame, now);
+                return false;
+            },
+            .both => {
+                self.send(frame, now);
+                return true;
+            },
+            .dropped => {
+                self.dropped_broadcasts += 1;
+                return false;
+            },
+        }
+    }
+
+    fn send(self: *Pair, bytes: []const u8, now: u64) void {
+        if (bytes.len > frame_max) return;
+        var f: Frame = .{ .due = @as(i96, now) + self.lookahead_ns, .side = self.side, .seq = self.seq, .len = @intCast(bytes.len) };
+        @memcpy(f.bytes[0..bytes.len], bytes);
+        self.seq += 1;
+        if (self.first_sent_due == null) self.first_sent_due = f.due;
+        self.sendFn(self.ctx, &f);
+    }
+
+    /// **THE OTHER MACHINE'S FRAMES THAT ARE DUE, ONTO THIS SIDE'S WIRE**, as
+    /// far as it has room: `hold` (anything with `holdRemote(bytes, due)
+    /// bool`) refuses when full, and the frame stays first in the inbox.
+    pub fn deliver(self: *Pair, line: anytype, now: u64) void {
+        while (self.inbox.pump(now)) |f| {
+            if (!line.holdRemote(f.data(), @intCast(f.due))) {
+                self.inbox.unpump(f);
+                return;
+            }
+        }
+    }
+
+    /// The inbox's next due after `now`, for the card's `nextDue`.
+    pub fn nextDue(self: *const Pair, now: u64) ?u64 {
+        const at = self.inbox.earliestAfter(now) orelse return null;
+        return @intCast(at);
+    }
+};
+
+/// **WHAT THE RUN LOOP ASKS OF A PAIR** (main.zig's `Machine.turns`, null
+/// outside one): how far this side may run, the other side's status, and
+/// giving up the turn, which returns once the turn is back. Chunk 12b's
+/// socket is behind it.
+pub const Hooks = struct {
+    ctx: *anyopaque,
+    limitFn: *const fn (ctx: *anyopaque) ?u64,
+    otherFn: *const fn (ctx: *anyopaque) Status,
+    yieldFn: *const fn (ctx: *anyopaque, clock: u64, status: Status) anyerror!void,
+
+    pub fn limit(self: Hooks) ?u64 {
+        return self.limitFn(self.ctx);
+    }
+
+    pub fn other(self: Hooks) Status {
+        return self.otherFn(self.ctx);
+    }
+
+    pub fn yield(self: Hooks, clock: u64, status: Status) anyerror!void {
+        return self.yieldFn(self.ctx, clock, status);
+    }
+
+    /// **BEFORE THE CLOCK MOVES `step` PAST `clock`** (an exit's tick, or
+    /// owed time paid): the turn given up while the move would take it past
+    /// the limit, as often as it takes (§4, "The holder gives up the turn").
+    pub fn beforeMove(self: Hooks, clock: u64, step: u64) anyerror!void {
+        while (self.limit()) |at| {
+            if (clock + step <= at) return;
+            try self.yield(clock, .running);
+        }
+    }
+};
+
+/// **A HALT'S MOVE, CAPPED BY THE LIMIT** (§4): the clock goes to `at`, the
+/// halt's wake, unless that is past the limit; then to the limit (never
+/// back past `now`), and the turn is given up there. Null: no cap.
+pub fn capHalt(now: u64, at: u64, lim: ?u64) ?u64 {
+    const l = lim orelse return null;
+    if (at <= l) return null;
+    return @max(now, l);
+}
+
+/// **AN EXIT MAY TICK** when the clock after it stays within the limit
+/// (none: always).
+pub fn mayTick(clock: u64, step: u64, at: ?u64) bool {
+    const lim = at orelse return true;
+    return clock + step <= lim;
 }
 
 // ── the two messages ──────────────────────────────────────────────────────
@@ -461,4 +583,109 @@ test "the messages round-trip, and a short or unknown one is refused" {
     try testing.expectError(error.Short, decode(""));
     try testing.expectError(error.UnknownTag, decode("X"));
     try testing.expectError(error.Short, decode(encode(.{ .frame = f }, &buf)[0..20]));
+}
+
+const Sent = struct {
+    list: [8]Frame = undefined,
+    n: usize = 0,
+    fn take(ctx: *anyopaque, f: *const Frame) void {
+        const self: *Sent = @ptrCast(@alignCast(ctx));
+        self.list[self.n] = f.*;
+        self.n += 1;
+    }
+};
+
+test "a pair's frames: unicast across, due L after it is sent; ARP to both; DHCP kept; other broadcasts dropped and counted" {
+    var sent: Sent = .{};
+    var pair: Pair = .{ .side = 1, .lookahead_ns = 1 * std.time.ns_per_ms, .sendFn = Sent.take, .ctx = &sent };
+    var out: [64]u8 = @splat(0);
+    // A TCP frame to the other machine, at 10.0.2.15.
+    @memcpy(out[0..6], &frames.side(0).mac);
+    frames.writeBe16(out[12..14], frames.ethertype_ipv4);
+    out[14] = 0x45;
+    out[23] = 6;
+    @memcpy(out[30..34], &frames.side(0).ip);
+    try testing.expect(!pair.route(&out, 5 * std.time.ns_per_ms));
+    try testing.expectEqual(@as(usize, 1), sent.n);
+    try testing.expectEqual(@as(i96, 6 * std.time.ns_per_ms), sent.list[0].due);
+    try testing.expectEqual(@as(?i96, 6 * std.time.ns_per_ms), pair.first_sent_due);
+    // To 10.0.2.2: the own peer's, nothing across.
+    @memcpy(out[30..34], &frames.server_ip);
+    try testing.expect(pair.route(&out, 7 * std.time.ns_per_ms));
+    try testing.expectEqual(@as(usize, 1), sent.n);
+    // ARP: both.
+    frames.writeBe16(out[12..14], frames.ethertype_arp);
+    try testing.expect(pair.route(&out, 8 * std.time.ns_per_ms));
+    try testing.expectEqual(@as(usize, 2), sent.n);
+    try testing.expectEqual(@as(u64, 1), sent.list[1].seq);
+    // A broadcast that is not DHCP: dropped.
+    frames.writeBe16(out[12..14], frames.ethertype_ipv4);
+    @memcpy(out[0..6], &frames.mac_broadcast);
+    try testing.expect(!pair.route(&out, 9 * std.time.ns_per_ms));
+    try testing.expectEqual(@as(u64, 1), pair.dropped_broadcasts);
+}
+
+const Line = struct {
+    held: [2][]const u8 = undefined,
+    dues: [2]u64 = undefined,
+    n: usize = 0,
+    pub fn holdRemote(self: *Line, bytes: []const u8, due: u64) bool {
+        if (self.n == self.held.len) return false;
+        self.held[self.n] = bytes;
+        self.dues[self.n] = due;
+        self.n += 1;
+        return true;
+    }
+};
+
+test "the other machine's frames reach this side's wire only once due, and wait in the inbox while the wire is full" {
+    var sent: Sent = .{};
+    var pair: Pair = .{ .side = 0, .lookahead_ns = 1, .sendFn = Sent.take, .ctx = &sent };
+    for ([_]i96{ 10, 20, 30 }, 0..) |due, k| _ = pair.inbox.put(frameAt(due, k, 'a' + @as(u8, @intCast(k))));
+    var line: Line = .{};
+    pair.deliver(&line, 9);
+    try testing.expectEqual(@as(usize, 0), line.n);
+    try testing.expectEqual(@as(?u64, 10), pair.nextDue(9));
+    pair.deliver(&line, 30);
+    try testing.expectEqual(@as(usize, 2), line.n); // the wire took two
+    try testing.expectEqual(@as(u64, 20), line.dues[1]);
+    try testing.expectEqual(@as(usize, 1), pair.inbox.n); // the third waits
+    try testing.expectEqual(@as(?u64, null), pair.nextDue(30)); // due, not after
+}
+
+const Script = struct {
+    limits: [4]?u64,
+    at: usize = 0,
+    yields: usize = 0,
+    fn limit(ctx: *anyopaque) ?u64 {
+        const self: *Script = @ptrCast(@alignCast(ctx));
+        return self.limits[self.at];
+    }
+    fn other(_: *anyopaque) Status {
+        return .running;
+    }
+    fn yield(ctx: *anyopaque, _: u64, _: Status) anyerror!void {
+        const self: *Script = @ptrCast(@alignCast(ctx));
+        self.yields += 1;
+        self.at += 1;
+    }
+};
+
+test "an exit that would take the clock past the limit gives up the turn first, until the limit allows it" {
+    var script: Script = .{ .limits = .{ 100, 150, 400, null } };
+    const hooks: Hooks = .{ .ctx = &script, .limitFn = Script.limit, .otherFn = Script.other, .yieldFn = Script.yield };
+    try hooks.beforeMove(90, 10); // to 100: within
+    try testing.expectEqual(@as(usize, 0), script.yields);
+    try hooks.beforeMove(100, 200); // to 300: past 100 and 150, within 400
+    try testing.expectEqual(@as(usize, 2), script.yields);
+    try testing.expect(mayTick(90, 10, 100));
+    try testing.expect(!mayTick(91, 10, 100));
+    try testing.expect(mayTick(1_000_000, 10, null));
+}
+
+test "a halt moves to its wake within the limit, and to the limit past it, never back" {
+    try testing.expectEqual(@as(?u64, null), capHalt(10, 50, 50));
+    try testing.expectEqual(@as(?u64, null), capHalt(10, 50, null));
+    try testing.expectEqual(@as(?u64, 40), capHalt(10, 50, 40));
+    try testing.expectEqual(@as(?u64, 10), capHalt(10, 50, 5));
 }
