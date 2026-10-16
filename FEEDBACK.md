@@ -11,6 +11,39 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: QUEUE 225 chunks 4, 5a and 5b done (zig-metal-unikernel `7b1c9cb`, `5c23f30`, `6127d87`)
+
+- **4, the table can hold a client (`7b1c9cb`).**
+  - Every connection now has a `Role` (accepted or initiated) and a `local_port`. `find` keys on all four parts of the socket pair. Each segment goes out from its connection's own port.
+  - LISTEN answers only on the table's own port. The port filter also accepts an initiated connection's port.
+  - `reserved_for_initiated` defaults to 0, so the server behaves as it always has. A kernel with a client sets it to 1.
+  - probe/gopher.zig's `nextReady` skips connections it initiated.
+  - Seen red: a `find` that ignores our port.
+- **5a, `connect` and SYN-SENT (`5c23f30`).**
+  - `Table.connect` takes a slot (the reserved one allowed) and the next ephemeral port, which counts up from 49152 and skips ours and any port in use. It sends <SEQ=ISS><CTL=SYN> with our MSS.
+  - `synSent` (pure, in tcp_arrives.zig) has five answers. `synSentArrives` acts on them:
+    - an acceptable SYN-ACK: ESTABLISHED, taking its window and MSS;
+    - an ACK of ISS or past SND.NXT: <SEQ=SEG.ACK><CTL=RST>;
+    - RST|ACK: refused, with nothing sent back;
+    - a simultaneous open: dropped and counted.
+  - A SYN-SENT connection is dispatched before the RST and SYN checks.
+  - Seen red: accepting SEG.ACK == ISS, and dispatching after the RST block.
+- **5b, `Deadlines` (`6127d87`).**
+  - `Deadlines{connect_ns, idle_ns, total_ns}` has no defaults. It is `connect`'s parameter.
+  - `pastDeadline` is pure. `transmitOne` acts on it first, as one of three new `Abandon`s, each with its own counter on the host line.
+  - **One change to 5a's behaviour:** a connection abandoned while still SYN-SENT is now deleted without a reset. That covers the connect deadline and the `max_retries` give-up (RFC 9293 §3.10.5, ABORT in SYN-SENT). Once past SYN-SENT it is reset as before.
+  - The SYN's first retransmit is at 25 ms, then doubles (25, 75, 175 ms after the SYN). The server keeps its 200 ms floor.
+  - tcp_check:
+    - SYN-SENT has its own row, `syn_sent_without_a_timer`, and `handshake_without_a_timer` is SYN-RECEIVED's only again;
+    - `deadline_passed` also covers a connection's own Deadlines;
+    - a free slot holding Deadlines breaks `closed_holds_a_deadline`.
+  - Each deadline fires in a scripted test at §5's metal values (150 ms, 1 s, 3 s).
+  - Seen red: connect arming no timer, which trips the new row; a 200 ms first SYN RTO; no deadline check in `transmitOne`, which trips `deadline_passed`; a reset sent from SYN-SENT.
+- **All three:** golden traces identical (803/803), tier 0 green, and the strings file holds the four new `tcp:` strings.
+- **13 `DEPARTS:` lines, not the plan's 12.** The extra one is in 5a: text on a SYN-ACK is not taken (RFC 9293 §3.10.7.3 queues it for the user). Nobody sends it, and taking it would need SYN-SENT to have a receive path. If you'd rather it were taken, say so.
+- **Still blocked:** 3b's RFC quotes. `www.rfc-editor.org` is still refused here (403 from the proxy, checked just now).
+- **Next:** chunk 6, the kernel client against the kernel server in tcp_sim.
+
 ## CC → the box, 2026-10-16: QUEUE 225 chunk 3a done; 3b half done, its RFC quotes blocked on the network (zig-metal-unikernel `e736447`, `05733b7`)
 
 - **3a, the four files (`e736447`).**
