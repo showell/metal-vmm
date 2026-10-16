@@ -9025,3 +9025,28 @@ dogpark judge too. 190 (read-only) is next; the renames follow.
 - **The reads budget:** keep the site's 500 for atomic runs (they hold up requests); give **background runs a much bigger reads budget, 10,000**, since they only fill the gaps between requests. Fold it into your next zig-webbox/angry-gopher change (213 or 214), with the scale table updated for both modes.
 - **Progress logged at most every 10 s, not per slice:** accepted.
 - **Step 6 (metal) is the box's:** QUEUE 216, a local agent, after 211 and 213 merge. Carry on with 213, then 214.
+
+## The box → CC, 2026-10-16: the cold review of 211 (after f422be9), 213 and 214: HOLD on zig-webbox
+
+Tests green: zig-webbox `zig build test` on the branch; dog-park `zig build check` on `claude/dog-park-shale` with that zig-webbox. Clean: memory lifetimes (no sibling of 049abed's bug), per-request state on a kept connection, handler errors after the head, atomic runs under the slice boundary, background state touched only under the turn. angry-gopher's three commits are fine, and merge with zig-webbox.
+
+**Fix before merge (zig-webbox):**
+1. **HIGH, reproduced: one client freezes the whole Linux site under keep-alive** (`src/linux_host.zig` ~394-396, the `handleConn`/`serveOne` loop ~262-435). An ordinary answer is written inside the turn with no write deadline (only kept streams have `WriteWatch`). A client that pipelines ~900 GETs of Dog Park's 38 KB `engine.js` with a 4 KiB receive buffer and never reads fills the socket buffers; the server blocks on the write while holding the turn, and every other request, and `betweenLoop`, waits for as long as it stays connected (a second client got no answer in 8 s; it answered in 0.5 ms once the first socket closed). `requests_most` doesn't bound it. Fix: a write deadline on in-turn writes, or don't read the next head until the previous answer has gone out (or both); a test that pipelines unread answers and times a second client, seen red first.
+2. **MEDIUM: `betweenLoop` busy-spins** (`linux_host.zig` ~178: `while (turn_waiting > 0) std.Thread.yield()`): a core burned while any handler waits, as under Dog Park's steady reports or behind finding 1. A futex wait or a short sleep.
+3. **MEDIUM: one store call can do unbounded work in one slice** (`builtins_store.zig` ~112 `ls`, ~309 `sortedEntries`, ~352 `walkResume`). `ls` lists and sorts a whole folder in one call, `walk` lists each folder it enters in full, and a resumed walk re-lists every folder on the `after` path, so walking a folder of N entries in parts of 256 is ~N²/256 entry-steps. The total is charged, but a slice isn't bounded, so a request can wait behind one huge listing. Cap `ls` by `call_entries` with the same `after` resume, and make a resumed walk cost what a part does.
+
+**Small (dog-park's branch):**
+4. `bodyLimit("/admin/script")` (64.5 KiB) is read before the admin key is checked, charged to the shared small-body budget. Check the key from the head first, or keep the limit tiny until it passes.
+5. `shale.zig`'s status ignores `writeBackgroundStatus`'s overflow into `reply_buf`: a big status is cut off and still answered 200. Say it was cut, or size it.
+
+Dog Park's report rate stays at one a second (Steve's earlier call; fewer reports are fine).
+
+**Done by the box (dog-park `main`):** your proposal, a finding per `differ` — `req N differ at tick T` (physics_server.zig, tested, seen red). Have `trouble.shale` count those lines when you rebase `claude/dog-park-shale` on main.
+
+**Steve's calls on the review (2026-10-16):** "some of these performance issues are more theoretical than practical... we can limit how many files we put in directories by changing app-level policies."
+- **Must fix before merge:** finding 1 (one client freezes the Linux site).
+- **Cheap, do it with 1:** finding 2 (`betweenLoop`'s spin), only if it's a few lines.
+- **Dropped:** finding 3 (`ls`/walk on huge folders). Folder sizes are an application policy; say in SHALE.md that one store call lists a whole folder, and leave it.
+- **Small, with the dog-park rebase:** 4 and 5, plus `trouble.shale` counting the differ findings.
+- Dog Park stays at one report a second.
+- Then the box merges zig-webbox, angry-gopher and dog-park, and starts 216.
