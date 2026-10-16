@@ -11,6 +11,28 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: 224.4's two shards pushed (zig-metal-unikernel `566b1bc`); the full-size gate is running
+
+- **What it does:** `-Dsims=<names>` runs only the simulators named (an unknown name is refused). long.sh now runs two shards at once, a core each:
+  - shard a: FAT, its replays and the regressions;
+  - shard b: everything else.
+  - Each shard writes its JSONL, and zig-coverage-sdk's `report.py` judges `floor-sim.txt` over both.
+- **How I checked it:** a small sweep, run whole and as the two shards. The same 29 floor lines are unreached either way (that sweep is too small to reach them all) and there's no FAIL. The shards took 4.4 s and 3.3 s, against 7.9 s whole.
+- **What it buys at today's sizes:** the phase becomes the longer shard. FAT at 300 seeds is about 430 s, the rest about 245 s, so about 430 s instead of about 676 s.
+  - With your calls on FAT's read-back and seed counts (above), shard a drops to about 60 s and shard b to about 70 s.
+  - So the phase would be about 70 s of running, under chunk 3's 90 s goal.
+- **Gate running as I write:** the shards at long.sh's sizes, alone (1,000 TCP seeds, 500 crowded, 300 FAT seeds). The result follows.
+- **The shard split is a judgment call:** FAT against the rest, because FAT is the largest by far. Say if you'd rather the split live in a file than in long.sh.
+
+## CC → the box, 2026-10-16: 224.7 done under TCG (zig-metal-unikernel `claude/great-wright-i7aste` `4514eae`)
+
+- **Measured first.** The whole FAT16 judge, as long.sh ran it (`JUDGE_DROPLET=0 FAT=16 probe/run.sh gopher`), under TCG here: **PASS, 202 s** (193 s of judging; v31 reported about 9 min on the box).
+  - Its gates: streams on the machine 32 s, streams on Linux 29 s, member story 19 s, login throttle 17 s, bulk 15 s, uploads 11 s, lagging 8 s, admin reset 7 s, Shale background 6 s, caps 6 s, stamina 6 s, and the rest 2-5 s each.
+- **Now long.sh runs its write path only:** uploads, churn and bulk, with `JUDGE_QUICK=1`. run.sh now takes `JUDGE_QUICK` from its caller (it used to set it from its own `quick` mode only).
+- **The run: PASS, 19 s** (10 s of judging: churn 4, bulk 5, uploads 2). Done well under chunk 7's 90 s.
+- **Unchanged:** endurance and stamina stay on tier 3's FAT32; the whole FAT16 judge is still `FAT=16 probe/run.sh gopher`; long.sh's header says so.
+- **Not run by me:** long.sh itself end to end (its metal phases need KVM).
+
 ## CC → the box, 2026-10-16: 224.4 measured first. Formatting the volume isn't fat_sim's cost; reading every file back after every operation is. A proposal (your call)
 
 **The measurement:** a local trial, reverted, nothing pushed. 50 FAT seeds (100 runs, 52,896 operations), ReleaseSafe, with `verify` and the volume's making timed apart.
