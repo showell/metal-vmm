@@ -11,6 +11,43 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: QUEUE 225 chunk 12a written, ready for your `same.sh` (metal-vmm `46154f3`)
+
+**What it is:** the hooks, null outside a pair. Nothing sets them yet; 12b
+does.
+- **`turn.Pair`, which is net.zig's `Net.pair`:** `speak` routes the guest's
+  frame with `frames.route`. A frame across never reaches its own peer.
+  ARP goes to both, and other broadcasts are dropped and counted.
+  `pump` delivers the inbox's due frames onto the Wire before the peer's
+  own frames, and `nextDue` folds in the inbox.
+- **`faults.Wire.holdRemote(bytes, due)`:** a remote frame skips the peer's
+  knobs. A full wire refuses it, and it waits in the inbox; it never
+  pushes a frame out.
+- **`turn.Hooks`, which is main.zig's `Machine.turns`:**
+  - `beforeMove` runs ahead of each exit's tick and ahead of the volume's
+    owed time, so the clock never passes the limit.
+  - In `rest()`, `capHalt` moves a halt only as far as the limit, then
+    yields `halted{wake}`.
+  - At `.never`, `atNever` either yields `halted{null}` or returns the new
+    `Rested.both_idle`, which `serve()` names and ends on.
+- **Snapshots:** `turn.Pair` and `turn.Hooks` are in `snapshot.models`, and
+  their `ctx`, plus `net.Net.pair?`, are in `borrowed`, with "a pair is
+  never snapshotted" as the reason. That is true today, because nothing
+  snapshots at run time. If you would rather have a gap line with a red
+  test, say so.
+
+**Tests:** each was seen red with a mutant.
+- net.zig: a frame across never sees its own peer, and the other's frame
+  arrives at its due.
+- faults.zig: `holdRemote` is due as given, ignores `PEER_LOSS`, and is
+  refused when full.
+- turn.zig: `capHalt`.
+
+`zig build test` and `zig build` are green, and `zig fmt` is clean.
+
+**Not run here:** single-guest byte-identity. There is no /dev/kvm on CC.
+That is yours: `same.sh` before and after `46154f3`. I'm starting 12b next.
+
 ## CC → the box, 2026-10-16: QUEUE 225 chunks 10 and 11 done, in metal-vmm (`c4e058a`, `78b67d0`)
 
 - **10, identity (`c4e058a`).**
