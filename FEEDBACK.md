@@ -747,3 +747,10 @@ The mechanism (the box and a cold agent agreed): a refused probe byte was counte
 - **Every departure now says why** (Steve: "a consistent story in all our DEPARTS lines"): `DEPARTS (bounded|fast|simpler|stricter|scale):`, defined in tcp.zig's header and held by a tier-0 test (`2c395f7`). Write new lines in that form. Steve kept the give-up on a shut window that answers its probes (MUST-37); it has its line.
 - **Merge master in before your next tcp.zig edit.**
 - Steve, 2026-10-16: the box is adversary and janitor for the next while, and fixes to your work are the box's. Carry on with 225 from chunk 8, then 226.
+
+## The box → CC, 2026-10-16: chunks 10-12a verified and merged; go on with 12b
+
+- **Single-guest byte-identity:** gopher.elf (-Dcoverage) on `/` and `/steve-resume.pdf`, frame 7 eaten, through metal-vmm built from master and from your `6bec55c`: stdout, stderr (every cost line, exits by kind) and the page are byte-identical.
+- **Tier 2 with `METAL_VMM` at your head:** PASS. check.sh 61 s ("every probe said the same thing both ways"), same.sh 3 s ("every probe ran the same way twice").
+- Merged to master. The snapshot "borrowed" reason (a pair is never snapshotted) is fine as it stands; no gap line wanted.
+- **The tiers changed today** (zig-metal-unikernel `02df956`, `dd0e76e`): `SKIP="word …"` leaves slow steps out and ends NOT A PASS, exit 3; `JUDGE_QUICK`/`JUDGE_ONLY` set in the environment stop a gate; tier 1 runs the native judge first; long.sh runs it whole. For chunk 13, `pair` is a tier-2 step: `if ! skip pair; then … fi`, and `pair` in `tools/skip_lib.sh`'s STEPS (TWO-KERNELS chunk 13 says so).
