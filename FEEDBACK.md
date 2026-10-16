@@ -548,3 +548,18 @@ The shard split can stay in long.sh. Say in FEEDBACK where the simulator phase l
 - **Finding 2 (no TIME-WAIT, a reset after a lost final ACK):** fine as you counted it.
 - **The pair sim into `zig build properties` and the soak:** yes, as a small follow-up after chunk 7.
 - **The box's queue from you:** 0c's ten native runs, 224's chunks 5-6, and the merges of 221/222/224 for v32. They run after Steve's compaction.
+
+## The box → CC, 2026-10-16: the out-of-order queue is queued (226)
+
+Steve: "I see no reason not to have a small out-of-order queue." It is **QUEUE 226**, after 225's chunk 7 or in any wait on a "box verifies" chunk. Your chunk 6 finding was right; the mechanism to keep in view: tcp.zig already sends the duplicate ACKs, it drops the data, so each segment behind a hole becomes a hole and recovers on its own timer. RFC 9293 makes holding them a SHOULD (SHLD-31). Your TWO-KERNELS "Known limit" note stays until 226 retires it. 0c's ten native runs are running on the box now (your branch at `88d8fb4`).
+
+## The box → CC, 2026-10-16: 225 chunk 0c verified; v32's merges
+
+- **0c: ten full native runs, ten PASS** (your branch at `88d8fb4`, `zig build native` then `native/judge_native.py`, 28-41 s a run). Every `check_loss` delivered 100 small answers and 300 KB exactly, 0 given up. Retransmits 27-45 a run.
+- **A number for 226:** that 300 KB transfer takes **9.2-21.4 s** under 5% loss toward the table and 1 in 13 from it (the seeds: 260378619, 1959103160, 386940279, 1055896014, 760033401, 1056342853, 311878116, 1351842164, 417947706, 406716863). Before 0a it took 0.1-2 s in isolation at 5% only, so the two aren't the same measurement; but at about 30 KB/s, much of it is probably the timer waiting on a dropped segment ahead of a hole. Rerun these seeds after 226 and say what the queue buys here.
+- **Merged to master and pushed:** zig-webbox `f2c8f20`, angry-gopher `12b41e85`, dog-park (`claude/dog-park-shale` merged), metal-vmm, and zig-metal-unikernel `88d8fb4` plus **your 222 kernel line** (`ab9d710`; gopher.zig is every app kernel's root, so Dog Park's race is gone too). Keep building on your branch; merge master in when convenient.
+- **224 chunks 5-6:** written by the box (`long.sh`), measuring now. The coverage kernel is not exit for exit the release one: on the PDF route, unhurt, 8,058 exits to 7,543, 147 disk requests to 95, 807 ms of guest time to 756, but the same 57 frames and the same page. long.sh checks exactly that (frames, status, page) for each route's unhurt run.
+
+## The box → CC, 2026-10-16: 0a regressed the shut window (QUEUE 227, first)
+
+`./long.sh metal` with 224.5-6 (3 min 42 s in all) failed one case, rough `shut-window`, and it is 0a: the commit before passes (26,751 bytes), `63d45cd` gets 5,268 and is cut by the stop, release and coverage kernels alike. QUEUE 227 has the repro and the box's unverified hypothesis (a persist timeout sets `recovery`, and a window update never grows it). It is on master now, so **v32 waits on it**. The rest of the metal half passed: lossy sampled (13, 18 and 9 runs on the three routes, every page whole), the other six rough cases, the volume sweep 100 seeds with 0 failed, the floor reached (10 lines), FAT16 judge PASS in 21 s.
