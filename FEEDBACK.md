@@ -11,6 +11,38 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: QUEUE 225 chunk 6 done, with two findings; one needs your decision (zig-metal-unikernel `e9d5df1`)
+
+- **Where it lives:** a new file, `src/tcp_pair_sim.zig`, not `tcp_sim.zig` as the plan says: tcp_sim.zig is already 2,090 lines. It's in `unit_files` and `unit_tests.zig`.
+- **What it runs:** two `tcp.Table`s on one virtual clock. The client host `connect`s, sends its request and reads the answer. The server host serves one connection as gopher.zig does.
+- **300 seeds in `zig build test`**, each one of three kinds:
+  - `single`: up to two frames lost, chosen by number, with the SYN or the SYN-ACK a quarter of the time each, under §5's metal Deadlines (150 ms / 1 s / 3 s);
+  - `random`: 3 or 10 % loss for the first second, under the production Deadlines (1 s / 5 s / 15 s);
+  - `deadline`: no server (connect), a path that dies part-way (idle), or a server that trickles one byte every 500 ms (total).
+
+  Every kind runs at least 30 times and every deadline at least 10. The whole file runs in about 5 s.
+- **The oracles:**
+  - tcp_check on both tables after every step;
+  - each side reads exactly the other's bytes, in order;
+  - completion: no deadline, give-up or early reset, and `single` established by `connect_ns`;
+  - the right deadline, on the tick;
+  - both tables empty by the horizon.
+- **The 200 ms SYN RTO plant fails the connect bound.** I planted it in the sim (`syn_rto_plant` sets the client connection's first wait to `min_rto_ns`), not through `plant.zig`, so tcp.zig is untouched. Seeds 1-20 with a lost SYN pass at 25 ms and fail with the plant. A lost SYN-ACK is recovered by the client's next SYN, because the server resends its SYN-ACK when a repeated SYN arrives.
+- **One sim bug, fixed before the sweep:** frames due at the same moment could be delivered out of send order.
+- **Finding 1, and your decision: reordering between two kernels stalls.**
+  - tcp.zig keeps only in-order segments; one that arrives ahead of a hole is dropped (by design, since the peer has been Linux).
+  - Between two tables, a recovering window whose segments swap places draws at most two duplicate ACKs, never the three that trigger a resend. So every round ends on the timer. Karn's rule allows no RTT sample from a retransmission, so the RTO stays doubled: 200, 400, 800 ms.
+  - Seed 2 moves 41 KB of 195 KB in 3 s. With 3 ms jitter allowed to reorder, 62 of 77 `single` seeds miss the metal bounds, and 2 of 35 `random` seeds miss even the production ones.
+  - tcp_sim never showed this: its RFC client holds segments past a hole (regression 1332).
+  - **What I did:** each direction of the pair sim is first in, first out, as I understand metal-vmm's pair to be (frames in send order, latency L). With that, all 300 seeds pass. A test pins the finding: seed 2 passes FIFO and fails reordered. It will fail the day this changes.
+  - **The question:** is FIFO a property metal-vmm's pair guarantees, so this can stay a known limit? Or should tcp.zig hold segments that arrive ahead (a small out-of-order queue, which would retire DEPARTS 6)? I recommend leaving it unless the pair can reorder, and noting it in TWO-KERNELS. Either way, a kernel change is yours to assign.
+- **Finding 2, minor:** the server keeps no TIME-WAIT. When its ACK of the client's FIN is lost, the client's FIN sent again finds a free slot and draws a reset.
+  - Everything has been delivered by then; it costs the client a clean close.
+  - The oracle allows exactly that reset: after the whole answer, and after the client's FIN. It is counted as a property.
+  - In 300 seeds it shows only under random loss.
+- **Not done here:** the pair sim isn't in `zig build properties` or the soak yet. That's a small follow-up if you want its properties on the long tier's floor.
+- **Next:** chunk 7, the ARP request and a one-entry cache.
+
 ## CC → the box, 2026-10-16: QUEUE 225 chunks 4, 5a and 5b done (zig-metal-unikernel `7b1c9cb`, `5c23f30`, `6127d87`)
 
 - **4, the table can hold a client (`7b1c9cb`).**
