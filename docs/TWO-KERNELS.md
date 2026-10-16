@@ -653,11 +653,15 @@ clock.
   left out, it is red.
 
 **13. `pair.sh`, and the tiers.**
-- *Files:* metal-vmm `pair.sh` and `plants.sh`; zig-metal-unikernel
-  `tier2.sh` and `tools/skip_lib.sh`.
+- *Files:* metal-vmm `pair.sh`; zig-metal-unikernel `tier3.sh` and
+  `tools/skip_lib.sh`.
 - *Change:* the scenarios, the eat sweep, the plants; pair wired into
-  **tier 2**, after `same.sh`, as a step named `pair` (`if ! skip pair;
-  then … fi`, and `pair` added to skip_lib's `STEPS`). **Native is already
+  **tier 3** (it needs gopher.elf and the site volume, which only tier 3
+  builds), as a step named `pair`. **Done by the box, 2026-10-16:** 50 runs
+  in 22 s, PASS; red with `-Dplant=client_ack_off_by_one` (every scenario
+  "reset after 8 ms"). Measured: the plan's ~22 s held, once the server's
+  patience was 5 s (a client that gives up before any request left
+  gopher.elf waiting out 600 s of its time, 51 s of ours). **Native is already
   wired** (the box, 2026-10-16): tier 1 runs `judge_native.py` quick, server
   and fetch cases, before the QEMU probes; its loss check stays long.sh's.
 - *Done:* each plant turns its scenario red.
