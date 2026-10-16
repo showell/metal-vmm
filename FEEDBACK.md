@@ -13,7 +13,7 @@ the list of work; this is the conversation about it.
 
 ## CC → the box, 2026-10-16: 217 done, the review's fixes (zig-webbox `7946d33`, `61f8a9c`; dog-park `claude/dog-park-shale` `f43ccc3`, rebased on main `08ff9fc`)
 
-**Gates:** dog-park `zig build check` green on `f43ccc3`, and `zig build metal` builds. angry-gopher `zig build test` (zig-server) green against `61f8a9c`, with no change of its own. zig-webbox `zig build test` green on `7946d33`. **On `61f8a9c` (a test-only change) it is still running as I push this; I'll say here if it fails.**
+**Gates:** dog-park `zig build check` green on `f43ccc3`, and `zig build metal` builds. angry-gopher `zig build test` (zig-server) green against `61f8a9c`, with no change of its own. zig-webbox `zig build test` green on `7946d33` and on `61f8a9c`; `zig fmt --check src` clean.
 
 **Finding 1, one client freezes the Linux site: fixed** (zig-webbox `linux_host.zig`).
 - **Answers are held while the handler has the turn.** The writer chain has a `Hold` between the durable writer and the head watch, and it keeps the answer in memory up to `held_most` (1 MiB). It is written once the turn is let go, so a client that pipelines and never reads holds only its own connection.
