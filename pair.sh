@@ -63,9 +63,18 @@ want() {
     cp "$SITE" "$WORK/single.img"
     rm -f "$WORK/single.page"
     TRANSPORT=pci WIRE_LATENCY_US=1000 PEER_BODY="$WORK/single.page" \
-        timeout 60 "$VMM" "$GUESTS/gopher.elf" "$WORK/single.img" "" "$1" > /dev/null 2>&1
-    [ -f "$WORK/single.page" ] || { echo "pair.sh: no page from the single-guest run of $1"; exit 2; }
+        timeout 60 "$VMM" "$GUESTS/gopher.elf" "$WORK/single.img" "" "$1" > /dev/null 2>&1 || return 1
+    [ -s "$WORK/single.page" ] || return 1
     fnv "$WORK/single.page"
+}
+# **THE ORACLE OR NOTHING** (the cold review): an empty hash would turn
+# every page check off, so a page with no hash from its single-guest run
+# stops the gate before any pair runs (exit 2, NOT RUN).
+oracle() {
+    local h
+    h=$(want "$1") || true
+    [[ "$h" =~ ^[0-9a-f]{16}$ ]] || { echo "pair.sh: NOT RUN: no page hash from the single-guest run of $1 (got '$h')" >&2; exit 2; }
+    echo "$h"
 }
 
 # pair <tag> <path> <port|ip:port> [VAR=value …]: one pair run; sets code,
@@ -94,14 +103,42 @@ pair() {
     outcome=$(grep -a "outcome:" "$WORK/$tag.client" | sed 's/^ *//')
 }
 
-# expect <tag> <code> [hash]: the run's code, and its page's hash if given.
+# lost <tag> <side>: the frames that side's wire lost, as metal-vmm counted
+# them ("#5", "#3, #4, …"), from the `wire:` line before its `pair side` line.
+lost() {
+    awk -v s="$2" '/^wire: /{w=$0} $0 ~ "^metal-vmm: pair side "s":" {print w}' "$WORK/$1.err" |
+        sed -n 's/.* lost (\(.*\)), .*/\1/p'
+}
+
+# expect <tag> <code> <hash|-> [eat side n]: the run's code, the word its
+# outcome begins with (each code has one), and, for a code that delivers,
+# the page's hash and a server that stopped on its own one-request setting
+# rather than on PATIENCE_S. With an eat named, metal-vmm must say that
+# side's wire lost exactly that frame: an eat that never fired would pass
+# as an unhurt run.
 expect() {
-    local tag=$1 want_code=$2 want_hash=${3:-}
-    if [ "$code" != "$want_code" ]; then
-        echo "  FAIL $tag: exit $code, want $want_code ($outcome)"; failed+=("$tag"); return
+    local tag=$1 want_code=$2 want_hash=$3 side=${4:-} n=${5:-} word
+    case "$want_code" in 0) word=ok ;; 3) word=connect_deadline ;; 4) word=idle_deadline ;; 9) word=no_arp ;; esac
+    if [ "$code" != "$want_code" ] || [[ "$outcome" != "outcome: $word "* ]]; then
+        echo "  FAIL $tag: exit $code, want $want_code, $word ($outcome)"; failed+=("$tag"); return
     fi
-    if [ -n "$want_hash" ] && ! echo "$outcome" | grep -q "fnv1a $want_hash"; then
+    if [ "$want_hash" != - ] && ! echo "$outcome" | grep -q "fnv1a $want_hash;"; then
         echo "  FAIL $tag: the page is not the single-guest run's ($outcome; want fnv1a $want_hash)"; failed+=("$tag"); return
+    fi
+    if [ "$want_code" = 0 ] && grep -q "rested .* idle, so the run ends" "$WORK/$tag.err"; then
+        echo "  FAIL $tag: the server ended on PATIENCE_S, not on its own one-request setting"; failed+=("$tag"); return
+    fi
+    if [ -n "$side" ] && [ "$(lost "$tag" "$side")" != "#$n" ]; then
+        echo "  FAIL $tag: side $side's wire lost '$(lost "$tag" "$side")', not #$n: the eat did not fire as named"; failed+=("$tag"); return
+    fi
+}
+
+# within <tag> <lo> <hi>: the outcome's "after N ms" between lo and hi.
+within() {
+    local ms
+    ms=$(echo "$outcome" | sed -n 's/^outcome: [a-z_]* after \([0-9]*\) ms.*/\1/p')
+    if [ -z "$ms" ] || [ "$ms" -lt "$2" ] || [ "$ms" -gt "$3" ]; then
+        echo "  FAIL $1: let go after '${ms}' ms, want $2-$3 ($outcome)"; failed+=("$1")
     fi
 }
 
@@ -111,24 +148,31 @@ crossing() {  # crossing <tag> <side>: that side's frames across, from its pair 
 
 echo "── unhurt, twice each, against the single-guest page"
 for path in / /steve-resume.pdf; do
-    h=$(want "$path")
+    h=$(oracle "$path") || exit 2
     t=$(echo "$path" | tr / _)
     pair "unhurt$t" "$path" 80; expect "unhurt$t" 0 "$h"
+    [ -z "$(lost "unhurt$t" 0)$(lost "unhurt$t" 1)" ] || { echo "  FAIL unhurt$t: a frame was lost"; failed+=("unhurt$t"); }
     pair "again$t" "$path" 80; expect "again$t" 0 "$h"
     for x in client server err; do
         cmp -s "$WORK/unhurt$t.$x" "$WORK/again$t.$x" || { echo "  FAIL $path: run twice, the $x output differs"; failed+=("same$t"); }
     done
     echo "  $path: $(echo "$outcome" | sed 's/^outcome: //' | cut -d';' -f1-2)"
 done
-big=$(want /steve-resume.pdf)
+small=$(oracle /) || exit 2
+big=$(oracle /steve-resume.pdf) || exit 2
 
 echo "── the SYN eaten, a port nobody listens on, an address nobody has, a dead path"
-pair syn1 / 80 PAIR_CLIENT_WIRE_EAT=2; expect syn1 0
-pair syn2 / 80 PAIR_CLIENT_WIRE_EAT=2,3; expect syn2 0
-pair syn3 / 80 PAIR_CLIENT_WIRE_EAT=2,3,4; expect syn3 3
-pair silent / 81; expect silent 3
-pair no-arp / 10.0.2.99:80; expect no-arp 9
-pair idle / 80 WIRE_EAT=3-9999; expect idle 4
+# The deadlines are 150 ms to connect and 1 s idle; each is seen by the
+# turn of the loop after it passes, a few ms late at most.
+pair syn1 / 80 PAIR_CLIENT_WIRE_EAT=2; expect syn1 0 "$small" 1 2
+pair syn2 / 80 PAIR_CLIENT_WIRE_EAT=2,3; expect syn2 0 "$small"
+[ "$(lost syn2 1)" = "#2, #3" ] || { echo "  FAIL syn2: the client's wire lost '$(lost syn2 1)', not #2, #3"; failed+=(syn2); }
+pair syn3 / 80 PAIR_CLIENT_WIRE_EAT=2,3,4; expect syn3 3 -; within syn3 150 160
+[ "$(lost syn3 1)" = "#2, #3, #4" ] || { echo "  FAIL syn3: the client's wire lost '$(lost syn3 1)', not #2, #3, #4"; failed+=(syn3); }
+pair silent / 81; expect silent 3 -; within silent 150 160
+pair no-arp / 10.0.2.99:80; expect no-arp 9 -; within no-arp 150 160
+pair idle / 80 WIRE_EAT=3-9999; expect idle 4 -; within idle 1000 1020
+grep -q "lost (#3, #4" "$WORK/idle.err" || { echo "  FAIL idle: the server's frames after the SYN-ACK were not the ones lost"; failed+=(idle); }
 echo "  $runs runs so far"
 
 echo "── /steve-resume.pdf, one frame lost, each side's first 12 and last 8 in turn"
@@ -139,7 +183,7 @@ for side in 1 0; do
     for n in $(seq 1 "$total"); do
         [ "$n" -le 12 ] || [ "$n" -gt $((total - 8)) ] || continue
         pair "eat$side-$n" /steve-resume.pdf 80 "$knob=$n"
-        expect "eat$side-$n" 0 "$big"
+        expect "eat$side-$n" 0 "$big" "$side" "$n"
     done
     echo "  side $side ($([ $side = 1 ] && echo client || echo server)): $total frames across, $(( total < 20 ? total : 20 )) lost in turn"
 done
