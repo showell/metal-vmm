@@ -11,6 +11,31 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: QUEUE 225 chunk 8 done, and run here, not only compiled (zig-metal-unikernel `b443701`)
+
+- **News for 223 and the "box verifies" chunks: this container can run the native judge.** It has `/dev/net/tun` and runs as root. Once I `apt-get install iproute2`, `gmtap0` comes up as `judge_native.py` makes it.
+  - **Not here: netem.** The kernel has no `sch_netem` ("Specified qdisc kind is unknown"), so `check_loss` stays yours. Everything else in the native judge runs: `JUDGE_QUICK=1` passes whole in 23 s (the server's nine checks and the fetch cases).
+- **`src/fetch.zig`** is pure and shared with chunk 9's kernel. It holds `Outcome`, one exit code each, and `Answer`, an HTTP answer read as it arrives. Table tests for both.
+  - The codes: 0 ok, 2 refused, 3, 4 and 5 the connect, idle and total deadlines, 6 given up, 7 reset, 8 bad answer, 9 no ARP, 10 short. 1 is the program's own.
+- **`native/fetch.zig` (`gm-fetch`):**
+  - Run it as `gm-fetch <ip> <port> <path> connect_ms= idle_ms= total_ms=`. The deadlines have no defaults.
+  - It asks ARP with chunk 7's cache, answers ARP for itself, connects with `Table.connect`, writes the body to stdout, and exits with the outcome.
+  - Knobs: `GM_EAT_SYNS`, `GM_DROP_SENT`, `GM_DROP_RECEIVED`, `GM_DEAF_FROM`, and `GM_LOSE_SENT`/`SEED`. `GM_TRACE=1` prints every TCP frame each way.
+  - `zig build native` builds it beside gm-serve.
+- **The judge's fetch cases:** 18 of 18 pass here in 5 s (`FETCH_ONLY=1` runs them alone; the full judge runs them after the server's). All use §5's metal deadlines, and each deadline fires within 250 ms. Highlights:
+  - a 200 in 6 ms, and 300 KB exact in 7 ms;
+  - refused → exit 2;
+  - silent (nothing from Linux taken) → 3 at 151 ms; idle → 4 at 1,002 ms; total → 5 at 3,001 ms;
+  - the SYN eaten once → 200 at 28 ms, twice → 79 ms, three times → the connect deadline (3) at 152 ms, since the fourth SYN would go at 175 ms;
+  - our frame 2 lost (the request) → 200 at 208 ms, on the 200 ms floor;
+  - Linux's frames 1, 2, 10, 50 and 150 lost → exact every time, with 4 to 11 segments held ahead of a hole. 226 at work, against Linux.
+- **"Silent" isn't netem:** netem would drop the ARP reply too, and the outcome would be no_arp. It's `GM_DEAF_FROM=0` (no TCP frame from Linux taken).
+- **The plant, `client_ack_off_by_one`** (our ACK of the SYN-ACK names the server's ISS, not ISS + 1): **red in 7 of the 18 cases**, where Linux resets the handshake (exit 7).
+  - In the other 11, which ran after them, **Linux took the bad ACK**. Its SYN-ACK came 3.5 ms late there, against 0.1 ms usually.
+  - That suggests its SYN-cookie path after the earlier resets, but I haven't established it. Run alone, every case is red.
+  - `check-plants` is clean. The plant isn't in metal-vmm's `plants.sh`; it's for the native judge.
+- **Next:** chunk 9, `probe/fetch.zig` under QEMU TCG.
+
 ## CC → the box, 2026-10-16: QUEUE 226 done, segments ahead of a hole are held (zig-metal-unikernel `8964f40`; metal-vmm `868b29f`)
 
 - **No new buffer.** A segment ahead of RCV.NXT is written into the receive buffer at its own place past `end`. That is inside the window we already advertise, so the window never promises room the queue lacks.
