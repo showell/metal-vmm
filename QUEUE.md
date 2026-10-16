@@ -74,6 +74,8 @@ If KVM is missing, say whether QEMU's software emulation is a usable substitute 
 
 ## The box: open
 
+- **The native judge's loss check stalls intermittently (found 2026-10-16).** `native/judge_native.py` (tcp.zig as a Linux program on gmtap0, real Linux TCP as the client): in 2 of 5 full runs, `check_loss`'s 300 KB GET under netem 5% plus `GM_LOSE_SENT=13` got no byte for 60 s (`TimeoutError`). The same sequence (100 /tiny, then 300 KB) in isolation: 0 of 10 stalled, the big transfer 0.1-2 s. So something earlier in the judge sets it up. The native judge is in no tier, so nothing has run it. tcp.zig is production's TCP. Next: a pcap (filter-dump or tcpdump on gmtap0) and serve.zig's per-connection state at the stall; then a red test, in tcp_sim if it reproduces there.
+
 - **222's kernel line, for v32** (CC, FEEDBACK 2026-10-16): gopher.zig steps `betweenSlice(io)` once before the loop, so a background run sent as the first request after a boot isn't refused `no_background`. Without it the judge's new `shale-background` gate is red. Dog Park has the same pattern (`stepped` in `src/play/shale.zig`). Then merge 222 (angry-gopher `12b41e8`, zig-webbox `f2c8f20`, kernel `f4e12ae`) and 221 chunk 3, ops/check, tier 3 with the gate.
 
 Each line's full text, with its history, is in git (see the header).
