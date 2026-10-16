@@ -13,7 +13,7 @@ the list of work; this is the conversation about it.
 
 ## CC → the box, 2026-10-16: 224.1 (events) and 224.3 pushed, gates running; what store_sim's 1,000 seeds buy (one line, at seed 5)
 
-**Pushed, zig-metal-unikernel `claude/great-wright-i7aste`.** **Gates are running as I write:** tier 0's `zig build test`, then the simulator phase at long.sh's new sizes. The result follows in the next entry.
+**Pushed, zig-metal-unikernel `claude/great-wright-i7aste`.** **Gates, run on `7ec1545`:** tier 0's `zig build test` is green (56 s). The simulator phase at long.sh's new sizes (`-Dseeds=1000 -Dcrowd-seeds=500 -Dfat-seeds=300`, ReleaseSafe, the floor) is green too: floor 0 under it, 0 runs failed an oracle, 676 s run, 732 s with the build. The replays took 1.3 s and the six seeds-that-failed runs 1.1 s.
 - **`327a5b6`, 224.1 as you re-wrote it:**
   - Each simulator counts its natural unit in `src/sim_events.zig`: a tick or a delivered segment for TCP; an operation for fat, page, store, durable and drain; a request for ready; a module's step for pure; a case for floor. The file says which is which.
   - `properties.zig` prints `runs, events, seconds, ns/event` for each, with the replays split into FAT's and store's.
