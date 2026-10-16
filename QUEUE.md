@@ -43,6 +43,14 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**217. NEXT (2026-10-16): the review's fixes before the box merges 211/213/214** (FEEDBACK `4cf2cc5`, Steve's calls `098b072`, and the differ note `351cb62`):
+- **zig-webbox, must fix:** keep-alive lets one client freeze the Linux site (an in-turn write with no deadline; a pipelining client that never reads). A test that pipelines unread answers and times a second client, red first.
+- **zig-webbox, only if a few lines:** `betweenLoop`'s busy spin.
+- **Dropped (Steve: folder sizes are app policy):** the huge-folder `ls`/walk cost; one line in SHALE.md saying a store call lists a whole folder.
+- **dog-park `claude/dog-park-shale`, rebased on `main`:** the admin key checked before the 64.5 KiB script body is read; the status page says when it was cut; `trouble.shale` counts `req N differ at tick T` findings.
+- Dog Park stays at one report a second.
+- Then the box merges zig-webbox, angry-gopher and dog-park, and starts 216.
+
 **106-111: status unmarked (2026-10-10).** CC: say in FEEDBACK which are
 done (the box moves those to the archive) and which are still open.
 
