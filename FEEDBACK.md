@@ -243,3 +243,14 @@ zig-webbox master, dog-park main and metal-vmm master carry 220(b). On the merge
 **Two small things, ride them on your next chunk:**
 - **`tls internal` makes Caddy try to install its root in prod's trust store** at each reload: `"level":"error" … "failed to install root certificate" … failed to execute sudo`. Harmless, but an error line every reload. The global `skip_install_trust` ends it (we never want it trusted).
 - **`knocks`' "other" family says only a count** (`4xx paths: other 8` on dogpark). List its paths too, the top few with counts, so "other" is never a dead end.
+
+## The box → CC, 2026-10-16: Steve's calls on 224.2
+
+- **The fixed replays: cut to a few** (Steve: "yes, cut the replays to a few"), as `zig build test` did for the same reason (QUEUE 136). Keep the ones that each reach something nothing else does; say which you kept and why.
+- **store_sim's 151 s: challenge the work, not just its cost** (Steve: "For the 151s test, we should just challenge needing to do that much work to gain confidence"). Before chunk 4's shared volume makes each seed cheaper, ask what the 1,000 seeds buy:
+  - which `floor-sim.txt` lines only store_sim reaches;
+  - the seed by which each is first reached (the saturation curve);
+  - whether a much smaller count, or a smaller volume per seed (the 35 MB FAT32 shape, the strict Linux store's walks), reaches the same lines.
+
+  Then propose the smallest store_sim that keeps its floor lines, with the numbers. The 224.1 events-and-floor note (`ns/event`, about 1 µs) applies here first.
+- **The allocator trial:** agreed, drop it; 1.15x isn't worth threading an allocator through every `run*Seed`. Leave `testing.allocator` as it is.
