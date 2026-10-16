@@ -11,6 +11,40 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: 224.1 done; 224.2 measured, and the bet is lost (about 1.15x, not 3x)
+
+**224.1, zig-metal-unikernel `claude/great-wright-i7aste` `aa2a09a`.**
+- `properties.zig` prints `time: sim <simulator> <s>` for each simulator and `time: sim run <s>`.
+- `long.sh` echoes those lines and logs `time: simulator build <s>`: the phase's time less the run's.
+- Tried on a small ReleaseSafe sweep and on 200 seeds. Not run under long.sh itself.
+
+**Where the run goes**, 200 TCP seeds, ReleaseSafe, everything else at build.zig's defaults (seconds):
+
+| simulator | today (`testing.allocator`) | trial (`smp_allocator`) |
+|---|---|---|
+| store (1,000 seeds) | 150.8 | 127.6 |
+| replays (40 FAT and 20 store tapes, fixed) | 45.5 | 38.7 |
+| pure (200) | 24.8 | 23.1 |
+| drain (100) | 24.7 | 18.1 |
+| fat (20, plain and probed) | 5.4 | 4.9 |
+| tcp plain, rough, crowd (200 each) | 1.8, 3.8, 1.6 | 1.6, 3.7, 1.5 |
+| the rest (page, ready, full, floor, durable, regressions) | 5.1 | 3.8 |
+| **run** | **263.4** | **222.9** |
+
+**224.2, the fast allocator: 1.18x on the run, not the 3x the chunk asks.**
+- **How I measured:** a local trial, not pushed. Every simulator's `testing.allocator` was swapped for one global, set to `std.heap.smp_allocator` in the sweep.
+- **It broke an oracle:** floor_sim failed 96 of 1,000 seeds with "an alignment past the heap was given". That oracle checks alignments only the testing allocator gives, so the trial broke it, not the code. A real version would need floor_sim to keep its own allocator.
+- **Where store's time goes.** An strace of a store-only sweep (100 seeds, plus the replays) puts about 23 s of the 64 s run in syscalls:
+  - munmap and mmap: 520,000 calls, 10 s. The volume-sized buffers (`w.big`, the test disk) are mapped and unmapped on every seed.
+  - getdents64, openat, close and lseek: about 690,000 calls, 10.7 s. The strict Linux store's walks and snapshots.
+  - fsync: 604 calls, 0.14 s. Not the cost.
+- **So the allocator isn't the lever, and I stopped there.** I won't thread an allocator through every `run*Seed` for 15%.
+- **Where the minutes are:**
+  1. store_sim at 1,000 seeds: chunk 3's seed count by measurement, and chunk 4's shared volume (one buffer and one formatted image per shape, copied, instead of mapped, formatted and unmapped per seed).
+  2. The fixed replays: 45 s for 60 tapes. They check the harness, not the FAT code (properties.zig says so). **Your call:** cut them to a few, as `zig build test` already did for the same reason (QUEUE 136)?
+  3. pure_sim and drain_sim, 25 s each, at their default seed counts: chunk 3 too.
+- **Next, unless you say otherwise:** chunk 3. For each simulator, the smallest seed count that still reaches the whole `floor-sim.txt`, measured.
+
 ## CC → the box, 2026-10-16: 223's blockers (QEMU runs here, KVM does not), and 222 pushed, with one kernel line for you
 
 **223, the long tier's blockers.** Fixed nothing except one install (qemu was missing). Steve allowed QEMU.
