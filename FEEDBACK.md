@@ -11,6 +11,86 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: 220(a), Shale's next round: what was awkward, and SHALE.md read cold (no code)
+
+**The scripts read:**
+- lynrummy's cookbook: zig-webbox `src/script/examples`, eight scripts;
+- Dog Park's: `tools/shale`, three scripts.
+
+**What was still awkward to write, ranked by how many scripts each would simplify:**
+
+1. **The paged walk, copied by hand into four scripts** (`chat_topics`, `find_message`, `stale_caches`, `where_the_bytes_are`): `walk_all`, 13 identical lines each. `big_files` recurses on `ls` itself instead.
+   - **Proposal: a prelude**, Shale functions every script gets, written in Shale. `walk_all` is its first.
+   - Each part stays one builtin call under `call_entries`, so slices and caps are untouched. It is the one fix the stranger also asked for first (below).
+2. **A whole file in 1 MiB parts** (`find_message`'s `find_part`, `trouble`'s two loops, `stale_caches`, which skips every transcript over 1 MiB rather than loop). Each script writes `while at < size ... min(PART, size - at)`.
+   - **Proposal: prelude functions over the range forms.**
+     - `count_all(p, s)`: the parts' counts summed.
+     - `find_next(p, s, at)`: the first match from `at`, part by part.
+   - With `find_next`, "each finding in a log" (`trouble`) becomes a plain loop.
+3. **Top N, descending** (`chat_topics`, and `where_the_bytes_are` twice): `sort; reverse; for r in rows do if #most < N then push(most, r) end end`.
+   - **Proposal:** `sort(rows, key, "desc")`, and `take(list, n)`, a new list of the first `n`.
+4. **Paths** (7 of 11 scripts):
+   - joining under a root: `if dir ~= "" then path = dir .. "/" .. name end`, and `dir .. "/" .. f` everywhere;
+   - an extension off: `sub(name, 1, #name - 3)`, `sub(x, 1, -4)`;
+   - the last part: `parts[#parts]`.
+   - **Proposal:** `path(a, b, ...)` (joins with `/`, "" the root), `basename(p)`, and `strip_suffix(s, t)` (`s` unchanged without it).
+5. **A file that may be missing** (`accounts`, `games`, `chat_topics`, `stale_caches`, `first_change`): `if exists(p) then x = read(p) end`, two store calls and two reads charged.
+   - **Proposal:** `read_or(p, default)`, one call; absence answers `default`, and any other failure stays a `store` error.
+6. **Parsing what may be torn** (`chat_topics`' cache, `stale_caches`, `trouble`'s `tonumber(w[6])`). `tonumber` stops the run on a non-number. `attempt` survives it, but only through a wrapping function.
+   - **Proposal:** `parse_int(s)`, nil for anything but an integer; `tonumber` stays strict.
+7. **The line around an offset** (`trouble`'s `lines(read(path, f, 200))[2]`, a guessed 200 bytes; `find_message` reads 2 KiB back and splits on `MSG_`).
+   - **Proposal:** `line_at(p, offset)`, the whole line holding `offset`, capped at call-bytes. Two scripts; lowest.
+
+**The cookbook alone, no language change:**
+- `where_the_bytes_are` keeps its own `order` list where `keys(m)` (first-set order) does.
+- `topics.shale` is "the old way" (whole reads); it goes, or becomes `count_all`.
+- `trouble` calls `stat` twice a log.
+
+**SHALE.md, read cold.** An agent that had never seen Shale read only SHALE.md, wrote two scripts from it, and marked each line it was unsure of. Its gaps, most harmful first. I checked 1, 2, 3 and 15 against the document; the rest are as reported.
+
+1. **`walk_all` is referenced and never shown.** The `walk` row says "see the cookbook's `walk_all`", and the cookbook section is a table of file names. Unstated:
+   - whether `more` is always last;
+   - whether `kind`/`like` drop it;
+   - whether `after = ""` is the same as no `after`.
+2. **The `more` entry has no `size`/`modified`**, and a missing key is an `index` error. So `e.size > X` before testing `e.kind` stops the run, and nothing warns of it.
+3. **Functions don't see the script's `local`s.** It is stated once, deep in Names; its first draft got it wrong.
+4. **No pattern for reading a big file line by line in parts** (carrying the torn line). `count_in` counts matches, not lines that contain something.
+5. **A script's author can't tell its mode or budgets** (atomic 500 reads with writes, background 10,000 with none). The runner section doesn't say which it uses.
+6. **Mixed types and unusual operands:** `"1" + 1`, `nil + 1`, `#` of a map or nil, and `a < b < c` are unstated.
+7. **`for x in` over a map** is unstated; `for k in keys(m)` has to be inferred.
+8. **A still-empty `{}`**, whose kind comes "from its first entry": what is it to `keys`, `sort` or `for`?
+9. **Edge results of the text builtins**: `lines("")`, `split("a,", ",")`, `find(s, "")`, `sub` with i > j. Also the error columns, missing outside the store table.
+10. **What `print` writes** for `nil`, and for no arguments.
+11. **`attempt` takes only a script's function**, so `attempt(read, p)` is out, but it is never said outright. It is also unclear whether `r.value` on a failure is an `index` error.
+12. **Where a top-level `return v` goes**: Result lists no value.
+13. **The error format** (`name:line:column`): is `name` the class?
+14. **Budget names:** the table says "read bytes", `budget()` says `read_bytes`, and arena/kept are not in `budget()`.
+15. **Organisation:**
+    - the Zig API comes before any language;
+    - VM, bench and signer tables sit inside the reference;
+    - "The store" is both a subsection and a section;
+    - path rules come after every builtin;
+    - there is no one list of builtins with signatures;
+    - `attempt` is outside the builtin tables;
+    - Lua's refused names have only one replacement given.
+16. **Rules met late:** the 1 MiB call-bytes cap in a table cell; "called only after declared" and no mutual recursion, which order helpers by hand.
+17. **Statement separators:** is `a = 1 b = 2` on one line legal?
+18. **`modified` 0** where a host keeps none: an age filter silently drops those files.
+
+**What I'd build first, if you approve** (each with a test seen red, the cookbook rewritten with them):
+- **(1)** the prelude with `walk_all`, `count_all` and `find_next`;
+- **(3)** `sort` desc and `take`;
+- **(4)** `path`, `basename` and `strip_suffix`;
+- **(5)** `read_or`.
+
+For SHALE.md, a restructure:
+- the language first, then the store, then the host API;
+- one builtin index with signatures and errors;
+- the walk paging shown in full;
+- the stranger's 2-12 answered where a reader looks.
+
+`parse_int` and `line_at` only if you want them. Nothing built until you say which.
+
 ## CC → the box, 2026-10-16: 218 and 219 done (zig-metal-unikernel `claude/great-wright-i7aste` `67faf97`, master `12901a1` merged in; dog-park `claude/dog-park-shale` `0496375`, restarted from main `5a9881c`)
 
 **218 was a kernel change.** I made it because the queue gave it to me by name; this says so, as my rule was to stop before one. Both halves are on my branch for you to boot.
