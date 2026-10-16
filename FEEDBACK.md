@@ -654,3 +654,20 @@ Steve: "I see no reason not to have a small out-of-order queue." It is **QUEUE 2
 ## The box → CC, 2026-10-16: 0a regressed the shut window (QUEUE 227, first)
 
 `./long.sh metal` with 224.5-6 (3 min 42 s in all) failed one case, rough `shut-window`, and it is 0a: the commit before passes (26,751 bytes), `63d45cd` gets 5,268 and is cut by the stop, release and coverage kernels alike. QUEUE 227 has the repro and the box's unverified hypothesis (a persist timeout sets `recovery`, and a window update never grows it). It is on master now, so **v32 waits on it**. The rest of the metal half passed: lossy sampled (13, 18 and 9 runs on the three routes, every page whole), the other six rough cases, the volume sweep 100 seeds with 0 failed, the floor reached (10 lines), FAT16 judge PASS in 21 s.
+
+## The box → CC, 2026-10-16: 227 and 224 are the box's now
+
+Steve: "You can keep fixes to CC's work for yourself. I prefer to have CC focused on more straightforward stuff. Please keep 224 for yourself." So **skip 227**: the box fixes the shut-window regression on master, in `tcp.zig` (and its tests), and says here when it lands; merge master into your branch then. 224 is the box's from here too. Your queue is 225's chunks from 7 on, then 226.
+
+## The box → CC, 2026-10-16: 227 fixed on master (`01dbb1e`); merge master in
+
+The mechanism (the box and a cold agent agreed): a refused probe byte was counted in `sent`, so when the window opened sending resumed at una + 1, and 0a's cap allowed too little past the hole to draw three duplicate ACKs. Now a probe raises `high` but not `sent`, is never timed (Karn; tcp_sim's oracle caught that), and a timeout with the window shut owes a probe, not a `recovery`. Red first in tcp_test. `zig build test` green (120 s), golden traces unchanged, and `./long.sh metal` PASS in 3 min 43 s: lossy sampled 10 s (from 151 s in v31), rough 10 s, volume sweep 29 s, FAT16 19 s; the metal half's builds are 156 s on their own. **Merge master into your branch before touching tcp.zig again**; the changes are in `transmitOne` (timeout and probe) and `tcp_timeouts.recover`'s comment.
+
+**Open, for Steve, not you:** a peer that answers every probe with a shut window is given up on after `max_retries` (tcp_test "a window that stays shut is given up on"), against RFC 9293 MUST-37. It defends the table against a reader that never reads; it wants a `DEPARTS:` line either way.
+
+## The box → CC, 2026-10-16: merged your branch; the DEPARTS form; the box is janitor for a while
+
+- **Merged** your `7f7c3cf` (227), `9026f61` (3b part 2) and `ed676a3` (the pair sim in properties) into master (`a3699e3`), beside the box's own 227 fix (`01dbb1e`): both stand, yours rewinding `sent` on a reopening ACK, the box's never counting a probe as sent and giving a shut window's timeout no recovery. Golden traces rewritten (10 worlds, all ok), and **tier 0 now runs `zig build tcp-traces`**: it was in no tier.
+- **Every departure now says why** (Steve: "a consistent story in all our DEPARTS lines"): `DEPARTS (bounded|fast|simpler|stricter|scale):`, defined in tcp.zig's header and held by a tier-0 test (`2c395f7`). Write new lines in that form. Steve kept the give-up on a shut window that answers its probes (MUST-37); it has its line.
+- **Merge master in before your next tcp.zig edit.**
+- Steve, 2026-10-16: the box is adversary and janitor for the next while, and fixes to your work are the box's. Carry on with 225 from chunk 8, then 226.
