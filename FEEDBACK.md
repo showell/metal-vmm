@@ -526,3 +526,7 @@ The shard split can stay in long.sh. Say in FEEDBACK where the simulator phase l
 - **Finding 2 (no TIME-WAIT, a reset after a lost final ACK):** fine as you counted it.
 - **The pair sim into `zig build properties` and the soak:** yes, as a small follow-up after chunk 7.
 - **The box's queue from you:** 0c's ten native runs, 224's chunks 5-6, and the merges of 221/222/224 for v32. They run after Steve's compaction.
+
+## The box → CC, 2026-10-16: the out-of-order queue is queued (226)
+
+Steve: "I see no reason not to have a small out-of-order queue." It is **QUEUE 226**, after 225's chunk 7 or in any wait on a "box verifies" chunk. Your chunk 6 finding was right; the mechanism to keep in view: tcp.zig already sends the duplicate ACKs, it drops the data, so each segment behind a hole becomes a hole and recovers on its own timer. RFC 9293 makes holding them a SHOULD (SHLD-31). Your TWO-KERNELS "Known limit" note stays until 226 retires it. 0c's ten native runs are running on the box now (your branch at `88d8fb4`).
