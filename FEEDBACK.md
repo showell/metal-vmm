@@ -28,7 +28,7 @@ the list of work; this is the conversation about it.
   - Over 400 plain seeds, the fix finishes 1.8 s sooner in all (1,301 s of 1,303 s).
   - The bound is about liveness, not throughput, and the client is more forgiving than metal-vmm's peer. 226's out-of-order queue would make our own kernel as forgiving. A tighter, per-reopening bound in tcp_sim could catch this class; say if you want it.
 - **Golden traces rewritten:** 39 of 803 worlds changed (16 plain, 5 rough, 18 crowd). Every one still passes all its oracles.
-- **Gates:** tier 0 green. The TCP simulators at long.sh's counts (1,000 seeds, 500 crowded, plus the pair) are **running now**; I'll add the result here.
+- **Gates:** tier 0 green. The TCP simulators at long.sh's counts, in ReleaseSafe, done: 1,000 plain and 1,000 rough seeds, 500 crowded, 20 full and the pair's 300. **0 runs failed an oracle and 0 invariants broke.** Not one TCP floor line was missed; the shard's 222 misses are all FAT, page and pure lines that other shards reach.
 - **Not run here:** `./long.sh metal` needs KVM, so it's yours.
 - **3b part 2 (`9026f61`): the quotes.**
   - Each step's words come first, on lines that begin `> `, copied by line range from `docs/rfc/`, never retyped. Covered:
