@@ -11,6 +11,30 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: QUEUE 225 chunks 0a and 0b done; 0c written, yours to verify (zig-metal-unikernel `claude/great-wright-i7aste` `63d45cd`, `d5818fa`, `5a6f0c7`)
+
+- **0a, `63d45cd`, RFC 6298 (5.4) in the table** (§3 of TWO-KERNELS.md), as specified:
+  - A timeout sets `recovery = max(1, min(mss, high))`.
+  - The send loop stops at the cap before the window rule.
+  - An ACK makes it `(recovery -| acked) + 2 * acked`, and it ends once it covers `high`.
+  - `reset()` clears it, since the field defaults to null.
+- **The plan's red for 0a didn't hold, and I used another.** The fixed sim world (every 13th frame to the client lost, a 13 × MSS client window) **recovers before the fix too.** I swept all 13 alignments of the loss against the window and two answer sizes. Fast retransmit recovered every run within 0.7 s, so the sim's dynamics don't reproduce the native lock. I kept the sweep as a regression (`drop_every_to_client`, `drop_every_phase` and a per-scenario `client_buffer` up to 16 KB; the default stays 4,096), but it was never red. **The red is a direct test of (5.4):** after a timeout the table sends one 536-byte segment from `una`, then two after its ACK, then the rest. Before the fix it sent all four.
+- **The shut-window test:** a full but live peer is probed after every timeout, 36 of them, and never given up on. It passes before and after. The plant without `max(1, …)` turns the existing "a shut window is probed" test red.
+  - **"Red with the cap checked after the window rule" has nothing to catch.** Folding the cap into the window behaves identically, because a probe is owed only on the loop's first pass, before any cap is reached. The cap is still a separate break, with a comment saying why.
+- **The old timeout test** ("sent again, oldest first, and the wait doubles") now expects one segment where the go-back sent 536 + 64.
+- **0b, `d5818fa`:** `resend()` sets `recovery` the same way, and the backoff is untouched. The new test (three duplicate ACKs resend exactly one segment, retries and RTO unchanged, and its ACK lets two follow) was red before.
+- **Golden traces aren't pinned yet (that's chunk 1),** so I have no trace diff to name. Frames change wherever a timeout or a fast retransmit fired.
+  - **The revival ring's witness list lost eight crowd seeds:** 640, 1961, 2870 and 6606 with 0a; 4362, 8003, 8575 and 9366 with 0b. Each now passes with the ring off as well as on.
+  - The 7 crowd seeds left, and all 14 rough seeds, still fail without the ring. The list's comment says so, as it did for 6307.
+- **0c, `5a6f0c7`, box verifies:**
+  - `serve.zig`'s `GM_LOSE_SENT=N` now drops 1 in N at random from `GM_LOSE_SEED` (default 1).
+  - `check_loss` picks a seed and prints it; `LOSS_SEED` repeats one.
+  - A 300 KB transfer that stalls past `LOSS_LIMIT_S` (20 s) fails with the table's `/stats`, with netem removed first so `/stats` answers.
+  - It now also requires `given_up 0`.
+  - It compiles; `zig build test` builds native. **Please run 10 full native runs** (the "done" for 0c).
+- **Gates, run on each of 0a and 0b:** tier 0 `zig build test` green, and the two shards at long.sh's sizes green: 0 oracles broken, the floor reached over both. The phase took 168 s and 167 s.
+- **Next: chunk 1, golden traces.** Unless you'd rather pin them on a commit from before 0a, they're pinned on `d5818fa`'s behaviour.
+
 ## CC → the box, 2026-10-16: Steve's calls on 224.3-224.4 done (zig-metal-unikernel `9bb646b`). The simulator phase is 169 s, from 1,429 s in v31; the long pole is fat_sim, then pure_sim
 
 - **Done:**
