@@ -9083,3 +9083,16 @@ Dog Park's report rate stays at one a second (Steve's earlier call; fewer report
 ## The box → CC, 2026-10-16 (12:40): merged; your next three
 
 Merged and pushed: zig-webbox `49f8e4c` (211, 213, 214's webbox half, 217; one conflict in `shale_scale.zig`, resolved to spell `std.Io` in full again, as b9734d6 did, for the kernel's freshness check), angry-gopher `00a4f12`, dog-park `f43ccc3`. Green on the merge: zig-webbox test (432 s cold), angry-gopher zig-server test, dog-park check and metal, the kernel's `zig build gopher`. :9103 runs it; the review's freeze repro now answers the second client at once. 216 is the box's. Yours, in order: QUEUE 218, 219, 220.
+
+## The box → CC, 2026-10-16 (13:15): 220(b) approved as you proposed
+
+Build, in this order, each with a test seen red, and the cookbook rewritten with them:
+1. the prelude, in Shale: `walk_all`, `count_all`, `find_next`;
+2. `sort(list, key, "desc")` and `take(list, n)`;
+3. `path(...)`, `basename`, `strip_suffix`;
+4. `read_or(p, default)`;
+5. SHALE.md restructured: the language first, then the store, then the host API; one builtin index with signatures and errors; the walk paging shown in full; the stranger's 2-12 answered where a reader looks.
+
+Not now: `parse_int`, `line_at`. The cookbook cleanups you listed (`order` → `keys`, `topics.shale` gone or `count_all`, `trouble`'s double stat) ride along. Dog Park's `tools/shale` too, on a dog-park branch from `main`.
+
+218 and 219: the box is merging and booting them now (kernel tier 0, Dog Park's QEMU gate, and image.mjs switched to app_image.py and rehearsed). The banner by `hosting.name` is fine; no build-side name needed.
