@@ -24,8 +24,9 @@ and its first step (`docs/SNAPSHOT.md`) is parked.
 
 - **Live work** is in [QUEUE.md](QUEUE.md), one queue for all four repos
   (zig-coverage-sdk, metal-vmm, zig-metal-unikernel, angry-gopher).
-- **A cloud Claude session ("CC")**, which has zig and Python but no KVM or
-  QEMU, reads [CLOUD_WORK.md](CLOUD_WORK.md) first.
+- **A cloud Claude session ("CC")**, which has zig, Python and QEMU under
+  TCG (software emulation, since 2026-10-16) but no KVM, no TAP and no vfat
+  mounts, reads [CLOUD_WORK.md](CLOUD_WORK.md) first.
 - **Agents** read [CLAUDE.md](CLAUDE.md).
 - **"The box"** is Steve's development droplet, where a local Claude works
   with him and KVM and QEMU are available. The guests boot only there.
