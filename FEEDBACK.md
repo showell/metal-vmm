@@ -11,6 +11,69 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: 224.1 (events) and 224.3 pushed, gates running; what store_sim's 1,000 seeds buy (one line, at seed 5)
+
+**Pushed, zig-metal-unikernel `claude/great-wright-i7aste`.** **Gates are running as I write:** tier 0's `zig build test`, then the simulator phase at long.sh's new sizes. The result follows in the next entry.
+- **`327a5b6`, 224.1 as you re-wrote it:**
+  - Each simulator counts its natural unit in `src/sim_events.zig`: a tick or a delivered segment for TCP; an operation for fat, page, store, durable and drain; a request for ready; a module's step for pure; a case for floor. The file says which is which.
+  - `properties.zig` prints `runs, events, seconds, ns/event` for each, with the replays split into FAT's and store's.
+  - `-Dtrace-reach` prints, for each floor line, the simulators that reach it and the first seed each did.
+- **`7ec1545`, 224.3 and the replays:**
+  - long.sh's `SEEDS` is 1,000, down from 10,000, the smallest of 1k, 2k and 5k that reaches the whole floor; `CROWD_SEEDS` is 500, down from all. A run at those sizes keeps the verdict.
+  - The tape replays are 4 FAT and 2 store, down from 40 and 20: 42 s became 1.5 s. **Which I kept, and why:** the trace found no floor line that only the replays reach. So the replays are a check of the harness's replay alone, and I kept FAT seeds 1-4 (including the 1 `zig build test` runs) and store 1-2.
+  - `coverage/seeds-that-failed.txt` runs every seed that once broke an oracle, whatever the counts. It is read by `src/failed_seeds.zig`, whose test I saw red against a stub. It holds FAT 93 and 295, and TCP 23953 plain and rough, from the git history.
+  - README and long.sh's header updated.
+
+**The measured run**, 1,000 TCP seeds (500 crowded), 300 FAT seeds, every other count at build.zig's default, ReleaseSafe. 710 s run, floor 0 under it, 0 oracles broken:
+
+| simulator | runs | events | s | ns/event |
+|---|---|---|---|---|
+| fat | 600 | 329,220 | 431.5 | 1,310,539 |
+| store | 1,000 | 73,808 | 154.1 | 2,087,348 |
+| fat replays (40, before the cut) | 40 | 55,636 | 35.5 | 638,299 |
+| drain | 100 | 91,111 | 24.7 | 270,576 |
+| pure | 200 | 57,193 | 23.8 | 415,972 |
+| tcp rough | 1,000 | 10,079,889 | 17.0 | 1,682 |
+| tcp plain | 1,000 | 3,808,386 | 8.8 | 2,297 |
+| store replays (20, before) | 20 | 3,204 | 6.6 | 2,062,738 |
+| tcp crowd | 500 | 1,251,435 | 3.7 | 2,986 |
+| floor | 1,000 | 14,000 | 1.4 | 102,329 |
+| tcp full, page, ready, durable, regressions | | | 3.6 | 7,135; 9,119; 136,491; 25; 252,890 |
+
+**Against the 1 µs floor.** TCP is 1.7-3 µs an event, in range. durable is 25 ns. Over 10x, one line each:
+- **fat, 1.3 ms an operation:**
+  - Each run is twice over: the FAT on the disk, then held in memory.
+  - Each run makes its own volume: FAT32's `small32` is 70,000 sectors, 35 MB, allocated and formatted.
+  - `verify` walks the whole volume every `check_every` operations.
+  - I haven't yet measured which of these dominates. That is chunk 4's first measurement (one formatted image per shape, copied).
+- **store, 2.1 ms an operation:**
+  - Every operation goes three ways: the model, the FAT store and the strict Linux store on a real directory.
+  - Its strace: 520,000 mmap and munmap calls (volume-sized buffers each seed), and 690,000 directory calls (getdents, openat, close, lseek) for the Linux store's walks and snapshots. fsync is 0.14 s.
+- **pure, 416 µs a step:** mostly the kept log's boots, each writing past its 1.25 MiB slot (pure_sim.zig's own comment says so).
+- **drain, 271 µs a step:** each step opens, drains and closes connections over the simulated slots; not chased.
+- **ready 136 µs, floor 102 µs a case:** small totals (0.4 s and 1.4 s); not chased.
+
+**What store_sim's 1,000 seeds buy** (your call: challenge the work):
+- **Floor lines only store_sim reaches: one,** first reached at **seed 5**. Every other line store_sim reaches, another simulator reaches too, by seed 50 at the latest.
+- **The saturation curve, simulator by simulator:** for the lines that only it reaches, the seed by which each was first reached:
+  - store: 5 (one line);
+  - fat: 17 and 113 (two lines);
+  - floor: 71 lines, all by 42 except two at 100 and 186;
+  - pure: 32 lines, all by 7 except one at 160;
+  - page: 22 lines, by 88;
+  - durable: 10 lines, by 14;
+  - ready: 7 lines, by 8;
+  - tcp_crowd: 2 lines, by 89;
+  - tcp_rough: 6 lines, by 17;
+  - tcp_full: 1 line, at 1.
+  - **No line needs drain_sim or the replays.**
+- **Proposal: store_sim at 50 seeds,** 10x the seed its one line needs. 154 s becomes about 8 s. Smaller volumes per seed would cut the cost further, but at 50 seeds it's no longer where the minutes are.
+- The floor only measures reach. 50 seeds still exercises each oracle, but over fewer worlds. That is the trade you named (about 80% of the value).
+- **Two more proposals, yours to call:**
+  - **FAT_SEEDS at 150,** down from 300: its two exclusive lines come by seed 113. 431 s becomes about 215 s, and FAT becomes the largest cost by far, which chunk 4 then attacks.
+  - **drain at 20 seeds,** down from 100: no floor line needs it. 25 s becomes 5 s.
+- **With all three,** the simulator phase is about 290 s at today's per-seed costs, down from 710 s here and over 16 minutes in v31.
+
 ## CC → the box, 2026-10-16: 224.1 done; 224.2 measured, and the bet is lost (about 1.15x, not 3x)
 
 **224.1, zig-metal-unikernel `claude/great-wright-i7aste` `aa2a09a`.**
