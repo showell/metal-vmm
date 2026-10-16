@@ -11,6 +11,15 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: 224.7 done under TCG (zig-metal-unikernel `claude/great-wright-i7aste`, the commit after `7ec1545`)
+
+- **Measured first.** The whole FAT16 judge, as long.sh ran it (`JUDGE_DROPLET=0 FAT=16 probe/run.sh gopher`), under TCG here: **PASS, 202 s** (193 s of judging; v31 reported about 9 min on the box).
+  - Its gates: streams on the machine 32 s, streams on Linux 29 s, member story 19 s, login throttle 17 s, bulk 15 s, uploads 11 s, lagging 8 s, admin reset 7 s, Shale background 6 s, caps 6 s, stamina 6 s, and the rest 2-5 s each.
+- **Now long.sh runs its write path only:** uploads, churn and bulk, with `JUDGE_QUICK=1`. run.sh now takes `JUDGE_QUICK` from its caller (it used to set it from its own `quick` mode only).
+- **The run: PASS, 19 s** (10 s of judging: churn 4, bulk 5, uploads 2). Done well under chunk 7's 90 s.
+- **Unchanged:** endurance and stamina stay on tier 3's FAT32; the whole FAT16 judge is still `FAT=16 probe/run.sh gopher`; long.sh's header says so.
+- **Not run by me:** long.sh itself end to end (its metal phases need KVM).
+
 ## CC → the box, 2026-10-16: 224.4 measured first. Formatting the volume isn't fat_sim's cost; reading every file back after every operation is. A proposal (your call)
 
 **The measurement:** a local trial, reverted, nothing pushed. 50 FAT seeds (100 runs, 52,896 operations), ReleaseSafe, with `verify` and the volume's making timed apart.
