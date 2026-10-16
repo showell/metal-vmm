@@ -11,6 +11,49 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: 214 done, Dog Park's Shale route (dog-park `claude/dog-park-shale` `08edc62`; zig-webbox `049abed`, `070f765`, `8e69105`; angry-gopher `00a4f12`)
+
+Each item's test was seen red, under a plant or before the code. Green: dog-park `zig build check` (its new node test included) and `zig build metal`; zig-webbox `zig build test`; angry-gopher's zig-server `zig build test`.
+
+**A real bug first, found by 214, fixed in zig-webbox `049abed`.** A Process took its caller's source, and the parsed tree's names, map keys and strings point into it.
+- A background run outlives its request. Once Dog Park's host freed the request's arena, the run read its map keys from unmapped memory, and the server died.
+- zig-webbox's own route tests missed it, because their fixture's arena lives through the whole test.
+- Now `Process.start` copies the source into the machine's memory (charged there, at most the source budget), so a Process owns all it holds, as its contract says.
+- Red: a run whose caller's source, or whose request's arena, comes from the page allocator and is freed before it is stepped segfaults. There's a test of each.
+
+**Steve's calls, folded in:**
+- **Background runs get their own budgets.** `script_route.Request.background_budgets`: angry-gopher's are its atomic ones with 10,000 reads (`00a4f12`), unused until 216 sets a `backing`.
+- **The scale table is in SHALE.md for both modes.** Atomic is as I reported. In the background, the chat-walking scripts fit 1,069 (`where_the_bytes_are`) and 1,292 (`chat_topics`) topics, stopped by the arena, and the transcript readers by their steps.
+- `shale-sign` gained `background <file> <target>` and `kill <target>`.
+
+**Dog Park** (src/play/shale.zig):
+- **The routes.** `POST /admin/script` takes a signed `mode=background` script or a `mode=kill`, after the admin key, as every `/admin` page. `GET /admin/script` shows the run going, or the last one, and what it printed.
+  - The budgets: 50M steps, an 8 MiB arena, 10,000 reads, 256 MiB read, no changes.
+- **Atomic is off, and I wired no writes.** The route's atomic mode can't be held to a game's folder, so per 214's own fallback I left it.
+  - A confined "remove this game" would be a small Dog Park route of its own, if Steve wants one.
+- **The key is set by hand:** `shale.conf` and `shale/sequence` in the auth dir (README, "Running a script").
+  - lynrummy's is installed through `/admin/script-key` with the admin's password typed again. Dog Park has no password, only the admin key, so a key route would let a leaked bearer install its own.
+- **Only where a host steps it.** A background run is accepted only once the host has called `between`. The Linux host calls it from its start; metal's kernel doesn't yet (216).
+  - So on the droplet the route refuses one, 501 `no_background`, rather than taking a run that never moves and blocks the next.
+- **The cookbook** (tools/shale/):
+  - `games.shale`: each game's kept tick, last log, and log bytes;
+  - `trouble.shale`: each game's last hour of reports, `req ?`, overlaps, idle drags, stuck, and refused lines. Logs are scanned a megabyte at a time, because a log rotates once it is *past* 1 MiB, so it can be over the one-call cap.
+  - `accounts.shale`: the accounts against 80, and the games started.
+- **One gap: a `differ` is not in the log.** A report answered `differ` is logged as its kept prefix, like any report, so `trouble.shale` can't count differs.
+  - **Proposed:** a `finding` line per `differ` (`differ at tick T`), one line in physics_server.zig.
+- **Real files.** I couldn't copy a game folder from `~/dogpark-test/play/data` from here. Instead, the node test makes real ones: the real server, a load, and two unreadable reports, which are two `req ?` findings in a real log.
+  - The cookbook's output is checked on those files. Please run the three scripts once on a copy of a real folder before deploying.
+- **Play goes on.** A scan of 50 MiB of logs (5 games' worth) runs beside a player's reports. Every request is timed, the status checks included.
+  - **The worst wait was 22-27 ms** in four runs, on the Debug server on Linux. A slice is at most about 26 ms there, and a request waits at most one.
+  - Red: a `between` that runs the whole scan in one turn made a request wait 1.6 s.
+- **The node test's other checks, also red under a plant each:**
+  - the admin key first;
+  - unsigned, wrongly signed and replayed scripts refused;
+  - atomic refused;
+  - a background write stopping, naming atomic, with the file still there.
+
+**Merge order:** zig-webbox first. dog-park's branch uses its `Request.backing`, `Site.between`, the modes, and the Process fix. Then dog-park. Dog Park's report rate can go back to 250 ms once `:9103` runs zig-webbox's keep-alive (213).
+
 ## CC → the box, 2026-10-15: 213 done, keep-alive in webbox's Linux host (zig-webbox `1e3ed80`, angry-gopher `edaa943`)
 
 **Why close was forced, written down.** The line (`req.head.keep_alive = false; // force connection: close without touching each handler`) came in with angry-gopher's first import (`7ee35bf`, July), and moved with the host into zig-webbox unchanged. Its only stated reasons are its comments:
