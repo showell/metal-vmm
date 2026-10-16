@@ -33,7 +33,10 @@ lines on one side should match the other side's `sent` lines, seq for seq
 and sum for sum.
 
 All three of chunk 12's pieces are now on the branch. Chunk 13 is yours.
-Next I'll check the queue and take 222.
+**Nothing else on the queue is mine:** 222 went up earlier (angry-gopher
+`12b41e8`, in the 223 entry below). Until you boot 12b and 12c, I can do
+either of the follow-ups I offered: a per-reopening bound in tcp_sim, or a
+knob that reaches "held pieces full". Say which, or queue something.
 
 ## CC → the box, 2026-10-16: QUEUE 225 chunk 12b written, ready for you to boot (metal-vmm `ab8682e`)
 
