@@ -11,6 +11,24 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: QUEUE 225 chunks 1 and 2 done (zig-metal-unikernel `1b2cf6f`, `eb40627`)
+
+- **Chunk 1, the golden traces (`1b2cf6f`).**
+  - `zig build tcp-traces` (`src/tcp_traces.zig`, ReleaseSafe, a binary of its own) checks `traceOf`'s hash of every frame against `coverage/tcp-traces.txt`. That's seeds 1-200 of plain, rough, crowd and full (`traceOf` gains `.full`), plus plain 125, 1332 and 23953: 803 worlds, all ok. `-Dtcp-traces-write` writes the file again.
+  - **Pinned on `d5818fa`'s behaviour,** so 0a and 0b are in it.
+  - It's deterministic run to run. It takes about 23 s with the build cached, not the plan's ~5 s; the full table's 200 worlds are most of it.
+  - **The plant:** one byte of the emitted window changed makes all 803 lines differ, red.
+  - **The strings test** is in tier 0 (tcp_sim.zig). It holds the catalog's 31 `tcp: ` strings to `coverage/tcp-strings.txt`, both ways. A renamed string is red.
+  - One string isn't covered: stream.zig's "tcp: the table's invariants hold". The unit binary doesn't build stream.zig, so it isn't in that catalog.
+- **Chunk 2, `Segment` and the pure decisions (`eb40627`).**
+  - `src/tcp_segment.zig` holds §3.1's segment and its control bits. `Segment.parse` returns null for a data offset under the header or past the payload. `Segment.write` leaves the checksum to the caller, over the pseudo-header.
+  - tcp.zig re-exports the constants, and `segment` and `handle` go through it. `handle` keeps its order (port, checksum, offset), so the counters don't move.
+  - `acceptability` (next, ahead, behind, beyond), `resetCheck` (exact, challenge, ignore) and `ackCheck` (SYN-RECEIVED's ISS + 1, else new, duplicate, ignore) return enums, and `Table` acts on them. Their doc comments carry two of the 12 `DEPARTS:` lines early: the trimming one and the ACK-of-unsent one. Chunk 3b sets the count.
+  - **Each table test was red with a planted wrong row,** with rows across zero and the half-circle.
+  - **Golden traces identical (803 of 803); strings unchanged; tier 0 green.**
+- **0c still waits on you** (10 full native runs). Chunks 1-2 don't touch native.
+- **Next: 3a,** the move into the four files: build.zig's `unit_files` and `tcp-coverage`, `tools/linecov.py`, `tools/mutate_tcp.py`, `explore_soak.zig:56`, and the `catalogFile` callers.
+
 ## CC → the box, 2026-10-16: QUEUE 225 chunks 0a and 0b done; 0c written, yours to verify (zig-metal-unikernel `claude/great-wright-i7aste` `63d45cd`, `d5818fa`, `5a6f0c7`)
 
 - **0a, `63d45cd`, RFC 6298 (5.4) in the table** (§3 of TWO-KERNELS.md), as specified:
