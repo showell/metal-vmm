@@ -11,6 +11,248 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: 217 done, the review's fixes (zig-webbox `7946d33`, `61f8a9c`; dog-park `claude/dog-park-shale` `f43ccc3`, rebased on main `08ff9fc`)
+
+**Gates:** dog-park `zig build check` green on `f43ccc3`, and `zig build metal` builds. angry-gopher `zig build test` (zig-server) green against `61f8a9c`, with no change of its own. zig-webbox `zig build test` green on `7946d33` and on `61f8a9c`; `zig fmt --check src` clean.
+
+**Finding 1, one client freezes the Linux site: fixed** (zig-webbox `linux_host.zig`).
+- **Answers are held while the handler has the turn.** The writer chain has a `Hold` between the durable writer and the head watch, and it keeps the answer in memory up to `held_most` (1 MiB). It is written once the turn is let go, so a client that pipelines and never reads holds only its own connection.
+- **Every socket write has a deadline.** An answer past `held_most` is written in the turn, under `turn_write_deadline_ms` (5 s); any write after the turn is under `answer_write_deadline_ms` (30 s, a kept stream's).
+- **One watchdog thread** shuts a socket whose write is past its deadline. It is a table of writes under way, not a thread per connection. A connection so ended is counted (`writes_shut`), not logged as a connection error.
+- **Tests, both red first:**
+  - 40 × 512 KiB pipelined, never read: a second client is answered within 2 s. Red with the hold planted off.
+  - One 8 MiB answer, with the in-turn deadline at 300 ms: a second client is answered within 1.5 s. Red with the watchdog's shutdown planted off.
+- **One thing the gate found:** the 8 MiB test's shut write was logged as `connection error: WriteFailed`. The build runner fails a test that writes to stderr, and only on some runs. That is why the quiet end above exists.
+- **Its test route** takes its size from the test, not the request (`61f8a9c`). angry-gopher's request-edges lint was right to flag a test site's route that parsed a number.
+
+**Finding 2, `betweenLoop`'s spin: fixed.** It sleeps 1 ms while a handler waits for the turn.
+
+**Finding 3: dropped, as Steve said.** SHALE.md ("The store") now says one `ls`, or one walk's listing, reads a whole folder in one call, and that folder sizes are the application's to bound. SHALE-TASKS.md's "not capped yet" line says the same.
+
+**Finding 4, the script body read before the admin key: fixed** (dog-park `app.zig`).
+- `/admin/script`'s cap is `before_turn_most + 1`, which makes it an upload, and `uploader` names "admin" only for a request with the admin key. So a stranger's body is never read, nor charged to the small bodies' budget.
+- Both hosts ask: webbox's Linux host, and metal's (`probe/gopher.zig` calls `app.site.uploader`). The route still reads at most `shale.most_body`.
+- **Test:** a head with no key promises 60 KiB and sends none; it is answered 4xx at once (`test_shale.mjs`). Red with the old limit planted back: no answer in 2 s.
+
+**Finding 5, a cut status answered as if whole: fixed.** `shale.zig` writes post and status replies through `written`, which keeps room at the end and adds `── cut here: the rest is past this reply's room ──` on overflow. **Unit test:** red with the note planted out.
+
+**trouble.shale** has a `differs` column counting `req N differ at tick T`, matched before the stuck check. Its README line and the cookbook and scan tests are updated.
+
+Dog Park's report rate is untouched (one a second). Nothing here touches a kernel.
+
+## CC → the box, 2026-10-16: 214 done, Dog Park's Shale route (dog-park `claude/dog-park-shale` `08edc62`; zig-webbox `049abed`, `070f765`, `8e69105`; angry-gopher `00a4f12`)
+
+Each item's test was seen red, under a plant or before the code. Green: dog-park `zig build check` (its new node test included) and `zig build metal`; zig-webbox `zig build test`; angry-gopher's zig-server `zig build test`.
+
+**A real bug first, found by 214, fixed in zig-webbox `049abed`.** A Process took its caller's source, and the parsed tree's names, map keys and strings point into it.
+- A background run outlives its request. Once Dog Park's host freed the request's arena, the run read its map keys from unmapped memory, and the server died.
+- zig-webbox's own route tests missed it, because their fixture's arena lives through the whole test.
+- Now `Process.start` copies the source into the machine's memory (charged there, at most the source budget), so a Process owns all it holds, as its contract says.
+- Red: a run whose caller's source, or whose request's arena, comes from the page allocator and is freed before it is stepped segfaults. There's a test of each.
+
+**Steve's calls, folded in:**
+- **Background runs get their own budgets.** `script_route.Request.background_budgets`: angry-gopher's are its atomic ones with 10,000 reads (`00a4f12`), unused until 216 sets a `backing`.
+- **The scale table is in SHALE.md for both modes.** Atomic is as I reported. In the background, the chat-walking scripts fit 1,069 (`where_the_bytes_are`) and 1,292 (`chat_topics`) topics, stopped by the arena, and the transcript readers by their steps.
+- `shale-sign` gained `background <file> <target>` and `kill <target>`.
+
+**Dog Park** (src/play/shale.zig):
+- **The routes.** `POST /admin/script` takes a signed `mode=background` script or a `mode=kill`, after the admin key, as every `/admin` page. `GET /admin/script` shows the run going, or the last one, and what it printed.
+  - The budgets: 50M steps, an 8 MiB arena, 10,000 reads, 256 MiB read, no changes.
+- **Atomic is off, and I wired no writes.** The route's atomic mode can't be held to a game's folder, so per 214's own fallback I left it.
+  - A confined "remove this game" would be a small Dog Park route of its own, if Steve wants one.
+- **The key is set by hand:** `shale.conf` and `shale/sequence` in the auth dir (README, "Running a script").
+  - lynrummy's is installed through `/admin/script-key` with the admin's password typed again. Dog Park has no password, only the admin key, so a key route would let a leaked bearer install its own.
+- **Only where a host steps it.** A background run is accepted only once the host has called `between`. The Linux host calls it from its start; metal's kernel doesn't yet (216).
+  - So on the droplet the route refuses one, 501 `no_background`, rather than taking a run that never moves and blocks the next.
+- **The cookbook** (tools/shale/):
+  - `games.shale`: each game's kept tick, last log, and log bytes;
+  - `trouble.shale`: each game's last hour of reports, `req ?`, overlaps, idle drags, stuck, and refused lines. Logs are scanned a megabyte at a time, because a log rotates once it is *past* 1 MiB, so it can be over the one-call cap.
+  - `accounts.shale`: the accounts against 80, and the games started.
+- **One gap: a `differ` is not in the log.** A report answered `differ` is logged as its kept prefix, like any report, so `trouble.shale` can't count differs.
+  - **Proposed:** a `finding` line per `differ` (`differ at tick T`), one line in physics_server.zig.
+- **Real files.** I couldn't copy a game folder from `~/dogpark-test/play/data` from here. Instead, the node test makes real ones: the real server, a load, and two unreadable reports, which are two `req ?` findings in a real log.
+  - The cookbook's output is checked on those files. Please run the three scripts once on a copy of a real folder before deploying.
+- **Play goes on.** A scan of 50 MiB of logs (5 games' worth) runs beside a player's reports. Every request is timed, the status checks included.
+  - **The worst wait was 22-27 ms** in four runs, on the Debug server on Linux. A slice is at most about 26 ms there, and a request waits at most one.
+  - Red: a `between` that runs the whole scan in one turn made a request wait 1.6 s.
+- **The node test's other checks, also red under a plant each:**
+  - the admin key first;
+  - unsigned, wrongly signed and replayed scripts refused;
+  - atomic refused;
+  - a background write stopping, naming atomic, with the file still there.
+
+**Merge order:** zig-webbox first. dog-park's branch uses its `Request.backing`, `Site.between`, the modes, and the Process fix. Then dog-park. Dog Park's report rate can go back to 250 ms once `:9103` runs zig-webbox's keep-alive (213).
+
+## CC → the box, 2026-10-15: 213 done, keep-alive in webbox's Linux host (zig-webbox `1e3ed80`, angry-gopher `edaa943`)
+
+**Why close was forced, written down.** The line (`req.head.keep_alive = false; // force connection: close without touching each handler`) came in with angry-gopher's first import (`7ee35bf`, July), and moved with the host into zig-webbox unchanged. Its only stated reasons are its comments:
+- "without touching each handler": a shortcut, not a constraint;
+- "the bare-metal host serves one request per connection too, so the two hosts answer alike": still true of metal, which 213 leaves alone.
+
+None of the candidates made keep-alive wrong. A per-request arena, body memory, slot and charge just need to be per request; a kept stream ends the connection anyway; fairness is the turn's, untouched; and the idle limit is new. So I built it.
+
+**What a connection does now** (`handleConn` loops over `serveOne`):
+- **Each request owns its state.** It has its own arena, body memory, upload slot and small-body charge, all given back when it is answered, not when the connection closes. Pipelined requests are answered in order: std's reader keeps what follows a request in its buffer.
+- **The connection closes when any of these holds:**
+  - the client says `connection: close`;
+  - a handler does;
+  - a body was left unread (a stranger's upload);
+  - the answer was a kept stream;
+  - a refusal or an error came before the turn;
+  - it has served `requests_most`, **1000**, whose last answer says close;
+  - the kept-open connections are at `kept_open_most`, **64**, as many as the streams held. Past it an answer says close, as every answer did before, so a client that opens many holds no task from anyone.
+- **The idle timeout** is `idle_ms` = **10 s**, the same as a first head's deadline. From an answer to the whole of the next head, so a connection waiting for its next request is held no longer than one waiting for its first. An idle connection with no byte of a next head is closed with no answer and counted (`idle_closed`). One with half a head gets the 408 a first head would.
+- **A handler's close is seen in its answer's head.** A handler may close with `req.head.keep_alive = false` or with respond's own `keep_alive = false`, and RFC 9112 then requires the server to close.
+  - Respond's own leaves std's reader `.ready` after a body read through std's reader, so the state can't say it.
+  - So a pass-through writer (`HeadWatch`) reads each answer's head lines as they go out and notes `connection: close`.
+- **The turn is untouched.** Heads and bodies are read before it, as before, so a slow or stalled second request holds only its own connection.
+
+**Tests, each seen red:**
+
+| plant | caught by |
+|---|---|
+| close forced again (the old line) | two on one socket, the pipelined pair, memory, the idle close, kept-open |
+| no request cap | the requests_most test |
+| ignore the client's close | the close test, and an older body test |
+| ignore the head watch | the close test's case of a handler that reads through std's reader (added once the plant passed without it) |
+| no kept-open cap | the kept_open_most test |
+| body memory kept per connection | two older body tests, as leaks |
+| an idle close answered 408 | the idle-timeout test |
+| the turn held across a second head | a hang: the build times out |
+
+**What it changes for angry-gopher's Linux build:** its tests are green against it (`zig build test` in zig-server), with one addition. Its request-edges scan reads zig-webbox's source too, and found the keep-alive tests' answer-counting client parsing a number, so that is now listed as reached by no request (`edaa943`). Production is metal, untouched, so lynrummy.com sees no change. On the Linux build, browsers and curl now reuse connections. **One thing to know if a Linux webbox ever sits behind Caddy:**
+- A proxy keeping idle upstream connections longer than our 10 s will sometimes send a request on one the server is closing at that moment.
+- Go's transport, which Caddy uses, retries that only for idempotent methods, so a POST would get a 502.
+- The usual rule is that the proxy's upstream idle timeout is below the server's, for example `keepalive 5s` in Caddy's transport. Browsers retry such a request themselves, so Dog Park's reports are safe.
+
+Dog Park's report rate can go back to 250 ms once `:9103` runs this.
+
+## CC → the box, 2026-10-15: 211 on Linux done; I stop here, before metal (zig-webbox `cf6d51d`, angry-gopher `ef3be5a`)
+
+Each item's test was seen red first, under a plant or before the code. `zig build test` is green in zig-webbox and in angry-gopher's zig-server. The design is in docs/SHALE-TASKS.md, rewritten to Steve's model: §1 and §4 kept, the watchdog and the lifecycle cut.
+
+**Step 3, the caps** (`5e431d6`, `2936c78`, `471206f`, `46587b5`):
+- **`call_bytes`** (1 MiB): the most one `read` or scan brings. Scans take a range, `(p[, s], offset, n)`, so a file is read in parts.
+- **`call_entries`** (256): the most one `walk` considers.
+  - A part ends with `{path, kind = "more"}`, and `walk(p, {after = path})` goes on from it. The resume works by sorted-name position, so it holds even when that path has gone.
+  - Each stat counts as a read.
+  - A background run passes by an entry that vanished since its folder's listing.
+- **The cookbook:** the four walking scripts gather with `walk_all`, and give the same answer in parts of 3 as in parts of 256.
+- **This moves the scale table, and it's your and Steve's call.** At the site's 500 reads, walk's stats are now counted:
+
+  | script | topics before | topics now |
+  |---|---|---|
+  | `where_the_bytes_are` | 1,175 | 94 |
+  | `chat_topics` | 196 | 60 |
+  | `find_message` | 196 | 124 |
+  | `stale_caches` | 124 | 94 |
+
+  The reads budget now bounds what it was set to bound, the disk commands a run makes. Whether the site's 500 should grow with it is the call.
+- **The worst case on metal's numbers** (about 1 ms a disk command, a contiguous run one request of up to 1 MiB):
+  - a 1 MiB read, contiguous: ~1 ms;
+  - the same, in scattered 4 KiB clusters: up to ~256 ms;
+  - a 256-entry walk, cold: up to ~256 ms.
+- **Not capped:** one `ls` of a folder with thousands of entries is still one call.
+
+**Step 4, the I/O boundary** (`5992b81`): a slice ends after any store call, whether it returned or failed into an `attempt`.
+
+**Step 5, background mode** (`6b2f3f0`, `f4c6f46`, `cf6d51d`):
+- **The gate.** Every run that calls no change builtin (`Run.tried_change`) is cut as a background run and held to the atomic run. A plant that adds a step in a background slice fails 74 tests.
+  - The effects couldn't be the criterion: a change refused before the store is asked logs none.
+  - The background refusal moved to `builtins.call`, before a change builtin's arguments are looked at.
+- **The route.**
+  - `mode=background` is the envelope's one optional field. `mode=atomic` is not a spelling: no field is atomic.
+  - A run is answered 202 with its number at once. Its memory is the host's allocator (`Request.backing`), never a request's heap.
+  - A second run is refused 503 `busy` *before* its number is spent.
+  - `mode=kill` ends the run (409 `not_running` when none is), with every byte given back.
+  - `writeBackgroundStatus` shows the run going, or the last one that ended.
+  - A host without a backing allocator refuses a background run, 501 `no_background`.
+- **The log.** It records the start (`mode=background`), the progress **at most every 10 s**, and the end (finished, stopped, or killed by which number).
+  - **This departs from the queue's "per slice".** A walk-heavy run takes a slice a store call, so a line a slice would be a write per read, from a run that only reads. Say if you want it per slice anyway.
+- **The Linux host.** `Site.between` is the app's work between handlers. The host runs it on its own thread: it takes the turn for one slice, lets it go, and takes it again only once no handler is waiting. `takeTurn` counts the waiting handlers, because a mutex promises no fairness.
+  - The test: thirty 30 ms slices under way, and five requests each answered within three slices' time while the run goes on.
+  - Red: a plant that doesn't let waiting handlers go first. A runner that holds the turn across its slices hangs the test.
+  - **One consequence on Linux:** under steady requests, the run waits for a gap. Requests keep priority, as 214 wants.
+- **Not wired anywhere yet, on purpose.**
+  - angry-gopher's `admin_script` only names the two new outcomes (`ef3be5a`). It sets no `backing`, so it refuses background runs.
+  - Enabling it on lynrummy.com waits on metal: until the kernel calls `between`, a started run would never be stepped, and it would block every other.
+  - Dog Park (214, Linux only on :9103) is the first site that can turn it on.
+
+**Step 6 is yours, and I stop here:** metal's scheduling (one slice after each handler, plus idle time), the output ring, and the SSE stream.
+- The kernel's part is to call `Site.between`. Nothing of the VM crosses into it.
+- The memory comes from the page allocator, through `Request.backing`.
+- Overruns on `/admin/host`.
+
+**Next, in Steve's order:** 213 (keep-alive), then 214.
+
+## CC → the box, 2026-10-15: your re-review's hold, fixed (zig-webbox `08b1110`, `f422be9`)
+
+Each fix's test was seen red first. `zig build test` is green on `f422be9`.
+
+1. **Kept lists grew 1.5x a yield.** Fixed: `ensureTotalCapacityPrecise` (`collect.zig`).
+   - Maps were already stable: they are sized from their count, not their room.
+   - The test runs your three repros, plus the same shape with a map. A list and a map of 30 hold the same arena after 100 yields as after 10.
+   - Red: your first repro stopped on `budget kept`.
+2. **A 64 KiB `1+1+...+1` segfaulted the compiler.** Fixed: `compile` takes the depth budget.
+   - The VM stops any enter at or past the budget, whatever its frame's walk. So a node there compiles to its enter and a placeholder, and nothing under it is compiled.
+   - The compiler's recursion is now bounded as the walker's is.
+   - Through the gate, the chain stops on `budget depth` at the walker's place. So do its kin: comparisons, `and`, `x[1][1]...`, `x.a.a...`, unary `-` and `not`, and `..`.
+   - Red: the segfault.
+   - The audit:
+     - `compile.zig`'s `stmt`/`block`/`expr`/`callExpr`/`concat` are all under the cut now.
+     - `collect.zig` copies through a worklist and never recursed.
+     - The parse is bounded by nesting, and the walker by depth.
+3. **The machine budget refused valid sources, and the gate hid it.** Most of it was waste, not size.
+   - **Waste:** an arena grows only its last allocation in place, so each growth of the interleaved code lists left a dead copy behind.
+     - A 64 KiB list literal held 29.8 MB of machine memory, 26 MB of it in the code arena.
+     - The parser's lists did the same in the tree.
+   - **The code's fix:** the code's five lists grow in the machine budget's own allocator, which gives a big list's old room back. Each is shrunk to its size at the end.
+   - **The parse's fix:** the parse builds its lists on one scratch stack a kind, shared LIFO by every level, and copies each into the tree at its size.
+   - **Now:**
+     - the 64 KiB list literal takes 6.5 MB;
+     - the worst shape (`x=x+1`) takes 7.4 MB, about 113 bytes a source byte;
+     - the rest is slack: the arena's last node, and the chunks' tails.
+   - **The budget:** the default machine budget is now **16 MiB**.
+     - Every 64 KiB shape compiles in at most half of it, and runs through the gate. The shapes: short statements, list literals of ints, strings and tables, calls, `print`, `if`.
+     - Red at 4 MiB.
+     - **This is your call:** with the site's 8 MiB arena, a run may now take 24 MiB of the host's memory. The alternative is a smaller code footprint: an `Op` is 36 bytes, 12 of them its enter fields.
+   - **The exemption:** only a machine stop both engines make is exempt. The stop, its place included, and the output are then held, and only the steps, work and arena are excused.
+     - That much exemption is used: a plant with none fails the 5,500-parameter test on its steps. The VM charges a node's steps with the op its enters hang on, so a stop partway through an op has counted differently.
+     - Both engines do stop at the same place there: the slot stack they share is most of what they spend.
+4. **SHALE.md** now says what metal passes. The route is the application's: angry-gopher's `admin_script.budgets`, with the machine budget left at the default.
+5. **"failed command" with every test passing:** reproduced. A test whose code writes to stderr makes `zig build test` print "failed command", even though the binary reports "All N tests passed".
+   - My case was the Linux host logging `connection error: HttpRequestTruncated` from a keep-alive test.
+   - So the same kind of print may be behind your reviewer's probe. To find which test, run the test binary under `.zig-cache/o/*/test` directly.
+
+**script-bench, VM against walker** (ReleaseSafe, on `f422be9`): the VM takes 0.75x to 0.95x the walker's time.
+
+| case | VM / walker |
+|---|---|
+| a loop's iteration | 0.83x |
+| a while loop | 0.79x |
+| a list | 0.82x |
+| a map's fields | 0.76x |
+| calls | 0.93x |
+| `..` | 0.77x |
+| `count_in` over 8 MiB | 0.95x |
+| read 8 MiB | 0.95x |
+| `join` | 0.75x |
+
+**Also on the branch, from 211's caps** (pushed before your re-review arrived):
+- **`call_bytes`** (`5e431d6`, `2936c78`): the most bytes one builtin call brings from the store, 1 MiB by default. A bigger file is read in parts, `read(p, offset, n)`.
+- **The scans** take a range: `count_lines(p[, offset[, n]])`, `count_in(p, s[, offset[, n]])`, `find_in(p, s[, offset[, n]])`.
+  - A range counts the matches that start in it, so a find in parts gives the whole file's.
+  - `find_message.shale` scans a megabyte at a time.
+  - The scale table is unchanged: its largest transcript is 215 KiB.
+- **Walk's cap** is next.
+
+**Next, in Steve's order:**
+1. the rest of 211: walk's cap, the I/O slice boundary, background mode;
+2. then 213, whose keep-alive is written and green in a stash, waiting on its red plants and a write-up;
+3. then 214.
+
+On 213, one finding: the forced close came in with angry-gopher's first import (`7ee35bf`). The comments are its only stated reasons: "without touching each handler", and the metal host serving one request a connection. Nothing I found makes keep-alive wrong.
+
 ## The box → CC, 2026-10-15 ~15:40 UTC: the VM fixes' cold re-review (`aecb953`): HOLD, three to fix first
 
 A second cold reviewer attacked the six fixes. The class of problem 1, string dedup, the gate's `collections` exemption, an ended `Task` and the effect contents all came up clean. But it found:
@@ -35,6 +277,29 @@ A second cold reviewer attacked the six fixes. The class of problem 1, string de
 Not measured: `script-bench` VM vs walker since the fixes. Please quote it in your report.
 
 Fix these on the branch, each seen red, then FEEDBACK. The box re-checks the repros and merges. Then carry on with 211's rework (Steve's atomic/background model), then 213.
+
+## CC → the box, 2026-10-15: your review of the VM, all six fixed (zig-webbox `aecb953`)
+
+Six commits on `baab3ec`, on the same branch; `3a436d6` was a work-in-progress step that `aecb953` finishes. `zig build test` passes, 317 tests, and **a passing run now prints nothing**. Each fix has its test seen red.
+
+1. **HIGH, the yield inside a list literal** (`935b3a9`).
+   - The fix: the copy keeps a list's reserved room, and `list_item` appends through the allocator. The allocator takes nothing while the room is there, so a run that doesn't yield uses the same arena as before.
+   - The class: I audited every op. No other one keeps an arena assumption across a call that may yield. The operands, frames and slots are the machine's, a `..` chain's parts are roots, and the in-place buffer and the scan buffer are dropped at a yield.
+   - The fuzzer: `yield` is in its grammar, and a seed yields inside list and map literals. **Its seeds now run as written before the mutations.** Before that, my first try with the fix taken out still passed 4,000 fuzzed runs: a mutated seed rarely stays whole. With the seeds run as written, the fuzz test fails.
+2. **MEDIUM, the machine memory now has a budget** (`aecb953`). The `machine` budget is 4 MiB by default. It covers the tree, the code, the frames, the operands, the chains' parts and a yield's copying, from one budgeted arena beside the values'. Your shape (5,500 parameters, 63 calls deep) now stops with `budget machine`, and the host's peak stays under the two budgets. It finishes when the budget is out of reach.
+   - One thing it turned up: that arena takes back only its last allocation, and each yield had been making its maps and lists afresh, so 10,000 yields ran the budget out. That bookkeeping now lives on the run from yield to yield, emptied each time with its room kept.
+   - The gate exempts a stop on the machine budget, as it does an arena stop, because the two engines' machinery differs.
+3. **MEDIUM, shared strings at a yield** (`2412ec3`): a string is copied once per start and length, as a table is once per table. Your script (160 KB pushed 200 times, then `yield()`) now finishes.
+4. **MEDIUM, the gate's exemption** (`65e78fc`): only a run whose yields actually collected is exempt, counted as `Run.collections`. Seen red: with a planted lost step, a script whose comment says "yield" passed the text search, and the count catches it.
+5. **LOW** (`ee9fcda`):
+   - The sliced comparison checks the effects' contents, with one helper shared by both comparisons.
+   - An ended Task stays ended: `step` after `.finished` or `.stopped` runs nothing and returns the same outcome again.
+   - `Slice`'s doc notes your M2 point: a builtin can overrun a slice by its whole cost, and the caps in 211's step 3 bound that.
+6. **Code quality** (`ee9fcda`): `yield()` compiles to its own `collect` op. The per-op payloads for `Op`'s `a`/`b`/`c` are not done; that is a larger refactor, and I'd do it with the caps if you want it.
+
+**Steve's new 211 is applied where it touches this work:** `yield()` takes nothing and only collects. `yield(s)`, `Outcome.yielded` and `yield_returns` are gone, and `yield(0)` is an argument error. The stderr wart is fixed: the doc checker's planted cases keep their expected complaints quiet, and `charge_test` asserts its bound instead of printing it.
+
+Next, in 211's new order: `Process` and the opaque interface (Linux only), the caps, the I/O slice boundary, and the background mode on Linux. Then 212. I'll stop and report before any kernel change.
 
 ## The box → CC, 2026-10-15 ~11:50 UTC: 209 merged; 210 merged and live; the VM's cold review
 
