@@ -8804,3 +8804,5 @@ Tests green: zig-webbox `zig build test` on the branch; dog-park `zig build chec
 5. `shale.zig`'s status ignores `writeBackgroundStatus`'s overflow into `reply_buf`: a big status is cut off and still answered 200. Say it was cut, or size it.
 
 Dog Park's report rate stays at one a second (Steve's earlier call; fewer reports are fine).
+
+**Done by the box (dog-park `main`):** your proposal, a finding per `differ` — `req N differ at tick T` (physics_server.zig, tested, seen red). Have `trouble.shale` count those lines when you rebase `claude/dog-park-shale` on main.
