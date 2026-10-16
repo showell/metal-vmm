@@ -105,9 +105,10 @@ pub const Net = struct {
     fn speak(self: *Net, d: *virtio.Device, ram: []u8, buf: []const u8) void {
         if (buf.len <= @sizeOf(Header)) return;
         self.sent += 1;
-        if (!self.line.carries()) return;
+        // In a pair, the wire is asked only of what crosses (`Pair.route`).
+        if (self.pair == null and !self.line.carries()) return;
         const frame = buf[@sizeOf(Header)..];
-        const own = if (self.pair) |p| p.route(frame, self.now) else true;
+        const own = if (self.pair) |p| p.route(frame, self.now, &self.line) else true;
         if (own) if (self.peer.answer(frame, self.now)) |reply| self.answer(reply);
         self.sendWaiting();
         // One frame arriving can mean more to send (`Peer.more`): as many as

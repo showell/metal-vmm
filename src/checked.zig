@@ -128,10 +128,20 @@ pub const table = [_]Setting{
     .{ .name = "TRANSPORT", .kind = .{ .choice = &.{"pci"} } },
     .{ .name = "VOLUME", .kind = .any },
     .{ .name = "COVERAGE_OUT", .kind = .any },
+    // A pair (docs/TWO-KERNELS.md §4): the client's kernel and command line,
+    // and, in the client, its end of the socket. `PAIR_CLIENT_<NAME>` is
+    // the client's `<NAME>`, checked as the client's (`pair.zig`).
+    .{ .name = "PAIR", .kind = .any },
+    .{ .name = "PAIR_CMDLINE", .kind = .any },
+    .{ .name = "PAIR_FD", .kind = any_number },
 };
 
 /// The families a misspelt setting would be in.
-const families = [_][]const u8{ "WIRE_", "PEER_", "DISK_", "VOLUME_", "RTC_", "PIT_", "DHCP_", "FAULT_" };
+const families = [_][]const u8{ "WIRE_", "PEER_", "DISK_", "VOLUME_", "RTC_", "PIT_", "DHCP_", "FAULT_", "PAIR_" };
+
+/// The client's settings in a pair, checked as the client's environment
+/// before it starts (main.zig's `spawnClient`), not as the server's.
+const client_prefix = "PAIR_CLIENT_";
 
 /// **NAMES IN A FAMILY THAT ARE THE SCRIPTS', NOT METAL-VMM'S**: sweep.sh's
 /// and plants.sh's (`VOLUME_SITE`, `VOLUME_SEEDS`) and zig-metal-unikernel's probes'
@@ -158,6 +168,7 @@ pub fn complaint(entries: []const [*:0]const u8, buf: []u8) ?[]const u8 {
         const eq = std.mem.indexOfScalar(u8, line, '=') orelse continue;
         const name = line[0..eq];
         const value = line[eq + 1 ..];
+        if (std.mem.startsWith(u8, name, client_prefix)) continue;
         const setting = find(name) orelse {
             for (script_names) |ok| {
                 if (std.mem.eql(u8, ok, name)) break;
@@ -332,4 +343,11 @@ test "a time no clock here can hold is refused, not overflowed (metal-vmm QUEUE 
         std.debug.print("{s} is taken, and overflows when read as nanoseconds\n", .{seconds});
         return error.Taken;
     }
+}
+
+test "a pair's settings: a misspelt PAIR_ name is refused, and the client's own are left to the client's check" {
+    var buf: [256]u8 = undefined;
+    try testing.expectEqual(@as(?[]const u8, null), complaint(&.{ "PAIR=fetch.elf", "PAIR_CMDLINE=fetch 10.0.2.15 80 /", "PAIR_CLIENT_WIRE_EAT=nonsense" }, &buf));
+    try testing.expectEqualStrings("PAIR_CMDLNE is not a setting metal-vmm reads (a misspelling?)", complaint(&.{"PAIR_CMDLNE=x"}, &buf).?);
+    try testing.expect(complaint(&.{"PAIR_FD=seven"}, &buf) != null);
 }

@@ -628,6 +628,18 @@ clock.
   - `PAIR=fetch.elf` gets a 200;
   - two runs, and a run pinned to one core, give byte-identical stderr.
 - *Runs it:* CC writes; **box verifies**.
+- *As written* (CC): the socket's half is a file of its own, `src/pair.zig`
+  (`Link`, behind `turn.Hooks` and `turn.Pair`), so main.zig gains only
+  the start and the end. **The client's settings are the server's
+  `PAIR_CLIENT_<NAME>`**, unprefixed: only `WIRE_LATENCY_US` and `PAIR`
+  go to both (a `VOLUME` or `COVERAGE_OUT` inherited by both would be
+  shared by both). The command line is `PAIR_CMDLINE`. A frame the server
+  sends while the client is off is not sent, and is counted (`sent before
+  the client was on`): it is exactly a frame due before d. Each side
+  prints one `pair side N:` line at its end, while it holds the turn, so
+  stderr stays in turn order. The test with two scripted guests on two
+  threads, over a real socket, is red with a limit of c + 2L: frames
+  arrive late.
 
 **12c. `WIRE_TRACE`.**
 - *Files:* `src/turn.zig`, `src/main.zig`.

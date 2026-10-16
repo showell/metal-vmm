@@ -142,6 +142,22 @@ pub fn Inbox(comptime capacity: usize) type {
             return f;
         }
 
+        /// **THIS SIDE POWERS ON AT `d`** (START): from here a frame due
+        /// before it is discarded and counted, and so is one already kept.
+        pub fn powerOn(self: *Self, d: i96) void {
+            self.power_on_at = d;
+            var kept: usize = 0;
+            for (self.frames[0..self.n]) |f| {
+                if (f.due < d) {
+                    self.before_power_on += 1;
+                    continue;
+                }
+                self.frames[kept] = f;
+                kept += 1;
+            }
+            self.n = kept;
+        }
+
         /// Puts back the frame `pump` just gave, at the front: the Wire had
         /// no room, and it never pushes out an older frame.
         pub fn unpump(self: *Self, f: Frame) void {
@@ -254,16 +270,18 @@ pub const Pair = struct {
 
     /// **A FRAME FROM THE GUEST**: across, to its own peer, to both, or
     /// dropped, as `frames.route` says. True when its own peer is to answer
-    /// it.
-    pub fn route(self: *Pair, frame: []const u8, now: u64) bool {
+    /// it. **EATS ARE THE SENDER'S, OF WHAT CROSSES** (§4, "Messages"):
+    /// `line.carries()` (`WIRE_EAT`, `WIRE_LOSS`) is asked of each frame
+    /// that would cross and of no other, and an eaten one is never sent.
+    pub fn route(self: *Pair, frame: []const u8, now: u64, line: anytype) bool {
         switch (frames.route(frame)) {
             .local => return true,
             .cross => {
-                self.send(frame, now);
+                if (line.carries()) self.send(frame, now);
                 return false;
             },
             .both => {
-                self.send(frame, now);
+                if (line.carries()) self.send(frame, now);
                 return true;
             },
             .dropped => {
@@ -273,7 +291,7 @@ pub const Pair = struct {
         }
     }
 
-    fn send(self: *Pair, bytes: []const u8, now: u64) void {
+    pub fn send(self: *Pair, bytes: []const u8, now: u64) void {
         if (bytes.len > frame_max) return;
         var f: Frame = .{ .due = @as(i96, now) + self.lookahead_ns, .side = self.side, .seq = self.seq, .len = @intCast(bytes.len) };
         @memcpy(f.bytes[0..bytes.len], bytes);
@@ -310,6 +328,13 @@ pub const Hooks = struct {
     limitFn: *const fn (ctx: *anyopaque) ?u64,
     otherFn: *const fn (ctx: *anyopaque) Status,
     yieldFn: *const fn (ctx: *anyopaque, clock: u64, status: Status) anyerror!void,
+    /// The server's guest said it listens, at `clock` (§4, "Power-on and
+    /// START"): null on the client's side.
+    listeningFn: ?*const fn (ctx: *anyopaque, clock: u64) void = null,
+
+    pub fn listening(self: Hooks, clock: u64) void {
+        if (self.listeningFn) |f| f(self.ctx, clock);
+    }
 
     pub fn limit(self: Hooks) ?u64 {
         return self.limitFn(self.ctx);
@@ -598,6 +623,7 @@ const Sent = struct {
 test "a pair's frames: unicast across, due L after it is sent; ARP to both; DHCP kept; other broadcasts dropped and counted" {
     var sent: Sent = .{};
     var pair: Pair = .{ .side = 1, .lookahead_ns = 1 * std.time.ns_per_ms, .sendFn = Sent.take, .ctx = &sent };
+    var carry: Carry = .{};
     var out: [64]u8 = @splat(0);
     // A TCP frame to the other machine, at 10.0.2.15.
     @memcpy(out[0..6], &frames.side(0).mac);
@@ -605,24 +631,67 @@ test "a pair's frames: unicast across, due L after it is sent; ARP to both; DHCP
     out[14] = 0x45;
     out[23] = 6;
     @memcpy(out[30..34], &frames.side(0).ip);
-    try testing.expect(!pair.route(&out, 5 * std.time.ns_per_ms));
+    try testing.expect(!pair.route(&out, 5 * std.time.ns_per_ms, &carry));
     try testing.expectEqual(@as(usize, 1), sent.n);
     try testing.expectEqual(@as(i96, 6 * std.time.ns_per_ms), sent.list[0].due);
     try testing.expectEqual(@as(?i96, 6 * std.time.ns_per_ms), pair.first_sent_due);
     // To 10.0.2.2: the own peer's, nothing across.
     @memcpy(out[30..34], &frames.server_ip);
-    try testing.expect(pair.route(&out, 7 * std.time.ns_per_ms));
+    try testing.expect(pair.route(&out, 7 * std.time.ns_per_ms, &carry));
     try testing.expectEqual(@as(usize, 1), sent.n);
     // ARP: both.
     frames.writeBe16(out[12..14], frames.ethertype_arp);
-    try testing.expect(pair.route(&out, 8 * std.time.ns_per_ms));
+    try testing.expect(pair.route(&out, 8 * std.time.ns_per_ms, &carry));
     try testing.expectEqual(@as(usize, 2), sent.n);
     try testing.expectEqual(@as(u64, 1), sent.list[1].seq);
     // A broadcast that is not DHCP: dropped.
     frames.writeBe16(out[12..14], frames.ethertype_ipv4);
     @memcpy(out[0..6], &frames.mac_broadcast);
-    try testing.expect(!pair.route(&out, 9 * std.time.ns_per_ms));
+    try testing.expect(!pair.route(&out, 9 * std.time.ns_per_ms, &carry));
     try testing.expectEqual(@as(u64, 1), pair.dropped_broadcasts);
+}
+
+/// A wire whose `carries` eats the frames named, counting what it is asked.
+const Carry = struct {
+    eat: []const u64 = &.{},
+    asked: u64 = 0,
+    pub fn carries(self: *Carry) bool {
+        self.asked += 1;
+        for (self.eat) |n| if (n == self.asked) return false;
+        return true;
+    }
+};
+
+test "an eat is the sender's, of what crosses: the frames its own peer takes are not counted, and an eaten one is never sent" {
+    var sent: Sent = .{};
+    var pair: Pair = .{ .side = 0, .lookahead_ns = 1, .sendFn = Sent.take, .ctx = &sent };
+    var carry: Carry = .{ .eat = &.{2} };
+    var out: [64]u8 = @splat(0);
+    frames.writeBe16(out[12..14], frames.ethertype_ipv4);
+    out[14] = 0x45;
+    out[23] = 6;
+    @memcpy(out[0..6], &frames.side(1).mac);
+    @memcpy(out[30..34], &frames.side(1).ip);
+    _ = pair.route(&out, 0, &carry); // crossing 1: sent
+    @memcpy(out[30..34], &frames.server_ip);
+    _ = pair.route(&out, 0, &carry); // its own peer's: not asked
+    @memcpy(out[30..34], &frames.side(1).ip);
+    _ = pair.route(&out, 0, &carry); // crossing 2: eaten
+    _ = pair.route(&out, 0, &carry); // crossing 3: sent
+    try testing.expectEqual(@as(u64, 3), carry.asked);
+    try testing.expectEqual(@as(usize, 2), sent.n);
+    try testing.expectEqual(@as(u64, 1), sent.list[1].seq);
+}
+
+test "powering on at d discards the frames already kept that are due before it, and counts them" {
+    var inbox: Inbox(4) = .{};
+    for ([_]i96{ 5, 10, 15 }, 0..) |due, k| _ = inbox.put(frameAt(due, k, 'a'));
+    inbox.powerOn(10);
+    try testing.expectEqual(@as(usize, 2), inbox.n);
+    try testing.expectEqual(@as(u64, 1), inbox.before_power_on);
+    try testing.expect(inbox.put(frameAt(9, 3, 'b')));
+    try testing.expectEqual(@as(usize, 2), inbox.n);
+    try testing.expectEqual(@as(u64, 2), inbox.before_power_on);
 }
 
 const Line = struct {
