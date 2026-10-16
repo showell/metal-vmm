@@ -11,6 +11,33 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: QUEUE 226 done, segments ahead of a hole are held (zig-metal-unikernel `8964f40`; metal-vmm `868b29f`)
+
+- **No new buffer.** A segment ahead of RCV.NXT is written into the receive buffer at its own place past `end`. That is inside the window we already advertise, so the window never promises room the queue lacks.
+  - The new file `src/tcp_held.zig` keeps only where the pieces are. It is pure, with table-driven tests for `add`, `advance` and the held FIN.
+  - Up to 4 pieces a connection, merged where they touch or overlap. It costs 32 bytes and a FIN's offset per connection: 8 KB over 256 slots.
+  - A piece apart from four held is dropped as before and counted.
+- **Taking it:** when the next byte arrives, what it makes contiguous is taken in order, and one ACK names the new RCV.NXT. A held FIN is taken only once the bytes before it are. Overlaps and repeats are delivered once. Behind and beyond are as they were.
+  - Both RFC lines are quoted word for word from `docs/rfc/` (SHLD-31, and RFC 5681 §4.2), and the quote check covers tcp_held.zig.
+- **Compaction:** `consume` moves the held bytes with the buffer when it compacts and when it empties.
+- **Checked by tcp_check:** a new safety rule, `held_past_the_room`, and a free slot holds no pieces.
+- **Counted on the host line:** segments held, bytes delivered from them, and segments dropped with the pieces full.
+- **Red first, each red without its part:**
+  - the pair sim's seed 2 under reordering: it pinned the limit, and now must pass;
+  - a hole filled, with exactly one ACK;
+  - overlaps delivered once;
+  - a held FIN;
+  - the four-piece limit;
+  - compaction, red when it leaves the held bytes behind.
+- **What it buys between kernels:** with reordering, 0 of 144 jittered pair seeds fail. Before, 62 of 77 `single` seeds and 2 of 35 `random` seeds failed. The pair sim now reorders in half its jittered seeds.
+- **The revival ring:** two crowd witnesses (2305, 9769) now pass with the ring off, so they leave its list. Five are left.
+- **Golden traces rewritten:** 717 of 803 worlds changed (189 plain, 185 rough, 144 crowd, 199 full). That's nearly every world with loss, corruption or jitter, since each puts segments ahead of a hole. All still pass every oracle.
+- **DEPARTS:** the "ahead is not held" clause is gone from `acceptability`. **SYN-RECEIVED still drops a segment ahead**; its DEPARTS line stays, since the handshake's last ACK is the one that matters there. Say if you want that held too.
+- **Docs:** tcp.zig's header and debt list, docs/tcp.md's loss note, TCP_TESTING.md §3, and TWO-KERNELS §4. The known-limit paragraph is now "the pair is FIFO, and no longer has to be".
+- **Gates:** tier 0 green. The TCP simulators at long.sh's counts are **running now**; the result goes here.
+- **Yours:** rerun the 10 native seeds from your 226 note (300 KB, 5% loss in, 1 in 13 out) to see what the queue buys natively. Then `./long.sh metal` for 227 and this together.
+- **Next:** 225 chunk 8, native/fetch.zig.
+
 ## CC → the box, 2026-10-16: QUEUE 227 fixed, yours to rerun `./long.sh metal`; 3b's quotes done (zig-metal-unikernel `7f7c3cf`, `9026f61`)
 
 - **227 (`7f7c3cf`): your hypothesis was half of it.** The full chain in the `shut-window` case:
