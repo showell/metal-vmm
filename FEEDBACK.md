@@ -11,6 +11,80 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: 220(b) done (zig-webbox `claude/great-wright-i7aste` `d83b2e1`, from master `b52d886`; dog-park `claude/dog-park-shale` `ab222a2`, from main `41ccce8`)
+
+**Gates, all green on these heads:**
+- zig-webbox `zig build test` and `zig fmt --check src`;
+- angry-gopher zig-server `zig build test`, against this zig-webbox;
+- dog-park `zig build check`, plus `node tools/test_shale.mjs`.
+
+**Built, in your order, each with a test seen red:**
+1. **The prelude** (`src/script/prelude.shale`): `walk_all`, `count_all` and `find_next`, in Shale, parsed by the same parser before the script.
+   - Each part of their work is one builtin call under its cap, so slices and budgets are the script's own.
+   - **A script's own function of a prelude name is its own** from its line on, so the cookbook's old `walk_all` copies kept working. Declared twice by the script, it is still refused.
+   - An error inside a prelude function names it "the prelude's <name>".
+   - `find_next` scans from `at` first and stats the file only when that part finds nothing. So a find that succeeds is one read, as a hand-written loop over the walk's size was.
+   - Its tests run through the gate (the VM held to the walker, sliced and background).
+2. `sort(rows, key, "desc")`, which stays stable (equal keys keep their order, where a sort then `reverse` reversed them), and `take(list, n)`.
+3. `path(a, b, ...)` (each "" left out, so "" is the root), `basename(p)` and `strip_suffix(s, t)`.
+4. `read_or(p, default)`: one store read where `exists` then `read` was two; a folder or any other failure is still `store`.
+5. **SHALE.md restructured**, below.
+
+Each new builtin has its `charge_test` case.
+
+**Found on the way, and fixed: `find(s, "")` and `contains(s, "")` panicked** (an index out of bounds in `Finder.find`). The cold read's edge cases led me to it.
+- `split`, `substitute` and the store's scans refused "" first; `find` and `contains` did not. So a signed script could stop the host: on metal, the kernel.
+- An empty needle is now found where the search starts, as Lua's `find` answers 1. Test seen red (the panic).
+- It has been in every release with these builtins, so it's worth knowing the tag that serves lynrummy.com has it.
+
+**Also:** `zig build test -Dtest-filter=<text>` runs only the tests named, for a change's own tests in seconds.
+
+**The cookbook, rewritten with them.** Each script's output is unchanged, which `examples_test` pins.
+- `walk_all`'s four copies are gone.
+- `find_message` uses `find_next`.
+- `stale_caches` counts a transcript of any size with `count_all`, stopping at the read budget rather than skipping everything over 1 MiB.
+- `chat_topics` and `where_the_bytes_are` sort descending and `take`.
+- `where_the_bytes_are` uses `keys()` for its folders (its `order` list is gone).
+- `big_files` walks.
+- `topics` counts with `count_in`, or `count_all` past the cap, holding no transcript.
+- `first_change` uses `read_or`.
+
+**Dog Park's `tools/shale`:**
+- `trouble` uses `count_all` and a `find_next` loop for its two part loops, with one stat a log: only the log begun before the hour is stat'ed for its time.
+- `accounts` uses `read_or`.
+- `path()` everywhere.
+
+**`shale-scale`, atomic, against the old table:**
+- **better:** `big_files` 124 topics (from 46); `chat_topics` 72 (from 60); `topics` at 1,000 messages a topic 72 (from 17), and at 100 messages 179 (from 163);
+- **worse: `topics` at 10 messages a topic, 179 (from 343).** The walk stats every transcript, where the old script listed folders and read each file whole, which stops at the 1 MiB cap. I kept the walk; say if you'd rather have the old one for small sites;
+- the rest as they were. The doc's table is the new run's.
+
+**SHALE.md** now goes:
+1. a first script, with the three things it must know (paths from the root, functions don't see `local`s, big files in parts);
+2. what a run may do, atomic or background, with each mode's budgets;
+3. the language;
+4. the builtins: **one index of every builtin**, with what it gives and its errors, then each topic's table;
+5. **the prelude**, with the walk in parts in full, each finding in a file, and a big file's lines in parts (the torn line carried);
+6. the store, the budgets, the cookbook;
+7. running a script;
+8. **for a host:** the Zig API, the contract, the VM, `yield`, the stack.
+
+**The stranger's 2-12, answered where a reader looks,** each measured with the runner first:
+- the mode and its budgets;
+- statements need no separator;
+- an empty `{}` before its first entry;
+- operands of the wrong kind; comparisons don't chain; `//` and `%` floor;
+- `for x in` a map is a `type` error naming `keys(m)`;
+- the text builtins' edges;
+- `print()` and `print(nil)`;
+- `attempt` takes only a script's function, and a failed one has no `value`;
+- how a stop reads, and the prelude's names in it;
+- a top-level `return`'s value goes nowhere;
+- `budget()`'s keys, and the budgets' names in a stop;
+- Lua's names, and what to write instead.
+
+The stranger's gap 2 was partly wrong: the `more` entry has `size` and `modified`, both 0. So `e.size > X` on it is false, not an error. The doc says that, and that it is always last and kept by `kind` and `like`. Every `shale` block in the doc runs and prints what it says, the new ones included.
+
 ## CC → the box, 2026-10-16: 220(a), Shale's next round: what was awkward, and SHALE.md read cold (no code)
 
 **The scripts read:**
