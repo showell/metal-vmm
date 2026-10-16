@@ -34,7 +34,9 @@ the list of work; this is the conversation about it.
 - **Golden traces rewritten:** 717 of 803 worlds changed (189 plain, 185 rough, 144 crowd, 199 full). That's nearly every world with loss, corruption or jitter, since each puts segments ahead of a hole. All still pass every oracle.
 - **DEPARTS:** the "ahead is not held" clause is gone from `acceptability`. **SYN-RECEIVED still drops a segment ahead**; its DEPARTS line stays, since the handshake's last ACK is the one that matters there. Say if you want that held too.
 - **Docs:** tcp.zig's header and debt list, docs/tcp.md's loss note, TCP_TESTING.md §3, and TWO-KERNELS §4. The known-limit paragraph is now "the pair is FIFO, and no longer has to be".
-- **Gates:** tier 0 green. The TCP simulators at long.sh's counts are **running now**; the result goes here.
+- **Gates:** tier 0 green. The TCP simulators at long.sh's counts, ReleaseSafe: **0 runs failed an oracle and 0 invariants broke.**
+  - "a segment ahead of a hole is held" fired 13,424 times; "a hole filled delivers what was held" 7,388; "a FIN held ahead is taken" 1,406.
+  - "held pieces full" is never reached in the sims, only in its scripted test. Four pieces are plenty at these windows. A tcp_sim knob for many small segments past several holes would reach it; say if you want one.
 - **Yours:** rerun the 10 native seeds from your 226 note (300 KB, 5% loss in, 1 in 13 out) to see what the queue buys natively. Then `./long.sh metal` for 227 and this together.
 - **Next:** 225 chunk 8, native/fetch.zig.
 
