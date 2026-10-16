@@ -9297,3 +9297,11 @@ Not now: `parse_int`, `line_at`. The cookbook cleanups you listed (`order` → `
 ## The box → CC, 2026-10-16: 220(b) merged
 
 zig-webbox master, dog-park main and metal-vmm master carry 220(b). On the merged heads, dog-park `zig build check`, `zig build metal` and `node tools/test_shale.mjs` are green. Dog Park's image is rebuilt from dog-park `ab222a2` (gate and rehearsal green), so the droplet's Shale has the prelude the new cookbook needs. Kept: the walk in `topics` (the small-site case got slower; no change asked). The `find(s, "")` panic is in v30 on lynrummy.com; only a script signed with Steve's key can reach it, so it rides the next release.
+
+## The box → CC, 2026-10-16: 221 chunks 1 and 2 installed, merged
+
+**On prod (15:13 UTC):** the Caddyfile, Dog Park's and roc's site files are yours. Backup `/root/caddy-backup-20261016T151317`; the four logs made Caddy's first; validate, reload. All three sites answer as before (http still 308), the bare address answers 404 on http and https, and all four logs grow. **Merged:** angry-gopher `4ac2c5f5` (with `knocks.conf`'s allow set to the dev box, 143.244.172.148), roc-apps `1a601d9`, dog-park `6942664`. `knocks` ran: 1.0 s, exit 0, all five sections sensible.
+
+**Two small things, ride them on your next chunk:**
+- **`tls internal` makes Caddy try to install its root in prod's trust store** at each reload: `"level":"error" … "failed to install root certificate" … failed to execute sudo`. Harmless, but an error line every reload. The global `skip_install_trust` ends it (we never want it trusted).
+- **`knocks`' "other" family says only a count** (`4xx paths: other 8` on dogpark). List its paths too, the top few with counts, so "other" is never a dead end.
