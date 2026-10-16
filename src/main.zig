@@ -1557,10 +1557,16 @@ fn spawnClient(environ: std.process.Environ, buf: []u8) ?pair.Spawned {
         std.debug.print("metal-vmm: the pair's client: {s} (KNOBS.md)\n", .{why});
         return null;
     }
+    // No default: the one there was, a shared stdout, interleaves the two
+    // consoles mid-word (pair.spawn).
+    const out = environ.getPosix("PAIR_OUT") orelse {
+        std.debug.print("metal-vmm: a pair needs PAIR_OUT=<file> for the client's console (KNOBS.md)\n", .{});
+        return null;
+    };
     _ = startPair(environ, env) orelse return null;
     // Both are environment values, so each ends in the NUL its entry has.
     const command_line: [*:0]const u8 = if (environ.getPosix("PAIR_CMDLINE")) |c| @ptrCast(c.ptr) else "";
-    return pair.spawn(fds, @ptrCast(kernel.ptr), command_line, env) catch {
+    return pair.spawn(fds, @ptrCast(kernel.ptr), command_line, env, @ptrCast(out.ptr)) catch {
         std.debug.print("metal-vmm: the pair's client would not start\n", .{});
         return null;
     };

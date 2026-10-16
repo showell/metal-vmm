@@ -133,6 +133,7 @@ pub const table = [_]Setting{
     // the client's `<NAME>`, checked as the client's (`pair.zig`).
     .{ .name = "PAIR", .kind = .any },
     .{ .name = "PAIR_CMDLINE", .kind = .any },
+    .{ .name = "PAIR_OUT", .kind = .any },
     .{ .name = "PAIR_FD", .kind = any_number },
     .{ .name = "WIRE_TRACE", .kind = .flag },
 };

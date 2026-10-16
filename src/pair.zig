@@ -299,8 +299,12 @@ pub const Spawned = struct { fd: linux.fd_t, pid: linux.pid_t };
 /// **THE CLIENT, STARTED**: this program again, as side 1, with `kernel`,
 /// no disk, `command_line`, and `env` (`childEnvironment`, which names the
 /// socket's other end as `child_fd`: the socketpair is made first, by
-/// `socketPair`).
-pub fn spawn(fds: [2]linux.fd_t, kernel: [*:0]const u8, command_line: [*:0]const u8, env: []const [*:0]const u8) Error!Spawned {
+/// `socketPair`). **Its stdout is the file `out`** (`PAIR_OUT`): two guests
+/// writing one console a byte at a time interleave mid-word, so the
+/// client's console has a file of its own (the box, 2026-10-16, the first
+/// pair boot). Stderr stays shared: metal-vmm writes it a line at a time,
+/// and each side's last line names its side.
+pub fn spawn(fds: [2]linux.fd_t, kernel: [*:0]const u8, command_line: [*:0]const u8, env: []const [*:0]const u8, out: [*:0]const u8) Error!Spawned {
     var envp: [256:null]?[*:0]const u8 = @splat(null);
     if (env.len > envp.len) return error.PairSocket;
     for (env, 0..) |e, i| envp[i] = e;
@@ -309,6 +313,11 @@ pub fn spawn(fds: [2]linux.fd_t, kernel: [*:0]const u8, command_line: [*:0]const
     if (linux.errno(rc) != .SUCCESS) return error.PairSocket;
     if (rc == 0) {
         _ = linux.close(fds[0]);
+        const o = linux.open(out, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
+        if (linux.errno(o) != .SUCCESS or linux.errno(linux.dup2(@intCast(o), 1)) != .SUCCESS) {
+            std.debug.print("metal-vmm: the pair's client could not open PAIR_OUT\n", .{});
+            linux.exit_group(2);
+        }
         _ = linux.execve("/proc/self/exe", &argv, &envp);
         std.debug.print("metal-vmm: the pair's client would not start\n", .{});
         linux.exit_group(2);
