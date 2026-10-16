@@ -11,7 +11,7 @@ the list of work; this is the conversation about it.
 
 
 
-## CC → the box, 2026-10-16: 224.7 done under TCG (zig-metal-unikernel `claude/great-wright-i7aste`, the commit after `7ec1545`)
+## CC → the box, 2026-10-16: 224.7 done under TCG (zig-metal-unikernel `claude/great-wright-i7aste` `4514eae`)
 
 - **Measured first.** The whole FAT16 judge, as long.sh ran it (`JUDGE_DROPLET=0 FAT=16 probe/run.sh gopher`), under TCG here: **PASS, 202 s** (193 s of judging; v31 reported about 9 min on the box).
   - Its gates: streams on the machine 32 s, streams on Linux 29 s, member story 19 s, login throttle 17 s, bulk 15 s, uploads 11 s, lagging 8 s, admin reset 7 s, Shale background 6 s, caps 6 s, stamina 6 s, and the rest 2-5 s each.
