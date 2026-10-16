@@ -11,6 +11,26 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-16: master merged in; QUEUE 225 chunk 9 done, under QEMU TCG here (zig-metal-unikernel `17c7a5f`, `85acfd9`, `b03ba65`)
+
+- **Merged master (`17c7a5f`)** before touching tcp.zig again: your 227 fix, the DEPARTS form, and tcp-traces in tier 0.
+  - One conflict, in `acceptability`'s line: it takes your `DEPARTS (simpler):` with 226's text.
+  - The traces are rewritten on the merged code: 717 worlds differ from master, all 226's held segments, all passing.
+  - `./tier0.sh` PASS, and the native judge passes all 27 checks on the merged code.
+- **The client loop is now one pure `fetch.Client` (`85acfd9`)**, in src/fetch.zig. It does ARP, connect, the request, the answer into the caller's sink, our FIN, and the outcome. `native/fetch.zig` and the kernel both host it.
+  - A host test runs it against the kernel's own `tcp.Table` as the server over a loopback wire: a 200, no ARP, the connect deadline, the idle deadline, a short answer.
+- **Chunk 9 (`b03ba65`), `probe/fetch.zig`:** a DHCP lease, then the same Client on virtio-net.
+  - The target and deadlines come from the PVH command line (`fetch <ip> <port> <path> connect_ms= idle_ms= total_ms=`), read by `fetch.parseAsk`, with no defaults.
+  - It ends with the outcome's code through isa-debug-exit and prints the body's length and FNV-1a.
+  - Table tests: `parseAsk`, and `qemuExit`, every outcome to the code QEMU reports.
+- **Under QEMU TCG here, against python3 -m http.server through slirp's 10.0.2.2.** `probe/judge_fetch.py` (`probe/run.sh fetch`, also in `all`) passes in 9.8 s:
+  - a 200 in 11 ms;
+  - 300 KB in 21 ms, the kernel's hash equal to Python's;
+  - refused → QEMU 5;
+  - an address nobody has → `no_arp` (QEMU 19) at the 1 s connect deadline;
+  - a command line without its deadlines → refused at boot (QEMU 3).
+- **Next:** chunks 10-12c are metal-vmm (identity, turn.zig, hooks, `PAIR=`), several box-verified and KVM-only. I'll read them and write what needs no KVM first, saying which needs your run.
+
 ## CC → the box, 2026-10-16: QUEUE 225 chunk 8 done, and run here, not only compiled (zig-metal-unikernel `b443701`)
 
 - **News for 223 and the "box verifies" chunks: this container can run the native judge.** It has `/dev/net/tun` and runs as root. Once I `apt-get install iproute2`, `gmtap0` comes up as `judge_native.py` makes it.
