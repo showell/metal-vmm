@@ -13,6 +13,62 @@ pub const peer_mac = [6]u8{ 0x52, 0x55, 0x0a, 0x00, 0x02, 0x02 };
 pub const card_mac = [6]u8{ 0x52, 0x54, 0x00, 0x12, 0x34, 0x56 };
 
 pub const guest_ip = [4]u8{ 10, 0, 2, 15 };
+
+/// **WHICH MACHINE THIS PROCESS IS** (docs/TWO-KERNELS.md §4, "Identity
+/// and forwarding"; QUEUE 225, chunk 10): its card's hardware address and
+/// the lease its peer hands out. Side 0 is QEMU's default, `card_mac` and
+/// `guest_ip`, as every run before a pair; side 1 is one on in each, so the
+/// two guests of a pair never share either.
+pub const Identity = struct { mac: [6]u8, ip: [4]u8 };
+
+/// The sides a pair has: 0, the server, and 1, the client.
+pub const max_side: u8 = 1;
+
+pub fn side(n: u8) Identity {
+    std.debug.assert(n <= max_side);
+    var id: Identity = .{ .mac = card_mac, .ip = guest_ip };
+    id.mac[5] += n;
+    id.ip[3] += n;
+    return id;
+}
+
+/// **THIS PROCESS'S GUEST**: set once, at start, from `SIDE` (main.zig).
+/// Every frame the peer builds for the guest is addressed to it.
+pub var guest: Identity = side(0);
+
+/// **TWO GUESTS MAY NOT SHARE AN ADDRESS**: each side's frames would be
+/// taken by both, and every answer would race. Refused at a pair's start.
+pub fn checkPair(a: Identity, b: Identity) error{ SameMac, SameAddress }!void {
+    if (std.mem.eql(u8, &a.mac, &b.mac)) return error.SameMac;
+    if (std.mem.eql(u8, &a.ip, &b.ip)) return error.SameAddress;
+}
+
+/// **WHERE A FRAME FROM THE GUEST GOES** in a pair (TWO-KERNELS.md §4): each
+/// process's own peer keeps DHCP and 10.0.2.2; every ARP frame is seen by
+/// both, each peer answering only for its own addresses; a unicast frame to
+/// anyone else crosses to the other machine; any other broadcast is dropped
+/// and counted. Outside a pair every frame is `local`, as always.
+pub const Route = enum { local, cross, both, dropped };
+
+pub fn route(frame: []const u8) Route {
+    if (frame.len < 14) return .local;
+    const ethertype = readBe16(frame[12..14]);
+    if (ethertype == ethertype_arp) return .both;
+    if (ethertype != ethertype_ipv4 or frame.len < 34) return .local;
+    const to = frame[30..34].*;
+    const broadcast = std.mem.eql(u8, frame[0..6], &mac_broadcast) or std.mem.eql(u8, &to, &broadcast_ip);
+    if (broadcast) {
+        // DHCP's DISCOVER and REQUEST are broadcast: the own peer's.
+        const ihl: usize = @as(usize, frame[14] & 0x0F) * 4;
+        if (frame[23] == proto_udp and frame.len >= 14 + ihl + 4 and readBe16(frame[14 + ihl + 2 ..][0..2]) == 67) return .local;
+        return .dropped;
+    }
+    if (std.mem.eql(u8, &to, &server_ip) or std.mem.eql(u8, &to, &dns_ip)) return .local;
+    return .cross;
+}
+
+pub const mac_broadcast = [6]u8{ 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+pub const ethertype_arp: u16 = 0x0806;
 pub const server_ip = [4]u8{ 10, 0, 2, 2 };
 pub const dns_ip = [4]u8{ 10, 0, 2, 3 };
 pub const netmask = [4]u8{ 255, 255, 255, 0 };
@@ -77,8 +133,8 @@ pub fn build(out: []u8, from: [4]u8, port: u16, seq: u32, ack: u32, flags: u8, w
     // **THE GUEST VERIFIES THIS ONE.** Its table counts a segment whose
     // checksum is wrong as damaged and drops it without a word, so a
     // client that got it wrong would simply hang.
-    writeBe16(tcp[16..18], pseudoChecksum(from, guest_ip, 6, tcp));
-    return wrap(out, 6, from, guest_ip, tcp_len);
+    writeBe16(tcp[16..18], pseudoChecksum(from, guest.ip, 6, tcp));
+    return wrap(out, 6, from, guest.ip, tcp_len);
 }
 
 /// The TCP segment inside a frame addressed to us, or null.
@@ -137,7 +193,7 @@ pub const proto_udp: u8 = 17;
 pub fn wrap(out: []u8, protocol: u8, from: [4]u8, to: [4]u8, payload_len: usize) []const u8 {
     const ip_len = 20 + payload_len;
 
-    @memcpy(out[0..6], &card_mac);
+    @memcpy(out[0..6], &guest.mac);
     @memcpy(out[6..12], &peer_mac);
     writeBe16(out[12..14], ethertype_ipv4);
 
@@ -265,4 +321,59 @@ test "a SYN's MSS option is read, and anything malformed is none" {
     for (cases) |c| {
         try std.testing.expectEqual(c.mss, mssOption(c.options));
     }
+}
+
+test "each side has its own card and lease; side 0 is QEMU's default, as before a pair" {
+    try std.testing.expectEqualSlices(u8, &card_mac, &side(0).mac);
+    try std.testing.expectEqualSlices(u8, &guest_ip, &side(0).ip);
+    try std.testing.expectEqualSlices(u8, &[_]u8{ 0x52, 0x54, 0x00, 0x12, 0x34, 0x57 }, &side(1).mac);
+    try std.testing.expectEqualSlices(u8, &[_]u8{ 10, 0, 2, 16 }, &side(1).ip);
+    try checkPair(side(0), side(1));
+    try std.testing.expectError(error.SameMac, checkPair(side(1), side(1)));
+    var same_ip = side(1);
+    same_ip.ip = side(0).ip;
+    try std.testing.expectError(error.SameAddress, checkPair(side(0), same_ip));
+}
+
+test "the peer's frames go to this side's guest: its card and its address" {
+    const was = guest;
+    defer guest = was;
+    guest = side(1);
+    var out: [128]u8 = undefined;
+    const frame = build(&out, server_ip, 40000, 1, 2, flag_ack, 100, "x");
+    try std.testing.expectEqualSlices(u8, &side(1).mac, frame[0..6]);
+    try std.testing.expectEqualSlices(u8, &side(1).ip, frame[30..34]);
+    // Its checksum is over side 1's address, as that guest checks it.
+    try std.testing.expectEqual(@as(u16, 0), pseudoChecksum(server_ip, side(1).ip, 6, frame[34..]));
+}
+
+/// A frame from the guest to `to`, of `ethertype`, to `dst_mac`, UDP to
+/// `udp_port` when one is named, else TCP.
+fn fromGuest(out: []u8, dst_mac: [6]u8, ethertype: u16, to: [4]u8, udp_port: ?u16) []const u8 {
+    @memset(out[0..64], 0);
+    @memcpy(out[0..6], &dst_mac);
+    @memcpy(out[6..12], &card_mac);
+    writeBe16(out[12..14], ethertype);
+    out[14] = 0x45;
+    out[23] = if (udp_port != null) proto_udp else 6;
+    @memcpy(out[30..34], &to);
+    if (udp_port) |p| writeBe16(out[36..38], p);
+    return out[0..64];
+}
+
+test "what crosses in a pair: ARP to both, unicast past 10.0.2.2 to the other, DHCP kept, other broadcasts dropped" {
+    var out: [64]u8 = undefined;
+    const Row = struct { frame: []const u8, want: Route };
+    const rows = [_]Row{
+        .{ .frame = fromGuest(&out, mac_broadcast, ethertype_arp, .{ 0, 0, 0, 0 }, null), .want = .both },
+    };
+    for (rows) |r| try std.testing.expectEqual(r.want, route(r.frame));
+    var a: [64]u8 = undefined;
+    try std.testing.expectEqual(Route.cross, route(fromGuest(&a, peer_mac, ethertype_ipv4, side(1).ip, null)));
+    try std.testing.expectEqual(Route.local, route(fromGuest(&a, peer_mac, ethertype_ipv4, server_ip, null)));
+    try std.testing.expectEqual(Route.local, route(fromGuest(&a, peer_mac, ethertype_ipv4, dns_ip, null)));
+    try std.testing.expectEqual(Route.local, route(fromGuest(&a, mac_broadcast, ethertype_ipv4, broadcast_ip, 67)));
+    try std.testing.expectEqual(Route.dropped, route(fromGuest(&a, mac_broadcast, ethertype_ipv4, broadcast_ip, 137)));
+    try std.testing.expectEqual(Route.dropped, route(fromGuest(&a, mac_broadcast, ethertype_ipv4, side(1).ip, null)));
+    try std.testing.expectEqual(Route.local, route(fromGuest(&a, peer_mac, 0x86DD, server_ip, null))); // IPv6: not ours to send on
 }

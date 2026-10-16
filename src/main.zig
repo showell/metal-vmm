@@ -35,6 +35,7 @@ const posix = std.posix;
 const kvm = @import("kvm.zig");
 const virtio = @import("virtio.zig");
 const net = @import("net.zig");
+const frames = @import("frames.zig");
 const clock = @import("clock.zig");
 const entropy = @import("entropy.zig");
 const disk = @import("disk.zig");
@@ -312,6 +313,9 @@ pub const Machine = struct {
     /// What to ask the guest for once it says so, and whether it has been asked.
     request: ?[]const u8 = null,
     asked: bool = false,
+    /// In a pair (`PAIR`): the other machine is the client, so `consider`
+    /// never connects this program's own.
+    pair: bool = false,
     card: ?*net.Net = null,
     card_device: ?*virtio.Device = null,
     /// **THE PC-SHAPED MACHINE** (`TRANSPORT=pci`): the devices on a PCI bus,
@@ -434,7 +438,7 @@ pub const Machine = struct {
     }
 
     fn consider(self: *Machine) void {
-        if (self.asked) return;
+        if (self.asked or self.pair) return;
         const request = self.request orelse return;
         if (std.mem.indexOf(u8, self.said[0..self.said_len], "listening on port 80") == null) return;
         const card = self.card orelse return;
@@ -526,6 +530,7 @@ const census = .{
     .{ "said_len", Holds.value, "" },
     .{ "request", Holds.input, "the first request, read into `request_bufs` before the run's first exit; `asked` is what a restore must put back, and it is a value" },
     .{ "asked", Holds.value, "" },
+    .{ "pair", Holds.value, "" },
     .{ "card", Holds.model, "" },
     .{ "card_device", Holds.model, "" },
     .{ "bus", Holds.model, "" },
@@ -1118,6 +1123,21 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     // **THE WIRE ENDS HERE, ON PURPOSE.** There is always a network device,
     // because the machine at the other end of it is this program and costs
     // nothing when nobody talks to it.
+    // **WHICH SIDE OF A PAIR THIS IS** (`SIDE=0` or `1`, docs/TWO-KERNELS.md
+    // §4; QUEUE 225, chunk 10): its card's address and its lease, read
+    // before the card is built, which copies the address. 0 unset, as
+    // every run before a pair.
+    if (init.environ.getPosix("SIDE")) |text| {
+        const n = std.fmt.parseInt(u8, text, 10) catch std.math.maxInt(u8);
+        if (n > frames.max_side) {
+            std.debug.print("metal-vmm: SIDE={s} is not a side of a pair: 0 or 1\n", .{text});
+            return 2;
+        }
+        frames.guest = frames.side(n);
+    }
+    // **IN A PAIR, THE OTHER MACHINE ASKS** (`PAIR`, chunk 12b): this
+    // program's own client does not connect when the guest says it listens.
+    machine.pair = init.environ.getPosix("PAIR") != null;
     var card = net.Net{};
     var net_device = card.device();
     if (!pc) machine.devices[1] = &net_device;

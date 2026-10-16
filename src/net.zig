@@ -17,6 +17,7 @@
 const std = @import("std");
 const virtio = @import("virtio.zig");
 const wire = @import("peer.zig");
+const frames = @import("frames.zig");
 const faults = @import("faults.zig");
 
 /// VIRTIO_NET_F_MAC: the card's address is in config space. The guest asks for
@@ -76,7 +77,7 @@ pub const Net = struct {
             .context = self,
             .notified = notified,
         };
-        @memcpy(d.config[0..6], &wire.card_mac);
+        @memcpy(d.config[0..6], &frames.guest.mac); // this side's card (frames.side)
         return d;
     }
 
@@ -313,7 +314,6 @@ test "the peer sends no faster than the wire has room, and waits for the guest w
 }
 
 test "a request in more segments than the wire holds goes as the guest takes them, none pushed out" {
-    const frames = @import("frames.zig");
     var card = Net{};
     card.peer.rough.mss = 2;
     var ram = [_]u8{0} ** 256;
@@ -343,7 +343,7 @@ test "an answer to the guest while the wire is full waits for room too, none pus
     // answer to this frame on regardless: with the wire full of the
     // request, the guest sending its SYN-ACK again pushed out a segment of
     // it, which a peer that never resends never sends again.
-    const frames = @import("frames.zig");
+
     var card = Net{};
     card.peer.rough.mss = 2;
     var ram = [_]u8{0} ** 256;
