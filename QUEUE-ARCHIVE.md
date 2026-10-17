@@ -105,7 +105,7 @@ Items moved out of QUEUE.md on 2026-10-16, one line each: number, title, outcome
 Letters and proposals moved the same day:
 
 - **v20 (2026-10-08).** Port, gates, image, Caddy reload: superseded (v31 is in its checks).
-- **B16.** The SDK's commit and what the image reads in the release verdict: DONE; gopher-metal `tools/verdicts.py`, 2026-10-07, no sha named.
+- **B16.** The SDK's commit and what the image reads in the release verdict: DONE; gopher-metal `tools/verdicts.py`, 2026-10-07, no sha named; first written as: a verdict keyed by what the image reads, not angry-gopher's commit, and (2026-10-07) the SDK too.
 - **P198.12.** The volume's two Debug-heavy paths (`aliasFor`, the FAT32 free count): taken as 203(b), DONE (FEEDBACK 2026-10-14).
 - **P193(c).** Ask before a stuck disk is restarted: decided in 198 ((b) for the site's disk, (a) for the NIC).
 - **P139(a), P139(b).** State changes only by named events: taken as 139 and 140, DONE.
@@ -220,16 +220,16 @@ The archive as moved on 2026-10-07 and 2026-10-10 (items 1-155, the proposals F/
 - **100.** Item 93 continued: status unmarked; commits named: none.
 - **102.** Paused (Steve, 2026-10-07 evening: a stable point first; the box will say when). The rough…: Paused; commits named: 4f6d7bc.
 - **101.** Your proposals again: Paused; commits named: none.
-- **N1..** N1. Knobs for the refusals only a device reaches: status unmarked; commits named: none.
-- **N2..** N2. store_sim that fills the volume: status unmarked; commits named: none.
-- **N3..** N3. readAt, if Steve takes it as the seventh: status unmarked; commits named: none.
+- **N1.** Knobs for the refusals only a device reaches: status unmarked; commits named: none.
+- **N2.** store_sim that fills the volume: status unmarked; commits named: none.
+- **N3.** readAt, if Steve takes it as the seventh: status unmarked; commits named: none.
 - **N4.** N4 (the box's). Run "For the box": status unmarked; commits named: none.
-- **N5..** N5. The two FAT refusals that need a foreign directory: status unmarked; commits named: none.
-- **P1..** P1. TIME-WAIT, and closed ports that answer: status unmarked; commits named: none.
-- **P2..** P2. The guest's window, kept (CC, with item 39a) and probed (not yet: a zero window waits …: status unmarked; commits named: none.
-- **P3..** P3. Recovery like a real client's: status unmarked; commits named: none.
+- **N5.** The two FAT refusals that need a foreign directory: status unmarked; commits named: none.
+- **P1.** TIME-WAIT, and closed ports that answer. Answered: yes, a halt rest resolves resets quiet, and a guest that rests: status unmarked; commits named: none.
+- **P2.** The guest's window, kept (CC, with item 39a) and probed (not yet: a zero window waits …: status unmarked; commits named: none.
+- **P3.** Recovery like a real client's: status unmarked; commits named: none.
 - **P5.** P5 (with P6, P7). RFC 5961 resets and §3.10.7 acknowledgement checks: status unmarked; commits named: none.
-- **S1..** S1. The sweep excuses the peer's own give-up: status unmarked; commits named: none.
+- **S1.** The sweep excuses the peer's own give-up: status unmarked; commits named: none.
 - **P4.** P4 (the box's call). An MSS option in the peer's SYN: status unmarked; commits named: none.
 - **8.** Config-data port accesses at any offset and width (H1): Done; commits named: none.
 - **9.** The deadline timer between halts (H2): Done in item 5; commits named: none.
@@ -240,33 +240,33 @@ The archive as moved on 2026-10-07 and 2026-10-10 (items 1-155, the proposals F/
 - **14.** The host's time behind the filter, on both machines (D1): Done for TRANSPORT=pci; commits named: none.
 - **15.** Done (CC; check.sh first, see Questions). Ports 0xE0/0xE1 answer only the rewritten instru…: Done; commits named: none.
 - **16.** A halt is not a hang on the PC-shaped machine (P1): Done; commits named: none.
-- **F1..** F1. A bad sector, aimed by address: status unmarked; commits named: none.
-- **F2..** F2. Silent rot on read: status unmarked; commits named: none.
-- **F3..** F3. A write cache, and whether the guest ever flushes: status unmarked; commits named: none.
-- **F4..** F4. A client that retries what got no answer: status unmarked; commits named: none.
-- **F5..** F5. The calendar as a knob: status unmarked; commits named: none.
-- **G1..** G1. The seam that makes fat16.zig a layer with nothing below it: status unmarked; commits named: none.
-- **G2..** G2. A fault on a multi-sector write: status unmarked; commits named: none.
-- **H1..** H1. A slow client: status unmarked; commits named: none.
-- **H5..** H5. Pipelining: status unmarked; commits named: none.
-- **H3..** H3. Frames that lie, from the peer: status unmarked; commits named: none.
-- **H2..** H2. A lease that ends: status unmarked; commits named: none.
-- **H4..** H4. A simulator for ready.zig: status unmarked; commits named: none.
-- **I1..** I1. A SYNCHRONIZE CACHE that fails: status unmarked; commits named: none.
-- **I2..** I2. A volume that is slow: status unmarked; commits named: none.
-- **I3..** I3. UNIT ATTENTION in the middle of a run: status unmarked; commits named: none.
-- **I4..** I4. The seam under io.durable: status unmarked; commits named: none.
-- **I5..** I5. A seed that draws the volume's faults: status unmarked; commits named: none.
-- **J1..** J1. A volume that goes away: status unmarked; commits named: none.
-- **J2..** J2. A volume that turns read-only: status unmarked; commits named: none.
-- **J3..** J3. Lies in the peer's UDP: status unmarked; commits named: none.
-- **J4..** J4. A flush that costs more than a read: status unmarked; commits named: none.
+- **F1.** A bad sector, aimed by address: status unmarked; commits named: none.
+- **F2.** Silent rot on read: status unmarked; commits named: none.
+- **F3.** A write cache, and whether the guest ever flushes: status unmarked; commits named: none.
+- **F4.** A client that retries what got no answer: status unmarked; commits named: none.
+- **F5.** The calendar as a knob: status unmarked; commits named: none.
+- **G1.** The seam that makes fat16.zig a layer with nothing below it: status unmarked; commits named: none.
+- **G2.** A fault on a multi-sector write: status unmarked; commits named: none.
+- **H1.** A slow client: status unmarked; commits named: none.
+- **H5.** Pipelining: status unmarked; commits named: none.
+- **H3.** Frames that lie, from the peer: status unmarked; commits named: none.
+- **H2.** A lease that ends: status unmarked; commits named: none.
+- **H4.** A simulator for ready.zig: status unmarked; commits named: none.
+- **I1.** A SYNCHRONIZE CACHE that fails: status unmarked; commits named: none.
+- **I2.** A volume that is slow: status unmarked; commits named: none.
+- **I3.** UNIT ATTENTION in the middle of a run: status unmarked; commits named: none.
+- **I4.** The seam under io.durable: status unmarked; commits named: none.
+- **I5.** A seed that draws the volume's faults: status unmarked; commits named: none.
+- **J1.** A volume that goes away: status unmarked; commits named: none.
+- **J2.** A volume that turns read-only: status unmarked; commits named: none.
+- **J3.** Lies in the peer's UDP: status unmarked; commits named: none.
+- **J4.** A flush that costs more than a read: status unmarked; commits named: none.
 - **J5.** J5 (the box's). A coverage property per refusal in the guest's: status unmarked; commits named: none.
-- **K1..** K1. A sweep that judges durability, not the page: status unmarked; commits named: none.
-- **K2..** K2. A write cache that writes back in its own order: status unmarked; commits named: none.
-- **K3..** K3. Crowds the size of the kernel's table: status unmarked; commits named: none.
-- **K4..** K4. An edge floor: status unmarked; commits named: none.
-- **K5..** K5. One report, two images: status unmarked; commits named: none.
+- **K1.** A sweep that judges durability, not the page: status unmarked; commits named: none.
+- **K2.** A write cache that writes back in its own order: status unmarked; commits named: none.
+- **K3.** Crowds the size of the kernel's table: status unmarked; commits named: none.
+- **K4.** An edge floor: status unmarked; commits named: none.
+- **K5.** One report, two images: status unmarked; commits named: none.
 - **Answer (CC, items 97 and 100)**: commits named: none.
 - **Answer (CC, item 94, second round)**: commits named: zig-coverage-sdk 40b4e54, zig-coverage-sdk e8fc53f, zig-coverage-sdk 28cfd98, zig-coverage-sdk 45110bb, zig-coverage-sdk b9cf355, gopher-metal 1cb9002, gopher-metal 06d296e, 45110bb, 06d296e, b9cf355, 28cfd98, 1cb9002.
 - **Answer (CC, item 94)**: commits named: zig-coverage-sdk 7ca0f1d, zig-coverage-sdk 45110bb, 28cfd98.
@@ -280,31 +280,27 @@ The archive as moved on 2026-10-07 and 2026-10-10 (items 1-155, the proposals F/
 - **Answer (CC, item 35)**: commits named: none.
 - **Answer (CC, item 23)**: commits named: none.
 - **Answer (CC, item 30)**: commits named: gopher-metal 4953f7e.
-- **B13..** B13. scsi.bring's config offsets to the spec's (30, 32), in v18: status unmarked; commits named: none.
-- **B14.** B14 done (2026-10-06, with item 68): done; commits named: none.
-- **B14.** B14 (as first written; lie was the wrong cache). v18's flush, proven on metal-vmm's volume: status unmarked; commits named: none.
-- **B15..** B15. The invariants in the kernel, as always: status unmarked; commits named: none.
-- **B16.** B16 (2026-10-07): the SDK too: status unmarked; commits named: none.
-- **B16..** B16. A verdict keyed by what the image reads, not angry-gopher's commit: status unmarked; commits named: none.
+- **B13.** scsi.bring's config offsets to the spec's (30, 32), in v18: status unmarked; commits named: none.
+- **B14.** B14 done (2026-10-06, with item 68); first written as: v18's flush, proven on metal-vmm's volume (the lie was the wrong cache): done; commits named: none.
+- **B15.** The invariants in the kernel, as always: status unmarked; commits named: none.
 - **B18.** B18 (was CC's 65, J3): status unmarked; commits named: none.
-- **B21..** B21. readConfig in probe/gopher.zig still says catch return conf: status unmarked; commits named: gopher-metal 12530f9, zig-coverage-sdk b9cf355.
-- **B23..** B23. A request head over 16 KiB gets no answer on metal-vmm: status unmarked; commits named: none.
-- **B22..** B22. fat16.remove takes a directory: status unmarked; commits named: none.
+- **B21.** readConfig in probe/gopher.zig still says catch return conf: status unmarked; commits named: gopher-metal 12530f9, zig-coverage-sdk b9cf355.
+- **B23.** A request head over 16 KiB gets no answer on metal-vmm. Done (2026-10-08): the peer sent the first 8,192 bytes: done; commits named: none.
+- **B22.** fat16.remove takes a directory: status unmarked; commits named: none.
 - **B17.** B17 (J5): status unmarked; commits named: gopher-metal 4953f7e, metal-vmm 49f46ab.
-- **B11..** B11. Does prod's chat volume cache writes? Read MODE SENSE's caching: status unmarked; commits named: none.
-- **B12..** B12. The real kernel reaches revival: a long.sh rough-peer run: status unmarked; commits named: gopher-metal 582510e, 9b0a41c, metal-vmm c09ce2d, gopher-metal f928de0, gopher-metal fc42856.
-- **B1..** B1. The gates on both merged bases: metal-vmm check.sh, same.sh,: status unmarked; commits named: none.
-- **B2..** B2. sweep.sh 1 200 on gopher.elf; answer item 23 here (time per: status unmarked; commits named: none.
-- **B3..** B3. F1, the bad sector, against gopher.elf (the pinned file, the: status unmarked; commits named: none.
-- **B4..** B4. The last three TCP properties on the real kernel: past the window: status unmarked; commits named: none.
-- **B5..** B5. fat16, the two findings: makePath's depth against check's and: status unmarked; commits named: none.
-- **B6..** B6. request_heap's figure (item 35's second finding): count what a: status unmarked; commits named: none.
-- **B7..** B7. G1, the seam that makes fat16.zig a layer with nothing below it;: status unmarked; commits named: none.
-- **B8..** B8. Item 17 (is the deadline mark needed?): status unmarked; commits named: none.
-- **B9..** B9. The snapshot's box half (item 30's note): registers, events,: status unmarked; commits named: none.
-- **B10..** B10. Item 14's microvm half, with its own check.sh run: status unmarked; commits named: 44f6522, f66becf, gopher-metal b9c3943, gopher-metal 7ffdf55.
-- **D3..** D3. Observed on this box: Linux 6.8.0-138-generic, an Intel host with: status unmarked; commits named: gopher-metal 1f742bb.
-- **P1..** P1. Yes: a halt rest resolves resets quiet. And a guest that rests: status unmarked; commits named: none.
+- **B11.** Does prod's chat volume cache writes? Read MODE SENSE's caching: status unmarked; commits named: none.
+- **B12.** The real kernel reaches revival: a long.sh rough-peer run: status unmarked; commits named: gopher-metal 582510e, 9b0a41c, metal-vmm c09ce2d, gopher-metal f928de0, gopher-metal fc42856.
+- **B1.** The gates on both merged bases: metal-vmm check.sh, same.sh,: status unmarked; commits named: none.
+- **B2.** sweep.sh 1 200 on gopher.elf; answer item 23 here (time per: status unmarked; commits named: none.
+- **B3.** F1, the bad sector, against gopher.elf (the pinned file, the: status unmarked; commits named: none.
+- **B4.** The last three TCP properties on the real kernel: past the window: status unmarked; commits named: none.
+- **B5.** fat16, the two findings: makePath's depth against check's and: status unmarked; commits named: none.
+- **B6.** request_heap's figure (item 35's second finding): count what a: status unmarked; commits named: none.
+- **B7.** G1, the seam that makes fat16.zig a layer with nothing below it;: status unmarked; commits named: none.
+- **B8.** Item 17 (is the deadline mark needed?): status unmarked; commits named: none.
+- **B9.** The snapshot's box half (item 30's note): registers, events,: status unmarked; commits named: none.
+- **B10.** Item 14's microvm half, with its own check.sh run: status unmarked; commits named: 44f6522, f66becf, gopher-metal b9c3943, gopher-metal 7ffdf55.
+- **D3.** Observed on this box: Linux 6.8.0-138-generic, an Intel host with: status unmarked; commits named: gopher-metal 1f742bb.
 - **103.** Attack what the box changed on 2026-10-07 and 10-08: status unmarked; commits named: gopher-metal d86ec98, gopher-metal c7539eb, d7a5903, e07b363, d2e7480, 83584da, angry-gopher 9e8e615d, angry-gopher ef3091eb, 8b617f3c, metal-vmm 766bffc, metal-vmm 9f24e42, metal-vmm 311731c (and more).
 - **104.** The cold hunt's smaller findings: status unmarked; commits named: none.
 - **105.** A lint for failure read as absence, in angry-gopher: status unmarked; commits named: angry-gopher ef3091eb.
@@ -349,7 +345,7 @@ The archive as moved on 2026-10-07 and 2026-10-10 (items 1-155, the proposals F/
 - **150.** virtio's take and ring sizes: Done; commits named: gopher-metal 99818c2.
 - **151.** Why a chat send costs 38 disk requests: Reported; commits named: none.
 - **152.** orphaned_runs: count orphaned long names as fsck.fat does: Done; commits named: gopher-metal 725c0dd, gopher-metal 7f48922.
-- **101.** Done (CC, 2026-10-08): C1-C5 under Proposed. Was: your: Done; commits named: none.
+- **101 (the first, 2026-10-08).** Done (CC, 2026-10-08): C1-C5 under Proposed. Was: your: Done; commits named: none.
 - **154.** From the box's cold review of 150/152: Done; commits named: gopher-metal 08a18cf, gopher-metal 9c606ac, gopher-metal afc78fe.
 - **B41.** B41, moved to CC as 148(a) (2026-10-10): moved to CC as 148; commits named: none.
 - **B42.** B42, done (2026-10-10, gopher-metal e4a7f3b, bdef1c2, on master; a cold review's four fixe…: done; commits named: gopher-metal e4a7f3b, gopher-metal bdef1c2.
@@ -362,7 +358,6 @@ The archive as moved on 2026-10-07 and 2026-10-10 (items 1-155, the proposals F/
 - **B33.** B33, done (CC, 2026-10-10, gopher-metal 91038e9, bf41cd1; 900 reaches over the 300 seeds, …: done; commits named: gopher-metal 91038e9, gopher-metal bf41cd1, gopher-metal b4463a9, 17eb459, b4463a9, 9e7d8e9.
 - **B30.** B30, done (CC, 2026-10-10, gopher-metal 629b576, 27 remade): done; commits named: gopher-metal 629b576.
 - **B28.** B28, done (2026-10-09, metal-vmm a92ca03, gopher-metal 21b1e47): the coverage door: done; commits named: metal-vmm a92ca03, gopher-metal 21b1e47.
-- **B23.** B23, done (2026-10-08): the peer sent the first 8,192 bytes: done; commits named: none.
 - **B24.** B24, done (gopher-metal, long.sh): done; commits named: none.
 - **B25.** B25, done (gopher-metal c7539eb): done; commits named: gopher-metal c7539eb.
 - **B27.** B27, done (gopher-metal 4ed59ba): done; commits named: gopher-metal 4ed59ba, angry-gopher 8b617f3c.
@@ -389,4 +384,4 @@ The archive as moved on 2026-10-07 and 2026-10-10 (items 1-155, the proposals F/
 - **Answer (CC, item 98: done before the pause, not merged.)**: commits named: gopher-metal 9c40811, gopher-metal a7940d7, 9745fd1, 1a3fbc4, 051941b.
 - **Answer (2026-10-07, to CC's item 98 note)**: commits named: gopher-metal b445e6f, 180462b, e2dbde6, e021bed.
 - **B38.** B38 (2026-10-10; BLOCKS v22, Steve): the FAT simulator got 67% slower since v21: status unmarked; commits named: b4463a9, a74cbd7, gopher-metal b4463a9.
-- **99.** Held until the box rebases angry-gopher's request-door onto master: Held; commits named: angry-gopher 8b617f3c.
+- **99 (the first).** Held until the box rebases angry-gopher's request-door onto master: Held; commits named: angry-gopher 8b617f3c.
