@@ -17,8 +17,9 @@ What works best, so far, is **a class hunt**: name one kind of mistake,
 walk every place in the code it could live, and end in red tests. Seed
 sweeps find less than they cost. The judge is moving from "does this run
 differ from the unhurt one, and is the difference excused?" to "did anything
-forbidden happen?", and `plants.sh` (a standing set of planted bugs) is to
-run on every change to it (written 2026-10-09; its first run is pending). The whole-machine snapshot (`docs/SNAPSHOT.md`) is
+forbidden happen?", and `plants.sh` (a standing set of planted bugs, the
+names in zig-metal-unikernel build.zig's `Plant` enum) runs on every change
+to it. The whole-machine snapshot (`docs/SNAPSHOT.md`) is
 parked. Essays: `notes/the-plan-after-the-postmortem.md`,
 `notes/our-lexicon.md` (the shared vocabulary).
 
@@ -30,13 +31,16 @@ parked. Essays: `notes/the-plan-after-the-postmortem.md`,
   QEMU. It runs the guests: `check.sh`, `same.sh`, `site.sh`, `pc_vs_microvm.sh`,
   `sweep.sh`, `nightly.sh` and the rest. It merges your branch into `master`
   after `check-cc.sh` (your branch built and swept on a guest, then
-  `plants.sh`; its first run is pending), a cold review and the unit tests; what the guests catch comes
+  `plants.sh`), a cold review and the unit tests; what the guests catch comes
   back to you as new items. It owns zig-metal-unikernel,
   the guest side of every contract here, and the releases.
 - **You (CC)**: build what needs no emulator, and anything adversarial
   (Steve, 2026-10-08): logic, tests that run on ordinary Linux, attacking
-  what the box changed, design. You have no `/dev/kvm`, so no guest ever
-  boots in your container. Do not try to get one.
+  what the box changed, design. You have zig, Python and QEMU under TCG
+  (software emulation), but no `/dev/kvm`, no TAP and no vfat mounts: a
+  guest boots in your container under QEMU, never under metal-vmm, and
+  metal-vmm's scripts, the native judge and the sweeps are the box's. Do not
+  try to get KVM.
 - **Talk in `FEEDBACK.md`** (this repo, newest entry first, signed). Say
   there when a task should have been split, when a check is too slow to run,
   when you disagree with an item, or when you are stuck (one line, then
@@ -124,15 +128,17 @@ Questions before building on it.
 | zig-metal-unikernel | `master` | the box | the base: you branch from it, the box merges into it |
 | zig-coverage-sdk | `main` | the box | the base: you branch from it, the box merges into it |
 | angry-gopher | `master` | the box | the base: you branch from it, the box merges into it |
+| zig-webbox | `master` | the box | the base: you branch from it, the box merges into it; zig-metal-unikernel builds gopher.elf from it |
+| dog-park | `main` | the box | the base, when an item names it; `check-cc.sh` does not take it from your branch |
 | zig-metal-unikernel, angry-gopher | `next`, only during a release's gates | the box | integration while `master` is held for the gates; `master` fast-forwards to it after the tag, and it is deleted. Never branch from it |
 | each of them | `claude/<your session's name>` | you | your work, with that repo's base merged in |
 
-**What serves lynrummy.com is a tag, not a branch**: zig-metal-unikernel's `vN`,
-and its README's "Serving" line says which. `master` may be
-ahead of it. `interrupts` and `antithesis-sdk` are retired: both are merged
+**What serves lynrummy.com is a tag, not a branch**: zig-metal-unikernel's `vN`.
+Its README's "Where it stands" says how to find which (it names no tag, by
+design). `master` may be ahead of it. `interrupts` and `antithesis-sdk` are retired: both are merged
 into `master`; don't branch from them.
 
-Use the same `claude/<name>` in both repos. Each QUEUE.md item says which
+Use the same `claude/<name>` in every repo. Each QUEUE.md item says which
 repo it is in; an item in zig-metal-unikernel is merged there, and its answer comes
 here like any other.
 
@@ -156,8 +162,9 @@ Antithesis" above all: those differences are decisions, not gaps.
 
 ## zig-metal-unikernel: the simulators
 
-Since 2026-10-05 you work in zig-metal-unikernel too, on the **simulators and
-properties only**: `src/tcp_sim.zig`, `src/fat_sim.zig`, `src/properties.zig`,
+You work in zig-metal-unikernel too, on the **simulators and properties**,
+and on **production code, such as `src/tcp.zig`, only when a QUEUE.md item
+gives it to you** (225 and 226 did): `src/tcp_sim.zig`, `src/fat_sim.zig`, `src/properties.zig`,
 new simulators beside them, their regression seeds, and `coverage/floor-sim.txt`
 (raise it; never lower it without a line in QUEUE.md saying why). Read its
 `CLAUDE.md` and its `COVERAGE.md`, then `TCP_TESTING.md`.
@@ -194,8 +201,10 @@ about the module, not a gap in the simulator. So:
 - **Your container's disk is small, and zig fills it.** Clear `.zig-cache`
   between large runs.
 - Do not change the scripts (`check.sh`, `same.sh`, `site.sh`, `pc_vs_microvm.sh`,
-  `lossy.sh`, `refused.sh`, `sound.sh`) without saying so in `QUEUE.md`.
-  zig-metal-unikernel's `gates.sh` runs three of them on a machine you cannot see.
+  `pair.sh`, `sleeps.sh`, `timeouts.sh`, `lossy.sh`, `refused.sh`, `sound.sh`)
+  without saying so in `QUEUE.md`. zig-metal-unikernel's gates run several of
+  them on a machine you cannot see (`grep -n 'VMM' tier*.sh long.sh` there
+  says which).
   A change to the judge (`sweep.sh`, `sound.sh`, an excuse) says so in its
   commit, so the box runs `plants.sh` before merging it.
 - A review has this shape: what holds up; findings by severity, each with the
