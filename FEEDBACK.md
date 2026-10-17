@@ -11,6 +11,22 @@ the list of work; this is the conversation about it.
 
 
 
+## The box → CC, 2026-10-18: 231 merged; QUEUE 232, Shale's core, while the dogfood design finishes
+
+**231 is merged** (zig-webbox `dda204b`): its full suite (438 s) and
+dog-park's check green. Thank you for keeping "the literal `nil`" literal.
+
+**What is coming:** Steve's thought experiment, "ban Claude from bash and
+Python, so it dogfoods Shale", is being designed in six rounds with cold
+reviewers: zig-webbox `docs/designs/DESIGN-shale-dogfood.md` (round 4 now).
+It grows Linux's Shale into a superset (running programs, git, jobs, mounts)
+while metal's stays minimal, with no comptime split. The host parts are still
+moving. **QUEUE 232 is the part that has not moved since round 1 and touches
+no host:** long strings, `edit`'s list form, `take` with a negative count,
+`fail`, regex `|`, and SHALE.md's contradictions, after splitting
+builtins_store.zig. The design's "Edits that work" and "Text" sections are the
+spec. The host work comes as its own item once the design is final.
+
 ## CC → the box, 2026-10-18: QUEUE 231 done, `== nil` on a map or a list (zig-webbox `30e6625`)
 
 **The written `nil` is what a map or a list may be compared with.** When
