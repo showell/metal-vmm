@@ -7,6 +7,70 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-17: QUEUE 233 chunk 2 done, the Linux prelude (zig-webbox `8583104` to `41e3e96`)
+
+**Chunk 2, tested red first, through the gate, against the fixture
+program.** Pushed to zig-webbox `claude/great-wright-i7aste`.
+- **The image:** gopher.elf's text grows **3,680 bytes** over chunk 1
+  (2,655,181 to 2,658,861), dogpark.elf's 3,056 (1,340,813 to 1,343,869).
+  All of it is the core's two changes below; the prelude itself is
+  Linux-only.
+- **The checks:** zig-webbox's `zig build test` and `zig fmt --check` are
+  green.
+
+**The commits:**
+1. **Optional parameters, `function f(a, b?)`** (`8583104`). This is a
+   language change the design didn't name; I made it because the design
+   needs it. Its `re_lines(s, pattern[, opts])` and
+   `glob(pattern[, {hidden}])` are Shale functions, and a Shale call
+   must give every parameter or the parse refuses it. Now a parameter
+   marked `?` may be left out:
+   - Optional parameters come last, and a call that leaves one out gets
+     nil, filled in by the parse.
+   - So both engines run an ordinary call, and the gate needs nothing
+     new.
+   - The arity is still checked: `` `f` takes 1 to 2 arguments, given
+     3 ``.
+   - A `?` anywhere else says what it is for.
+   - **If you'd rather not have it in the language**, the other way is
+     two names (`re_lines` and `re_lines_with`). Say so and I'll swap it.
+2. **`glob(pattern, {hidden = true})`** (`dee29da`), in the core's prelude.
+   An unknown option fails, naming it.
+3. **The Linux prelude** (`41e3e96`, `src/shale_prelude_linux.shale`,
+   embedded by the host). It has:
+   - `run` and `real` over `host`;
+   - `must`, `re_lines`, `head_lines`, `tail_lines`, `unique`,
+     `grep_all`, `newest`, `create` and `edits_all`;
+   - after it, the repo's `.shale/prelude.shale` and the user's prelude.
+     `SHALE_PRELUDE` pins the user's (`""` for none); one named but
+     missing is the CLI's exit 2.
+   - A stop in a prelude prints at that prelude's line, by its name:
+     `stopped at .shale/prelude.shale:5:12 (in \`.shale/prelude.shale's
+     bad\`)`.
+
+**Where I differed from the design, or it left me to guess:**
+- **`must`'s timeout message says only "timed out"**, without the ms. The
+  wall time differs between the gate's engines, and the design's own
+  wording has none.
+- **`must` drops one trailing newline** of the output it prints, so a
+  failing program's last line isn't followed by a blank one.
+- **`edits_all`'s check works on text in memory.** It replays the edits
+  with `substitute`, asserting each `old` once (or at all, for `all`).
+  A `word` edit is only checked for being there at all; `edit` itself
+  then holds it to whole words, so in rare cases a `word` edit could
+  stop after earlier files were written. It gives the total
+  replacements. The set is not atomic, as the design says.
+- **`newest` gives names**, the newest first (`ls -t | head`). Names that
+  changed in the same second come out in name order.
+- **`tail_lines`** starts at 64 KiB from the end and doubles until `n`
+  lines fit. `head_lines`, `tail_lines` and `create` stop as class `fail`
+  for a negative count or an existing file, since a Shale function can
+  raise no other class.
+- **The `job_*` wrappers come with chunk 4**, with the host calls they
+  wrap.
+
+Next is chunk 3, the git prelude.
+
 ## CC → the box, 2026-10-17: QUEUE 233 chunk 1 done, the seam and `run` (zig-webbox `6f66c72` to `b7ca5bc`)
 
 **Chunk 1, as the design has it, tested red first against the fixture
