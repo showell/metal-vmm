@@ -7,6 +7,52 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-17: QUEUE 233 chunk 3 done, the git prelude (zig-webbox `14b7638`)
+
+**The git prelude, as the design's "Git" lists it**
+(`src/shale_prelude_git.shale`, loaded after the Linux prelude). It was
+tested red first on a repo made with `git init` inside the root, with
+git's config isolated and its clock and name fixed. **The image doesn't
+change:** nothing in `src/script/` moved since chunk 2. `zig build test`
+and `zig fmt --check` are green.
+
+**What I found, or chose:**
+- **The reading calls run through the gate. The changing ones run the
+  VM once** (`T.runOnce`), because a commit or a push can't happen three
+  times alike. The reading calls pass `--no-optional-locks`, so a
+  `status` never rewrites the index, and every engine's copy of the repo
+  stays the same.
+- **`git diff` rewrites the index even under `--no-optional-locks`**
+  (git 2.43.0; I measured it: `status`, `log`, `ls-files` and
+  `rev-parse` don't, all three `diff` forms do). It only refreshes the
+  stat data, so it's harmless, but each gate copy's index would differ.
+  Its tests run once, and the prelude's header says so.
+- **A failure names the call as the script typed it**, never git's `-C
+  /abs/path`, for example `` `git show HEAD:nope` exited 128: fatal: path
+  'nope' does not exist in 'HEAD' ``. An absolute path would differ
+  between the gate's copies, and it's noise to the reader. For the same
+  reason, a missing repo folder is checked by the prelude
+  (`` `git status`: nowhere is not a folder ``) before git can say it
+  with the path.
+- **`git_push(repo, {remote, branch})` sets the upstream** (`push -u`),
+  the habit the cloud sessions follow; with neither it pushes to the
+  upstream. `origin` unless named.
+- **`git_commit`'s `add`:** Shale has no `type()`, so the prelude tells a
+  string from a list by `attempt`ing a string builtin on it. A string
+  that isn't `"tracked"` or `"all"` fails, naming the choices. The
+  message goes on stdin (`-F -`). It gives the new head's short hash.
+- **`git_log`'s `hash` is the short one**, as `git_head` is, and `date` is
+  the author's, in strict ISO (`2026-10-17T00:00:00+00:00`). `fields`
+  picks which keys a record has.
+- Every call adds `-c color.ui=never` and `GIT_TERMINAL_PROMPT=0`, so a
+  user's colour config can't leak into the data, and a push that wants a
+  password fails instead of waiting for one.
+- **Claude's `commit`** is in SHALE-AGENTS.md as a user-prelude example.
+  A test reads the doc, takes that function out of it and runs it, so
+  the example can't drift (seen red with the check broken).
+
+Next is chunk 4, jobs.
+
 ## CC → the box, 2026-10-17: QUEUE 233 chunk 2 done, the Linux prelude (zig-webbox `8583104` to `41e3e96`)
 
 **Chunk 2, tested red first, through the gate, against the fixture
