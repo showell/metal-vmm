@@ -26,7 +26,7 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
   its message names the commits. Dog Park serves dogpark.lynrummy.com.
 - **Built, not deployed (Steve's):** the Observatory's droplet (228). Dog
   Park's release with `/version` serves (its `/version` names the commit).
-- **CC:** 234, in order, then 235 (it builds on 234). 233 is done and merged. **The dry run is being deleted** (Steve, 2026-10-17: "I'm inclined to just outright delete the dry run now ... everything on linux can be rolled back with git. On metal ... rehearse scripts locally"): the box removes `Mode.dry_run`, the overlay (234's chunk 2) and `--write` on master; every run writes. Build chunk 3 with no dry-run path, and merge master before pushing it. `?` (optional parameters) stays (Steve, 2026-10-17). The `shale-gate` hook is installed on the box (2026-10-17): top-level Claude runs only Shale; subagents are exempt (zig-webbox SHALE-AGENTS.md, "The gate").
+- **CC (tonight, unsupervised; the essay `notes/cc-overnight-plan.md`):** 234's report if not sent, then **235, then 236, then 237**; if time is left, a bug hunt in the Linux host (`shale_spawn`, `shale_jobs`, `shale_host_jobs`, `shale_keep`, the secret scrubber's carry across chunks, mounts), each bug a red unit test, nothing new in the gates. A FEEDBACK entry per chunk, so whatever finished can be merged; both images measured each chunk. 233 is done and merged. **The dry run is deleted** (Steve, 2026-10-17; zig-webbox b994ce6): every run writes, `--write` is gone (the gate refuses it), and on Linux git is the undo. Merge master before you push. `?` (optional parameters) stays (Steve, 2026-10-17). The `shale-gate` hook is installed on the box (2026-10-17): top-level Claude runs only Shale; subagents are exempt (zig-webbox SHALE-AGENTS.md, "The gate").
 
 ## CC: open
 
@@ -37,7 +37,62 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**237. A doc checker for cited paths and names, not yet line numbers: CC'S, after 236** (Steve, 2026-10-17, of the box's "should a doc checker enforce `file:N`?": "Paths/names now, lines later"). The want is zig-webbox SHALE-WANTS.md `doc-check`: this morning five cold agents audited every doc in seven repos by hand, and each listed checks a script could run every time. **This item is the first of them, for paths and names only.** After 236, or before it if 235 stops on a disagreement.
+
+- **What it checks**, in each repo's tracked `*.md`. Out of scope: FEEDBACK*, QUEUE-ARCHIVE*, `docs/designs/` and essays, which are history, dated as they were written.
+  - **Every cited path resolves.** A backticked or linked token that looks like a path (has a `/` or a known extension: `.zig`, `.shale`, `.md`, `.sh`, `.py`, `.json`) must exist. It is taken against the doc's own repo first, then a sibling the line names (`zig-webbox src/x.zig`, `angry-gopher's ...`), then the box's repos. Found nowhere is a finding; a path in two siblings that the line does not pick between is a finding too, named, so the doc says which.
+  - **Every cited name exists where the line says.** For `` `file.zig`'s `name` `` and `` `name` (file.zig) `` and the like, `name` must be a declaration, a field or a test name in that file (235's `zig_decls`, once it lands; until then a word match, said so in the report).
+  - **`file:N` is read as `file`:** the line number is not checked (Steve: "lines later"). Count them, so the next decision has a number.
+- **How it runs:**
+  - one Shale script, zig-webbox `tools/doc_check.shale`, run by `zig build doc-check` over the repos named in a list at its top. It is a second user of zig-webbox's own tools; scripts are first-class.
+  - **Not in the gates yet:** its first report goes to FEEDBACK, the box fixes the findings, and Steve decides when it gates. Fail, never warn: it exits non-zero on any finding.
+- **Its own tests** (red first), on a small tree of docs and files:
+  - a path that's gone;
+  - a sibling-named path;
+  - an ambiguous one;
+  - a name that's gone;
+  - a link to a doc;
+  - a history file passed by.
+- **Report** in FEEDBACK:
+  - the findings per repo, in counts, and the first 20 of each kind;
+  - the false positives you saw, with the rule that would remove each;
+  - how many `file:N` citations there are, and, if it's cheap, how many of them point at the wrong thing.
+
+**236. `router.zig`'s tests split by the box's cut points, with 235's tools: CC'S, after 235** (Steve, 2026-10-17: "Let's do router.zig with you suggesting the cut points"; the essay `notes/cc-overnight-plan.md`). **235's second user**, done with 235's recipe (`zig_decls`, `zig_move`, `zig_rename`, `zig_imports`) and Shale throughout; where the tools fall short, say so in FEEDBACK as you go (that is the point: "a second non-trivial refactoring will lead to us wanting a bit more"). After 235. angry-gopher, from master, `zig-server/src/router.zig` (3,042 lines: ~340 of production, then 61 tests and their helpers from :339's `TESTS` banner on).
+
+**The cut points are the box's; do not choose others.** A file that would come out wrong (a test that needs another file's helper, say) is reported, not re-cut. Line numbers at angry-gopher 1ec3fd13. Each helper used by one file travels with it; a helper two files use goes to the harness.
+
+| file | what | tests (by line) | its own helpers |
+|---|---|---|---|
+| `router.zig` (stays) | the route table; tests of its private functions | 498 (`routeBodyLimit`), 1662 (families, `familyOf`); a `test {}` importing every file below | |
+| `router_harness.zig` (no tests) | the harness every file uses | | `serve`, `serveFrom`, `get`, `status`, `responseHeader`, `responseBody` (:349-399), `UidSite`, `setUid`, `playingAs`, `nowSecs`, `signedUid`, `postAs`, `postForm`, `adminSession`, `memberSession`, `writeTranscript` |
+| `router_pages_test.zig` | the public surfaces | 401, 439, 537, 561, 574, 592, 618 | |
+| `router_identity_test.zig` | gopher_uid and sessions | 708, 758, 792, 837, 1527, 2362 | `removeSecret` |
+| `router_legacy_cookies_test.zig` | the legacy names' migration: **deleted whole the day the legacy names retire** | 1552, 2311, 2334, 2641, 2669 | `currentId` |
+| `router_games_test.zig` | games and their bounds | 887, 927, 995, 2384 | `lowDisk` |
+| `router_admin_test.zig` | the admin surfaces and the host's setup | 1073, 1096, 1446, 1479, 1602, 1694, 1724, 2231 | `countFiles`, `TestLogs` |
+| `router_search_test.zig` | search | 1139, 1195, 1247, 1321, 2442, 2477 | |
+| `router_chat_test.zig` | chat's routes | 2091, 2110, 2139, 2206, 2247, 2284, 2416, 2614 | |
+| `router_failures_test.zig` | the store-failure class: a failure is a 500, never silence or a lie | 1776, 1837, 1875, 1916, 1962, 2016, 2051, 2176, 2507, 2543, 2557, 2592 | `removalsFail`, `postFailing` |
+| `router_script_test.zig` | the script route | 2703, 2784 | `scriptDurable`, `scriptRequest` |
+| `router_edges_test.zig` | request edges | 2964 | `EdgeSite`, `edge_sites`, `edge_requests`, `edgeRequest` |
+
+- **Section banners** (`// ── the script route (metal-vmm QUEUE 200) ──`) go with their section; the `TESTS` banner's text (why these tests exist) becomes `router_harness.zig`'s `//!`.
+- **Enrolment:** angry-gopher's build lists test roots by hand (build.zig :158) and `router.zig` is its own root (its tests need the assets' wiring, :131-154), so every new file is reached from `router.zig`'s `test {}` block and nowhere else. `router_harness.zig` is imported by test files only.
+- **A check that a test runs** (the hole that hid linux_host_test's orphan, zig-webbox bc2402f): in angry-gopher's `ops/check_zig` (fastest first), every `src/**/*.zig` holding a `test` block is a build.zig test root or imported, through a `test {}` block, from one; and no file that is not a `_test.zig` imports `router_harness.zig`. Plant a red for each (an unimported test file; a production import of the harness) and see it fire.
+- **The request-edge list:** `router.zig countFiles` (`unreachable_because = "a test's helper"`) goes when `countFiles` moves into a `_test.zig` (the scan skips those): the stale-entry check (1ec3fd13) will say so.
+
+**The judges, all without anyone's eyes:**
+1. **gopher.elf byte-identical** before and after (zig-metal-unikernel `zig build gopher`), **once angry-gopher's commit string is set aside**: the image carries it (zig-metal-unikernel build.zig :173, `commitOf`), and it is the same length each time, so replace the after-image's commit with the before-image's and the two must be equal byte for byte. Only test code moves, and test code is not in the server: any other change is a finding, and the split stops there. Check the judge itself first: two builds of one commit agree, and a planted change to a production line in router.zig makes them differ.
+2. **The same 61 test names** before and after, module left out (the box's `~/shale-scripts/same_tests.shale` is the shape; yours to write in angry-gopher), and the count the runner reports equal.
+3. `ops/check_zig` and zig-webbox's `zig build consumers` green.
+4. One commit per file moved, so a bad one reverts alone.
+
+**Report** in FEEDBACK: the commits, the three judges' numbers, and **what 235's tools could not do** that you did by hand, each as a want (zig-webbox SHALE-WANTS.md).
+
 **235. Shale reads Zig with Zig's parser: `zig_decls`, `zig_move`, `zig_imports`; read-only mounts: CC'S, after 234** (Steve, 2026-10-17: "I agree with your plan to use the zig tokenizer. ... divvy up that work among you, CC, and cold agents"). The evidence: the essay `notes/request-edges-and-zig-quirks.md` (https://github.com/showell/essay-repl-server/blob/master/notes/request-edges-and-zig-quirks.md), "What tooling this argues for", items 2 to 4; and the linux_host split, done by hand: zig-webbox 589837e (linux_writes) and 35317cf (linux_reads). A cold adversarial review shaped this text (the box's, 2026-10-17; it checked the citations at zig-webbox 7e2f379 and Zig 0.16's `lib/std/zig/Ast.zig`). zig-webbox, from master once 234 is merged: it builds on 234's host pattern (`host("zig_rename", ...)` in src/shale_host_linux.zig `call`) and core's `rewrite`. Both engines and the gate; `zig build consumers` before each push. **Metal behind the seam, as in 233 and 234:** gopher.elf's and dogpark.elf's images measured before and after each chunk and unchanged; `script.report` frozen (232's golden); all of it Linux-prelude only, gated at comptime. The box reviews each chunk as it lands and writes the docs' recipe.
+
+**One reading of identifier tokens:** `zig_rename` (234) and `zig_move`'s `uses_left` share one walker, with a test that holds them to the same answers on the same inputs (the box's `edits_all`/`edit` lesson: two readings of one rule drift within the hour). **A use without a call counts:** `store.durable_now = scriptDurable;` and `free_space.reader = lowDisk;` (angry-gopher router.zig) are uses; a red each.
 
 **The analysis is Zig's parser and identifier tokens, not types.** Say so in SHALE-AGENTS.md, with the limits below, and that the compiler judges after (`same_tests.shale`).
 
@@ -102,7 +157,7 @@ the box instead of guessing. Findings arrive as red tests where they can.
      6. the new file into the root's `test {}` block (library_test went red without it in both commits);
      7. `same_tests.shale`.
      
-     The box reruns 589837e and 35317cf as this recipe on a worktree, against the commits it made by hand, and reports the diffs.
+     **CC replays 589837e and 35317cf as this recipe** (on a worktree of each commit's parent; the essay `notes/cc-overnight-plan.md`, a cold agent's idea): that replay is `zig_move`'s acceptance, its diff against the commits made by hand reported in FEEDBACK. **If the replay disagrees with a hand commit, report the disagreement and stop**; do not tune the analysis until the numbers match.
 
 3. **`zig_imports(path)`: a file's `@import` and `@embedFile` calls, from the same Ast.**
    - **Each is a map:** `{kind = "import" | "embed", target, name, line, file}`.
@@ -116,6 +171,7 @@ the box instead of guessing. Findings arrive as red tests where they can.
    - **The refusal:** at one point every change passes (`changeAt` and `rewrite`, and `remove`'s and `create`'s own paths if they do not pass it), `refused: mount <name> is read-only`, before anything is written. A test lists every change builtin (`edit`, `replace`, `create`, `append`, `remove`, `zig_rename`, `zig_move`, `edits_all`) through an `ro` mount, so a new one can't skip it quietly.
    - **Reads and programs:** a read through it works. A `run` with its `cwd` there runs, since Shale cannot see what a program writes; SHALE-AGENTS.md says so.
    - It builds on the box's mounts (234's "Not in this item").
+   - **The store follows no symlink** (Steve, 2026-10-17: "refuse any"): today `read` of a link inside the root reads its target outside it (the box: a link to /etc/hostname, read). On Linux, a path any part of which (below the root or a mount's own path) is a symlink stops, `refused: <path> is a symbolic link`, for every read, change, `exists`/`stat` and listing; `openat2`'s `RESOLVE_NO_SYMLINKS` or a component walk, your choice, said which in SHALE.md. `walk` already passes links by (builtins_walk.zig): make it the same rule, one place. A mount's own path is resolved once, at load. Metal's FAT has no links: nothing there changes (the images). Red first: a link to a file, to a folder, in the middle of a path, into an `ro` mount.
 
 5. **The git prelude takes its root:** done by the box (zig-webbox a98cd48, with `git_merge`).
 

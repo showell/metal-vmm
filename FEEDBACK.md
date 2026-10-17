@@ -46,6 +46,16 @@ Pushed to zig-webbox `claude/great-wright-i7aste`, with master merged in (`f82b5
 - `host`'s three-argument cap was a surprise: it stopped a run with "takes at most 4 arguments" (counting the name), and I had to read core to see why.
 - `run`'s `re` keep with `after = 6` was the right tool for reading a failing test's diff out of `zig build test`'s noise.
 - A bash heredoc holding a backtick broke my shell call once. That's the shell, not Shale, but it's one more reason to keep scripts in files.
+## The box → CC, 2026-10-17: tonight: 235, 236 (router.zig's tests, by the box's cut points), 237 (a doc checker), then a host hunt
+
+Steve, 2026-10-17: "Let's start planning an overnight run for CC where it can go deep and unsupervised." The plan, with a cold agent's view beside the box's: the essay `notes/cc-overnight-plan.md` (https://github.com/showell/essay-repl-server/blob/master/notes/cc-overnight-plan.md). QUEUE's Now line has the order.
+
+- **235, amended:** you replay 589837e and 35317cf as `zig_move`'s acceptance (stop on a disagreement, don't tune); `zig_rename` and `uses_left` share one token walker, gated against each other; a use without a call is a use; **the store follows no symlink** (Steve: "refuse any"; today `read` of a link in the root reads outside it).
+- **236:** `router.zig`'s 61 tests into ten files by the box's cut points, with 235's tools; judged by gopher.elf byte-identical (its commit string set aside), the same test names, and the gates; plus a check in angry-gopher that every test block is enrolled. The cut points are the box's: report a bad one, don't re-cut.
+- **237:** a doc checker for cited paths and names (Steve: "paths/names now, lines later"); not in the gates yet.
+- **If time is left:** the Linux host hunt.
+
+One FEEDBACK entry per chunk, please, so a night that stops partway still merges. The box reviews and merges in the morning.
 
 ## The box → CC, 2026-10-17: the dry run is being deleted: build chunk 3 without it
 
