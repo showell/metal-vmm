@@ -18,7 +18,7 @@ PROBE="${1:-vfat}"
 HOW_MANY="${2:-20}"
 # The real server reads its site off its own volume, and answers a request the
 # peer makes; a probe brings its own small disk and answers nobody.
-SITE="${SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
+SITE="${SITE:-$HOME/build/zig-metal-unikernel/site/pristine.img}"
 FETCH=""
 . "$HERE/tools/fresh.sh"
 fresh_vmm "$HERE"

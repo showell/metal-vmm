@@ -240,7 +240,7 @@ default); its header is the reference.
 |---|---|---|
 | `GUESTS` | where the kernels are | the `probe/` of the zig-metal-unikernel checkout beside this one |
 | `KERNEL` | the guest; it must be built `-Dcoverage` | `$GUESTS/gopher.elf` |
-| `SITE` | the **boot disk** (virtio-blk) every run gets a fresh copy of: the site's files (README, "The site volume", says how to build it) | `~/build/zig-metal-unikernel/probe/gopher/pristine.img`, which nothing builds: set it |
+| `SITE` | the **boot disk** (virtio-blk) every run gets a fresh copy of: the site's files (README, "The site volume", says how to build it) | `~/build/zig-metal-unikernel/site/pristine.img`, where tier 3 and `long.sh` build it |
 | `PATH_WANTED` | the path fetched | `/` |
 | `TRANSPORT` | the machine | `pci` |
 | `FLOOR=<file>` | a coverage floor the merged report is gated on | none |

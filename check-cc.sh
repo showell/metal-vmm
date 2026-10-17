@@ -30,7 +30,7 @@ PLANT_SEEDS="${PLANT_SEEDS:-300}"
 OUT="${OUT:-$(mktemp -d)}"
 mkdir -p "$OUT"
 SDK="$OUT/zig-coverage-sdk"
-VOLUME_SITE="${VOLUME_SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
+VOLUME_SITE="${VOLUME_SITE:-$HOME/build/zig-metal-unikernel/site/pristine.img}"
 
 worktrees=()
 cleanup() { for w in "${worktrees[@]}"; do git -C "${w%%:*}" worktree remove --force "${w#*:}" 2>/dev/null; done; }

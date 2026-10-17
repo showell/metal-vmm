@@ -69,7 +69,7 @@ GUESTS="${GUESTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-metal-uni
 . "$HERE/tools/fresh.sh"
 [ -n "${KERNEL:-}" ] || fresh_kernel "$GUESTS/gopher.elf" "$(dirname "$GUESTS")"
 KERNEL="${KERNEL:-$GUESTS/gopher.elf}"
-SITE="${SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
+SITE="${SITE:-$HOME/build/zig-metal-unikernel/site/pristine.img}"
 fresh_vmm "$HERE"
 VMM="$HERE/zig-out/bin/metal-vmm"
 WORK="$(mktemp -d)"

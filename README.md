@@ -118,13 +118,7 @@ sudo; only `JUDGE_MOUNT=1` reads through a loop mount, with `sudo -n`.
 zig-metal-unikernel's tier 3 and `long.sh` build it fresh at
 `~/build/zig-metal-unikernel/site/pristine.img` and pass it as `SITE`.
 
-**The scripts' own defaults disagree.** `pair.sh` and `sleeps.sh` default
-`SITE` to that path. The others (`sweep.sh`, `site.sh`, `timeouts.sh`,
-`refused.sh`, `pc_vs_microvm.sh`, `nightly.sh`, `script_story.sh`, and
-`VOLUME_SITE` in `plants.sh` and `check-cc.sh`) default to
-`~/build/zig-metal-unikernel/probe/gopher/pristine.img`, which nothing builds.
-Set `SITE` (and `VOLUME_SITE`) by hand: `grep -n 'pristine.img' *.sh` shows
-each default.
+Every script defaults `SITE` (and `VOLUME_SITE`) to that path.
 
 ## A storage lab
 

@@ -18,7 +18,7 @@
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUESTS="${GUESTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-metal-unikernel/probe}"
-SITE="${SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
+SITE="${SITE:-$HOME/build/zig-metal-unikernel/site/pristine.img}"
 LATENCY_US="${LATENCY_US:-5000}"
 PATH_WANTED="${1:-/}"
 ROUTES="/ /driving /tutorial /chess /steve-resume /steve-resume.pdf \

@@ -116,7 +116,7 @@ GUESTS="${GUESTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-metal-uni
 # (KERNEL=, VMM=: plants.sh, nightly.sh, sweep_test.sh's fakes) is the caller's.
 [ -n "${KERNEL:-}" ] || fresh_kernel "$GUESTS/gopher.elf" "$(dirname "$GUESTS")"
 KERNEL="${KERNEL:-$GUESTS/gopher.elf}"
-SITE="${SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
+SITE="${SITE:-$HOME/build/zig-metal-unikernel/site/pristine.img}"
 PATH_WANTED="${PATH_WANTED:-/}"
 FIRST="${1:-1}"
 LAST="${2:-100}"

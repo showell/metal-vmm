@@ -18,7 +18,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUESTS="${GUESTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-metal-unikernel/probe}"
 # The staged GPT + FAT16 volume with the site on it, as judge_gopher.py builds
 # it (that needs a loop mount, and so sudo; this does not, it only reads one).
-SITE="${SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
+SITE="${SITE:-$HOME/build/zig-metal-unikernel/site/pristine.img}"
 PATH_WANTED="${1:-/}"
 
 # Cookie-free GET routes, from judge_gopher.py's own list. /version is left out

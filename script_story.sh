@@ -29,7 +29,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOS="$(cd "$HERE/.." && pwd)"
 GUESTS="${GUESTS:-$REPOS/zig-metal-unikernel/probe}"
 WEBBOX="${WEBBOX_ROOT:-$REPOS/zig-webbox}"
-SITE="${SITE:-$HOME/build/zig-metal-unikernel/probe/gopher/pristine.img}"
+SITE="${SITE:-$HOME/build/zig-metal-unikernel/site/pristine.img}"
 TARGET=metal-vmm.test
 cannot() { echo "script story: CANNOT JUDGE: $*"; exit 2; }
 for t in mcopy mmd mtype zig; do command -v "$t" > /dev/null || cannot "no $t"; done
