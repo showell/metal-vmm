@@ -275,17 +275,17 @@ pub const Pair = struct {
     /// **A FRAME FROM THE GUEST**: across, to its own peer, to both, or
     /// dropped, as `frames.route` says. True when its own peer is to answer
     /// it. **EATS ARE THE SENDER'S, OF WHAT CROSSES** (§4, "Messages"):
-    /// `line.carries()` (`WIRE_EAT`, `WIRE_LOSS`) is asked of each frame
+    /// `line.carries(now)` (`WIRE_EAT`, `WIRE_LOSS`) is asked of each frame
     /// that would cross and of no other, and an eaten one is never sent.
     pub fn route(self: *Pair, frame: []const u8, now: u64, line: anytype) bool {
         switch (frames.route(frame)) {
             .local => return true,
             .cross => {
-                self.across(frame, now, line.carries());
+                self.across(frame, now, line.carries(now));
                 return false;
             },
             .both => {
-                self.across(frame, now, line.carries());
+                self.across(frame, now, line.carries(now));
                 return true;
             },
             .dropped => {
@@ -704,7 +704,7 @@ test "a pair's frames: unicast across, due L after it is sent; ARP to both; DHCP
 const Carry = struct {
     eat: []const u64 = &.{},
     asked: u64 = 0,
-    pub fn carries(self: *Carry) bool {
+    pub fn carries(self: *Carry, _: u64) bool {
         self.asked += 1;
         for (self.eat) |n| if (n == self.asked) return false;
         return true;

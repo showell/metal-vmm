@@ -33,8 +33,9 @@
 #
 # - **two kernels: the sleeper fetching from gopher.elf** (PAIR, its disk
 #   PAIR_DISK), every 60 s for ten minutes: ten polls, each ok and the page's
-#   size from a single-guest run; then with the server's frames 46-50 lost
-#   (its ARP replies to polls 4 and 5): those two no_arp, the rest ok.
+#   size from a single-guest run; then with the server silent from 180 s to
+#   300 s (WIRE_SILENT_S), across polls 4 and 5: those two no_arp, the rest
+#   ok.
 #
 # Needs: KVM, zig-metal-unikernel beside this checkout (GUESTS, its probe/
 # with gopher.elf and sleeper.elf built: `zig build gopher sleeper`), a site
@@ -246,18 +247,19 @@ if [ -n "${page:-}" ]; then
     else
         echo "  fetches: two kernels, ten polls in ten minutes, each ok and $page bytes"
     fi
-    # **SILENT FOR A STRETCH**: the server's 46th to 50th frames lost, its
-    # ARP replies to the 4th and 5th polls (counted from the unhurt run):
-    # those two say no_arp, and the sleeper polls on, each after ok.
-    pairfetch silent WIRE_EAT=46-50
+    # **SILENT FOR A STRETCH**: the server sends nothing that arrives from
+    # 180 s to 300 s of its time (WIRE_SILENT_S), across the 4th and 5th
+    # polls: those two say no_arp, and the sleeper polls on, each after ok.
+    pairfetch silent WIRE_SILENT_S=180-300
+    silenced=$(sed -n 's/^metal-vmm: wire silent from 180 to 300 s .*: \([0-9]*\) frames lost$/\1/p' "$WORK/silent.err")
     if ! watched silent "$code" 600; then
         fail silent "the pair did not end on GUEST_S (exit $code): $(tail -1 "$WORK/silent.err")"
     elif [ "$outcomes" != "ok ok ok no_arp no_arp ok ok ok ok ok " ]; then
         fail silent "the ten polls: $outcomes (want the 4th and 5th no_arp, the rest ok)"
-    elif ! grep -q "lost (#46, #47, #48, #49, #50)" "$WORK/silent.err"; then
-        fail silent "the server's wire did not lose #46-#50 as named: $(grep '^wire: ' "$WORK/silent.err" | tr '\n' ' ')"
+    elif ! silenced=$(num silent "frames silenced" "$silenced") || [ "$silenced" -lt 2 ]; then
+        fail silent "the server's wire silenced '${silenced:-}' frames (want its replies to both polls)"
     else
-        echo "  silent: the server's frames 46-50 lost, polls 4 and 5 no_arp, the rest ok"
+        echo "  silent: the server silent from 180 s to 300 s ($silenced frames), polls 4 and 5 no_arp, the rest ok"
     fi
 fi
 

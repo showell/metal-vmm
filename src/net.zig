@@ -106,7 +106,7 @@ pub const Net = struct {
         if (buf.len <= @sizeOf(Header)) return;
         self.sent += 1;
         // In a pair, the wire is asked only of what crosses (`Pair.route`).
-        if (self.pair == null and !self.line.carries()) return;
+        if (self.pair == null and !self.line.carries(self.now)) return;
         const frame = buf[@sizeOf(Header)..];
         const own = if (self.pair) |p| p.route(frame, self.now, &self.line) else true;
         if (own) if (self.peer.answer(frame, self.now)) |reply| self.answer(reply);

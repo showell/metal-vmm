@@ -572,7 +572,7 @@ test "the wire: frames in flight, and the dice that lose them" {
                     h.update(got);
                     w.take();
                 },
-                else => note(h, @intFromBool(w.carries())),
+                else => note(h, @intFromBool(w.carries(0))),
             }
         }
     }.f;

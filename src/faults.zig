@@ -102,6 +102,12 @@ pub const Wire = struct {
     /// Which of the guest's frames never arrive. 1 is the first frame it ever
     /// sends.
     lost: Schedule = .init(0x77_69_72_65_64_69_63_65), // "wiredice"
+    /// **SILENT FOR A WHILE** (`WIRE_SILENT_S=a-b`): every frame the guest
+    /// sends from `a` to `b` seconds of its own time is lost, whatever its
+    /// number: a machine gone quiet, which a frame count cannot say once the
+    /// other side asks again. `lost` still counts these frames.
+    silent: ?struct { from_ns: u64, to_ns: u64 } = null,
+    silenced: u64 = 0,
     /// Which of the PEER's frames never arrive, and which arrive damaged: a
     /// byte of the TCP segment changed, which its checksum notices (or of
     /// the IP header, for a frame that is not TCP). 1 is the first frame the
@@ -148,7 +154,7 @@ pub const Wire = struct {
     next: usize = 0,
 
     pub fn configured(self: *const Wire) bool {
-        return self.lost.configured() or self.latency_ns != 0;
+        return self.lost.configured() or self.latency_ns != 0 or self.silent != null;
     }
 
     /// The peer's frames may not arrive as sent, so it must be ready to send
@@ -157,9 +163,14 @@ pub const Wire = struct {
         return self.peer_lost.configured() or self.peer_damaged.configured();
     }
 
-    /// **DOES THE GUEST'S NEXT FRAME GET THERE?**
-    pub fn carries(self: *Wire) bool {
-        return !self.lost.picks();
+    /// **DOES THE GUEST'S NEXT FRAME GET THERE?**, sent at `now`.
+    pub fn carries(self: *Wire, now: u64) bool {
+        const named = self.lost.picks();
+        if (self.silent) |w| if (now >= w.from_ns and now < w.to_ns) {
+            self.silenced += 1;
+            return false;
+        };
+        return !named;
     }
 
     /// A frame from the peer, put on the wire. It arrives when the wire says,
@@ -284,13 +295,26 @@ pub const Wire = struct {
 
 const testing = std.testing;
 
+test "a wire silent for a while loses every frame sent in it, whatever its number, and still counts it for WIRE_EAT" {
+    var w: Wire = .{};
+    w.lost.named[0] = .one(4);
+    w.silent = .{ .from_ns = 10, .to_ns = 20 };
+    try testing.expect(w.carries(5));
+    try testing.expect(!w.carries(10));
+    try testing.expect(!w.carries(19));
+    try testing.expect(!w.carries(20)); // the fourth, named
+    try testing.expect(w.carries(25));
+    try testing.expectEqual(@as(u64, 2), w.silenced);
+    try testing.expectEqual(@as(u64, 1), w.lost.picked_count);
+}
+
 test "the numbered frame is the one that goes missing" {
     var w = Wire{};
     w.lost.named[0] = .one(3);
-    try testing.expect(w.carries());
-    try testing.expect(w.carries());
-    try testing.expect(!w.carries()); // the third
-    try testing.expect(w.carries());
+    try testing.expect(w.carries(0));
+    try testing.expect(w.carries(0));
+    try testing.expect(!w.carries(0)); // the third
+    try testing.expect(w.carries(0));
     try testing.expectEqual(@as(u64, 1), w.lost.picked_count);
     try testing.expectEqual(@as(u32, 3), w.lost.picked[0]);
 }
@@ -320,7 +344,7 @@ test "two users of the same idea do not move each other's dice" {
     together.refused.rate = 3;
     var mixed: [60]bool = undefined;
     for (&mixed) |*x| {
-        _ = wire.carries(); // the wire is busy at the same time
+        _ = wire.carries(0); // the wire is busy at the same time
         x.* = together.serves(0, 1, false);
     }
     try testing.expectEqualSlices(bool, &alone, &mixed);
@@ -507,7 +531,7 @@ test "a wire with nothing configured is a wire that does nothing" {
     try testing.expect(!w.configured());
     try testing.expect(!d.configured());
     for (0..100) |_| try testing.expect(d.serves(0, 1, false));
-    for (0..100) |_| try testing.expect(w.carries());
+    for (0..100) |_| try testing.expect(w.carries(0));
     w.hold("now", 12345);
     try testing.expectEqualStrings("now", w.ready(12345).?);
 }

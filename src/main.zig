@@ -1355,6 +1355,10 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         };
     }
     if (count(init.environ, "PATIENCE_S")) |seconds| machine.patience_ns = seconds * std.time.ns_per_s;
+    if (init.environ.getPosix("WIRE_SILENT_S")) |text| card.line.silent = silentOf(text) orelse {
+        std.debug.print("metal-vmm: WIRE_SILENT_S={s}: not a-b, seconds, a before b (KNOBS.md)\n", .{text});
+        return 2;
+    };
     if (count(init.environ, "GUEST_S")) |seconds| machine.watch_ns = seconds * std.time.ns_per_s;
     // **COVERAGE LINES TO A FILE OF THEIR OWN**, appended: each boot of a
     // sweep adds its lines to the same JSONL, as the judge's do.
@@ -1595,6 +1599,22 @@ fn spawnClient(environ: std.process.Environ, buf: []u8) ?pair.Spawned {
         std.debug.print("metal-vmm: the pair's client would not start\n", .{});
         return null;
     };
+}
+
+/// `a-b`, whole seconds, `a` before `b`, as the wire's silent window.
+fn silentOf(text: []const u8) ?@FieldType(faults.Wire, "silent") {
+    const dash = std.mem.indexOfScalar(u8, text, '-') orelse return null;
+    const a = std.fmt.parseInt(u64, text[0..dash], 10) catch return null;
+    const b = std.fmt.parseInt(u64, text[dash + 1 ..], 10) catch return null;
+    if (a >= b or b > std.time.s_per_day) return null;
+    return .{ .from_ns = a * std.time.ns_per_s, .to_ns = b * std.time.ns_per_s };
+}
+
+test "WIRE_SILENT_S is a-b in whole seconds, a before b, at most a day" {
+    try testing.expectEqual(@as(u64, 180 * std.time.ns_per_s), silentOf("180-300").?.?.from_ns);
+    try testing.expectEqual(@as(?@FieldType(faults.Wire, "silent"), null), silentOf("300-180"));
+    try testing.expectEqual(@as(?@FieldType(faults.Wire, "silent"), null), silentOf("180"));
+    try testing.expectEqual(@as(?@FieldType(faults.Wire, "silent"), null), silentOf("a-b"));
 }
 
 /// **THE PAIR'S END** on this side: its line, `stopped` said and the other

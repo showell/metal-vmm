@@ -94,6 +94,7 @@ pub fn reportRest(machine: *const Machine) void {
 
 pub fn reportRun(card: *const net.Net, block: *const virtio.Block, ns: u64) void {
     if (card.line.configured()) reportFaults("wire", "frames sent", &card.line.lost, ns);
+    if (card.line.silent) |w| std.debug.print("metal-vmm: wire silent from {d} to {d} s of the guest's time (WIRE_SILENT_S): {d} frames lost\n", .{ w.from_ns / std.time.ns_per_s, w.to_ns / std.time.ns_per_s, card.line.silenced });
     // Frames a full wire pushed out, more than a bare ACK each: a loss no
     // knob asked for. A peer that sends again what is lost (any knob that
     // hurts it turns that on) recovers; one that never does may wait forever.
@@ -657,7 +658,7 @@ test "a knob whose moment never came says so, and a spent one says nothing" {
     line.peer_damaged.named[0] = .{ .lo = 5, .hi = 6 };
     drive.refused.named[0] = .one(50);
     drive.writes_only = true;
-    for (0..3) |_| _ = line.carries();
+    for (0..3) |_| _ = line.carries(0);
     for (0..4) |_| line.hold("x", 0);
     for (0..7) |_| _ = drive.serves(0, 1, true);
     // A reset due before the handshake finished, a vanish and a shut past

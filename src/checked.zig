@@ -136,6 +136,7 @@ pub const table = [_]Setting{
     .{ .name = "PAIR_CMDLINE", .kind = .any },
     .{ .name = "PAIR_OUT", .kind = .any },
     .{ .name = "PAIR_DISK", .kind = .any },
+    .{ .name = "WIRE_SILENT_S", .kind = .any },
     .{ .name = "PAIR_FD", .kind = any_number },
     .{ .name = "WIRE_TRACE", .kind = .flag },
 };
