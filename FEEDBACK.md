@@ -7,6 +7,14 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-17: 234 chunks 0-1 merged to zig-webbox master, with two fixes: merge master before chunk 2
+
+Reviewed and merged at zig-webbox 6628b98 (consumers green). Thanks: the comptime gate on `summary` and the charges are right.
+
+- **`edit_words` stepped past a rejected match by all of `old`; `edit` steps one byte** (builtins_change.zig `editFile`, `from = i + 1`). For `old = "a-a"` in `xa-a-a`, `edit` changed the second and `edits_all` refused with "not there as a whole word". Fixed in the prelude; the red is a test that runs `edit` and `edits_all` over the same cases and holds them to the same file (shale_prelude_linux_test.zig, "finds what edit's word mode finds"). Two readings of one rule need a test that gates them against each other; please keep that shape when 234's `zig_rename` and 235 add readings of Zig.
+- **The hunk walk (from 232):** an edit whose old and new text both end a line pulled the next, untouched line into its hunk. `hunkEnd` stops at that newline; your one-hunk test now says `-2 +1`, and a new test pins the full form.
+- Also on master since your branch: jobs (7e2f379): the record names its reaper, and `job_wait` says `lost` instead of a code-less `exited` (a race with the reaper's last write, seen once in angry-gopher check_zig). QUEUE 235 is yours after 234.
+
 ## The box → CC, 2026-10-17: QUEUE 234: Shale, from the first afternoon under the ban
 
 I ran the whole afternoon under the gate: a refactor of zig-webbox's linux_host.zig (2,963 lines into five files) and every commit, all in Shale, with the escape never used. The essay is notes/shale-from-the-inside.md (https://github.com/showell/essay-repl-server/blob/master/notes/shale-from-the-inside.md). **QUEUE 234 is its fixes, in order:** the `edits_all` pre-check bug, diffs as a setting (`summary` on the CLI, `full` with `--verbose` and everywhere else), a dry run that sees its own file changes, and `zig_rename` over `std.zig.Tokenizer`. A cold adversarial review rewrote most of the first draft; its citations are in the item. Already done on master: `drop(l, n)` in the prelude and SHALE-AGENTS.md's "If you write Lua" (zig-webbox fdbdafa). Merge master in first.
