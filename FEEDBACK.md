@@ -7,6 +7,77 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-17: QUEUE 233 done: chunk 7, the docs and your audit (zig-webbox `51372fa`, metal-vmm `b805d9d`)
+
+**All of 233 is on the branches.** zig-webbox `claude/great-wright-i7aste`
+ends at `51372fa`, metal-vmm's at this commit, and angry-gopher's one line
+is `e5cf272`. zig-webbox's `zig build test`, `zig fmt --check` and `zig
+build consumers` are green, and the queue tool's 40 Shale checks pass.
+**Not done, as the item says:** the hook isn't installed, and the
+archive's fix (chunk 6) is yours to apply.
+
+**Your audit, each item checked against the code:**
+- **Already fixed on master when I got there:** the date, and item 1 (the
+  "No dry run" line).
+- **2.** lynrummy.com has stepped background runs since v32; SHALE.md now
+  says so.
+- **3.** The prelude row lists `walk_upto`, `room_for` and `glob`.
+  **4.** `walk`'s `skip` was already in the options list, so there was
+  nothing to do.
+- **5.** The machine's memory is the machine arena (`machine_bytes`),
+  stated once.
+- **6.** "Three modes", `dry_run` among them, and `Process.startWith` with
+  `Options` in the call table.
+- **7.** DEPLOY.md, "Shale scripts: looking inside a droplet".
+- **8.** The planted version, the narrative citation and the test counts
+  are gone.
+- **9.** The VM is "above".
+- **10.** The runner says what goes to stdout and what to stderr, what
+  `── used:` is, and that exit 2 covers the mounts and the preludes too.
+- **11.** "four budgets: steps, reads, read bytes, output bytes".
+- **12.** The two spellings are stated once: `arena_bytes` is `arena`,
+  `output_bytes` is `output`, `source_bytes` is `source`. I didn't rename
+  either side; both are public, one in hosts' code and one in scripts'
+  stops.
+- **13.** The `script` step's synopsis names `--budget` and `-e`.
+- **14.** "put it on PATH".
+- **15.** The measured tables now carry the date they were last changed
+  (from git: 2026-10-15 for script-bench, 2026-10-16 for shale-scale) and
+  the step that measures them again. I didn't re-run them.
+- **SHALE-TASKS.md is gone.** Its §4, the stream, is
+  `docs/designs/DESIGN-shale-stream.md`, marked parked as the queue says;
+  the rest is built and in SHALE.md. vm.zig's pointer now names SHALE.md.
+- **`src/`:** both comments now say `lint_portable.py` is angry-gopher's.
+  **`_ = host_fetch;` is already in webbox.zig's test block** (line 94),
+  so there was nothing to add.
+- **The duplicate ids** (99, 101, B14, B16, B23, P1): `queue_check` names
+  every one now. Lettered ids are checked too (`b805d9d`), and the test
+  pins all seven lines from the `7bc93db` archive. **The live archive
+  carries all six.** Chunk 6's diff covers 99 and 101; the letters need
+  the same kind of relabel. I'd suffix the later occurrence, e.g. `-
+  **B14 (again).**`, but which one counts as "the" B14 is yours to say.
+  Until they're relabelled, every changing call refuses on the live files.
+
+**Also rewritten for what was built:**
+- SHALE.md has a new section, "On Linux: behind the seam" (the host, the
+  path hook and mounts, the preludes and their order, the dry run's stop,
+  the gate), and its "What was decided" points to it.
+- SHALE-AGENTS.md's "Where Shale is worse" now covers programs run whole
+  (not piped), no environment, git as a prelude over `git`, and jobs that
+  are polled.
+
+**Over the whole of 233:**
+- **Image:** gopher.elf's text grew 6,992 bytes (2,651,869 to 2,658,861),
+  dogpark.elf's 6,368. All of it is chunks 1 and 2; chunks 3 to 7 are
+  Linux-only.
+- **What it took:**
+  - a language change (optional parameters);
+  - two CLI fixes: metal compiling no later prelude, and streaming stdout
+    and stderr;
+  - one angry-gopher line.
+- **To decide:** keep or replace `?` (chunk 2), install the gate, and
+  apply the archive's relabels.
+
 ## CC → the box, 2026-10-17: QUEUE 233 chunk 6 done, the queue in Shale; a proposal for the archive; a CLI fix (metal-vmm `22f8258`, zig-webbox `9c76f9f`)
 
 **The queue tool** is `.shale/prelude.shale`: `queue_check`, `queue_next`,
