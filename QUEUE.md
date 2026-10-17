@@ -26,7 +26,7 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
   its message names the commits. Dog Park serves dogpark.lynrummy.com.
 - **Built, not deployed (Steve's):** the Observatory's droplet (228). Dog
   Park's release with `/version` serves (its `/version` names the commit).
-- **CC:** 234, in order, then 235 (it builds on 234). 233 is done and merged. `?` (optional parameters) stays (Steve, 2026-10-17). The `shale-gate` hook is installed on the box (2026-10-17): top-level Claude runs only Shale; subagents are exempt (zig-webbox SHALE-AGENTS.md, "The gate").
+- **CC:** 234, in order, then 235 (it builds on 234). 233 is done and merged. **The dry run is being deleted** (Steve, 2026-10-17: "I'm inclined to just outright delete the dry run now ... everything on linux can be rolled back with git. On metal ... rehearse scripts locally"): the box removes `Mode.dry_run`, the overlay (234's chunk 2) and `--write` on master; every run writes. Build chunk 3 with no dry-run path, and merge master before pushing it. `?` (optional parameters) stays (Steve, 2026-10-17). The `shale-gate` hook is installed on the box (2026-10-17): top-level Claude runs only Shale; subagents are exempt (zig-webbox SHALE-AGENTS.md, "The gate").
 
 ## CC: open
 
@@ -77,7 +77,7 @@ the box instead of guessing. Findings arrive as red tests where they can.
      - It cuts each span from `from` with the whitespace after it, up to the next token or comment. That leaves exactly one blank line where the declaration was between two others, and none at the end of the file.
      - `opts.comment = "doc"` (the default) takes the doc comment; `"doc_and_plain"` also takes `comment_above`.
      - It puts the declarations in `to` in `from`'s order, one blank line between each and before the first. They go at the end, or after the declaration `opts.after` names; an `after` name missing in `to` stops it.
-     - It writes through core's `rewrite`: one logged `edit` per file, the run's `diffs` setting, the dry run and 234's overlay, budgets.
+     - It writes through core's `rewrite`: one logged `edit` per file, the run's `diffs` setting, budgets.
    - **It gives** `{moved = n, needs_pub, needs_import, needs_from_from, uses_left}`, each a list of `{name, line}`:
      - `needs_pub`: moved declarations that are `file`-visible and still used in `from`. 589837e's `Hold` (:527), `Sent` (:593) and `WriteWatch` (:703) were `const X = struct` and needed `pub`. It also lists members `y` of a moved `X` that are not `pub` and are named as `X.y` in `from`: 35317cf's `Progress.Ended`, from `git show 35317cf^:src/linux_host.zig`. It does not add `pub`.
      - `needs_import`: identifiers in the moved code that name a top-level `const` of `from` whose value is an `@import(...)` (`std`, `Io`, `net`): copy that import into `to`, as `{name, target}`. These are never in `needs_from_from`.
@@ -141,7 +141,7 @@ the box instead of guessing. Findings arrive as red tests where they can.
    - **What it renames:** every `.identifier` token equal to `from`. Never one right after `.` (a field, a decl access, an enum literal: the essay's `.watch`); never `@"from"` (tagged `.identifier`: a byte check); strings, character literals and comments are not identifier tokens. "Part of a longer identifier" comes free from tokens: keep it as a red, not a rule.
    - **When `to` is qualified** (contains `.`), a match in a **declaration position** stops the run, naming the line, and nothing is written: after `const`/`var`/`fn`, a parameter's or field's name before `:`, a capture inside `|...|`. That was the essay's worst miss (`pub const linux_writes.kept_write_deadline_ms`), and token rules alone do not prevent it.
    - **`from`** must be an identifier (refused otherwise); the file must tokenize with no `.invalid` (refused, nothing written).
-   - **How it writes:** core exports one `pub fn rewrite(run, pos, p, was, now, spans)` from builtins_change.zig: the diff (by the run's `diffs` setting), then `changeAt(..., .edit, ...)`, logged as an `edit`. The host computes the spans and calls it. Unreferenced on metal, so the image does not change. It is a change: dry run, overlay, budgets.
+   - **How it writes:** core exports one `pub fn rewrite(run, pos, p, was, now, spans)` from builtins_change.zig: the diff (by the run's `diffs` setting), then `changeAt(..., .edit, ...)`, logged as an `edit`. The host computes the spans and calls it. Unreferenced on metal, so the image does not change. It is a change: budgets (no dry run: it is being deleted, see Now).
    - **It gives** `{renamed = n, left_in_comments = m}`: the mentions of `from` in comments it did not touch (the gaps between tokens and the doc-comment tokens), so the author can decide.
    - **`opts.lines = {first, last}`**, inclusive, limits it to a range.
    - **Charges:** the file `dupeZ`'d for the tokenizer, and a step a token. Its charge test lives in the host's tests (N and 4N, as charge_test does: charge_test lists `.host` as the host's own work).
