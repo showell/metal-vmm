@@ -7,6 +7,63 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-17: QUEUE 235 chunk 2: `zig_move`; the replays agree with 589837e and 35317cf; one reading of identifiers found three bugs in 234's `zig_rename` (zig-webbox `a136bcd`)
+
+Pushed to zig-webbox `claude/great-wright-i7aste`. `zig build test`, `zig fmt --check` and `zig build consumers` are green.
+
+**`zig_move(from, to, names, opts?)`**, over `host("zig_move", from, to, {names, opts})`. `host` takes three arguments past its name, and a map can't hold a nil `opts`, so the prelude builds the map.
+- **The pure mover** is the new `src/shale_zig_move.zig`. It cuts each span with the whitespace after it, so one blank line stays where a declaration was between two others, and a cut to the end of the file leaves one newline.
+- **Placement:** in `from`'s order, one blank line apart, at `to`'s end or after `opts.after`. `opts.comment = "doc_and_plain"` takes the `//` comment above too.
+- **Writing:** `to` (made if missing) is written first, then `from` is cut, each through core's `rewrite`. A stop between them leaves the declarations in both, never in neither.
+- **Refused, with nothing written:** a name not there; a name that is two (say `{kind, name}`); a name given twice; an unnamed `test {}`; an `after` not in `to`; one file for both; a file that doesn't parse.
+- **The report:**
+  - `needs_pub`: moved, `file`-visible and still used, at the name's line; plus `X.y` members not `pub` that `from` names.
+  - `needs_import`: the target is the value `from` gives it (`@import("std")`, `std.Io.net`), so `const name = target;` copies it. It counts an `@import(...)` const, and a const that names a part of one, found until no more are.
+  - `needs_from_from`.
+  - `uses_left`: each line, code only.
+- **The known limits are pinned by a red each:** `p.end()` through a value, and `self_file.P` through `@This()`.
+- **Charged:** both reads and copies, a step a token and a node of both files.
+
+**The replays, the acceptance (the item's "stop on a disagreement"): they agree.**
+- **How:** a Shale script per commit. It takes the commit's parent's `linux_host.zig`, finds the declarations the hand commit's new file took (in the new file, in the parent, gone after), runs `zig_move`, and holds its report against what the hand commit did:
+
+| | 589837e (`linux_writes.zig`, 22 moved) | 35317cf (`linux_reads.zig`, 28 moved) |
+|---|---|---|
+| declarations made `pub` by hand | 3 (`Hold:527`, `Sent:593`, `WriteWatch:703`); `zig_move` named all 3, nothing extra | 15; `zig_move` named all 15, nothing extra |
+| members made `pub` by hand | 12; `zig_move` named 1 (`WriteWatch.run`) | 4; `zig_move` named 1 (`Progress.Ended:1716`) |
+| imports | `std Io net`, the same set | `std Io net body_rule`, the same set |
+| `from`'s own | `sleepMs`: the hand commit neither copied nor imported it; it inlined `Io.Clock.Duration.sleep` | `sleepMs`: copied by hand |
+| lines that name a moved declaration | 14 code lines; the hand commit qualified 16 | 87; the hand commit qualified 88 |
+
+- **Every difference is one this chunk documents.**
+  - The members not named are methods called through a value (`hold.begin()`, `sent.flush()`, `progress.end()`, `whole.read()`): the known limit the item states.
+  - The extra qualified lines are comments: 589837e's :305 and :308 (`` (`linux_writes.Sent`) ``) and 35317cf's :337. `uses_left` is code only, and `zig_rename` counts such mentions in `left_in_comments`.
+  - The `sleepMs` inline was the author's third choice.
+- **Kept as tests:** both replays are tests now ("zig_move replays 589837e/35317cf"). I did not build the replayed trees; the analysis is what the item asked to accept.
+
+**One reading of identifiers, and what it found.**
+- `zig_rename`'s plan and `zig_move` both read through `shale_zig_ast.identifiers` now.
+- A test over every `src/**/*.zig` holds them to one answer: for each top-level declaration, the lines a rename changes outside it must be exactly `uses_left`'s. It took three failing runs before it held, and each failure was a real bug in the reading 234's `zig_rename` shipped with:
+  1. **`[]const X`**: `const` was read as a declaration keyword, so `X` there was declared. A qualified `zig_rename` stopped on it, which is safe. `uses_left` missed it, which is not.
+  2. **A field that shares a top-level name** (log_view.zig's `kept: usize` beside `fn kept`) was renamed with it, breaking every `.kept`.
+  3. **A nested container's own declaration** of the name (linux_host.zig's `pub const kept_open = &host_file.kept_open;`) was renamed with it.
+- **The fix:** each identifier has a role, `use`, `declaration` or `field`. `field` covers a nested container's fields (before `:` at its own level, outside parens), enum, union and error members, and its own declarations. A tuple struct's `struct { P, P }` stays uses. `zig_rename` never renames a field, and `uses_left` is uses only. Each case has a red in the rename and move tests. The box's lesson held within the hour.
+
+**Red first:** these tests were written after the mover. Their red was seen by mutation: with the member rule off, the fixture and the 35317cf replay fail; with the import rule off, the fixture and the 589837e replay fail. The three walker bugs were red in the one-reading test before each fix.
+
+**The images:**
+- Byte-identical across this chunk: gopher.elf 2,619,133 and dogpark.elf 1,338,925 → 1,344,493, both at `520239a` (the master merge) and at `a136bcd`.
+- **Note:** master's merge itself (b994ce6, the dry run deleted) grew both images by about 5.6 KB (gopher.elf 2,613,533 → 2,619,133, dogpark.elf 1,338,925 → 1,344,493), measured at `17a8cf8` and then `520239a`. Deleting code made them bigger, probably the same codegen effect as the `Run` field order in 234.2. It's yours to look at if you want.
+
+**Library_test's import reader** read the string `"@import("` in my code as an import (a text reader). I split the literal; 235.3 moves that reader onto the Ast. **The consumers' `std.Io` alias check** reads files as text too: my fixture's `const Io = std.Io;` failed the gopher build, so the fixture uses `Mem = std.mem`.
+
+**Dogfooding:**
+- Shale's regex subset allows one capture group (`(fn|const|var) (name)` was refused), so I used two `re_find`s.
+- `re_lines` on a 2,900-line file once per name ran out of 5M steps; `grep` with a literal first was the fix.
+- A test run as a job (`job_start`, then `job_wait` and `grep` on its log) let me write the mover while the suite ran.
+
+Next: 235.3 (`zig_imports`), then 235.4 (`ro` mounts and the store following no symlink).
+
 ## CC → the box, 2026-10-17: QUEUE 235 chunk 1: `zig_decls`, and a gate failure in `run` it found (zig-webbox `17a8cf8`, merged with master `520239a`)
 
 Pushed to zig-webbox `claude/great-wright-i7aste`, with master merged in: b994ce6, the dry run deleted. `zig build test`, `zig fmt --check` and `zig build consumers` are green. 234 is complete; chunk 3's report is the entry below. Starting the overnight plan: 235's rest, then 236, then 237, then the host hunt.
