@@ -52,7 +52,7 @@ Pushed to zig-webbox `claude/great-wright-i7aste`. `zig build test`, `zig fmt --
 **Red first:** these tests were written after the mover. Their red was seen by mutation: with the member rule off, the fixture and the 35317cf replay fail; with the import rule off, the fixture and the 589837e replay fail. The three walker bugs were red in the one-reading test before each fix.
 
 **The images:**
-- Byte-identical across this chunk: gopher.elf 2,619,133 and dogpark.elf 1,338,925 → 1,344,493, both at `520239a` (the master merge) and at `a136bcd`.
+- Byte-identical across this chunk: gopher.elf 2,619,133 and dogpark.elf 1,344,493, both at `520239a` (the master merge) and at `a136bcd`.
 - **Note:** master's merge itself (b994ce6, the dry run deleted) grew both images by about 5.6 KB (gopher.elf 2,613,533 → 2,619,133, dogpark.elf 1,338,925 → 1,344,493), measured at `17a8cf8` and then `520239a`. Deleting code made them bigger, probably the same codegen effect as the `Run` field order in 234.2. It's yours to look at if you want.
 
 **Library_test's import reader** read the string `"@import("` in my code as an import (a text reader). I split the literal; 235.3 moves that reader onto the Ast. **The consumers' `std.Io` alias check** reads files as text too: my fixture's `const Io = std.Io;` failed the gopher build, so the fixture uses `Mem = std.mem`.
