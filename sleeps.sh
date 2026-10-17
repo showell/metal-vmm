@@ -31,6 +31,11 @@
 #   middle of a longest rest: answered within 5 ms of opening, and the whole
 #   minute at most 20 halts (11 when written; a 1 ms slice would be 60,000).
 #
+# - **two kernels: the sleeper fetching from gopher.elf** (PAIR, its disk
+#   PAIR_DISK), every 60 s for ten minutes: ten polls, each ok and the page's
+#   size from a single-guest run; then with the server's frames 46-50 lost
+#   (its ARP replies to polls 4 and 5): those two no_arp, the rest ok.
+#
 # Needs: KVM, zig-metal-unikernel beside this checkout (GUESTS, its probe/
 # with gopher.elf and sleeper.elf built: `zig build gopher sleeper`), a site
 # volume (SITE; zig-metal-unikernel's long.sh builds one) and mtools. Exit 0
@@ -205,6 +210,55 @@ elif [ "$opened" -lt 34000000 ] || [ $((answered - opened)) -ge 5000 ] || [ "$ha
     fail woken "opened at $opened us, answered $((answered - opened)) us later, $halts halts (want 35 s in, under 5 ms, at most 20): $second"
 else
     echo "  woken: a request 35 s into a sleep answered in $(((answered - opened) / 1000)) ms, $halts halts in the minute"
+fi
+
+# ── the sleeper fetching from a server, two kernels (PAIR, PAIR_DISK) ────────
+# The page's size, from a single-guest run of gopher.elf (PEER_BODY), as
+# pair.sh takes its oracle: the pair's own count could agree with itself.
+cp "$SITE" "$WORK/single.img"
+rm -f "$WORK/single.page"
+TRANSPORT=pci WIRE_LATENCY_US=1000 PEER_BODY="$WORK/single.page" \
+    timeout 60 "$VMM" "$GUESTS/gopher.elf" "$WORK/single.img" "" / > /dev/null 2>&1
+page=$(stat -c %s "$WORK/single.page" 2> /dev/null)
+if ! page=$(num fetches "page size from the single-guest run" "$page"); then
+    failed+=(fetches)
+fi
+# pairfetch <tag> [VAR=value ...]: gopher.elf serving, the sleeper fetching
+# / every 60 s for ten minutes of both machines' time.
+pairfetch() {
+    local tag=$1; shift
+    disk "$WORK/$tag.server" 'requests = 1000\n'
+    disk "$WORK/$tag.client" 'requests = 1000\n' 'period_ms = 60000\nfetch = 10.0.2.15:80 /\n'
+    env "$@" TRANSPORT=pci GUEST_S=600 WIRE_LATENCY_US=1000 PAIR="$GUESTS/sleeper.elf" PAIR_DISK="$WORK/$tag.client" \
+        PAIR_OUT="$WORK/$tag.out" PAIR_CLIENT_TRANSPORT=pci \
+        timeout 60 "$VMM" "$GUESTS/gopher.elf" "$WORK/$tag.server" > "$WORK/$tag.server.out" 2> "$WORK/$tag.err"
+    code=$?
+    wakes "$tag" "$WORK/$tag.client"
+    outcomes=$(awk '$1 == "fetch" {print $3}' "$WORK/$tag.wakes" | tr '\n' ' ')
+}
+if [ -n "${page:-}" ]; then
+    pairfetch fetches
+    sizes=$(awk '$1 == "fetch" && $3 == "ok" {print $5}' "$WORK/fetches.wakes" | sort -u | tr '\n' ' ')
+    if ! watched fetches "$code" 600; then
+        fail fetches "the pair did not end on GUEST_S (exit $code): $(tail -1 "$WORK/fetches.err")"
+    elif [ "$outcomes" != "ok ok ok ok ok ok ok ok ok ok " ] || [ "$sizes" != "$page " ]; then
+        fail fetches "the ten polls: $outcomes, sizes $sizes (want ten ok, each $page bytes)"
+    else
+        echo "  fetches: two kernels, ten polls in ten minutes, each ok and $page bytes"
+    fi
+    # **SILENT FOR A STRETCH**: the server's 46th to 50th frames lost, its
+    # ARP replies to the 4th and 5th polls (counted from the unhurt run):
+    # those two say no_arp, and the sleeper polls on, each after ok.
+    pairfetch silent WIRE_EAT=46-50
+    if ! watched silent "$code" 600; then
+        fail silent "the pair did not end on GUEST_S (exit $code): $(tail -1 "$WORK/silent.err")"
+    elif [ "$outcomes" != "ok ok ok no_arp no_arp ok ok ok ok ok " ]; then
+        fail silent "the ten polls: $outcomes (want the 4th and 5th no_arp, the rest ok)"
+    elif ! grep -q "lost (#46, #47, #48, #49, #50)" "$WORK/silent.err"; then
+        fail silent "the server's wire did not lose #46-#50 as named: $(grep '^wire: ' "$WORK/silent.err" | tr '\n' ' ')"
+    else
+        echo "  silent: the server's frames 46-50 lost, polls 4 and 5 no_arp, the rest ok"
+    fi
 fi
 
 echo "time: $((SECONDS - began)) s"

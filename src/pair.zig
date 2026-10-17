@@ -304,11 +304,11 @@ pub const Spawned = struct { fd: linux.fd_t, pid: linux.pid_t };
 /// client's console has a file of its own (the box, 2026-10-16, the first
 /// pair boot). Stderr stays shared: metal-vmm writes it a line at a time,
 /// and each side's last line names its side.
-pub fn spawn(fds: [2]linux.fd_t, kernel: [*:0]const u8, command_line: [*:0]const u8, env: []const [*:0]const u8, out: [*:0]const u8) Error!Spawned {
+pub fn spawn(fds: [2]linux.fd_t, kernel: [*:0]const u8, disk: [*:0]const u8, command_line: [*:0]const u8, env: []const [*:0]const u8, out: [*:0]const u8) Error!Spawned {
     var envp: [256:null]?[*:0]const u8 = @splat(null);
     if (env.len > envp.len) return error.PairSocket;
     for (env, 0..) |e, i| envp[i] = e;
-    const argv = [_:null]?[*:0]const u8{ "metal-vmm", kernel, "", command_line };
+    const argv = [_:null]?[*:0]const u8{ "metal-vmm", kernel, disk, command_line };
     const rc = linux.fork();
     if (linux.errno(rc) != .SUCCESS) return error.PairSocket;
     if (rc == 0) {

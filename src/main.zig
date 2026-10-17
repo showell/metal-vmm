@@ -1588,7 +1588,10 @@ fn spawnClient(environ: std.process.Environ, buf: []u8) ?pair.Spawned {
     _ = startPair(environ, env) orelse return null;
     // Both are environment values, so each ends in the NUL its entry has.
     const command_line: [*:0]const u8 = if (environ.getPosix("PAIR_CMDLINE")) |c| @ptrCast(c.ptr) else "";
-    return pair.spawn(fds, @ptrCast(kernel.ptr), command_line, env, @ptrCast(out.ptr)) catch {
+    // The client's boot disk, if it has one (an application kernel reads its
+    // conf and keeps its data there); its writes are kept at a normal end.
+    const client_disk: [*:0]const u8 = if (environ.getPosix("PAIR_DISK")) |d| @ptrCast(d.ptr) else "";
+    return pair.spawn(fds, @ptrCast(kernel.ptr), client_disk, command_line, env, @ptrCast(out.ptr)) catch {
         std.debug.print("metal-vmm: the pair's client would not start\n", .{});
         return null;
     };
