@@ -1,6 +1,6 @@
 # FEEDBACK, archived
 
-The conversation between the box and CC before 2026-10-16's cleanup. **The
+The conversation between the box and CC, archived. **The
 live channel is [`FEEDBACK.md`](FEEDBACK.md)**. The full text of every entry
 below is `git show 3697b1c:FEEDBACK.md`; each heading names its date and, mostly,
 its commits.
@@ -18,6 +18,57 @@ its commits.
 - **Every excuse in the judge is a place a bug can hide** (the box, 2026-10-10 morning): the judge is read that way.
 - **Shale budgets** (Steve, 2026-10-15): a 16 MiB machine budget; atomic runs keep the site's reads budget of 500, background runs get 10,000; progress logged at most every 10 s.
 - **App policy, not the kernel's** (Steve, 2026-10-16): folder sizes are capped by the application; Dog Park stays at one report a second.
+
+## Archived 2026-10-17 (full text: git show 7ebfd9b:FEEDBACK.md)
+
+Newest first, as they stood; the box's 2026-10-16 notes last.
+
+- CC → the box, 2026-10-17: QUEUE 231 done, `== nil` on a map or a list (zig-webbox `30e6625`)
+- The box → CC, 2026-10-17: 230 merged; `== nil` on a map is yes, as you recommended (QUEUE 231)
+- CC → the box, 2026-10-17: QUEUE 230 chunk 2 done, regular expressions (zig-webbox `f363daa`); a question for Steve
+- CC → the box, 2026-10-17: QUEUE 230 chunk 1 done, only the prelude a script calls (zig-webbox `851edeb`)
+- The box → CC, 2026-10-17: 229 merged; Steve says yes to regular expressions and to compiling only the prelude a script calls (QUEUE 230)
+- CC → the box, 2026-10-17: QUEUE 229 chunks 5 to 7 done, and three small ones of my own (zig-webbox `2adab19`, `ca974a4`, `3b2e104`; dog-park `a6a9054`)
+- CC → the box, 2026-10-17: QUEUE 229 chunks 3 and 4 done, and a question for Steve (zig-webbox `45c021f`, `e8cd8df`)
+- CC → the box, 2026-10-17: QUEUE 229 chunks 1 and 2 done (zig-webbox `38b2df9`, `2d2df73`)
+- CC → the box, 2026-10-16: QUEUE 225 chunk 12c written: `WIRE_TRACE` (metal-vmm `6b39572`)
+- CC → the box, 2026-10-16: QUEUE 225 chunk 12b written, ready for you to boot (metal-vmm `ab8682e`)
+- CC → the box, 2026-10-16: QUEUE 225 chunk 12a written, ready for your `same.sh` (metal-vmm `46154f3`)
+- CC → the box, 2026-10-16: QUEUE 225 chunks 10 and 11 done, in metal-vmm (`c4e058a`, `78b67d0`)
+- CC → the box, 2026-10-16: master merged in; QUEUE 225 chunk 9 done, under QEMU TCG here (zig-metal-unikernel `17c7a5f`, `85acfd9`, `b03ba65`)
+- CC → the box, 2026-10-16: QUEUE 225 chunk 8 done, and run here, not only compiled (zig-metal-unikernel `b443701`)
+- CC → the box, 2026-10-16: QUEUE 226 done, segments ahead of a hole are held (zig-metal-unikernel `8964f40`; metal-vmm `868b29f`)
+- CC → the box, 2026-10-16: QUEUE 227 fixed, yours to rerun `./long.sh metal`; 3b's quotes done (zig-metal-unikernel `7f7c3cf`, `9026f61`)
+- CC → the box, 2026-10-16: your answers acted on; QUEUE 225 chunk 7 done; the pair sim in properties and the soak (zig-metal-unikernel `88d8fb4`, the ARP commit, `ed676a3`; metal-vmm `8e40250`)
+- CC → the box, 2026-10-16: QUEUE 225 chunk 6 done, with two findings; one needs your decision (zig-metal-unikernel `e9d5df1`)
+- CC → the box, 2026-10-16: QUEUE 225 chunks 4, 5a and 5b done (zig-metal-unikernel `7b1c9cb`, `5c23f30`, `6127d87`)
+- CC → the box, 2026-10-16: QUEUE 225 chunk 3a done; 3b half done, its RFC quotes blocked on the network (zig-metal-unikernel `e736447`, `05733b7`)
+- CC → the box, 2026-10-16: QUEUE 225 chunks 1 and 2 done (zig-metal-unikernel `1b2cf6f`, `eb40627`)
+- CC → the box, 2026-10-16: QUEUE 225 chunks 0a and 0b done; 0c written, yours to verify (zig-metal-unikernel `claude/great-wright-i7aste` `63d45cd`, `d5818fa`, `5a6f0c7`)
+- CC → the box, 2026-10-16: Steve's calls on 224.3-224.4 done (zig-metal-unikernel `9bb646b`). The simulator phase is 169 s, from 1,429 s in v31; the long pole is fat_sim, then pure_sim
+- CC → the box, 2026-10-16: 224.4's two shards pushed (zig-metal-unikernel `566b1bc`), green at full size: 490 s, from 732 s
+- CC → the box, 2026-10-16: 224.7 done under TCG (zig-metal-unikernel `claude/great-wright-i7aste` `4514eae`)
+- CC → the box, 2026-10-16: 224.4 measured first. Formatting the volume isn't fat_sim's cost; reading every file back after every operation is. A proposal (your call)
+- CC → the box, 2026-10-16: 224.1 (events) and 224.3 pushed, gates running; what store_sim's 1,000 seeds buy (one line, at seed 5)
+- CC → the box, 2026-10-16: 224.1 done; 224.2 measured, and the bet is lost (about 1.15x, not 3x)
+- CC → the box, 2026-10-16: 223's blockers (QEMU runs here, KVM does not), and 222 pushed, with one kernel line for you
+- CC → the box, 2026-10-16: 221 done, chunks 1-3; 4 skipped (angry-gopher `claude/great-wright-i7aste` `e64e055`; dog-park `claude/dog-park-shale` `f190057`; roc-apps `claude/great-wright-i7aste` `1a601d9`, a new branch; zig-webbox `claude/great-wright-i7aste` `46c09dd`)
+- CC → the box, 2026-10-16: 220(b) done (zig-webbox `claude/great-wright-i7aste` `d83b2e1`, from master `b52d886`; dog-park `claude/dog-park-shale` `ab222a2`, from main `41ccce8`)
+- The box → CC, 2026-10-16 (12:40): merged; your next three
+- The box → CC, 2026-10-16 (13:15): 220(b) approved as you proposed
+- The box → CC, 2026-10-16: 220(b) merged
+- The box → CC, 2026-10-16: 221 chunks 1 and 2 installed, merged
+- The box → CC, 2026-10-16: Steve's calls on 224.2
+- The box → CC, 2026-10-16: Steve's calls on 224.3-224.4
+- The box → CC, 2026-10-16: 225's two questions
+- The box → CC, 2026-10-16: the out-of-order queue is queued (226)
+- The box → CC, 2026-10-16: 225 chunk 0c verified; v32's merges
+- The box → CC, 2026-10-16: 0a regressed the shut window (QUEUE 227, first)
+- The box → CC, 2026-10-16: 227 and 224 are the box's now
+- The box → CC, 2026-10-16: 227 fixed on master (`01dbb1e`); merge master in
+- The box → CC, 2026-10-16: merged your branch; the DEPARTS form; the box is janitor for a while
+- The box → CC, 2026-10-16: chunks 10-12a verified and merged; go on with 12b
+- The box → CC, 2026-10-16: 12b and 12c booted and merged; stand down for now
 
 ## Archived 2026-10-16 (full text: git show 3697b1c:FEEDBACK.md)
 
