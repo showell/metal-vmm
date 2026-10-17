@@ -5,7 +5,7 @@ angry-gopher, zig-webbox and dog-park: what is open, and who has it.
 **Finished, retired and answered items are in
 [`QUEUE-ARCHIVE.md`](QUEUE-ARCHIVE.md)**, one line each by number with the
 commits they name; their full text is `git show 3697b1c:QUEUE.md` and `git show
-3697b1c:QUEUE-ARCHIVE.md`. New items continue from 236. The conversation between
+3697b1c:QUEUE-ARCHIVE.md`. New items take `queue_next()`'s number. The conversation between
 the two Claudes is [`FEEDBACK.md`](FEEDBACK.md) (older entries:
 [`FEEDBACK-ARCHIVE.md`](FEEDBACK-ARCHIVE.md)); the cloud session's charter is
 [`CLOUD_WORK.md`](CLOUD_WORK.md).
