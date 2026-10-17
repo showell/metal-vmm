@@ -24,9 +24,8 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
 - **What serves lynrummy.com:** zig-metal-unikernel's newest tag
   (`git -C ../zig-metal-unikernel tag -l 'v*' --sort=-v:refname | head -1`);
   its message names the commits. Dog Park serves dogpark.lynrummy.com.
-- **Built, not deployed (Steve's):** a Dog Park release with `/version`, and
-  the Observatory's droplet (228); the Safari downloads on metal and /tutorial's
-  removal ride the next lynrummy.com release.
+- **Built, not deployed (Steve's):** the Observatory's droplet (228). Dog
+  Park's release with `/version` serves (its `/version` names the commit).
 - **CC:** 233, in order.
 
 ## CC: open
