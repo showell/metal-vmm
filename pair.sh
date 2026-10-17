@@ -88,12 +88,12 @@ pair() {
     t0=$(date +%s%N)
     # **PATIENCE_S=5, THE SERVER'S**: a run whose client gives up before any
     # request (the SYN eaten three times, silent, no ARP) leaves gopher.elf
-    # waiting for a request that never comes; it wakes on its timer every
-    # 0.8 ms, so the default 600 s of guest time is 3 million exits, about
-    # 51 s of wall time a run (measured 2026-10-16). Once its client has
-    # gone the server owes nothing; 5 s of its time ends it in well under
-    # one of ours. A run that serves its request ends on the site's own
-    # one-request setting long before.
+    # waiting for a request that never comes. Once its client has gone the
+    # server owes nothing, so 5 s of its time ends it. (It ends at its first
+    # wake past 5 s: a quiescent server sleeps up to its longest rest, 10 s.
+    # Before the sleep, DESIGN-sleep.md, it woke every 0.8 ms, and the
+    # default 600 s cost about 51 s of wall time a run.) A run that serves
+    # its request ends on the site's own one-request setting long before.
     env "$@" PATIENCE_S=5 TRANSPORT=pci WIRE_LATENCY_US=1000 PAIR="$GUESTS/fetch.elf" PAIR_OUT="$WORK/$tag.client" \
         PAIR_CLIENT_TRANSPORT=pci PAIR_CMDLINE="fetch $ip $port $path connect_ms=150 idle_ms=1000 total_ms=3000" \
         timeout 60 "$VMM" "$GUESTS/gopher.elf" "$WORK/disk.img" > "$WORK/$tag.server" 2> "$WORK/$tag.err"
