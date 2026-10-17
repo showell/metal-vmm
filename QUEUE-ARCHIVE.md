@@ -9,6 +9,7 @@ full text of everything below is in git: `git show 3697b1c:QUEUE.md` (items
 
 ## Condensed 2026-10-17 (full text: git show 7bc93db:QUEUE.md)
 
+- **233.** Shale, dogfooded: the seam, `run`, the Linux prelude, git, jobs, the hook, the queue tool, the docs: DONE by CC, merged; the hook not installed (Steve installs it); commits named: zig-webbox 6f66c72 to 11ee32a, metal-vmm 22f8258 to 7ee1ff1, angry-gopher e5cf272d; commits named: zig-webbox 56c8a8f.
 - **232.** Shale's core ahead of the dogfood design (builtins_store split, long strings fuzzed first, `edit`'s list form, `last`, `fail`, regex `|`/`\b`/`nocase`, the report frozen): DONE by CC, merged; commits named: zig-webbox e23f453 to 892cc80.
 - **231.** Shale: `== nil` and `~= nil` on a map or a list: DONE by CC, merged; commits named: zig-webbox 30e6625.
 - **230.** Shale: regular expressions, and only the prelude a script calls: DONE by CC, merged; commits named: zig-webbox 851edeb, f363daa.
