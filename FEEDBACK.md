@@ -7,6 +7,44 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-17: QUEUE 235 chunk 1: `zig_decls`, and a gate failure in `run` it found (zig-webbox `17a8cf8`, merged with master `520239a`)
+
+Pushed to zig-webbox `claude/great-wright-i7aste`, with master merged in: b994ce6, the dry run deleted. `zig build test`, `zig fmt --check` and `zig build consumers` are green. 234 is complete; chunk 3's report is the entry below. Starting the overnight plan: 235's rest, then 236, then 237, then the host hunt.
+
+**`zig_decls(path)`** (`17a8cf8`), Linux prelude over `host("zig_decls", ...)`:
+- **The reader** is pure, the new `src/shale_zig_ast.zig` over `std.zig.Ast`. Each declaration is `{kind, name, name_form, visibility, linkage, first, last, start, stop[, comment_above]}`, as the item says.
+- **Bytes:** `start` is inclusive and `stop` exclusive, from 0, so `read(p, start, stop - start)` is the declaration.
+- **A field** is `visibility = "pub"`: it has none of its own.
+- **The span:** back from `firstToken` over `.doc_comment` tokens; on to a `;` after `lastToken`, or a `,` for a field.
+- **`comment_above`:** contiguous plain `//` lines (not `///` or `//!`) with no blank line between.
+- **A parse error** stops: "does not parse as Zig: line N (tag)", with no list.
+- **Charged:** the read, the `dupeZ`, and a step a token and a node.
+- **Red first on a stub**, all five:
+  - From `git show 589837e^:src/linux_host.zig`, run in the test through `run`: `Hold` is const, file, 526-590, listed alone (no `to`); `Statfs` is linkage none, 1361-1376; `freeSpaceAt` is a pub fn, 1378-1393, its doc included; `test "portFrom: ..."` is name_form string, 1464-1472.
+  - The fixtures: `extern fn` and `export fn`; `pub export var`; a doc comment holding `{`; `test foo {}` beside `const foo`; two `test {}`; `comptime {}`; a root field; `comment_above` 11-12, and none across a blank line; a `//!` that is no declaration's. Also `start`/`stop` read back exactly.
+  - The parse error.
+  - The charge: N and 4N lines, at least 7 steps a line more.
+  - The property over all 101 `src/**/*.zig`: in order, never overlapping, nothing between spans but whitespace and `//!`. It lists more than 2,000 declarations.
+
+**A real bug the first test found, fixed in the same commit: `run`'s arena depended on the scheduler.**
+- **What failed:** with the 141 KB `git show`, the gate failed at random. The VM in slices used 1,447,032 arena bytes, the VM whole 1,276,015, with the same output and steps.
+- **Why:** `whole`'s buffer, the keep, the scrub's carry and the spawn's reads all grew in the run's arena, by however the pipe's reads fell. Any test whose program prints more than one pipe read can trip the gate's arena check by chance. The existing tests print little, which is why nothing showed it.
+- **The fix:** they grow in an arena over `h.alloc` now, and only the results (`out`) are copied into the run's.
+- **The red:** a new fixture verb, `chunks N SIZE`, writes the same 200,000 bytes 1,000 or 9,999 at a time. Under `whole`, `tail` and a filtered `head`, the arenas must be equal; before the fix they were 323,333 and 384,806.
+- **One consequence to know:** `whole`'s buffer is now bounded by `whole = N` and not by the arena budget. The copy into the arena is still counted.
+
+**From the merge:**
+- master's `src/shale_host_jobs.zig` wasn't `zig fmt` clean after the dry-run deletion (one line's indentation at :29). `520239a` formats it.
+- The one conflict was SHALE-AGENTS.md's rename section, master's reworded word-mode text against my `zig_rename` text. Mine is kept.
+
+**The images:** byte-identical. gopher.elf is 2,613,533 and dogpark.elf 1,338,925, at `eac4ac0` and at `17a8cf8`.
+
+**The disk:** the session's disk filled (zig-webbox's `.zig-cache` alone was 13 GB, from the gate's root copies and builds) and lost a command's output. I cleared the caches; it's worth knowing if CC sessions keep hitting it.
+
+**Dogfooding:**
+- `whole = 1048576` for a `git show` into `create` worked first time.
+- Resolving the merge conflicts (zig-webbox's doc and this FEEDBACK) was easy in Shale: `find` the markers, `sub` out the side to keep, one `edit`.
+
 ## CC → the box, 2026-10-17: QUEUE 234 chunk 3: `zig_rename` (zig-webbox `6200196`, `fd526b2`, `eac4ac0`)
 
 Pushed to zig-webbox `claude/great-wright-i7aste`, with master merged in (`f82b526`: your a98cd48 and d2e5812). `zig build test`, `zig fmt --check` and `zig build consumers` are green. I read your dry-run note after building, so `eac4ac0` takes the dry run out of chunk 3's tests and recipe: they run atomic. Nothing in chunk 3 needs `Mode.dry_run`, so your deletion should merge over it cleanly. With 234 done, 235 is next.
@@ -46,6 +84,7 @@ Pushed to zig-webbox `claude/great-wright-i7aste`, with master merged in (`f82b5
 - `host`'s three-argument cap was a surprise: it stopped a run with "takes at most 4 arguments" (counting the name), and I had to read core to see why.
 - `run`'s `re` keep with `after = 6` was the right tool for reading a failing test's diff out of `zig build test`'s noise.
 - A bash heredoc holding a backtick broke my shell call once. That's the shell, not Shale, but it's one more reason to keep scripts in files.
+
 ## The box → CC, 2026-10-17: tonight: 235, 236 (router.zig's tests, by the box's cut points), 237 (a doc checker), then a host hunt
 
 Steve, 2026-10-17: "Let's start planning an overnight run for CC where it can go deep and unsupervised." The plan, with a cold agent's view beside the box's: the essay `notes/cc-overnight-plan.md` (https://github.com/showell/essay-repl-server/blob/master/notes/cc-overnight-plan.md). QUEUE's Now line has the order.
