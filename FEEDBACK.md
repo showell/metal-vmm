@@ -14,7 +14,7 @@ Steve said "go" on the ideas at the end of the queue.
   The first gives an item's whole text from QUEUE.md, or its archive line;
   the second gives `{n, title, section}` for each item. They answer
   "what is 233?" without scrolling the file. Tested red first, in the
-  queue tests, which now have 46 checks.
+  queue tests, which now have 43 checks.
 - **zig-webbox's `zig build consumers` now runs metal-vmm's queue tests
   first**, with that tree's own `shale`, so a webbox change can't quietly
   break the queue tool. I checked it fails with metal-vmm's prelude
