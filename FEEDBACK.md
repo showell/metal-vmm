@@ -7,6 +7,38 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-17: QUEUE 234 chunk 2: a dry run that sees its own changes (zig-webbox `303b477`, `bc64e24`, `c08ab1e`)
+
+Pushed to zig-webbox `claude/great-wright-i7aste`. `zig build test`, `zig fmt --check` and `zig build consumers` are green. Written with Shale throughout. Next is chunk 3, `zig_rename`, then 235.
+
+**What it does** (`303b477`):
+- In a dry run each change also goes into an overlay (new `src/script/overlay.zig`), keyed by the resolved path (`p.full`, after the mounts).
+- Every `read`, `stat`, `exists`, `is_dir` and partial read sees it, through one view in builtins_store.zig. So `replace` then `edit` previews the edit against the replaced text, `create` then `read` reads it, and after `remove` or `remove_tree` the path is gone.
+- A removal hides what was made under it before it; a write after it is there again. An append to a real file reads as the file plus its suffix.
+- **Listing (`ls`, `walk`) a folder the dry run changed stops**, with an `argument` error: "a dry run cannot list chat after changing it: run --write on a copy". Merging the overlay into a listing's order, its budgets and walk's `more` didn't seem worth it, and refusing is honest. If you want the merge, it's a follow-up.
+- The overlay lives in the run's arena, counted there, and is copied at a `yield` as the effects are; the gate's cut engine has a test for this.
+- **Programs are still refused** in a dry run (`budget runs`).
+- **A lint test** fails any `builtins_*` file that reads the store outside the view. It also fails a `store.list` without `viewListCheck` on the line before (`bc64e24`; seen red with one check removed).
+- **Red first:** overlay_test.zig on the parent `2349249`, in a worktree, failed four of six tests: replace-then-edit, new/remove/append, folders, and the yield. The budget test and the lint pass on the parent, as they should.
+- Docs: SHALE.md (the runner's dry run) and SHALE-AGENTS.md ("Nothing changes unless asked").
+
+**The images.** Metal compiles none of it: only host_io_std.zig says `shale_dry_run`. Still, the first commit grew both images by about 1.5 KB:
+
+| | gopher.elf | dogpark.elf |
+|---|---|---|
+| `2349249` (chunk 1) | 2,613,261 | 1,338,653 |
+| `303b477` | 2,614,861 | 1,340,157 |
+| `bc64e24` (views inline) | 2,614,829 | 1,340,221 |
+| `c08ab1e` (field last) | **2,613,469** | **1,338,861** |
+
+Diffing dogpark.elf's symbols (a Shale script over `nm -t d`, with the `__anon_N` numbers stripped) showed no new code. Instead, dozens of functions grew 14-20 bytes, including `join`, `split` and `last`, which the chunk never touched. The cause was **`Run`'s new zero-size field**: removing it gave 1,338,861, making it `void` changed nothing, and **placing it last in `Run`** gave 1,338,861 too. So it is last now, with a comment to keep it there. The +208 bytes left are the same on both images. I didn't chase them: the views are inline and gated, and chunk 1 moved the images by 6 KB the other way. Say if you want them chased.
+
+**Dogfooding notes:**
+- **Lua habits, four times so far, each refused with a hint that fixed it at once:** `for _, i in`, `local function`, `type(x)`, and `parse_int(s, 16)` for nm's hex (I used `nm -t d`). Steve says Lua habits that dominate are a sign. None of these four dominates yet, so I changed nothing. If one would earn its place, it's `local function` at the top level as plain `function`: the refusal is clear, but I typed it without thinking.
+- **`..` again:** `job_wait(real("../measure.log.job"))` from metal-vmm stopped. I ran it from /home/user instead; 235.5 covers `"."` but not this.
+- **Experiments on another repo's tree** were easy in Shale: `edit` a file, `run` the build, `git checkout --` it back, with `must` keeping the restore before the check. Four builds, each a job (`job_start` and `job_wait`) because they outlast a call.
+- **`git merge --ff-only`** failed here (my FEEDBACK commit plus yours), so I merged with `--no-edit`. A `git_merge` in the prelude is still the add I'd make.
+
 ## CC → the box, 2026-10-17: QUEUE 234 chunks 0 and 1: edits_all's word check, diffs as a setting (zig-webbox `38fdd46`, `2349249`)
 
 Both pushed to zig-webbox `claude/great-wright-i7aste`, master merged in first (`135f793`, edge_sites.zig). Tests seen red first, `zig build test` and `zig build consumers` green. **Written with Shale throughout** (Steve: dogfood while fixing it), notes at the end.
