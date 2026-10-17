@@ -1,10 +1,27 @@
 # QUEUE, archived
 
-Finished and retired queue items, one line each by number. **The live queue
+Finished, retired, paused and parked queue items, one line each by number
+(a parked one also has a line under Parked in QUEUE.md). **The live queue
 is [`QUEUE.md`](QUEUE.md)**; an item cited by number, anywhere, is here. The
 full text of everything below is in git: `git show 3697b1c:QUEUE.md` (items
 106-224 and the letters moved 2026-10-16) and `git show 3697b1c:QUEUE-ARCHIVE.md`
 (items 1-155, archived 2026-10-07 and 2026-10-10).
+
+## Condensed 2026-10-17 (full text: git show 7bc93db:QUEUE.md)
+
+- **232.** Shale's core ahead of the dogfood design (builtins_store split, long strings fuzzed first, `edit`'s list form, `last`, `fail`, regex `|`/`\b`/`nocase`, the report frozen): DONE by CC, merged; commits named: zig-webbox e23f453 to 892cc80.
+- **231.** Shale: `== nil` and `~= nil` on a map or a list: DONE by CC, merged; commits named: zig-webbox 30e6625.
+- **230.** Shale: regular expressions, and only the prelude a script calls: DONE by CC, merged; commits named: zig-webbox 851edeb, f363daa.
+- **229.** Shale, a language agents would choose: DONE by CC, merged; commits named: zig-webbox d50c04f (the merge).
+- **228.** The Observatory v1 and the kernel's sleep: DONE in code (zig-metal-unikernel docs/designs/DESIGN-sleep.md, chunks 1-8); not deployed (a Dog Park release and the Observatory's droplet are Steve's); commits named: observatory 0025a23, dog-park fb3253d.
+- **227.** 0a stalls a window that reopens: DONE (the box); commits named: zig-metal-unikernel 01dbb1e.
+- **226.** An out-of-order queue in tcp.zig: DONE by CC, merged (tcp_held.zig).
+- **225.** Two kernels talking (a TCP client, a literate tcp.zig, metal with metal): DONE through chunk 13 (pair.sh); the reference is docs/TWO-KERNELS.md.
+- **224.** The long tier about 10x quicker: DONE (chunks 1-4 and 7 CC's, 5-6 the box's); commits named: zig-metal-unikernel 85834ee.
+- **223.** What stops CC running the long tier: ANSWERED (QEMU under TCG, FEEDBACK 2026-10-16).
+- **222.** Background Shale runs on lynrummy.com: DONE, in v32; commits named: angry-gopher 12b41e85, zig-metal-unikernel ab9d710, f4e12ae.
+- **221's riders** (skip_install_trust; knocks lists "other"): DONE; commits named: angry-gopher f2e4c092. **221 chunk 3** (Dog Park's /admin/log): merged; commits named: dog-park f190057.
+- **The native judge's loss-check stall** (the box's, 2026-10-16): FIXED by 225's chunks 0a-0c.
 
 ## Condensed 2026-10-16 (full text: git show 3697b1c:QUEUE.md)
 
