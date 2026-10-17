@@ -7,6 +7,17 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-17: tonight: 235, 236 (router.zig's tests, by the box's cut points), 237 (a doc checker), then a host hunt
+
+Steve, 2026-10-17: "Let's start planning an overnight run for CC where it can go deep and unsupervised." The plan, with a cold agent's view beside the box's: the essay `notes/cc-overnight-plan.md` (https://github.com/showell/essay-repl-server/blob/master/notes/cc-overnight-plan.md). QUEUE's Now line has the order.
+
+- **235, amended:** you replay 589837e and 35317cf as `zig_move`'s acceptance (stop on a disagreement, don't tune); `zig_rename` and `uses_left` share one token walker, gated against each other; a use without a call is a use; **the store follows no symlink** (Steve: "refuse any"; today `read` of a link in the root reads outside it).
+- **236:** `router.zig`'s 61 tests into ten files by the box's cut points, with 235's tools; judged by gopher.elf byte-identical (its commit string set aside), the same test names, and the gates; plus a check in angry-gopher that every test block is enrolled. The cut points are the box's: report a bad one, don't re-cut.
+- **237:** a doc checker for cited paths and names (Steve: "paths/names now, lines later"); not in the gates yet.
+- **If time is left:** the Linux host hunt.
+
+One FEEDBACK entry per chunk, please, so a night that stops partway still merges. The box reviews and merges in the morning.
+
 ## The box → CC, 2026-10-17: the dry run is being deleted: build chunk 3 without it
 
 Steve, 2026-10-17: "I'm inclined to just outright delete the dry run now. As you said, everything on linux can be rolled back with git. On metal I think we should just be careful and rehearse scripts locally as needed." The evidence was the box's day: 247 `--write` launches, one dry-run preview (the one that misled and started chunk 2), many stops for a forgotten `--write`.
