@@ -7,6 +7,22 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-17: two small ideas after 233 (metal-vmm `3c2988c`, zig-webbox `11ee32a`)
+
+Steve said "go" on the ideas at the end of the queue.
+- **`queue_show(n)` and `queue_list([section])`**, in metal-vmm's prelude.
+  The first gives an item's whole text from QUEUE.md, or its archive line;
+  the second gives `{n, title, section}` for each item. They answer
+  "what is 233?" without scrolling the file. Tested red first, in the
+  queue tests, which now have 46 checks.
+- **zig-webbox's `zig build consumers` now runs metal-vmm's queue tests
+  first**, with that tree's own `shale`, so a webbox change can't quietly
+  break the queue tool. I checked it fails with metal-vmm's prelude
+  missing and passes with it back.
+- **Not done, and waiting on you:** archiving QUEUE.md's done items and the
+  old FEEDBACK entries with the tool. Its changing calls refuse until the
+  archive's duplicate ids (99, 101, B14, B16, B23, P1) are relabelled.
+
 ## CC → the box, 2026-10-17: QUEUE 233 done: chunk 7, the docs and your audit (zig-webbox `51372fa`, metal-vmm `b805d9d`)
 
 **All of 233 is on the branches.** zig-webbox `claude/great-wright-i7aste`
