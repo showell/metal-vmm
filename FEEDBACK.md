@@ -7,6 +7,79 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-17: QUEUE 233 chunk 6 done, the queue in Shale; a proposal for the archive; a CLI fix (metal-vmm `22f8258`, zig-webbox `9c76f9f`)
+
+**The queue tool** is `.shale/prelude.shale`: `queue_check`, `queue_next`,
+`queue_add`, `queue_done`, `queue_archive`, `queue_reorder`, `feedback_add`
+and `feedback_archive`. The grammar it checks is in README.md, "The queue's
+grammar". Every changing call checks first, and refuses a file that breaks
+the grammar.
+
+**Tests**, in Shale (`.shale/queue_test.shale`, 38 checks, all pass), on
+`tests/queue/`: the small fixture, plus QUEUE.md and QUEUE-ARCHIVE.md as
+they stood at `7bc93db`, the real misorder. The design asked for these and
+they pass:
+- `queue_check` names exactly the three misordered lines (224 after 223,
+  225 after 224, 226 after 225), and `queue_reorder` fixes them in one
+  diff.
+- `queue_add` puts the next number at the top of "CC: open", after the
+  section's own text.
+- An archived number is never given again.
+- An archive refused part way changes neither file.
+- A dry run of any of them shows the diff and writes nothing (none of
+  them runs a program).
+
+**The proposal (yours to apply).** The live QUEUE.md is already in order,
+because you archived 222 to 232 this afternoon, and FEEDBACK.md checks
+clean. But **the live archive numbers two items twice**, so every changing
+call refuses today. `queue_check()` on master says:
+
+```
+QUEUE-ARCHIVE.md:352: 101 is archived twice (also line 222)
+QUEUE-ARCHIVE.md:392: 99 is archived twice (also line 219)
+```
+
+These are older items that took numbers already used. I propose renaming
+the older two, so their numbers stop counting and the text stays. This is
+`shale` without `--write`, so nothing was written:
+
+```
+--- a/QUEUE-ARCHIVE.md
++++ b/QUEUE-ARCHIVE.md
+@@ -352,1 +352,1 @@
+-- **101.** Done (CC, 2026-10-08): C1-C5 under Proposed. Was: your: Done; commits named: none.
++- **101 (the first, 2026-10-08).** Done (CC, 2026-10-08): C1-C5 under Proposed. Was: your: Done; commits named: none.
+@@ -392,1 +392,1 @@
+-- **99.** Held until the box rebases angry-gopher's request-door onto master: Held; commits named: angry-gopher 8b617f3c.
++- **99 (the first).** Held until the box rebases angry-gopher's request-door onto master: Held; commits named: angry-gopher 8b617f3c.
+```
+
+To apply it, run the same `edit` with `--write`. After that, `queue_check()`
+is empty, and `queue_next()` is 234.
+
+**Where I differed from the design:**
+- **I don't check the order of the archive's lines.** Its 2026-10-16
+  section lists items oldest first, as it was written. Only the archive's
+  numbers are checked: unique, and none also in QUEUE.md.
+- **Archive lines go to the top of the archive's first section of
+  numbered lines.** No new "Condensed" section is made, because the
+  section header holds a git sha the tool can't know without running git.
+  `feedback_archive` does make a new section; `opts.sha` puts the sha in
+  its header.
+- **The commits named** are each hex word of 7 to 40 characters with a
+  digit in it, prefixed by a repo named within three words before it.
+- **The tests need `--budget output_bytes=8388608`**, because every
+  change prints its diff and the reorder's is long. The README and the
+  test's header say so.
+
+**A CLI bug the tests found** (zig-webbox `9c76f9f`). With `> f 2>&1`, the
+stop report overwrote the script's own output. Zig's `File.writer` writes at
+offsets it tracks itself, so two writers on one file clobber each other.
+Both writers now stream. A test runs the build's `shale` that way; it failed
+before the fix and passes after.
+
+Next is chunk 7, the docs.
+
 ## CC → the box, 2026-10-17: QUEUE 233 chunk 5 done, `shale-gate`, not installed (zig-webbox `4325135`)
 
 **`tools/shale_gate.zig`, `tools/shale-gate.sh`, and their tests**
