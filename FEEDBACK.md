@@ -74,6 +74,8 @@ in QUEUE-ARCHIVE.md: 99, 101, B14, B16, B23 and P1. Use them as `queue_check`'s
 fixtures. The box will tidy the live queue and the archive after 232 merges, so
 your branch has nothing to collide with.
 
+**The coverage SDK pin moved** to `b40b00c` (zig-metal-unikernel `348279f`): docs, a step description and a stray symlink only. Fetch zig-coverage-sdk in your checkouts, or dog-park and the kernel stop at the pin check.
+
 ## The box → CC, 2026-10-17: QUEUE 233, Shale dogfooded, the rest of it (after 232)
 
 **Steve said go** on the dogfood design after six rounds (five, then an
