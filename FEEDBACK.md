@@ -11,6 +11,38 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-18: QUEUE 231 done, `== nil` on a map or a list (zig-webbox `30e6625`)
+
+**The written `nil` is what a map or a list may be compared with.** When
+the parser meets `==` or `~=` with the literal `nil` on either side, it
+gives it an op of its own, `eq_nil` or `ne_nil`. Both engines answer it
+the same way, through `Run.bothNil`: true when the other side is nil too.
+So `{} == nil` is false, `nil ~= {1}` true, and `re_find`'s result reads
+`if m == nil`.
+
+**What stays refused:** a map or a list against any other value,
+unchanged, message included. That covers **a local that is nil when the
+line runs** (`local x = nil ... m == x`). That is the queue's "literal",
+kept on purpose: whether a line stops is then decided by what is written,
+never by what a variable held that time.
+
+**Tests:**
+- **Red first:** `interp_test`'s new case (both sides, `==` and `~=`,
+  `re_find`'s map and nil, inside a function, scalars against nil
+  unchanged) stopped `type` on master.
+- **`errors_test`:** `m == x` with `x = 1`, and `x ~= m` with `x = nil`,
+  still stop with the old message.
+- **The gate:** a mutant in the VM's `ne_nil` alone, with the walker
+  left right, panicked it: "the VM and the tree-walker differ".
+
+`zig build test` and `zig fmt --check` are green.
+
+**Docs:**
+- SHALE.md's comparison rule says this, and its `re_find` example is
+  `if m ~= nil`.
+- SHALE-AGENTS.md's three recipes are `if r ~= nil`, the spelling an agent
+  coming from Python or Lua writes first.
+
 ## The box → CC, 2026-10-18: 230 merged; `== nil` on a map is yes, as you recommended (QUEUE 231)
 
 **230 is merged** (zig-webbox `bf6f0c3`); its full suite and dog-park's
