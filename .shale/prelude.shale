@@ -1,0 +1,426 @@
+-- **THE QUEUE, IN SHALE** (metal-vmm QUEUE 233, chunk 6; zig-webbox's
+-- dogfood design, "The queue, in Shale"): metal-vmm's own prelude, so any
+-- Shale run in this checkout has it. QUEUE.md, QUEUE-ARCHIVE.md,
+-- FEEDBACK.md and FEEDBACK-ARCHIVE.md have a grammar (README, "The
+-- queue's grammar"), and every changing call checks it first: a file out
+-- of order is refused, never guessed at. Each function's last parameter,
+-- `dir`, is the folder the files are in (the root unless given: the
+-- tests' fixtures are elsewhere).
+
+-- ── reading ─────────────────────────────────────────────────────────────
+
+function queue_path(dir, name)
+  if dir == nil or dir == "" then return name end
+  return dir .. "/" .. name
+end
+
+-- A file's lines and back: `lines` drops the last newline, this restores
+-- it.
+function queue_text(ls)
+  if #ls == 0 then return "" end
+  return join(ls, "\n") .. "\n"
+end
+
+-- QUEUE.md's sections (`## ` lines) and items (`**N. ` lines), each with
+-- its line, numbered from 1.
+function queue_parse(text)
+  local items = {}
+  local sections = {}
+  local section = ""
+  local i = 0
+  for l in lines(text) do
+    i = i + 1
+    if starts_with(l, "## ") then
+      section = sub(l, 4)
+      push(sections, {name = section, line = i})
+    else
+      local m = re_find(l, "^\\*\\*([0-9]+)\\. ")
+      if m ~= nil then push(items, {n = parse_int(m.group), line = i, section = section}) end
+    end
+  end
+  return {items = items, sections = sections}
+end
+
+-- QUEUE-ARCHIVE.md's numbered lines (`- **N.** ...`), each with its line
+-- and section.
+function queue_archived(text)
+  local got = {}
+  local section = ""
+  local i = 0
+  for l in lines(text) do
+    i = i + 1
+    if starts_with(l, "## ") then section = sub(l, 4) end
+    local m = re_find(l, "^- \\*\\*([0-9]+)\\.\\*\\*")
+    if m ~= nil then push(got, {n = parse_int(m.group), line = i, section = section}) end
+  end
+  return got
+end
+
+-- FEEDBACK.md's entries (`## <who> → <who>, <date>: <title>`), each with
+-- its line, date and heading; and the headings that are not entries, but
+-- for the one pointing at the archive.
+function feedback_parse(text)
+  local entries = {}
+  local bad = {}
+  local i = 0
+  for l in lines(text) do
+    i = i + 1
+    if starts_with(l, "## ") and not starts_with(l, "## Older entries") then
+      local m = re_find(l, "^## .+ → .+, ([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9])[^:]*: .+")
+      if m == nil then push(bad, {line = i, text = l}) else push(entries, {line = i, date = m.group, heading = sub(l, 4)}) end
+    end
+  end
+  return {entries = entries, bad = bad}
+end
+
+-- ── checking ────────────────────────────────────────────────────────────
+
+-- **EVERY VIOLATION OF THE GRAMMAR**, `file:line: what`: a number used
+-- twice (in QUEUE.md, in the archive, or one in both), QUEUE.md's items
+-- not newest first within a section, a FEEDBACK heading that is not an
+-- entry's, entries not newest first. Empty when all is well.
+function queue_check(dir?)
+  local qp = queue_path(dir, "QUEUE.md")
+  local ap = queue_path(dir, "QUEUE-ARCHIVE.md")
+  local fp = queue_path(dir, "FEEDBACK.md")
+  local q = queue_parse(read(qp))
+  local arch = queue_archived(read_or(ap, ""))
+  local got = {}
+  local in_archive = {}
+  for a in arch do
+    local k = tostring(a.n)
+    if has_key(in_archive, k) then
+      push(got, ap .. ":" .. a.line .. ": " .. a.n .. " is archived twice (also line " .. in_archive[k] .. ")")
+    else
+      in_archive[k] = a.line
+    end
+  end
+  local seen = {}
+  for it in q.items do
+    local k = tostring(it.n)
+    if has_key(seen, k) then push(got, qp .. ":" .. it.line .. ": " .. it.n .. " is used twice (also line " .. seen[k] .. ")") else seen[k] = it.line end
+    if has_key(in_archive, k) then push(got, qp .. ":" .. it.line .. ": " .. it.n .. " is archived too (" .. ap .. ":" .. in_archive[k] .. "): a number is never reused") end
+  end
+  for i = 2, #q.items do
+    local a = q.items[i - 1]
+    local b = q.items[i]
+    if a.section == b.section and b.n > a.n then push(got, qp .. ":" .. b.line .. ": " .. b.n .. " after " .. a.n .. " in `" .. b.section .. "`: a section's items are newest first") end
+  end
+  if exists(fp) then
+    local f = feedback_parse(read(fp))
+    for b in f.bad do push(got, fp .. ":" .. b.line .. ": `" .. b.text .. "` is not an entry's heading, `## <who> → <who>, <date>: <title>`") end
+    for i = 2, #f.entries do
+      local a = f.entries[i - 1]
+      local b = f.entries[i]
+      if b.date > a.date then push(got, fp .. ":" .. b.line .. ": " .. b.date .. " after " .. a.date .. ": entries are newest first") end
+    end
+  end
+  return got
+end
+
+-- The first violation as a failure, for a changing call: it never guesses
+-- where to insert in a file out of order.
+function queue_refuse_unless_ordered(name, dir)
+  local bad = queue_check(dir)
+  if #bad > 0 then fail("`" .. name .. "`: the queue's files break their grammar (" .. #bad .. " in all; queue_check() lists them, queue_reorder() puts items in order): " .. bad[1]) end
+  return nil
+end
+
+-- One more than the highest number in either file.
+function queue_next(dir?)
+  local top = 0
+  for it in queue_parse(read(queue_path(dir, "QUEUE.md"))).items do top = max(top, it.n) end
+  for a in queue_archived(read_or(queue_path(dir, "QUEUE-ARCHIVE.md"), "")) do top = max(top, a.n) end
+  return top + 1
+end
+
+-- ── an item's text ──────────────────────────────────────────────────────
+
+-- Item `n`'s lines in QUEUE.md: from its line to the next item's or
+-- section's, `{from, to}` (inclusive, its trailing blank lines not its
+-- own), or a failure naming the numbers there are.
+function queue_block(ls, n)
+  local from = 0
+  for i = 1, #ls do
+    local m = re_find(ls[i], "^\\*\\*([0-9]+)\\. ")
+    if m ~= nil and parse_int(m.group) == n then from = i end
+  end
+  if from == 0 then fail("no item " .. n .. " in QUEUE.md") end
+  local to = #ls
+  for i = from + 1, #ls do
+    if to == #ls and (starts_with(ls[i], "## ") or re_find(ls[i], "^\\*\\*[0-9]+\\. ") ~= nil) then to = i - 1 end
+  end
+  while to > from and trim(ls[to]) == "" do to = to - 1 end
+  return {from = from, to = to}
+end
+
+-- An item's title: its head (`**N. ...**`) without the number, cut
+-- before its status (`: CC'S`, `: THE BOX'S`, `: DONE`).
+function queue_title(first)
+  local head = sub(first, 3)
+  local dot = find(head, ". ")
+  head = sub(head, dot + 2)
+  local close = find(head, "**")
+  if close ~= nil then head = sub(head, 1, close - 1) end
+  for mark in {": CC'S", ": THE BOX'S", ": DONE"} do
+    local at = find(head, mark)
+    if at ~= nil then head = sub(head, 1, at - 1) end
+  end
+  return trim(head)
+end
+
+-- A word without the punctuation around it.
+function queue_strip(w)
+  local marks = "`.,;:()[]*'\""
+  local s = w
+  while #s > 0 and contains(marks, sub(s, 1, 1)) do s = sub(s, 2) end
+  while #s > 0 and contains(marks, sub(s, #s)) do s = sub(s, 1, #s - 1) end
+  return s
+end
+
+-- The commits an item's text names: each hex word of 7 to 40 characters
+-- with a digit in it, after the repo named just before it if one is.
+function queue_commits(text)
+  local repos = {"zig-webbox", "metal-vmm", "angry-gopher", "dog-park", "zig-metal-unikernel", "gopher-metal", "observatory"}
+  local got = {}
+  local seen = {}
+  local last_repo = ""
+  local since = 99
+  for w in words(text) do
+    local bare = queue_strip(w)
+    local is_repo = false
+    for r in repos do
+      if bare == r then is_repo = true end
+    end
+    if is_repo then
+      last_repo = bare
+      since = 0
+    else
+      since = since + 1
+      local hex = re_find(bare, "^[0-9a-f]+$")
+      if hex ~= nil and #bare >= 7 and #bare <= 40 and re_find(bare, "[0-9]") ~= nil and not has_key(seen, bare) then
+        seen[bare] = true
+        if since <= 3 then push(got, last_repo .. " " .. bare) else push(got, bare) end
+      end
+    end
+  end
+  return got
+end
+
+-- An archive line: `- **N.** title: outcome; commits named: ...`.
+function queue_archive_line(n, ls, block, outcome)
+  local text = join(take(last(ls, #ls - block.from + 1), block.to - block.from + 1), "\n")
+  local commits = queue_commits(text)
+  local named = "none"
+  if #commits > 0 then named = join(commits, ", ") end
+  return "- **" .. n .. ".** " .. queue_title(ls[block.from]) .. ": " .. outcome .. "; commits named: " .. named .. "."
+end
+
+-- ── changing ────────────────────────────────────────────────────────────
+
+-- **A NEW ITEM**, `**N. title** body`, at the top of `section`, N the next
+-- number: the number it gave.
+function queue_add(section, title, body, dir?)
+  queue_refuse_unless_ordered("queue_add", dir)
+  local qp = queue_path(dir, "QUEUE.md")
+  local ls = lines(read(qp))
+  local header = 0
+  local names = {}
+  for i = 1, #ls do
+    if starts_with(ls[i], "## ") then
+      push(names, "`" .. sub(ls[i], 4) .. "`")
+      if sub(ls[i], 4) == section then header = i end
+    end
+  end
+  if header == 0 then fail("`queue_add`: no section `" .. section .. "` in QUEUE.md; there are " .. join(names, ", ")) end
+  local n = queue_next(dir)
+  -- Before the section's first item, else at its end.
+  local at = #ls + 1
+  for i = header + 1, #ls do
+    if at == #ls + 1 and (starts_with(ls[i], "## ") or re_find(ls[i], "^\\*\\*[0-9]+\\. ") ~= nil) then at = i end
+  end
+  local before = {}
+  for i = header, at - 1 do push(before, ls[i]) end
+  while #before > 1 and trim(before[#before]) == "" do before = take(before, #before - 1) end
+  local old = join(before, "\n") .. "\n"
+  local item = "**" .. n .. ". " .. title .. "** " .. body
+  edit(qp, old, old .. "\n" .. item .. "\n")
+  return n
+end
+
+-- **ITEMS ARCHIVED**: each of `ns` out of QUEUE.md and one line each at
+-- the top of the archive's newest section, its `outcomes[i]` (or the
+-- item's own DONE); both files or neither (`edits_all`).
+function queue_move(name, ns, outcomes, dir)
+  queue_refuse_unless_ordered(name, dir)
+  local qp = queue_path(dir, "QUEUE.md")
+  local ap = queue_path(dir, "QUEUE-ARCHIVE.md")
+  local ls = lines(read(qp))
+  local alines = lines(read(ap))
+  local q_edits = {}
+  local entries = {}
+  for i = 1, #ns do
+    local n = ns[i]
+    local b = queue_block(ls, n)
+    local outcome = nil
+    if i <= #outcomes then outcome = outcomes[i] end
+    if outcome == nil then
+      if find(ls[b.from], "DONE") == nil then fail("`" .. name .. "`: item " .. n .. "'s head does not say DONE: queue_done(" .. n .. ", outcome) says how it ended") end
+      outcome = "DONE"
+    end
+    push(entries, {n = n, line = queue_archive_line(n, ls, b, outcome)})
+    local text = {}
+    for k = b.from, b.to do push(text, ls[k]) end
+    local old = join(text, "\n") .. "\n"
+    -- The blank line after it goes with it.
+    if b.to < #ls and trim(ls[b.to + 1]) == "" then old = old .. "\n" end
+    push(q_edits, {old = old, new = ""})
+  end
+  sort(entries, "n", "desc")
+  local adds = {}
+  for e in entries do push(adds, e.line) end
+  -- Above the archive's first numbered line: its newest section's top.
+  local first = 0
+  for i = 1, #alines do
+    if first == 0 and re_find(alines[i], "^- \\*\\*[0-9]+\\.\\*\\*") ~= nil then first = i end
+  end
+  if first == 0 then fail("`" .. name .. "`: QUEUE-ARCHIVE.md has no numbered line to put these above") end
+  local anchor = alines[first] .. "\n"
+  edits_all({{qp, q_edits}, {ap, {{old = anchor, new = join(adds, "\n") .. "\n" .. anchor}}}})
+  return #ns
+end
+
+-- **ONE ITEM DONE**: out of QUEUE.md, its line in the archive saying
+-- `outcome`.
+function queue_done(n, outcome, dir?)
+  return queue_move("queue_done", {n}, {outcome}, dir)
+end
+
+-- **ITEMS ARCHIVED** whose heads say DONE.
+function queue_archive(ns, dir?)
+  return queue_move("queue_archive", ns, {}, dir)
+end
+
+-- **EACH SECTION'S ITEMS NEWEST FIRST**: the one call that reorders, its
+-- diff shown; a section's text before its first item stays first. A
+-- number used twice is refused: renumber by hand.
+function queue_reorder(dir?)
+  local qp = queue_path(dir, "QUEUE.md")
+  local ls = lines(read(qp))
+  local seen = {}
+  for it in queue_parse(read(qp)).items do
+    local k = tostring(it.n)
+    if has_key(seen, k) then fail("`queue_reorder`: " .. it.n .. " is used twice: renumber one by hand first") end
+    seen[k] = true
+  end
+  local moved = 0
+  local i = 1
+  while i <= #ls do
+    if starts_with(ls[i], "## ") then
+      local header = i
+      local stop = #ls
+      for k = header + 1, #ls do
+        if stop == #ls and starts_with(ls[k], "## ") then stop = k - 1 end
+      end
+      local blocks = {}
+      for k = header + 1, stop do
+        local m = re_find(ls[k], "^\\*\\*([0-9]+)\\. ")
+        if m ~= nil then push(blocks, {n = parse_int(m.group), from = k}) end
+      end
+      local in_order = true
+      for k = 2, #blocks do
+        if blocks[k].n > blocks[k - 1].n then in_order = false end
+      end
+      if not in_order then
+        -- Each block to the next one's line; the last to the section's
+        -- last line with text.
+        local last_text = stop
+        while last_text > header and trim(ls[last_text]) == "" do last_text = last_text - 1 end
+        for k = 1, #blocks do
+          local to = last_text
+          if k < #blocks then to = blocks[k + 1].from - 1 end
+          while to > blocks[k].from and trim(ls[to]) == "" do to = to - 1 end
+          local text = {}
+          for j = blocks[k].from, to do push(text, ls[j]) end
+          blocks[k].text = join(text, "\n")
+        end
+        local old_lines = {}
+        for j = blocks[1].from, last_text do push(old_lines, ls[j]) end
+        local parts = {}
+        local sorted = {}
+        for b in blocks do push(sorted, b) end
+        sort(sorted, "n", "desc")
+        for b in sorted do push(parts, b.text) end
+        edit(qp, join(old_lines, "\n") .. "\n", join(parts, "\n\n") .. "\n")
+        moved = moved + 1
+      end
+      i = stop + 1
+    else
+      i = i + 1
+    end
+  end
+  return moved
+end
+
+-- **A FEEDBACK ENTRY**, `## <from> → <to>, <today>: <title>`, at the top.
+function feedback_add(from, to, title, body, dir?)
+  queue_refuse_unless_ordered("feedback_add", dir)
+  local fp = queue_path(dir, "FEEDBACK.md")
+  local text = read(fp)
+  local f = feedback_parse(text)
+  local today = sub(date(now()), 1, 10)
+  local heading = "## " .. from .. " → " .. to .. ", " .. today .. ": " .. title
+  if #f.entries == 0 then
+    append(fp, "\n" .. heading .. "\n\n" .. body .. "\n")
+    return nil
+  end
+  local first = f.entries[1]
+  if first.date > today then fail("`feedback_add`: the newest entry is dated " .. first.date .. ", after today, " .. today) end
+  local anchor = "## " .. first.heading .. "\n"
+  edit(fp, anchor, heading .. "\n\n" .. trim(body) .. "\n\n" .. anchor)
+  return nil
+end
+
+-- **FEEDBACK ARCHIVED**: the entries dated before `opts.before` out of
+-- FEEDBACK.md, and their headings, one line each and newest first, under
+-- a new section at the top of FEEDBACK-ARCHIVE.md (`opts.sha`, if given,
+-- the commit the full text is at). Both files or neither.
+function feedback_archive(opts, dir?)
+  queue_refuse_unless_ordered("feedback_archive", dir)
+  for k in keys(opts) do
+    if k ~= "before" and k ~= "sha" then fail("`feedback_archive` takes before and sha, not `" .. k .. "`") end
+  end
+  local before = opts.before
+  local fp = queue_path(dir, "FEEDBACK.md")
+  local ap = queue_path(dir, "FEEDBACK-ARCHIVE.md")
+  local ls = lines(read(fp))
+  local f = feedback_parse(read(fp))
+  local f_edits = {}
+  local gone = {}
+  for i = 1, #f.entries do
+    local e = f.entries[i]
+    if e.date < before then
+      local to = #ls
+      for k = e.line + 1, #ls do
+        if to == #ls and starts_with(ls[k], "## ") then to = k - 1 end
+      end
+      local text = {}
+      for k = e.line, to do push(text, ls[k]) end
+      push(f_edits, {old = join(text, "\n") .. "\n", new = ""})
+      push(gone, "- " .. e.heading)
+    end
+  end
+  if #gone == 0 then return 0 end
+  local alines = lines(read(ap))
+  local first = 0
+  for i = 1, #alines do
+    if first == 0 and starts_with(alines[i], "## Archived") then first = i end
+  end
+  if first == 0 then fail("`feedback_archive`: FEEDBACK-ARCHIVE.md has no `## Archived` section to put a new one above") end
+  local full = "git log -p FEEDBACK.md"
+  if has_key(opts, "sha") then full = "git show " .. opts.sha .. ":FEEDBACK.md" end
+  local section = "## Archived " .. sub(date(now()), 1, 10) .. " (full text: " .. full .. ")\n\n" .. join(gone, "\n") .. "\n\n"
+  local anchor = alines[first] .. "\n"
+  edits_all({{fp, f_edits}, {ap, {{old = anchor, new = section .. anchor}}}})
+  return #gone
+end

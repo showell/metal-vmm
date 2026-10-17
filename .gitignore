@@ -2,3 +2,4 @@ zig-out/
 .zig-cache/
 .*.swp
 __pycache__/
+tests/queue/scratch/

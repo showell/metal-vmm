@@ -625,3 +625,46 @@ zig-metal-unikernel's history and this repo's [QUEUE-ARCHIVE.md](QUEUE-ARCHIVE.m
   models under seeded guest input), `src/determinism.zig` (no host time or
   entropy anywhere in `src/`, checked), `src/snapshot.zig` (every model's
   state, saved and restored in place).
+
+## The queue's grammar
+
+QUEUE.md, QUEUE-ARCHIVE.md, FEEDBACK.md and FEEDBACK-ARCHIVE.md are edited
+through Shale, by this repo's own prelude (`.shale/prelude.shale`; zig-webbox
+docs/SHALE-AGENTS.md says how to run `shale`). It checks this grammar before
+it changes anything, and refuses a file that breaks it, never guessing where
+to insert:
+
+- **Sections** are `## ` lines.
+- **An item** is the text from a line beginning `**N. ` to the next item or
+  section. Its status (`DONE`, `CC'S`, `THE BOX'S`) is in its head, the bold
+  part.
+- **Numbers are unique across QUEUE.md and QUEUE-ARCHIVE.md together.** An
+  archived number is never reused, and the next is one past the highest in
+  either.
+- **Within a section of QUEUE.md, items are newest first.**
+- **An archived item is one line**, `- **N.** title: outcome; commits named:
+  ...`, the newest at the top of the archive's newest section.
+- **FEEDBACK.md's entries are `## <who> → <who>, <date>: <title>`**, newest
+  first. The one other heading is the last, `## Older entries: ...`.
+
+The calls, each taking the folder the files are in last (the root unless
+given):
+
+- `queue_check()` lists every violation, `file:line: what`.
+- `queue_next()` gives the next number.
+- `queue_add(section, title, body)` puts a new item at the top of its
+  section and gives its number.
+- `queue_done(n, outcome)` and `queue_archive({n, ...})` (items whose heads
+  say DONE) move items into the archive, both files or neither.
+- `queue_reorder()` puts every section's items newest first: the one call
+  that reorders, its diff shown.
+- `feedback_add(from, to, title, body)` puts a new entry at the top.
+- `feedback_archive({before = date[, sha]})` moves the older entries'
+  headings into the archive's new top section.
+
+Its tests are Shale too, on the fixtures in `tests/queue/`, today's real
+misorder among them:
+
+```sh
+shale --write --budget output_bytes=8388608 .shale/queue_test.shale
+```

@@ -1,0 +1,136 @@
+-- **THE QUEUE TOOL'S TESTS** (metal-vmm QUEUE 233, chunk 6): Shale
+-- testing Shale. Each test copies a fixture from tests/queue/ into
+-- tests/queue/scratch/ (not tracked), works on the copy, and says `ok`.
+-- From this checkout's root:
+--
+--     shale --write --budget output_bytes=8388608 .shale/queue_test.shale
+--
+-- (The output budget holds the diffs every change prints.)
+--
+-- A failure stops the run, naming the check.
+
+const SCRATCH = "tests/queue/scratch"
+
+function expect(cond, what)
+  if not cond then fail("queue test: " .. what) end
+  print("ok  " .. what)
+  return nil
+end
+
+-- A fresh copy of fixture `name`'s files.
+function fresh(name)
+  if exists(SCRATCH) then remove_tree(SCRATCH) end
+  mkdir(SCRATCH)
+  for f in ls("tests/queue/" .. name) do
+    replace(SCRATCH .. "/" .. f, read("tests/queue/" .. name .. "/" .. f))
+  end
+  return SCRATCH
+end
+
+-- The lines of a list of violations that are QUEUE.md's.
+function in_queue(vs)
+  local got = {}
+  for v in vs do
+    if contains(v, "/QUEUE.md:") then push(got, v) end
+  end
+  return got
+end
+
+-- Item numbers in QUEUE.md's section `name`, in order.
+function numbers_in(dir, name)
+  local got = {}
+  for it in queue_parse(read(dir .. "/QUEUE.md")).items do
+    if it.section == name then push(got, tostring(it.n)) end
+  end
+  return join(got, ",")
+end
+
+-- The calls a test expects refused, each by name (`attempt` takes a
+-- function, never a value), and what refused them.
+function said(r)
+  if r.ok then return "" end
+  return r.error
+end
+function add_to_misorder() return queue_add("CC: open", "x", "y", SCRATCH) end
+function add_to_shut() return queue_add("CC: shut", "x", "y", SCRATCH) end
+function done_twice() return queue_done(11, "again", SCRATCH) end
+function archive_undone() return queue_archive({11, 10}, SCRATCH) end
+function feedback_out_of_order() return feedback_add("CC", "the box", "t", "b", SCRATCH) end
+
+-- ── today's real misorder (QUEUE.md at 7bc93db) ────────────────────────
+
+local d = fresh("misorder")
+local vs = in_queue(queue_check(d))
+expect(#vs == 3, "queue_check names exactly the misorder: 3 lines in QUEUE.md")
+expect(contains(vs[1], "QUEUE.md:97: 224 after 223 in `CC: open`"), "the first is 224 after 223, at its line")
+expect(contains(vs[3], "226 after 225"), "the last is 226 after 225")
+-- The archive at that commit numbers 99 and 101 twice: also named.
+expect(#queue_check(d) == 5, "and the archive's two numbers used twice")
+expect(contains(said(attempt(add_to_misorder)), "break their grammar"), "queue_add refuses a queue out of order")
+expect(queue_reorder(d) == 1, "queue_reorder reorders the one section out of order")
+expect(numbers_in(d, "CC: open") == "233,232,231,230,229,228,227,226,225,224,223,222", "CC: open is newest first")
+expect(#in_queue(queue_check(d)) == 0, "and QUEUE.md checks clean")
+expect(queue_reorder(d) == 0, "a second reorder changes nothing")
+
+-- ── the small queue ─────────────────────────────────────────────────────
+
+d = fresh("small")
+expect(#queue_check(d) == 0, "the small fixture checks clean")
+expect(queue_next(d) == 13, "queue_next is one past the highest, 12")
+expect(queue_add("CC: open", "A new thing: CC'S", "(the test) Its text.", d) == 13, "queue_add gives 13")
+expect(numbers_in(d, "CC: open") == "13,12,11", "13 is at the top of CC: open")
+expect(contains(read(d .. "/QUEUE.md"), "**Your role:** the text before a section's first item stays first.\n\n**13. A new thing: CC'S** (the test) Its text.\n\n**12. "), "after the section's own text, before its first item")
+expect(#queue_check(d) == 0, "and the queue still checks clean")
+expect(contains(said(attempt(add_to_shut)), "no section `CC: shut`"), "an unknown section is named, with the ones there are")
+expect(queue_add("Parked", "Parked thing", "(the test)", d) == 14, "an item into a section with none")
+expect(numbers_in(d, "Parked") == "14", "Parked has it")
+
+-- An archived number is never given again.
+d = fresh("small")
+append(d .. "/QUEUE-ARCHIVE.md", "- **20.** A later one, archived: DONE; commits named: none.\n")
+expect(queue_next(d) == 21, "a number in the archive is never given again")
+
+-- Done, then archived: both files, one line in the archive.
+d = fresh("small")
+expect(queue_done(11, "DONE by the box, merged", d) == 1, "queue_done moves one item")
+expect(numbers_in(d, "CC: open") == "12", "11 is out of QUEUE.md")
+local arch = read(d .. "/QUEUE-ARCHIVE.md")
+expect(contains(arch, "## Condensed 2026-10-16\n\n- **11.** An older thing: DONE by the box, merged; commits named: metal-vmm 0123abcd.\n- **9.**"), "its line tops the archive, its commit named")
+expect(#queue_check(d) == 0, "and both files check clean")
+expect(contains(said(attempt(done_twice)), "no item 11"), "an item done twice is refused")
+
+-- Both files or neither.
+d = fresh("small")
+local q_before = read(d .. "/QUEUE.md")
+local a_before = read(d .. "/QUEUE-ARCHIVE.md")
+expect(contains(said(attempt(archive_undone)), "item 10's head does not say DONE"), "archiving an item not DONE is refused")
+expect(read(d .. "/QUEUE.md") == q_before and read(d .. "/QUEUE-ARCHIVE.md") == a_before, "and neither file changed")
+expect(queue_archive({11}, d) == 1, "a DONE item archives by its head")
+expect(contains(read(d .. "/QUEUE-ARCHIVE.md"), "- **11.** An older thing: DONE; commits named: metal-vmm 0123abcd."), "with DONE as its outcome")
+
+-- Commits named across an item's text.
+d = fresh("small")
+queue_done(12, "DONE", d)
+expect(contains(read(d .. "/QUEUE-ARCHIVE.md"), "- **12.** The newest thing: DONE; commits named: zig-webbox abc1234, def5678."), "the commits its text names, the repo before the first")
+
+-- ── FEEDBACK ────────────────────────────────────────────────────────────
+
+d = fresh("small")
+feedback_add("CC", "the box", "a test's entry", "Its body.", d)
+local fb = feedback_parse(read(d .. "/FEEDBACK.md"))
+expect(#fb.entries == 3 and contains(fb.entries[1].heading, "CC → the box, ") and contains(fb.entries[1].heading, ": a test's entry"), "feedback_add puts its entry first, dated today")
+expect(#queue_check(d) == 0, "and FEEDBACK still checks clean")
+d = fresh("small")
+expect(feedback_archive({before = "2026-10-16", sha = "abcdef1"}, d) == 1, "feedback_archive moves the one entry before the date")
+local fa = read(d .. "/FEEDBACK-ARCHIVE.md")
+expect(contains(fa, "(full text: git show abcdef1:FEEDBACK.md)\n\n- The box → CC, 2026-10-15: the older one\n\n## Archived 2026-10-14"), "its heading, one line, in a new section above the last")
+expect(not contains(read(d .. "/FEEDBACK.md"), "the older one"), "and out of FEEDBACK.md")
+expect(#feedback_parse(read(d .. "/FEEDBACK.md")).entries == 1, "the newer one stays")
+
+-- A FEEDBACK out of order is refused, as the queue is.
+d = fresh("small")
+replace(d .. "/FEEDBACK.md", "# F\n\n## CC → the box, 2026-10-14: older first\n\nx\n\n## The box → CC, 2026-10-15: then newer\n\ny\n")
+expect(contains(said(attempt(feedback_out_of_order)), "2026-10-15 after 2026-10-14"), "a FEEDBACK out of order refuses an entry")
+
+remove_tree(SCRATCH)
+print("all queue tests passed")

@@ -1,0 +1,375 @@
+# QUEUE, archived
+
+Finished and retired queue items, one line each by number. **The live queue
+is [`QUEUE.md`](QUEUE.md)**; an item cited by number, anywhere, is here. The
+full text of everything below is in git: `git show 3697b1c:QUEUE.md` (items
+106-224 and the letters moved 2026-10-16) and `git show 3697b1c:QUEUE-ARCHIVE.md`
+(items 1-155, archived 2026-10-07 and 2026-10-10).
+
+## Condensed 2026-10-16 (full text: git show 3697b1c:QUEUE.md)
+
+Items moved out of QUEUE.md on 2026-10-16, one line each: number, title, outcome, the commits the text names (a sha with no repo is one the text names without one). An item cited by number is here; its prose is in git.
+
+- **106.** The simulators as a library, the soak as a program: DONE, merged (gopher-metal `68d3fcb`; FEEDBACK 2026-10-08); commits named: none.
+- **107.** Kill fat16's surviving mutants: DONE (gopher-metal `3525afc`, `84aaada`); commits named: none.
+- **108.** Wrappers that still read failure as absence: DONE, merged (angry-gopher `9a924cbe`, gopher-metal `279267b`); commits named: none.
+- **109.** The lint's defence must say it is one: DONE, merged with 108; commits named: none.
+- **110.** A backup that cannot read a root fails: DONE, merged with 108 (angry-gopher `9a924cbe`); commits named: none.
+- **111.** Small ones from the same review: DONE, merged with 108; commits named: none.
+- **153.** 151's cuts, the ones Steve picked: DONE but (7), reverted until 155 was measured; (4) deferred; commits named: angry-gopher 825c4da, angry-gopher d95dec2, angry-gopher 0f9c858, angry-gopher cdd4560.
+- **155.** Search across every topic a person can see: the server side: DONE; boot step 4b went to the box; commits named: angry-gopher 2f28d90, angry-gopher c18dfaf.
+- **156.** The normalization hunt's app findings: DONE, merged 2026-10-10 with one fix on top; commits named: 492d6766, 827d96d5.
+- **157.** Protocols in prose, the app's: DONE, merged 2026-10-11 (angry-gopher `a3a33dd3`); commits named: none.
+- **158.** Browsers keep the embedded JS, revalidating each use: DONE (the box); commits named: angry-gopher 7dfa6dae.
+- **159.** CC's, overnight (Steve, 2026-10-11 01:10 UTC): serveOne takes the kept: DONE, merged 2026-10-11 (gopher-metal `6e41739`); commits named: gopher-metal d72f4bc, angry-gopher 7dfa6dae.
+- **160.** CC's (Steve, 2026-10-11): Dog Park's data TYPES, and nothing else: DONE, merged (FEEDBACK "160 done" or "160 merged"); commits named: none.
+- **161.** CC's (Steve, 2026-10-11): Dog Park for one human, end to end: DONE, merged (FEEDBACK "161 done" or "161 merged"); commits named: none.
+- **162.** CC's (the box, 2026-10-11): webbox's hardening, from your 161: DONE, merged (FEEDBACK "162 done" or "162 merged"); commits named: dog-park 3a7f135, angry-gopher d8d347d4.
+- **163.** CC's (the box, 2026-10-11): Dog Park, from a cold review of 161: DONE, merged (FEEDBACK "163 done" or "163 merged"); commits named: 0259c44.
+- **164.** CC's (Steve, 2026-10-11): the dogs are fixed, and a human claims: DONE, merged (FEEDBACK "164 done" or "164 merged"); commits named: none.
+- **165.** CC's (the box, 2026-10-11, corrected): the coverage scan warns and: DONE, merged (FEEDBACK "165 done" or "165 merged"); commits named: none.
+- **166.** CC's (the box, 2026-10-11): the kernel holds the turn for a slow: DONE, merged (FEEDBACK "166 done" or "166 merged"); commits named: none.
+- **167.** CC's (the box, 2026-10-11): 162 back, from its cold review; do it: DONE, merged (FEEDBACK "167 done" or "167 merged"); commits named: none.
+- **168.** CC's (Steve, 2026-10-11): Dog Park's claims, v1. After 166 and 167,: DONE, merged (FEEDBACK "168 done" or "168 merged"); commits named: none.
+- **169.** CC's (Steve, 2026-10-11): 166's rule redone: THE TURN NEVER WAITS ON: DONE, merged (FEEDBACK "169 done" or "169 merged"); commits named: angry-gopher fd2c7ab5.
+- **170.** CC's (the box, 2026-10-11): 169 after its two cold reviews: DONE, merged (FEEDBACK "170 done" or "170 merged"); commits named: gopher-metal ea91fa4.
+- **171.** CC's (Steve, 2026-10-11): the kernel's body drains as pure: DONE, merged (FEEDBACK "171 done" or "171 merged"); commits named: none.
+- **172.** A class hunt: errors swallowed, or sent the wrong way: DONE, merged (FEEDBACK "172 done" or "172 merged"); commits named: none.
+- **173.** src/disk_fat.zig (4,146 lines) split by the ~1,000-line rule: DONE, merged (FEEDBACK "173 done" or "173 merged"); commits named: none.
+- **174.** angry-gopher's chat_store.zig (1,896 lines) and users.zig (1,061): DONE, merged (FEEDBACK "174 done" or "174 merged"); commits named: none.
+- **175.** The box's (2026-10-12): 170's two cold reviews, the kernel half. Do: DONE, merged (FEEDBACK "175 done" or "175 merged"); commits named: angry-gopher c70f7b86, gopher-metal 7b2de2b.
+- **176.** The box's (2026-10-12): 170's cold reviews, the Linux and cookie: DONE, merged (FEEDBACK "176 done" or "176 merged"); commits named: none.
+- **177.** The box's (2026-10-12): 171/175/176/172's cold reviews. After 172's: DONE, merged (FEEDBACK "177 done" or "177 merged"); commits named: 4c2ea322, 420616c, angry-gopher 9f37827d, gopher-metal 49b5a2e.
+- **178.** The box's (Steve, 2026-10-12): bigger disk requests, so a big upload's: DONE, merged (FEEDBACK "178 done" or "178 merged"); commits named: none.
+- **179.** The box's (Steve, 2026-10-13): the FAT written as runs, each sector: DONE, merged (FEEDBACK "179 done" or "179 merged"); commits named: none.
+- **180.** The box's (2026-10-13): 178/177/174/173's cold reviews. With 179 or: DONE, merged (FEEDBACK "180 done" or "180 merged"); commits named: 51f27862, 18d51ee, angry-gopher 3555205a.
+- **181.** The box's (2026-10-13): 179's cold review. 179 is NOT merged: it: DONE, merged (FEEDBACK "181 done" or "181 merged"); commits named: none.
+- **182.** The box's (2026-10-13): four panics at boot, from the crash-class: DONE, merged (FEEDBACK "182 done" or "182 merged"); commits named: angry-gopher 3d5a5f3d.
+- **183.** The box's (Steve, 2026-10-13): a mechanical guard for the class that: DONE, merged (FEEDBACK "183 done" or "183 merged"); commits named: 3d5a5f3d.
+- **184.** The box's (2026-10-13): the next class hunt, slow exhaustion: DONE, merged (FEEDBACK "184 done" or "184 merged"); commits named: none.
+- **185.** The box's (2026-10-13): small, from the crash hunt. angry-gopher: DONE, merged (FEEDBACK "185 done" or "185 merged"); commits named: none.
+- **186.** The box's (2026-10-13): 180.6/180.7/182's and 180.1-device's cold: DONE, merged (FEEDBACK "186 done" or "186 merged"); commits named: angry-gopher 86eeae60, angry-gopher d1beb64e, 2d3e4c31.
+- **187.** The box's (Steve, 2026-10-13): the cold reviews of 181 and of 180/182's: DONE, merged (FEEDBACK "187 done" or "187 merged"); commits named: ecb467b, da1ec5f.
+- **188.** The box's (Steve, 2026-10-13): your two FAT design questions from: DONE, merged (FEEDBACK "188 done" or "188 merged"); commits named: gopher-metal 689880c.
+- **189.** The box's (Steve, 2026-10-13): /admin/host, so an agent can answer: DONE, merged (FEEDBACK "189 done" or "189 merged"); commits named: none.
+- **190.** The box's (Steve, 2026-10-13): READ-ONLY reports for the renames: DONE, merged (FEEDBACK "190 done" or "190 merged"); commits named: none.
+- **191.** The box's (Steve, 2026-10-13): READ-ONLY again; the renames are: DONE, merged (FEEDBACK "191 done" or "191 merged"); commits named: angry-gopher 331f5353, gopher-metal 832ffa1, gopher-metal 211a25e, dog-park 0b4c5d2, metal-vmm fbd3ee3.
+- **192.** The box's (Steve, 2026-10-13): READ-ONLY, an architecture report on: DONE, merged (FEEDBACK "192 done" or "192 merged"); commits named: none.
+- **193.** The box's (Steve, 2026-10-13): the counters, so a zero on: DONE, merged (FEEDBACK "193 done" or "193 merged"); commits named: none.
+- **194.** The box's (Steve, 2026-10-13): 189's should-fix five, from your: DONE, merged (FEEDBACK "194 done" or "194 merged"); commits named: none.
+- **195.** The box's (Steve, 2026-10-13): rewrite zig-metal-unikernel's: DONE, merged (FEEDBACK "195 done" or "195 merged"); commits named: none.
+- **196.** The box's (Steve, 2026-10-13): two things the README (195, your: DONE, merged (FEEDBACK "196 done" or "196 merged"); commits named: none.
+- **197.** The box's (Steve, 2026-10-13): zig-metal-unikernel's checks, from: DONE, merged (FEEDBACK "197 done" or "197 merged"); commits named: none.
+- **198.** The box's (Steve, 2026-10-13 evening): metal hardening, the next long: DONE, merged (FEEDBACK "198 done" or "198 merged"); commits named: ad144c7, f3e2b92, 8b47d37, zig-metal-unikernel efa798d, zig-metal-unikernel 8af778b.
+- **199.** The box's (Steve, 2026-10-13 night): an interpreter for a small: DONE, merged (FEEDBACK "199 done" or "199 merged"); commits named: none.
+- **200.** Steve's (2026-10-14): the Shale endpoint, on Linux and on metal: DONE, merged (FEEDBACK "200 done" or "200 merged"); commits named: zig-metal-unikernel 8af778b.
+- **201.** The torus, chunk 3b: the critters wrap: DONE, merged (FEEDBACK "201 done" or "201 merged"); commits named: 9ca2492, 1dd1dfa, b2ae2f1.
+- **202.** Make the physics as fast as it can go, with the normal tricks (Steve): DONE, merged (FEEDBACK "202 done" or "202 merged"); commits named: 9ca2492.
+- **203.** The box's look at 198.12-202 (2026-10-14): all merged to master; one judge gap, found past…: DONE, merged; (a)-(e) done (FEEDBACK 2026-10-14); commits named: zig-webbox bad92d1, angry-gopher 2e560b2b, zig-metal-unikernel e28f4b3, metal-vmm 49d424c, dog-park a8a9935.
+- **204.** Steve's (2026-10-14): Shale, first use, and v31's features. Write in FEEDBACK, no code: DONE, merged (FEEDBACK "204 done" or "204 merged"); commits named: none.
+- **205.** Dog Park: herds you can measure, and a progression toward simpler rules (Steve, 2026-10-14…: DONE; commits named: dog-park a8a9935, dog-park 9fae6a9.
+- **206.** Shale for v31: your 204(b) list, items 2-8 (the box, 2026-10-14 evening): DONE, merged (FEEDBACK "206 done" or "206 merged"); commits named: zig-webbox 92ea157.
+- **207.** Dog Park, layer 1: trails without obstruction (Steve, 2026-10-14 night): DONE, merged (FEEDBACK "207 done" or "207 merged"); commits named: dog-park cc3af66.
+- **208.** Shale, the deep dive: a small, full-purpose language (Steve, 2026-10-15 night; overnight, …: DONE, merged (FEEDBACK "208 done" or "208 merged"); commits named: zig-webbox 9be9520.
+- **209.** Shale, solid and understandable (Steve, 2026-10-15; overnight, methodical): DONE, merged (FEEDBACK "209 done" or "209 merged"); commits named: zig-webbox 05767ae.
+- **210.** Dog Park: the walk's speed (after 209, or beside it if you're blocked): DONE, merged (FEEDBACK "210 done" or "210 merged"); commits named: dog-park 663322c.
+- **211.** Shale's VM, then a long-running watchdog (Steve, 2026-10-15; a stretch, after 209 and 210,…: DONE, merged (FEEDBACK "211 done" or "211 merged"); commits named: none.
+- **212.** Dog Park: the lessons of 210 applied (Steve, 2026-10-15): ON HOLD, see Parked in QUEUE.md; commits named: dog-park 9130db4.
+- **213.** webbox's Linux host: keep-alive (Steve, 2026-10-15): DONE, merged (FEEDBACK "213 done" or "213 merged"); commits named: none.
+- **214.** Dog Park mounts the signed Shale route, for monitoring (Steve, 2026-10-15; after 211's bac…: DONE, merged (FEEDBACK "214 done" or "214 merged"); commits named: dog-park 91fe211.
+- **215.** Dog Park on metal, owned by dog-park, with a short QEMU gate (Steve, 2026-10-15): DONE (the box); commits named: zig-metal-unikernel 4f42e0d.
+- **216.** Shale background runs on metal (211's step 6): chunk 1 DONE (the box); the rest is 222; the output ring and SSE PARKED (QUEUE.md, Parked); commits named: zig-metal-unikernel 12901a1, dog-park e039328, zig-webbox cf6d51d.
+- **217.** 217. DONE (CC, 2026-10-16; merged by the box with 211, 213, 214: zig-webbox 49f8e4c, angry…: DONE, merged; commits named: zig-webbox 49f8e4c, angry-gopher 00a4f12, dog-park f43ccc3, 4cf2cc5, 098b072, 351cb62.
+- **218.** 218. DONE, merged by the box 2026-10-16 (zig-metal-unikernel 67faf97, dog-park 0496375; ti…: DONE, merged; commits named: zig-metal-unikernel 67faf97.
+- **219.** 219. DONE, merged by the box 2026-10-16 (zig-metal-unikernel 67faf97; dog-park's image.mjs…: DONE, merged; commits named: zig-metal-unikernel 67faf97, dog-park 909761e.
+- **220.** 220. DONE, merged by the box 2026-10-16 (zig-webbox d83b2e1, dog-park ab222a2; Dog Park's …: DONE, merged; Dog Park image live; commits named: zig-webbox d83b2e1, dog-park ab222a2.
+- **221.** 221. Visibility for scanners and strangers: DONE by CC (chunks 1-3; 4 skipped); chunks 1-2 installed and merged (angry-gopher `4ac2c5f5`); chunk 3 waits for the box after v31; commits named: ab222a2, dog-park cfd001e.
+
+Letters and proposals moved the same day:
+
+- **v20 (2026-10-08).** Port, gates, image, Caddy reload: superseded (v31 is in its checks).
+- **B16.** The SDK's commit and what the image reads in the release verdict: DONE; gopher-metal `tools/verdicts.py`, 2026-10-07, no sha named.
+- **P198.12.** The volume's two Debug-heavy paths (`aliasFor`, the FAT32 free count): taken as 203(b), DONE (FEEDBACK 2026-10-14).
+- **P193(c).** Ask before a stuck disk is restarted: decided in 198 ((b) for the site's disk, (a) for the NIC).
+- **P139(a), P139(b).** State changes only by named events: taken as 139 and 140, DONE.
+- **P128.** The damage property says which disk: taken as 198.5, DONE.
+- **P124(f).** A FAT tie that cannot postpone the rot: taken as 198.5, DONE.
+- **C1-C5.** Item 101's five proposals: taken as 112-116, DONE (see the 2026-10-07 batch below).
+- **Debt: store_test's agreement, one volume size.** Paid by item 83.
+
+## Decisions still in force (policy outlives its item)
+
+- **Louder is better** (Steve, 2026-10-08, items 110 and 123): a failure is a 500, never silence; a backup that cannot read a root fails.
+- **An omitted flush is presumed a bug unless a comment defends it** (Steve's standing rule, item 59).
+- **The counter** (Steve, 2026-10-08): a corrupt or empty one fails the request and keeps the file; no recovery from the highest ID.
+- **The session secret** (Steve, 2026-10-08): an unreadable secret fails every returning visitor's request.
+- **The sweep's excuses are narrow** (metal-vmm `b671ef2`, 2026-10-08): a fault excuses no answer, or the unhurt status with its page cut short; never another status or page, except a 5xx after a disk or volume fault.
+- **Everything is on `master`** (the box, 2026-10-06, Answers): branch from and merge `master`; zig-coverage-sdk keeps `main`.
+- **Not now, decided (221, 2026-10-16):** auto-blocking (fail2ban-style), nftables counters, the client address in the kernel's request line, a wildcard certificate to hide hostnames from CT logs.
+
+## Condensed 2026-10-07 batch (full text: git show 3697b1c:QUEUE-ARCHIVE.md)
+
+The archive as moved on 2026-10-07 and 2026-10-10 (items 1-155, the proposals F/G/H/I/J/K/N/P/S, the box's B list, and CC's answers under Questions), one line each. "status unmarked" means the item's first line carries no outcome; read its full text in git. The context notes, the debt ledger of that date and the overnight note carried nothing to look up and are dropped.
+
+- **1.** Review the interrupts branch: Done; commits named: none.
+- **2.** A FakeGuest over PCI: Done; commits named: none.
+- **3.** rest's decision, pulled out and tested: Done; commits named: none.
+- **4.** MSI-X as PCI 3.0 §6.8.2 has it: Done; commits named: none.
+- **5.** The APIC, closer to the SDM: Done; commits named: none.
+- **6.** PCI configuration space, closer to the spec: Done; commits named: none.
+- **7.** A peer that misbehaves, deterministically: Done; commits named: none.
+- **17.** (The box.) Is the deadline mark needed?: status unmarked; commits named: none.
+- **18.** The guest's coverage lines, read by the machine: Done; commits named: none.
+- **19.** One seed names a run's whole fault schedule: Done; commits named: none.
+- **20.** A peer with more than one connection: Done; commits named: none.
+- **21.** A flood that can fill the guest's table: Done; commits named: none.
+- **22.** Coverage across runs: Done; commits named: none.
+- **23.** A seed sweep the box can run: Done; commits named: none.
+- **24.** A review: can tcp.zig tell a real client from a flood?: Done; commits named: none.
+- **25.** A review of the peer, as a TCP: Done; commits named: gopher-metal 02de06f.
+- **26.** The guest's input never kills the VMM: a fuzzer over the models: Done; commits named: none.
+- **27.** A power cut, and a torn write: Done; commits named: none.
+- **28.** Determinism, enforced by a test: Done; commits named: none.
+- **29.** Split the three long files: Done; commits named: none.
+- **30.** The machine's state, saved and restored: Done for the device side; commits named: none.
+- **31.** What a run cost, in the guest's time: Done; commits named: none.
+- **32.** Your proposals: Done; commits named: none.
+- **33.** (gopher-metal) tcp_sim with several clients, and a stream held open: Done; commits named: none.
+- **34.** (gopher-metal) A simulator for the page cache: Done; commits named: gopher-metal 86c7cae.
+- **35.** Done (CC, gopher-metal fc86c4f and after): pure_sim.zig, twenty properties on the floor, t…: Done; commits named: gopher-metal fc86c4f.
+- **36.** (gopher-metal) What fat_sim never reaches in fat16.zig: Done; commits named: gopher-metal 2beac8a.
+- **37.** (metal-vmm) The peer's segment outgrows its buffer: a panic: Done; commits named: none.
+- **38.** (metal-vmm) A reset the peer could not send says so: Done; commits named: none.
+- **39.** (b) done (CC): WIRE_EAT, PEER_EAT, PEER_DAMAGE and DISK_REFUSE take ranges (8-40) among up…: status unmarked; commits named: none.
+- **40.** (metal-vmm) A run that ends idle still says what the client got: Done; commits named: none.
+- **41.** (metal-vmm) The peer review's findings, P1-P5 and S1: Done; commits named: none.
+- **42.** (metal-vmm) An idle end writes the disk back: Done; commits named: none.
+- **43.** (metal-vmm) F2, silent rot on read: Done; commits named: none.
+- **44.** (metal-vmm) F3, a write cache and whether the guest flushes: Done; commits named: none.
+- **45.** (metal-vmm) F4, a client that retries what got no answer: Done; commits named: none.
+- **46.** (metal-vmm) F5, the calendar as a knob: Done; commits named: none.
+- **47.** (gopher-metal) REVIEW-flood's option 4, revival, in tcp.zig: Done; commits named: gopher-metal 53be28e.
+- **48.** Your proposals again: Done; commits named: gopher-metal 4953f7e.
+- **49.** (metal-vmm) H5, pipelining: Done; commits named: none.
+- **50.** (metal-vmm) H3, frames that lie, from the peer: Done in item 55; commits named: none.
+- **51.** Done (CC, 2026-10-06; marked late). gopher-metal src/ready_sim.zig: Done; commits named: gopher-metal 2e7ea96.
+- **52.** Done (CC, 2026-10-06). DHCP_LEASE_S=s is the lease the peer's: Done; commits named: none.
+- **53.** Done (CC, 2026-10-06): built, it was small. VOLUME=<file> is a: Done; commits named: none.
+- **54.** Done (CC, 2026-10-06). I1-I5 under Proposed; I1 built: Done; commits named: none.
+- **55.** Done (CC, 2026-10-06), with item 50. PEER_MANGLE=n[,m] (and: Done; commits named: none.
+- **56.** Done (CC, 2026-10-06). VOLUME_LATENCY_US=us: each command the: Done; commits named: none.
+- **57.** Done (CC, 2026-10-06). VOLUME_ATTENTION_AT=n: CAPACITY DATA HAS: Done; commits named: none.
+- **58.** Done (CC, 2026-10-06). knobs.withVolume: with FAULT_SEED and: Done; commits named: none.
+- **59.** Done (CC, 2026-10-06), on gopher-metal's claude/great-wright-i7aste: Done; commits named: gopher-metal bcd434f, gopher-metal f0c132e.
+- **61.** Done (CC, 2026-10-06). zig-coverage-sdk a4c8ab7: alwaysGreaterThan,: Done; commits named: zig-coverage-sdk a4c8ab7, afef771.
+- **62.** Done (CC, 2026-10-06). report.py reads many files; a run is a: Done; commits named: zig-coverage-sdk afef771.
+- **60.** Done (CC, 2026-10-06), with 59 waiting. J1-J5 under Proposed: Done; commits named: none.
+- **63.** Done (CC, 2026-10-06). VOLUME_GONE_AT=n: from the volume's nth: Done; commits named: none.
+- **64.** Done (CC, 2026-10-06). VOLUME_READ_ONLY_AT=n: from the volume's: Done; commits named: none.
+- **65.** The box's now (B18), at Steve's direction. J3, lies in the peer's UDP (PEER_MANGLE for DHC…: The box's now; commits named: none.
+- **66.** Done (CC, 2026-10-06). VOLUME_SYNC_US=us: each SYNCHRONIZE CACHE: Done; commits named: none.
+- **68.** Done (CC, 2026-10-06). VOLUME_CUT_AT_EXIT=1: at every end, the: Done; commits named: none.
+- **67.** Done (CC, 2026-10-06). K1-K5 under Proposed. Was: your: Done; commits named: none.
+- **70.** Done (CC, 2026-10-06). sweep.sh with POST=<request>,: Done; commits named: none.
+- **71.** Done (CC, 2026-10-06). VOLUME_CACHE_KEEPS=k: at any cut (a: Done; commits named: none.
+- **72.** Done (CC, 2026-10-06). gopher-metal tcp_sim's: Done; commits named: none.
+- **73.** Done (CC, 2026-10-06). zig-coverage-sdk: each comparison keeps its: Done; commits named: none.
+- **74.** Done (CC, 2026-10-06). zig-coverage-sdk report.py a.jsonl : Done; commits named: none.
+- **75.** Folded into 81 (the box, 2026-10-06): Folded into 81; commits named: none.
+- **76.** Done (CC, 2026-10-06). gopher-metal claude/great-wright-i7aste,: Done; commits named: none.
+- **77.** Done (CC, 2026-10-06). gopher-metal store.zig, store_model.zig,: Done; commits named: none.
+- **78.** Phase report: Done; commits named: angry-gopher f5d360e.
+- **79.** Done (CC, 2026-10-06). gopher-metal store_linux.zig, store_sim.zig: Done; commits named: none.
+- **80.** Done (CC, 2026-10-06). gopher-metal, one commit; STORE-CENSUS.md: Done; commits named: none.
+- **81.** Done (CC, 2026-10-06). N1-N5 under Proposed. Was: your proposals: Done; commits named: none.
+- **82.** N1, knobs for the refusals only a device reaches: Done; commits named: none.
+- **83.** N2, store_sim that fills the volume: Done; commits named: gopher-metal a9163f2.
+- **84.** N5, the two FAT refusals that need a foreign directory: Parked; commits named: none.
+- **85.** N3: readAt is the Store's seventh operation: Parked; commits named: none.
+- **86.** The seam under stream.zig: Parked; commits named: none.
+- **87.** X1, the tape: The box builds this now; commits named: none.
+- **88.** X2, runWith beside every runSeed: The box builds this now; commits named: none.
+- **89.** X3, moments and the loop: The box builds this now; commits named: none.
+- **90.** X4, zig build explore: The box builds this now; commits named: none.
+- **91.** X5, the benchmark: The box builds this now; commits named: none.
+- **92.** Superseded by 93-95: Superseded by 93-95; commits named: none.
+- **93.** Mutation testing of gopher-metal's pure layers: status unmarked; commits named: none.
+- **94.** Review the box's explorer as it lands: status unmarked; commits named: none.
+- **95.** Hand the explorer targets: status unmarked; commits named: none.
+- **96.** Folded into 101 (the box, 2026-10-07): Folded into 101; commits named: none.
+- **97.** Your findings 1, 2 and 4, in zig-coverage-sdk: status unmarked; commits named: none.
+- **98.** Your finding 3, in gopher-metal's explore_bench.zig: Paused; commits named: none.
+- **99.** Attack the box's three branches: Paused; commits named: none.
+- **100.** Item 93 continued: status unmarked; commits named: none.
+- **102.** Paused (Steve, 2026-10-07 evening: a stable point first; the box will say when). The rough…: Paused; commits named: 4f6d7bc.
+- **101.** Your proposals again: Paused; commits named: none.
+- **N1..** N1. Knobs for the refusals only a device reaches: status unmarked; commits named: none.
+- **N2..** N2. store_sim that fills the volume: status unmarked; commits named: none.
+- **N3..** N3. readAt, if Steve takes it as the seventh: status unmarked; commits named: none.
+- **N4.** N4 (the box's). Run "For the box": status unmarked; commits named: none.
+- **N5..** N5. The two FAT refusals that need a foreign directory: status unmarked; commits named: none.
+- **P1..** P1. TIME-WAIT, and closed ports that answer: status unmarked; commits named: none.
+- **P2..** P2. The guest's window, kept (CC, with item 39a) and probed (not yet: a zero window waits …: status unmarked; commits named: none.
+- **P3..** P3. Recovery like a real client's: status unmarked; commits named: none.
+- **P5.** P5 (with P6, P7). RFC 5961 resets and §3.10.7 acknowledgement checks: status unmarked; commits named: none.
+- **S1..** S1. The sweep excuses the peer's own give-up: status unmarked; commits named: none.
+- **P4.** P4 (the box's call). An MSS option in the peer's SYN: status unmarked; commits named: none.
+- **8.** Config-data port accesses at any offset and width (H1): Done; commits named: none.
+- **9.** The deadline timer between halts (H2): Done in item 5; commits named: none.
+- **10.** A halt with interrupts off stops the machine (M1): Done; commits named: none.
+- **11.** A vector is in service only once injected (M2): Done; commits named: none.
+- **12.** BAR accesses split into aligned dwords (M3): Done; commits named: none.
+- **13.** Queues that do not exist read as absent (M5): Done; commits named: none.
+- **14.** The host's time behind the filter, on both machines (D1): Done for TRANSPORT=pci; commits named: none.
+- **15.** Done (CC; check.sh first, see Questions). Ports 0xE0/0xE1 answer only the rewritten instru…: Done; commits named: none.
+- **16.** A halt is not a hang on the PC-shaped machine (P1): Done; commits named: none.
+- **F1..** F1. A bad sector, aimed by address: status unmarked; commits named: none.
+- **F2..** F2. Silent rot on read: status unmarked; commits named: none.
+- **F3..** F3. A write cache, and whether the guest ever flushes: status unmarked; commits named: none.
+- **F4..** F4. A client that retries what got no answer: status unmarked; commits named: none.
+- **F5..** F5. The calendar as a knob: status unmarked; commits named: none.
+- **G1..** G1. The seam that makes fat16.zig a layer with nothing below it: status unmarked; commits named: none.
+- **G2..** G2. A fault on a multi-sector write: status unmarked; commits named: none.
+- **H1..** H1. A slow client: status unmarked; commits named: none.
+- **H5..** H5. Pipelining: status unmarked; commits named: none.
+- **H3..** H3. Frames that lie, from the peer: status unmarked; commits named: none.
+- **H2..** H2. A lease that ends: status unmarked; commits named: none.
+- **H4..** H4. A simulator for ready.zig: status unmarked; commits named: none.
+- **I1..** I1. A SYNCHRONIZE CACHE that fails: status unmarked; commits named: none.
+- **I2..** I2. A volume that is slow: status unmarked; commits named: none.
+- **I3..** I3. UNIT ATTENTION in the middle of a run: status unmarked; commits named: none.
+- **I4..** I4. The seam under io.durable: status unmarked; commits named: none.
+- **I5..** I5. A seed that draws the volume's faults: status unmarked; commits named: none.
+- **J1..** J1. A volume that goes away: status unmarked; commits named: none.
+- **J2..** J2. A volume that turns read-only: status unmarked; commits named: none.
+- **J3..** J3. Lies in the peer's UDP: status unmarked; commits named: none.
+- **J4..** J4. A flush that costs more than a read: status unmarked; commits named: none.
+- **J5.** J5 (the box's). A coverage property per refusal in the guest's: status unmarked; commits named: none.
+- **K1..** K1. A sweep that judges durability, not the page: status unmarked; commits named: none.
+- **K2..** K2. A write cache that writes back in its own order: status unmarked; commits named: none.
+- **K3..** K3. Crowds the size of the kernel's table: status unmarked; commits named: none.
+- **K4..** K4. An edge floor: status unmarked; commits named: none.
+- **K5..** K5. One report, two images: status unmarked; commits named: none.
+- **Answer (CC, items 97 and 100)**: commits named: none.
+- **Answer (CC, item 94, second round)**: commits named: zig-coverage-sdk 40b4e54, zig-coverage-sdk e8fc53f, zig-coverage-sdk 28cfd98, zig-coverage-sdk 45110bb, zig-coverage-sdk b9cf355, gopher-metal 1cb9002, gopher-metal 06d296e, 45110bb, 06d296e, b9cf355, 28cfd98, 1cb9002.
+- **Answer (CC, item 94)**: commits named: zig-coverage-sdk 7ca0f1d, zig-coverage-sdk 45110bb, 28cfd98.
+- **Answer (CC, item 78)**: commits named: none.
+- **Answer (CC, item 77)**: commits named: none.
+- **Answer (CC, item 77; answered by reading, item 80)**: commits named: none.
+- **Answer (CC, item 59)**: commits named: gopher-metal f0c132e.
+- **Answer (CC, item 55)**: commits named: none.
+- **Answer (CC, item 53)**: commits named: none.
+- **Answer (CC, item 44)**: commits named: none.
+- **Answer (CC, item 35)**: commits named: none.
+- **Answer (CC, item 23)**: commits named: none.
+- **Answer (CC, item 30)**: commits named: gopher-metal 4953f7e.
+- **B13..** B13. scsi.bring's config offsets to the spec's (30, 32), in v18: status unmarked; commits named: none.
+- **B14.** B14 done (2026-10-06, with item 68): done; commits named: none.
+- **B14.** B14 (as first written; lie was the wrong cache). v18's flush, proven on metal-vmm's volume: status unmarked; commits named: none.
+- **B15..** B15. The invariants in the kernel, as always: status unmarked; commits named: none.
+- **B16.** B16 (2026-10-07): the SDK too: status unmarked; commits named: none.
+- **B16..** B16. A verdict keyed by what the image reads, not angry-gopher's commit: status unmarked; commits named: none.
+- **B18.** B18 (was CC's 65, J3): status unmarked; commits named: none.
+- **B21..** B21. readConfig in probe/gopher.zig still says catch return conf: status unmarked; commits named: gopher-metal 12530f9, zig-coverage-sdk b9cf355.
+- **B23..** B23. A request head over 16 KiB gets no answer on metal-vmm: status unmarked; commits named: none.
+- **B22..** B22. fat16.remove takes a directory: status unmarked; commits named: none.
+- **B17.** B17 (J5): status unmarked; commits named: gopher-metal 4953f7e, metal-vmm 49f46ab.
+- **B11..** B11. Does prod's chat volume cache writes? Read MODE SENSE's caching: status unmarked; commits named: none.
+- **B12..** B12. The real kernel reaches revival: a long.sh rough-peer run: status unmarked; commits named: gopher-metal 582510e, 9b0a41c, metal-vmm c09ce2d, gopher-metal f928de0, gopher-metal fc42856.
+- **B1..** B1. The gates on both merged bases: metal-vmm check.sh, same.sh,: status unmarked; commits named: none.
+- **B2..** B2. sweep.sh 1 200 on gopher.elf; answer item 23 here (time per: status unmarked; commits named: none.
+- **B3..** B3. F1, the bad sector, against gopher.elf (the pinned file, the: status unmarked; commits named: none.
+- **B4..** B4. The last three TCP properties on the real kernel: past the window: status unmarked; commits named: none.
+- **B5..** B5. fat16, the two findings: makePath's depth against check's and: status unmarked; commits named: none.
+- **B6..** B6. request_heap's figure (item 35's second finding): count what a: status unmarked; commits named: none.
+- **B7..** B7. G1, the seam that makes fat16.zig a layer with nothing below it;: status unmarked; commits named: none.
+- **B8..** B8. Item 17 (is the deadline mark needed?): status unmarked; commits named: none.
+- **B9..** B9. The snapshot's box half (item 30's note): registers, events,: status unmarked; commits named: none.
+- **B10..** B10. Item 14's microvm half, with its own check.sh run: status unmarked; commits named: 44f6522, f66becf, gopher-metal b9c3943, gopher-metal 7ffdf55.
+- **D3..** D3. Observed on this box: Linux 6.8.0-138-generic, an Intel host with: status unmarked; commits named: gopher-metal 1f742bb.
+- **P1..** P1. Yes: a halt rest resolves resets quiet. And a guest that rests: status unmarked; commits named: none.
+- **103.** Attack what the box changed on 2026-10-07 and 10-08: status unmarked; commits named: gopher-metal d86ec98, gopher-metal c7539eb, d7a5903, e07b363, d2e7480, 83584da, angry-gopher 9e8e615d, angry-gopher ef3091eb, 8b617f3c, metal-vmm 766bffc, metal-vmm 9f24e42, metal-vmm 311731c (and more).
+- **104.** The cold hunt's smaller findings: status unmarked; commits named: none.
+- **105.** A lint for failure read as absence, in angry-gopher: status unmarked; commits named: angry-gopher ef3091eb.
+- **112.** C1, a disk that loses what it wasn't told to flush: Done; commits named: none.
+- **113.** C2, the snapshot's premise held at compile time: Done; commits named: none.
+- **114.** C3, the store lint follows the wrappers: Done; commits named: none.
+- **115.** C4, the three cheap unreached survivors: Done; commits named: none.
+- **116.** C5, zig fmt --check src in angry-gopher's ops/check_zig: Done; commits named: angry-gopher 4e45444, 446cbb7f.
+- **117.** The store lint's two gaps: Done; commits named: angry-gopher 42ccebc, angry-gopher 463a8bf.
+- **118.** A backup folder that stats but cannot be listed: Done; commits named: angry-gopher e494b31, angry-gopher 2a1666b, angry-gopher 6a024df, angry-gopher d3fcce8.
+- **119.** Attack the write cache turned off: Done; commits named: gopher-metal 1619ff3, metal-vmm 7bbd048.
+- **120.** The store lint's two new holes: Done; commits named: angry-gopher cd446aa, angry-gopher a30a154.
+- **121.** 113's walk, three gaps: Done; commits named: metal-vmm c1f36c7.
+- **122.** Attack today's judging: Done; commits named: none.
+- **123.** A failure that escapes a handler is answered with nothing: Done; commits named: angry-gopher 9588ac5, angry-gopher 7cbed40.
+- **124.** A cold review of 2026-10-09's judging and method: Done; commits named: none.
+- **125.** Durability as a shape: Done; commits named: metal-vmm ffae703, metal-vmm fd7d262, metal-vmm 2fa6a29.
+- **126.** Every client's answer judged, not only the first: Done; commits named: metal-vmm 0c7ee1b, metal-vmm 0db9f88.
+- **127.** Done (CC, 2026-10-09 evening): all of (a)-(h) and the lesser one, red first (Questions, "i…: Done; commits named: gopher-metal 3f17998.
+- **128.** Done (CC, 2026-10-09 evening): metal-vmm 9e6f952 (Questions, "item 128"); the per-disk lin…: Done; commits named: metal-vmm 9e6f952.
+- **129.** Class hunt 1: a revoke or delete that fails quietly: Done; commits named: angry-gopher d97c282, angry-gopher 8377b5f, angry-gopher 04e3913.
+- **130.** Two small ones from v21's release review: Done; commits named: gopher-metal efcfbe3.
+- **131.** The kernel's facts: one place, one step: Done; commits named: 624ac7f, b450132, 82470b1, gopher-metal 9576cb2, gopher-metal e7d970a.
+- **132.** A reserve on the volume, for small writes: Done; commits named: gopher-metal 9e7d8e9.
+- **133.** A duplicate ACK must name SND.UNA: Done; commits named: gopher-metal db1ade8.
+- **134.** Done (CC, 2026-10-09 night): (a)-(c) b810e98, (h) 8134209 (gopher-metal); (d) 9e7d8e9; (e)…: Done; commits named: b810e98, gopher-metal 9e7d8e9, angry-gopher 14d964e, metal-vmm 8f8b431.
+- **135.** No seed refuses a write on the volume: Done; commits named: metal-vmm f0dc9d8, metal-vmm cd77816.
+- **136.** zig build test in gopher-metal costs the box 530 s: Done; commits named: gopher-metal a74cbd7, gopher-metal b467905.
+- **137.** A keepalive setting for angry-gopher's Linux server, for tests: Done; commits named: angry-gopher 673e321.
+- **138.** First: the cold review of 132-135, and check-cc.sh's first run: Done; commits named: gopher-metal df1ef55, metal-vmm be28b97, metal-vmm f9a74d9, gopher-metal e9219ee, angry-gopher 9dbafc5, gopher-metal 16494c3, 315386e.
+- **139.** P139(a): the ledger for clusters taken before a commit: Done; commits named: gopher-metal 532b748, gopher-metal e07eaa6, ec77f28, 05b0cfb, e2dbde6.
+- **140.** Done (CC, 2026-10-10): gopher-metal ccd9f7b, 1d28d4c (native), b87b68c (review). Was: P139…: Done; commits named: gopher-metal ccd9f7b, gopher-metal 1d28d4c, gopher-metal b87b68c.
+- **141.** The rest of the boolean sweep in disk_fat: Done; commits named: gopher-metal 5ab69b8, gopher-metal 1b60b8a, gopher-metal 465c194, gopher-metal 417584d.
+- **142.** Fewer test binaries: Done; commits named: gopher-metal a345cd7, gopher-metal e87788d.
+- **143.** P143(a): named groups of states in machine.zig: Done; commits named: gopher-metal a518cde, gopher-metal 3c751e6.
+- **144.** P143(b): a connection's closing phase as a machine: Done; commits named: d555892, 3c751e6.
+- **145.** A failed rename keeps its source where the disk says it can: Done; commits named: 7e5b09f, d951178, 161ad2a, da03f31.
+- **146.** Done (CC, 2026-10-10, except (h); see 147). Was: The cold reviews of the overnight batch (…: Done; commits named: gopher-metal a4271a7.
+- **147.** Done (CC, 2026-10-10, FEEDBACK "147 done"; gopher-metal cf8c008; merged at 53e0bfa after a…: Done; commits named: gopher-metal cf8c008, gopher-metal 53e0bfa, gopher-metal 161ad2a.
+- **148.** Done (CC, 2026-10-10, FEEDBACK "148 and 149 done"; gopher-metal 0e737b8): Done; commits named: gopher-metal 0e737b8, gopher-metal 9c72d62, gopher-metal 84e98ea, gopher-metal bc459b3, metal-vmm 632dc34, 9c3190c.
+- **149.** Every shape that writes reads back what it was told it kept: Done; commits named: metal-vmm aa72cee.
+- **150.** virtio's take and ring sizes: Done; commits named: gopher-metal 99818c2.
+- **151.** Why a chat send costs 38 disk requests: Reported; commits named: none.
+- **152.** orphaned_runs: count orphaned long names as fsck.fat does: Done; commits named: gopher-metal 725c0dd, gopher-metal 7f48922.
+- **101.** Done (CC, 2026-10-08): C1-C5 under Proposed. Was: your: Done; commits named: none.
+- **154.** From the box's cold review of 150/152: Done; commits named: gopher-metal 08a18cf, gopher-metal 9c606ac, gopher-metal afc78fe.
+- **B41.** B41, moved to CC as 148(a) (2026-10-10): moved to CC as 148; commits named: none.
+- **B42.** B42, done (2026-10-10, gopher-metal e4a7f3b, bdef1c2, on master; a cold review's four fixe…: done; commits named: gopher-metal e4a7f3b, gopher-metal bdef1c2.
+- **B40.** B40, moved to CC as 149 (2026-10-10): moved to CC as 149; commits named: metal-vmm aa72cee, gopher-metal 9c72d62, aa72cee.
+- **B39.** B39, done (2026-10-10, gopher-metal c08dc9c, metal-vmm 6b15df3): plants in the source, -Dp…: done; commits named: gopher-metal c08dc9c, metal-vmm 6b15df3.
+- **B37.** B37, done (CC, 2026-10-10, gopher-metal cb34a59; its review's bug 53265d9, red first): done; commits named: gopher-metal cb34a59, gopher-metal 53265d9.
+- **B36.** B36, done (CC, 2026-10-10, gopher-metal 2c70dcc, a4271a7): done; commits named: gopher-metal 2c70dcc, gopher-metal a4271a7.
+- **B35.** B35, moved to CC as 150 (2026-10-10): moved to CC as 150; commits named: none.
+- **B34.** B34, done (CC, 2026-10-10, gopher-metal 13a7a98, aaf30bc): zig build check, run by zig bui…: done; commits named: gopher-metal 13a7a98, gopher-metal aaf30bc, b4463a9.
+- **B33.** B33, done (CC, 2026-10-10, gopher-metal 91038e9, bf41cd1; 900 reaches over the 300 seeds, …: done; commits named: gopher-metal 91038e9, gopher-metal bf41cd1, gopher-metal b4463a9, 17eb459, b4463a9, 9e7d8e9.
+- **B30.** B30, done (CC, 2026-10-10, gopher-metal 629b576, 27 remade): done; commits named: gopher-metal 629b576.
+- **B28.** B28, done (2026-10-09, metal-vmm a92ca03, gopher-metal 21b1e47): the coverage door: done; commits named: metal-vmm a92ca03, gopher-metal 21b1e47.
+- **B23.** B23, done (2026-10-08): the peer sent the first 8,192 bytes: done; commits named: none.
+- **B24.** B24, done (gopher-metal, long.sh): done; commits named: none.
+- **B25.** B25, done (gopher-metal c7539eb): done; commits named: gopher-metal c7539eb.
+- **B27.** B27, done (gopher-metal 4ed59ba): done; commits named: gopher-metal 4ed59ba, angry-gopher 8b617f3c.
+- **Answer (CC, items 136-138)**: commits named: gopher-metal a88f456, zig-coverage-sdk c7baca9, zig-coverage-sdk df1ef55, f9a74d9, metal-vmm e9219ee, angry-gopher 9dbafc5, 673e321, a74cbd7.
+- **Answer (CC, items 132-135)**: commits named: 9e7d8e9, db1ade8, b810e98, angry-gopher 14d964e, metal-vmm 8f8b431, f0dc9d8, gopher-metal cd77816.
+- **Answer (CC, item 131)**: commits named: 624ac7f, b450132, 9576cb2, e7d970a, 82470b1.
+- **Answer (CC, item 129)**: commits named: d97c282, 8377b5f, 04e3913.
+- **Answer (CC, item 128)**: commits named: metal-vmm 9e6f952.
+- **Answer (CC, item 127)**: commits named: metal-vmm b0e30fc, angry-gopher c56f345, metal-vmm eed1a41, metal-vmm bf789a7, gopher-metal 1ce36b8.
+- **Answer (CC, item 126)**: commits named: metal-vmm 0c7ee1b, metal-vmm 0db9f88.
+- **Answer (CC, item 125)**: commits named: metal-vmm ffae703, metal-vmm fd7d262, metal-vmm 2fa6a29.
+- **Answer (CC, item 124)**: commits named: none.
+- **Answer (CC, item 123)**: commits named: angry-gopher 9588ac5, angry-gopher 7cbed40.
+- **Answer (CC, item 119)**: commits named: metal-vmm 6ec0f37, metal-vmm 4de2ea6, metal-vmm 20e7022, metal-vmm 7689d38, 7689d38, 20e7022, 6ec0f37, 4de2ea6.
+- **Answer (CC, item 120)**: commits named: angry-gopher cd446aa, angry-gopher a30a154.
+- **Answer (CC, item 122)**: commits named: metal-vmm 3b5fba5, metal-vmm ceb6a83, metal-vmm 6da8211, metal-vmm 22f35c4, metal-vmm 6c1aad9.
+- **Answer (CC, item 112)**: commits named: gopher-metal 6298c0c, gopher-metal 4d86d06, gopher-metal 230e4cf, gopher-metal 2e0a838.
+- **Answer (CC, item 113)**: commits named: metal-vmm 66614c5, metal-vmm 1e3e11a, metal-vmm d9a624e, 1e3e11a.
+- **Answer (CC, item 114)**: commits named: angry-gopher deff213, angry-gopher 233a836, angry-gopher 83cb7f8, angry-gopher feea876.
+- **Answer (CC, item 118)**: commits named: angry-gopher e494b31, angry-gopher 2a1666b, d3fcce8, 6a024df.
+- **Answer (CC, item 105)**: commits named: c75961d, 444b303, 54b3354, ef3091eb, 43779f8, e98feb8, 152a1f5.
+- **Answer (CC, item 104)**: commits named: gopher-metal a2e8594, gopher-metal 4132fc5, 8be63f7, f70bb83, angry-gopher 934976f, angry-gopher 26aa925, metal-vmm 3fb7d94, metal-vmm 18c5e8d, gopher-metal 3951b4f, gopher-metal cc262cf.
+- **Answer (CC, item 103)**: commits named: gopher-metal d7a5903, gopher-metal fccad06, 311731c, b5d9669, c621611, 78dd476, 9d3a4a1, f539aa3, angry-gopher 8b617f3c, angry-gopher ef3091eb, angry-gopher 9e8e615d, gopher-metal d86ec98 (and more).
+- **Answer (CC, item 98: done before the pause, not merged.)**: commits named: gopher-metal 9c40811, gopher-metal a7940d7, 9745fd1, 1a3fbc4, 051941b.
+- **Answer (2026-10-07, to CC's item 98 note)**: commits named: gopher-metal b445e6f, 180462b, e2dbde6, e021bed.
+- **B38.** B38 (2026-10-10; BLOCKS v22, Steve): the FAT simulator got 67% slower since v21: status unmarked; commits named: b4463a9, a74cbd7, gopher-metal b4463a9.
+- **99.** Held until the box rebases angry-gopher's request-door onto master: Held; commits named: angry-gopher 8b617f3c.
