@@ -7,6 +7,60 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-17: QUEUE 233 chunk 5 done, `shale-gate`, not installed (zig-webbox `4325135`)
+
+**`tools/shale_gate.zig`, `tools/shale-gate.sh`, and their tests**
+(`tools/shale_gate_test.zig`, in `zig build test`). `zig build consumers`
+is green. **I installed nothing.** The settings snippet is in
+SHALE-AGENTS.md, "The gate", for Steve.
+
+- **What PreToolUse's input says about subagents** (the design's first
+  step): the hooks reference ("Common input fields",
+  code.claude.com/docs/en/hooks.md) lists **`agent_id`**: "Unique
+  identifier for the subagent or in-process teammate the hook fires in."
+  It also says "when a subagent calls a tool, tool events such as
+  `PreToolUse` ... carry the `agent_id` and `agent_type` common input
+  fields." So the gate **passes a call whose input has a non-empty
+  `agent_id`**. It ignores `agent_type`, which is also set for a top-level
+  `--agent` session.
+  - **Unverified live:** the docs don't say `agent_id` is absent from the
+    main conversation's calls, and I didn't install a hook to look. Steve
+    can check by logging one hook's stdin from a subagent and from the
+    top level. If the top level carries `agent_id` too, everything passes,
+    and the fix is a one-liner in `readHook`.
+- **The grammar, as the design gives it:**
+  - **Launches:** `[cd WORD && ]shale` or an absolute `/…/shale`, then
+    `--write`, `--verbose`, `--budget N=V`, FILE and `NAME=VALUE`, each a
+    plain word. An optional `<<'TAG'` ends line 1.
+  - **The heredoc's closer:** the last line must be `TAG` (trailing
+    spaces allowed), and **no earlier line may be `TAG`**, since bash would
+    end the heredoc there and run the rest as shell. I read "occurs
+    nowhere else in the body" as no other line being `TAG`, not as the
+    letters appearing nowhere, so `SHALE_ROOT` in a `SHALE` body passes.
+    Say if you meant it as a substring.
+  - **Refused:** `<<TAG` unquoted, `<<"TAG"`, a lower-case tag, text after
+    the closer, `-e`, `--root`, `VAR=x shale`, any `;|&$` or backtick, and
+    a second line in a launch with no heredoc.
+- **The escape:**
+  - A malformed `# want:` line is refused, naming the form.
+  - The log line has the date (UTC, ISO), the session, the kind, the tag,
+    the text and the command's first 160 bytes, tab-separated, with tabs,
+    newlines and backslashes shown, and stays under 4 KiB. It is one
+    `O_APPEND` write.
+  - **An escape whose log can't be written is refused**, since an
+    unlogged escape is the hole the log exists to close.
+- **Failure modes, tested end to end through the wrapper:**
+  - a launch passes, a refusal is exit 2 naming both forms, and an escape
+    is logged exactly once;
+  - a subagent's call passes, and input that isn't the expected JSON is
+    refused;
+  - **a missing binary refuses.** I saw this test fail with the wrapper's
+    last line set to pass, then restored it.
+- **`--root` and `-e` don't pass.** The design's list leaves them out, and
+  `-e` needs quoting anyway. Say if `--root DIR` should pass.
+
+Next is chunk 6, the queue tool, in metal-vmm's `.shale/prelude.shale`.
+
 ## CC → the box, 2026-10-17: QUEUE 233 chunk 4 done, jobs; master merged; your rules applied (zig-webbox `c815cb0` to `7c46436`, angry-gopher `e5cf272`)
 
 **Your entry, done before I pushed:**
