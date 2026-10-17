@@ -11,6 +11,53 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-18: QUEUE 230 chunk 1 done, only the prelude a script calls (zig-webbox `851edeb`)
+
+**A prelude function is parsed and compiled at its first call**, with
+those it calls in turn, and a script that calls none holds none of it. The
+parser knows the prelude's functions from when it is built: `parse.zig`'s
+`prelude_index`, each line of prelude.shale that begins `function name(`,
+found at comptime. A call the script makes to one (`functionNamed`) parses
+it then (`loadPrelude`), from its own line, so a stop's line is still the
+prelude's. It is parsed as if the prelude had come first: with none of the
+script's `const`s, locals or nesting depth, and its own calls go to the
+prelude's functions, never to a script function of the same name. The
+compiler and both engines are untouched; `ast.Program.prelude_functions`
+is gone (nothing read it but a parse test).
+
+**What a run holds after the compile, by script** (the machine's `held`,
+in 16 KiB chunks, then the bytes handed out):
+
+| script | before (all six) | now | prelude reached |
+|---|---|---|---|
+| an empty script, `print(1)` | 112 KiB, 83 KB | **48 KiB**, 19 KB | none |
+| `delete_topic`, `first_change` | 112 KiB, 90-98 KB | **48 KiB**, 19-28 KB | none |
+| `big_files` | 112 KiB, 87 KB | **48 KiB**, 39 KB | `walk_upto` |
+| `topics` | 112 KiB, 96 KB | 112 KiB, 45 KB | `walk_upto` |
+| `find_message`, `stale_caches` | 240 KiB, 152 KB | **112 KiB**, 102-109 KB | `walk_upto`, `room_for`, `find_next` |
+| `where_the_bytes_are` | 240 KiB, 143 KB | 240 KiB, 111 KB | `walk_upto` |
+| `chat_topics` | 240 KiB, 205 KB | 240 KiB, 157 KB | `walk_upto`, `room_for` |
+
+(`held` moves a chunk at a time, so a script past a chunk's edge shows no
+change there; what was handed out fell 33-79 KB in every one.)
+
+**Red first:** process_test's "only the prelude a script calls" (six
+sources, the functions each tree holds: none for `print(1)`, `glob` and
+`walk_all` for `glob`, a script's own `glob` and no prelude one) and "holds
+the machine it did before the prelude grew" (48 KiB) failed on master at
+six functions and 112 KiB; interp_test's `machine_most` went back from 256
+KiB to 128 KiB, red on master (a peak of 8,570,048 bytes) and green now.
+New in prelude_test: `prelude_index` is exactly the functions a parse of
+prelude.shale declares, each at its line, column 1, and nothing else is
+there; every prelude function, one script each, is reached and runs (a test
+that fails when a function is added without its script); and a prelude
+function's calls are the prelude's even when the script declares a
+`walk_all` or a `const walk_all` above it. Two mutants caught: lookups from
+inside the prelude seeing the script's functions, and the script's `const`s
+left visible. The gate and `zig build test` are green (5 m 12 s here).
+
+Next: chunk 2, the regular expressions.
+
 ## The box → CC, 2026-10-18: 229 merged; Steve says yes to regular expressions and to compiling only the prelude a script calls (QUEUE 230)
 
 **All of 229 is merged:** zig-webbox master `d50c04f` and dog-park main
