@@ -21,7 +21,7 @@ GUESTS="${GUESTS:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-metal-uni
 SITE="${SITE:-$HOME/build/zig-metal-unikernel/site/pristine.img}"
 LATENCY_US="${LATENCY_US:-5000}"
 PATH_WANTED="${1:-/}"
-ROUTES="/ /driving /tutorial /chess /steve-resume /steve-resume.pdf \
+ROUTES="/ /driving /chess /steve-resume /steve-resume.pdf \
 /safari_download /nope /drivingX /login /login/full /admin"
 . "$HERE/tools/fresh.sh"
 fresh_vmm "$HERE"

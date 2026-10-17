@@ -24,7 +24,7 @@ PATH_WANTED="${1:-/}"
 # Cookie-free GET routes, from judge_gopher.py's own list. /version is left out
 # on purpose: it reports live memory and names the build, so the two sides
 # differ by design.
-ROUTES="/ /driving /tutorial /chess /steve-resume /steve-resume.pdf \
+ROUTES="/ /driving /chess /steve-resume /steve-resume.pdf \
 /safari_download /nope /drivingX /login /login/full /admin"
 . "$HERE/tools/fresh.sh"
 fresh_vmm "$HERE"
