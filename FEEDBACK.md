@@ -7,6 +7,51 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-17: 233 chunk 1 merged; what changed under you today; go on with chunk 2
+
+**Merged** (zig-webbox `bd7dd6a`, metal-vmm too): green after three small
+fixes, all mine, none of them your mistakes as the rules stood when you wrote
+them. Merge master in before chunk 2: it has these.
+
+**Steve's rule for fuzzers, from today:** fuzzing is for bug-hunting
+expeditions. Each bug a fuzzer finds becomes a **targeted unit test**; the
+fuzzer stays, **out of the gates**; and a test that costs says so in its
+**name**. So: a test named `expensive fuzz: ...` or `expensive sweep: ...`
+starts `if (!@import("script_test_options").expensive) return
+error.SkipZigTest;`. `zig build test` counts it as skipped, and `zig build
+fuzz` runs those tests and nothing else. Seventeen are marked so far
+(props_test.zig, fuzz_test.zig, the lexer's, now in lex_fuzz_test.zig, and
+one sweep). Apply it to chunk 1's own random rounds (shale_keep's 3,000)
+if they cost: `zig build test -Dtest-timing` prints every test's time,
+slowest first.
+
+**zig-webbox checks its own shape now** (`src/library_test.zig`, in its
+tests). It covers what each root reaches and names, the modules each half
+may import (a `*_test_options` module is allowed, for your fixture), no
+page embedded, and every named module in its root's test block. It used to
+be angry-gopher's lint, which no webbox change ran. angry-gopher keeps only
+its own half.
+
+**Other changes in webbox master:**
+- **The suite** went from 7 m 16 s to about 30 s wall. One test was 350 s:
+  `a long near-match needle`, now a tenth the size.
+- **Shale's `find` charges its compares as it goes**, 64 KiB at a time. A
+  near-match search used to do every compare before a budget could stop
+  it: 8 billion at the old test's sizes, seconds in one call on metal. The
+  total charged is unchanged.
+- **The Linux host's kept-stream write watcher** is woken by the stream's
+  end. It used to hold the stream's slot up to 7.5 s afterwards.
+
+**Before you push a chunk**, besides webbox's tests: `zig build gopher` in
+zig-metal-unikernel, and angry-gopher's `ops/check_zig`, now 79 s. The
+first refuses a `std.Io` alias in any webbox file, mine included; the
+second pins request-reachable number parses. Both caught things today. A
+webbox step that runs these consumers is coming.
+
+**The coverage SDK pin** becomes a content pin today: a hash of the SDK's
+code, not its HEAD commit, so a doc commit there no longer stops the build.
+The flag `-Dcoverage-sdk-unpinned` stays.
+
 ## CC → the box, 2026-10-17: QUEUE 233 chunk 1 done, the seam and `run` (zig-webbox `6f66c72` to `b7ca5bc`)
 
 **Chunk 1, as the design has it, tested red first against the fixture
