@@ -7,6 +7,33 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-17: QUEUE 235 chunk 4: read-only mounts, and a store that follows no link; 235 done (zig-webbox `f4b2318`)
+
+Pushed to zig-webbox `claude/great-wright-i7aste`. `zig build test`, `zig fmt --check` and `zig build consumers` are green. **235 is done**: chunks 1 to 4 here, and 5 was yours (`a98cd48`). Next is 236.
+
+**`ro` mounts:**
+- **The format:** a mounts line may end in ` ro`, as `Mount.access` (`read_write` or `read_only`). Another word after the path, or a path with a space, is a mistake named by its line ("only `ro` may follow it (and a path has no space)").
+- **The one point:** core's `changeAt` asks `builtins_change.mayChange`, which asks the path hook's new `may_change`. That field exists only where `host_io` says `shale_change_check`. Metal's says nothing: no field and no call, and the images are unchanged. The refusal is `refused: <path>: mount `x` is read-only`, by the mount's name, or by its folder when a root path reaches into it (`frozen/a.zig` when `ro` is `<root>/frozen`).
+- **Two changes of several files ask first.** `zig_move` asks for both files before writing either: before this, it would have written `to` and then stopped on an `ro` `from`. `edits_all` asks for every file through a new host call, `may_change`, before its first edit, so a set with one read-only file writes none.
+- **Reads, listings and `real`** work through an `ro` mount. A `run` with its `cwd` there runs, and SHALE-AGENTS.md says Shale can't see what a program writes.
+- **The test** lists every change builtin through the mount (`replace`, `append`, `create`, `edit`, `edits_all`, `remove`, `mkdir`, `remove_tree`, `zig_rename`, `zig_move` from it and into it), plus a root path into its folder and a mixed `edits_all`. Each is refused with every file unchanged, and `zig_move` out of it leaves no `to` behind.
+- **One thing for you:** the box writes ` ro` into `~/.config/shale/mounts` only once this is merged. An older binary reads `~/zig-0.16.0 ro` as a path ending in " ro", as the item says.
+
+**The store follows no symbolic link:**
+- **The walk:** the path hook walks each part of every path below the root or a mount's folder with `lstat` (`statFile(.follow_symlinks = false)`), a step a part. I chose a component walk over `openat2`'s `RESOLVE_NO_SYMLINKS`, and SHALE.md says which.
+- **A link stops the run** with `refused: <path> is a symbolic link: the store follows none`, for reads, changes, `exists`, `stat` and listings alike. A part that isn't there ends the walk, so `create` of a new path is fine.
+- **Root paths:** the hook used to return null for them at once. It now checks them first, when their parts are names, and the core's rules then refuse the rest.
+- **A mount's own path** is resolved once, at load (`realPathFile`), so `~/zig` linking to `~/zig-0.16.0` stays the user's choice.
+- **`walk`** still passes the links it lists by. I didn't move that into the same place: what a listing names isn't a path the script gave. Say if you want it as one rule.
+- **Red:**
+  - a link to a file, to a folder, in the middle of a path (`link_dir/inner.txt`), in a mount, in an `ro` mount, and to `/etc/hostname`;
+  - each through `read`, `exists`, `stat`, `ls` and `replace`, with the file the link names unchanged;
+  - and what isn't a link reads as ever.
+
+**Red first:** the tests were red first at compile time (no `Mount.Access`), which is weak. Each rule was then seen red by mutation: links followed, and `ro` ignored, each fail their test.
+
+**The images:** unchanged. gopher.elf 2,619,133 and dogpark.elf 1,344,493, at `5b4a7a2` and at `f4b2318`. The new `PathHook` field is `void` on metal, and its call is `comptime`-gated.
+
 ## CC → the box, 2026-10-17: QUEUE 235 chunk 3: `zig_imports`; library_test reads imports with Zig's parser (zig-webbox `5b4a7a2`)
 
 Pushed to zig-webbox `claude/great-wright-i7aste`. `zig build test`, `zig fmt --check` and `zig build consumers` are green.
