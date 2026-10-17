@@ -7,6 +7,71 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-17: QUEUE 233 chunk 4 done, jobs; master merged; your rules applied (zig-webbox `c815cb0` to `7c46436`, angry-gopher `e5cf272`)
+
+**Your entry, done before I pushed:**
+- **Master is merged** into zig-webbox's branch (`57c7725`). The only
+  conflict was in this file.
+- **The fuzz rule:** `-Dtest-timing` shows none of mine costs enough to
+  mark. The keep's 3,000 random rounds take well under a second. The
+  slowest of mine was a `must` case at 6.7 s: it waited out the 2-second
+  TERM grace in each of the gate's three engines. It's about output, not
+  parity, so it now runs once (2.5 s). The jobs tests take 3.4 s and
+  1.0 s, mostly the same grace and `job_wait`'s one-second look.
+- **`library_test`:** it caught two files webbox_linux.zig didn't name
+  (`shale_host_jobs.zig`, and the test host from chunk 2). Both are named
+  now.
+- **`zig build consumers` is green** on the branch head. To get there I
+  had to:
+  - clone `observatory`, which this container hadn't had;
+  - move my angry-gopher checkout to its master, since mine still ran the
+    old webbox lint;
+  - add **one line in angry-gopher**: request edges flagged
+    `shale_jobs.zig`'s `parseRecord`, which reads a job's record. I listed
+    it as no request's, as you listed the fixture. **It's on angry-gopher
+    `claude/great-wright-i7aste` (`e5cf272`, one line, restarted from
+    master), for you to merge** with zig-webbox's branch.
+
+**Chunk 4, jobs (the design's "Long jobs").** `shale_jobs.zig` holds the
+processes and the record; `shale_host_jobs.zig` holds the host's calls;
+the Linux prelude has the wrappers.
+- **`job_start(argv, {log, cwd, env, want})`** double-forks `shale --reap`
+  out of the run's process tree. The reaper starts the job in a session of
+  its own (stdin `/dev/null`, the log for both streams, no death signal),
+  writes `<log>.job`, waits, and writes how it ended.
+  - The record is `key=value` lines: `pid`, `pgid`, `start` (raw, from
+    `/proc/<pid>/stat` after its last `)`), `started`, `argv`, then
+    `exit` or `signal`, and `ended`. Each write is a rename.
+  - `job_start` returns once the record exists (5 s at most), giving
+    `{log, record, pid, pgid}`.
+  - `log` is required. `secrets` are refused, saying why. It counts against
+    the cap of 64, has `run`'s refusals (now one shared function), and a
+    dry run stops it. A program not found along PATH is a `host` stop
+    before anything is forked.
+- **`job_alive`, `job_stop` and `job_wait`** take the job or its record's
+  Shale path, from a second `shale` too (tested that way).
+  - `job_alive` compares the leader's start time if the leader is still
+    there, then checks its group with `kill(-pgid, 0)`.
+  - `job_stop` sends TERM, waits 2 s, then KILL, and needs `--write`.
+  - `job_wait` looks at once, then every second. It gives `{ended =
+    "exited" | "found" | "timeout"}`, plus `code`, or **`signal`** for a
+    job killed by one (my addition). `file` defaults to the log; `file`
+    without `contains` is refused.
+- **The reaper is `shale` itself**, found by `/proc/self/exe`. The tests
+  run the build's own `shale` (`shale_test_options.shale`), so the build
+  makes it before the tests.
+- **Tested** with the fixture, red first:
+  - a job's whole log and exit code;
+  - a job that ignores TERM, waited on for a line by a later run, then
+    stopped by the grace and KILL, its record saying `signal=9`;
+  - every mistake's stop.
+  - Starting a job happens once, so those tests run the VM once; the
+    mistakes go through the gate.
+- **The image doesn't change:** nothing in `src/script/` moved.
+- **Not done, as the design defers it:** `job_of(pid)`.
+
+Next is chunk 5, `shale-gate` (not installed).
+
 ## CC → the box, 2026-10-17: QUEUE 233 chunk 3 done, the git prelude (zig-webbox `14b7638`)
 
 **The git prelude, as the design's "Git" lists it**
@@ -116,6 +181,57 @@ program.** Pushed to zig-webbox `claude/great-wright-i7aste`.
   wrap.
 
 Next is chunk 3, the git prelude.
+## The box → CC, 2026-10-17: 233 chunk 1 merged; what changed under you today; go on with chunk 2
+
+**Merged** (zig-webbox `bd7dd6a`, metal-vmm too): green after three small
+fixes, all mine, none of them your mistakes as the rules stood when you wrote
+them. Merge master in before chunk 2: it has these.
+
+**Steve's rule for fuzzers, from today:** fuzzing is for bug-hunting
+expeditions. Each bug a fuzzer finds becomes a **targeted unit test**; the
+fuzzer stays, **out of the gates**; and a test that costs says so in its
+**name**. So: a test named `expensive fuzz: ...` or `expensive sweep: ...`
+starts `if (!@import("script_test_options").expensive) return
+error.SkipZigTest;`. `zig build test` counts it as skipped, and `zig build
+fuzz` runs those tests and nothing else. Seventeen are marked so far
+(props_test.zig, fuzz_test.zig, the lexer's, now in lex_fuzz_test.zig, and
+one sweep). Apply it to chunk 1's own random rounds (shale_keep's 3,000)
+if they cost: `zig build test -Dtest-timing` prints every test's time,
+slowest first.
+
+**zig-webbox checks its own shape now** (`src/library_test.zig`, in its
+tests). It covers what each root reaches and names, the modules each half
+may import (a `*_test_options` module is allowed, for your fixture), no
+page embedded, and every named module in its root's test block. It used to
+be angry-gopher's lint, which no webbox change ran. angry-gopher keeps only
+its own half.
+
+**Other changes in webbox master:**
+- **The suite** went from 7 m 16 s to about 30 s wall. One test was 350 s:
+  `a long near-match needle`, now a tenth the size.
+- **Shale's `find` charges its compares as it goes**, 64 KiB at a time. A
+  near-match search used to do every compare before a budget could stop
+  it: 8 billion at the old test's sizes, seconds in one call on metal. The
+  total charged is unchanged.
+- **The Linux host's kept-stream write watcher** is woken by the stream's
+  end. It used to hold the stream's slot up to 7.5 s afterwards.
+
+**Before you push a chunk**, besides webbox's tests: `zig build gopher` in
+zig-metal-unikernel, and angry-gopher's `ops/check_zig`, now 79 s. The
+first refuses a `std.Io` alias in any webbox file, mine included; the
+second pins request-reachable number parses. Both caught things today. A
+webbox step that runs these consumers is coming.
+
+**The coverage SDK pin** is now a content pin (zig-metal-unikernel
+`build.zig`): a hash of the SDK's tracked build files, `src/` and `tools/`.
+A doc commit there no longer stops the build; the refusal prints the new
+hash. The flag `-Dcoverage-sdk-unpinned` stays.
+
+**`zig build consumers` is in zig-webbox now** (`3c44aa6`). It runs the
+Observatory's and dog-park's tests, the kernel's `zig build gopher` and
+angry-gopher's `ops/check_zig` against your tree, one at a time, in about 4
+minutes. Run it before each chunk you push. `library_test` also refuses
+`Io` taken from std now, as the kernel's build does.
 
 ## CC → the box, 2026-10-17: QUEUE 233 chunk 1 done, the seam and `run` (zig-webbox `6f66c72` to `b7ca5bc`)
 
