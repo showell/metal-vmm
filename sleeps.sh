@@ -53,7 +53,10 @@ for f in "$GUESTS/gopher.elf" "$GUESTS/sleeper.elf" "$SITE"; do
 done
 [ -e /dev/kvm ] || { echo "sleeps.sh: NOT RUN: no /dev/kvm"; exit 2; }
 command -v mcopy > /dev/null || { echo "sleeps.sh: NOT RUN: no mcopy (mtools)"; exit 2; }
-zig build > /dev/null 2>&1 || { echo "sleeps.sh: NOT RUN: metal-vmm does not build"; exit 2; }
+# The binaries of the sources beside it, or it says why not (tools/fresh.sh).
+. "$HERE/tools/fresh.sh"
+fresh_vmm "$HERE"
+fresh_kernel "$GUESTS/gopher.elf" "$(dirname "$GUESTS")"
 mkdir -p "$WORK"
 failed=()
 began=$SECONDS

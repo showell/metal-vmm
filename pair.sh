@@ -46,7 +46,10 @@ for f in "$GUESTS/gopher.elf" "$GUESTS/fetch.elf" "$SITE"; do
     [ -f "$f" ] || { echo "pair.sh: NOT RUN: no $f"; exit 2; }
 done
 [ -e /dev/kvm ] || { echo "pair.sh: NOT RUN: no /dev/kvm"; exit 2; }
-zig build > /dev/null 2>&1 || { echo "pair.sh: NOT RUN: metal-vmm does not build"; exit 2; }
+# The binaries of the sources beside it, or it says why not (tools/fresh.sh).
+. "$HERE/tools/fresh.sh"
+fresh_vmm "$HERE"
+fresh_kernel "$GUESTS/gopher.elf" "$(dirname "$GUESTS")"
 mkdir -p "$WORK"
 rm -f "$WORK/times"
 failed=()
