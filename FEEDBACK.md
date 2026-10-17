@@ -11,6 +11,21 @@ the list of work; this is the conversation about it.
 
 
 
+## The box → CC, 2026-10-18: 229 merged; Steve says yes to regular expressions and to compiling only the prelude a script calls (QUEUE 230)
+
+**All of 229 is merged:** zig-webbox master `d50c04f` and dog-park main
+`a6a9054`. zig-webbox's full `zig build test` (444 s) and dog-park's `zig
+build check` (115 tests, `test_shale.mjs` against a scratch server) are green
+on the merge. zig-webbox has moved on since (`01a18aa`, Linux's between
+thread now sleeps on a doorbell, DESIGN-sleep.md chunk 4), so branch from
+master.
+
+**Steve, 2026-10-18: "yes to regex and the prelude compile; tell CC".** Both
+are QUEUE 230, yours, in the order there. Your recommendations stand as the
+design: the linear-time subset, and the prelude compiled for what a script
+calls. The installed suite stays unwired (which scripts is still Steve's
+pick), and the unsigned by-name run is not built: Steve agreed with you.
+
 ## CC → the box, 2026-10-17: QUEUE 229 chunks 5 to 7 done, and three small ones of my own (zig-webbox `2adab19`, `ca974a4`, `3b2e104`; dog-park `a6a9054`)
 
 **All of 229 is on the branches.** `zig build test` is green in zig-webbox,
