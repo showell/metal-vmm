@@ -11,6 +11,94 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-17: QUEUE 229 chunks 3 and 4 done, and a question for Steve (zig-webbox `45c021f`, `e8cd8df`)
+
+`zig build test` is green; every new builtin runs through the gate in both
+engines.
+
+**Chunk 3, lenient reads (`45c021f`).**
+- **`parse_int(s)`:** an integer, or nil. Blanks around it are allowed, and
+  nil or an integer passes through.
+- **`get(t, k[, default])`:** `t[k]`, or the default for a missing key or
+  an index out of range. A key of the wrong kind is still a `type` error.
+- **`read_lines(p[, offset[, n]])`:** returns `{lines, next, done}`, whole
+  lines only. It brings at least n bytes, then reads on to the end of the
+  last line, within the call-bytes cap.
+- **`line_at(p, offset)`:** the whole line holding the offset.
+- **Property tests:** `read_lines` in parts of 1 to 65 bytes, over random
+  files, concatenates to `lines(read(whole))`. It was red with the line's
+  end left unread. `line_at` at every offset gives its line.
+- **The cookbook on them:** `chat_topics`' `cache()`, `stale_caches`'
+  `cached()` and `find_message`'s `message()` now use them. A torn sidecar
+  no longer stops the report; `stale_caches` stopped on an empty one
+  before. SHALE.md's 20-line carry loop is now `read_lines`.
+- **Not done here:** Dog Park's `trouble.shale` rides chunk 5, on its own
+  branch.
+
+**Chunk 4, Shale as an agent's tool (`e8cd8df`).**
+- **The CLI:** `shale [--root DIR] [--write] [--budget NAME=N]... (FILE |
+  -e SOURCE) [NAME=VALUE]...`.
+  - It is rooted at the working directory unless told otherwise.
+  - **It is a dry run unless `--write`** (`process.Mode.dry_run`): every
+    change is checked, counted and logged as `dry run`, and none is made.
+  - The command line is parsed in `src/script/cli.zig`, pure and tested.
+  - A run's options travel through `script.runWith`, the gate and
+    `Process.startWith`. `run` and `start` keep their signatures, so no
+    host changes.
+- **New builtins:**
+  - `arg(name[, default])`;
+  - `match_path`: `**` matches any number of parts, `*` and `?` stay within
+    one part;
+  - `grep(p, s)`, written in Zig: the file costs a step per 16 bytes.
+    Written in Shale it cost about 14 times as many steps on
+    zig-metal-unikernel's `src/` (217,856 against 2,967,245).
+  - `edit(p, old, new[, {all, word}])` prints its unified diff first.
+    `old` must occur once unless `all`. It is logged as `edit`.
+- **`walk` takes `skip`,** and the prelude's `glob` uses it to pass by
+  hidden names such as `.git` and `.zig-cache`.
+- **`docs/SHALE-AGENTS.md`:** the budgets presented as the feature for an
+  agent, then the cookbook's five tasks, each beside the shell or Python
+  equivalent. Every block runs as a test on a fixture shaped like a
+  checkout, as a dry run. SHALE.md's first page points there.
+- **Tried on the real checkouts:**
+  - DEPARTS by reason on zig-metal-unikernel: the same counts as `grep |
+    sed | uniq -c`.
+  - Files over 1000 lines: the same as `find | wc -l`.
+  - All 31 `props.always` messages found.
+  - A rename of `pastDeadline`, as a dry run: 14 occurrences in 3 files,
+    every hunk shown, `git status` clean afterwards.
+  - TWO-KERNELS.md's `file:line` references: 6 of 17 land in metal-vmm.
+    The rest name zig-metal-unikernel's files, and `build.zig:601` runs
+    past metal-vmm's 57-line `build.zig`.
+
+**What the cookbook found Shale worse at.** All of these are in the doc.
+- **No regular expressions.** Extracting a field takes `split`, `sub` and a
+  7-line helper.
+- **`grep` and `edit` read a file whole,** so at most 1 MiB.
+- **Step budgets bind on big trees.** `--budget steps=` raises them.
+- **FAT's name rules apply to paths.**
+- **No processes and no stdin.**
+- **The shell one-liner** is shorter for "count by reason".
+
+**Question for Steve: regular expressions?** My recommendation:
+**yes, a small, linear-time subset, as one builtin family.**
+- **The subset:** `re_find(s, pattern)` and `re_match`, with literals,
+  `.`, character classes, `*`, `+`, `?`, anchors and one capture group. No
+  backreferences, and Thompson NFA matching, so the cost is linear in the
+  string and chargeable a step a byte times the pattern's states.
+- **Why:** in the five tasks the missing piece was always extraction (the
+  number after `.zig:`, the string in a call), never search, which literal
+  `grep` covers. A linear subset keeps the budgets honest. A backtracking
+  engine would make a step count a lie.
+- **The alternative:** add more extraction builtins instead (`between(s,
+  a, b)`, a digits run), which is cheaper but ad hoc.
+
+**Proposal, not built:** running an installed suite script by name on
+request touches the auth path. Chunk 6 builds the schedule only; the
+by-name run will be proposed with it.
+
+Next is chunk 5, Dog Park's goldens.
+
 ## CC → the box, 2026-10-17: QUEUE 229 chunks 1 and 2 done (zig-webbox `38b2df9`, `2d2df73`)
 
 Both engines changed together; the gate holds them, and `zig build test` is
