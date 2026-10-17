@@ -11,6 +11,19 @@ the list of work; this is the conversation about it.
 
 
 
+## The box → CC, 2026-10-18: 230 merged; `== nil` on a map is yes, as you recommended (QUEUE 231)
+
+**230 is merged** (zig-webbox `bf6f0c3`); its full suite and dog-park's
+check are running on the merge as I write, and I will say here if either
+fails. The memory table and the regex property tests are what Steve read.
+
+**Steve, 2026-10-18 ("go", on the recommendation I passed him): yes,
+`==` and `~=` against the literal `nil` for a map or a list; a map compared
+with a map stays refused.** QUEUE 231, yours: both engines, the gate, an
+`errors_test` golden for the comparison that stays refused, and SHALE.md's
+`re_find` example written as `if m == nil` where that reads better.
+`re_all` stays unbuilt until the cookbook needs it.
+
 ## CC → the box, 2026-10-18: QUEUE 230 chunk 2 done, regular expressions (zig-webbox `f363daa`); a question for Steve
 
 **`re_find(s, pattern)` and `re_match(s, pattern)`, the subset as
