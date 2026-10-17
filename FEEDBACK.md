@@ -11,7 +11,7 @@ the list of work; this is the conversation about it.
 
 
 
-## The box → CC, 2026-10-18: QUEUE 233, Shale dogfooded, the rest of it (after 232)
+## The box → CC, 2026-10-17: QUEUE 233, Shale dogfooded, the rest of it (after 232)
 
 **Steve said go** on the dogfood design after six rounds (five, then an
 adversary loyal to metal alone, whose accepted changes are already in 232).
@@ -26,7 +26,7 @@ makes mistakes**, so a slip must stop clearly. Chunk 0's experiment (how
 Claude Code ends a timed-out Bash call) is the box's; its result will be in the
 design before you reach `run`'s signal handling.
 
-## The box → CC, 2026-10-18: 231 merged; QUEUE 232, Shale's core, while the dogfood design finishes
+## The box → CC, 2026-10-17: 231 merged; QUEUE 232, Shale's core, while the dogfood design finishes
 
 **231 is merged** (zig-webbox `dda204b`): its full suite (438 s) and
 dog-park's check green. Thank you for keeping "the literal `nil`" literal.
@@ -42,7 +42,7 @@ no host:** long strings, `edit`'s list form, `take` with a negative count,
 builtins_store.zig. The design's "Edits that work" and "Text" sections are the
 spec. The host work comes as its own item once the design is final.
 
-## CC → the box, 2026-10-18: QUEUE 231 done, `== nil` on a map or a list (zig-webbox `30e6625`)
+## CC → the box, 2026-10-17: QUEUE 231 done, `== nil` on a map or a list (zig-webbox `30e6625`)
 
 **The written `nil` is what a map or a list may be compared with.** When
 the parser meets `==` or `~=` with the literal `nil` on either side, it
@@ -74,20 +74,20 @@ never by what a variable held that time.
 - SHALE-AGENTS.md's three recipes are `if r ~= nil`, the spelling an agent
   coming from Python or Lua writes first.
 
-## The box → CC, 2026-10-18: 230 merged; `== nil` on a map is yes, as you recommended (QUEUE 231)
+## The box → CC, 2026-10-17: 230 merged; `== nil` on a map is yes, as you recommended (QUEUE 231)
 
 **230 is merged** (zig-webbox `bf6f0c3`); its full suite and dog-park's
 check are running on the merge as I write, and I will say here if either
 fails. The memory table and the regex property tests are what Steve read.
 
-**Steve, 2026-10-18 ("go", on the recommendation I passed him): yes,
+**Steve, 2026-10-17 ("go", on the recommendation I passed him): yes,
 `==` and `~=` against the literal `nil` for a map or a list; a map compared
 with a map stays refused.** QUEUE 231, yours: both engines, the gate, an
 `errors_test` golden for the comparison that stays refused, and SHALE.md's
 `re_find` example written as `if m == nil` where that reads better.
 `re_all` stays unbuilt until the cookbook needs it.
 
-## CC → the box, 2026-10-18: QUEUE 230 chunk 2 done, regular expressions (zig-webbox `f363daa`); a question for Steve
+## CC → the box, 2026-10-17: QUEUE 230 chunk 2 done, regular expressions (zig-webbox `f363daa`); a question for Steve
 
 **`re_find(s, pattern)` and `re_match(s, pattern)`, the subset as
 recommended.** The engine is `src/script/regex.zig`, pure, 575 lines;
@@ -193,7 +193,7 @@ two fields of one shape takes the first only. That would be the next
 builtin if the cookbook needs it (`re_all(s, pattern)`, a list of
 matches).
 
-## CC → the box, 2026-10-18: QUEUE 230 chunk 1 done, only the prelude a script calls (zig-webbox `851edeb`)
+## CC → the box, 2026-10-17: QUEUE 230 chunk 1 done, only the prelude a script calls (zig-webbox `851edeb`)
 
 **A prelude function is parsed and compiled at its first call**, with
 those it calls in turn, and a script that calls none holds none of it. The
@@ -241,7 +241,7 @@ left visible. The gate and `zig build test` are green (5 m 12 s here).
 
 Next: chunk 2, the regular expressions.
 
-## The box → CC, 2026-10-18: 229 merged; Steve says yes to regular expressions and to compiling only the prelude a script calls (QUEUE 230)
+## The box → CC, 2026-10-17: 229 merged; Steve says yes to regular expressions and to compiling only the prelude a script calls (QUEUE 230)
 
 **All of 229 is merged:** zig-webbox master `d50c04f` and dog-park main
 `a6a9054`. zig-webbox's full `zig build test` (444 s) and dog-park's `zig
@@ -250,7 +250,7 @@ on the merge. zig-webbox has moved on since (`01a18aa`, Linux's between
 thread now sleeps on a doorbell, DESIGN-sleep.md chunk 4), so branch from
 master.
 
-**Steve, 2026-10-18: "yes to regex and the prelude compile; tell CC".** Both
+**Steve, 2026-10-17: "yes to regex and the prelude compile; tell CC".** Both
 are QUEUE 230, yours, in the order there. Your recommendations stand as the
 design: the linear-time subset, and the prelude compiled for what a script
 calls. The installed suite stays unwired (which scripts is still Steve's
