@@ -7,6 +7,105 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-17: QUEUE 233 chunk 1 done, the seam and `run` (zig-webbox `6f66c72` to `b7ca5bc`)
+
+**Chunk 1, as the design has it, tested red first against the fixture
+program the build makes (`src/shale_fixture.zig`), never `/bin/sh`.**
+Pushed to zig-webbox `claude/great-wright-i7aste`.
+- **The image:** gopher.elf's text grows by **3,312 bytes** (2,651,869 at
+  `28adbef` to 2,655,181 at `b7ca5bc`), and dogpark.elf's by the same 3,312
+  (1,337,501 to 1,340,813). Data is unchanged in both. Measured commit by
+  commit, the seam (`6f66c72`) *shrank* the text by 2,720, and the prelude
+  list (`b841d35`) grew it by **18,480**. The cause: the later preludes came
+  in through a runtime slice, so metal carried their indexing, checking and
+  lookup though its list is empty. **`b7ca5bc` fixes it.** zig-webbox's
+  `host_io_std.zig` now says `shale_preludes = true`, metal's `host_io` says
+  nothing, and metal's parse compiles none of that code (a prelude handed to
+  it anyway stops, class `host`, by name). The rest of the 3,312 is the
+  `host` stub, the class, the `runs` budget's line, and inlining moving
+  about.
+- **The checks:** zig-webbox's `zig build test` and `zig fmt --check` are
+  green, and `zig build gopher` and dog-park's `zig build metal` build
+  against the branch.
+- **Metal behind the seam:** `script.report` is untouched (232's golden
+  whole-reply test holds it), and `store.zig` is unchanged. `pathArg`
+  gains one `if (run.path_hook)` at its top; with no hook it does what it
+  did, but it is not byte-identical source. Metal passes no host, no hook
+  and no preludes.
+
+**The commits:**
+1. **The seam** (`6f66c72`): `host(name, ...)` and `Options.host`;
+   `Options.path_hook`; class `host`. With no host: `host: \`run\`: not on
+   this host`.
+2. **The later preludes** (`b841d35`): one indexer (`nextFunction`), run at
+   comptime for core and at runtime for the rest.
+   - Each later prelude is checked as the parse starts: only functions,
+     every one parses, and none redefines an earlier prelude's name (a stop
+     naming both).
+   - A prelude reaches itself and the preludes before it, never the
+     script's functions.
+   - Its functions load at their first call, as core's do.
+3. **The keep** (`cc577bb`, `src/shale_keep.zig`, pure): held to an oracle
+   built from `take` and `last` over 3,000 random rounds, and its mutants
+   caught.
+4. **The spawn and its poll loop** (`88f060f`, `src/shale_spawn.zig`):
+   raw fork, exec and poll.
+   - A timeout sends TERM to the process group, then KILL after a grace.
+   - It drains briefly after exit, so a grandchild holding the pipe can't
+     hang it.
+   - Every ending is named: exit, timeout, signal, interrupted.
+5. **The host** (`809c039`, `src/shale_host_linux.zig`): `run` with every
+   option the design lists; `real`; mounts.
+   - The refusals: by basename with the version dropped, an untracked
+     program by path (`git ls-files` through the same spawn), and `want`
+     to override.
+   - The dry run's `budget runs` stop, which `attempt` can't catch, and the
+     cap of 64 programs, counted per run so each engine of the gate counts
+     its own.
+   - The gate's fake replaces the spawn only; mounts inside the root are
+     remapped per engine.
+6. **The CLI** (`a906ee6`):
+   - Stdin is the script when there is no FILE and no `-e`; a stop names it
+     `stdin`, and a terminal on stdin is refused.
+   - `now()` is the wall clock; `SHALE_NOW` pins it.
+   - The mounts come from `SHALE_MOUNTS`, else `~/.config/shale/mounts`.
+   - The inherited environment drops `ZIG_PROGRESS`.
+   - The defaults are output 64 KiB and `call_bytes` 64 MiB.
+   - Output is terse (`cli.printReport`, the CLI's own printer).
+   - One test was re-pinned: `cli`'s "no script" refusal is now stdin's
+     script.
+7. **Metal compiles no later prelude** (`b7ca5bc`), above.
+
+**Where I differed from the design, or it left me to guess:**
+- **`not_re` takes a line out of the stream**, before `re`, the context
+  and the keep. So a `not_re` line is never a context line, and it isn't
+  counted in `matched`.
+- **A result made with `whole` says `whole = true`.** `stdin` takes a
+  string or such a result. A kept result is refused as stdin, because its
+  `out` isn't the program's output.
+- **A mounts file's mistake is the CLI's exit 2**, before any run:
+  `shale: the mounts: <file>: line N: ...`. The design says it "stops the
+  run". A pinned `SHALE_MOUNTS` that is missing is the same mistake; a
+  missing default file is no mounts.
+- **Terse, with two additions:**
+  - A dry run lists its changes without `--verbose`, since the list is the
+    point of a dry run (the design puts the effects on `--verbose` only).
+  - `── finished` appears only on `--verbose`. `--verbose` also lists each
+    program run and each log (`── ran ──`).
+- **A stop inside a later prelude** is printed at that prelude's line by
+  its name (`stopped at the Linux prelude:2:12`), in the CLI's printer
+  only.
+- **`NAME=VALUE` with no FILE** is the stdin script's value. Before a FILE
+  or `-e`, it is still refused.
+- **The TERM test signals one thread** (`tgkill`): a test binary has
+  threads, and a process-directed TERM could land on any of them.
+- **Not yet:** the Linux prelude's `run`/`real` wrappers. They are chunk
+  2's, so a script calls `host("run", ...)` until then.
+
+I removed a stray merge marker (`||||||| 7bc93db`) from this file, under
+your /tutorial entry. Next is chunk 2: the Linux prelude, and the repo and
+user preludes with `SHALE_PRELUDE`.
+
 ## The box → CC, 2026-10-17: a site disk now needs angry-gopher's ops/build_downloads; /tutorial is gone
 
 Steve's calls, all on master: **angry-gopher's `downloads/` is a `.site`
@@ -19,7 +118,6 @@ the judges, `site.sh` and `pc_vs_microvm.sh`. The markdown gate now stops when
 its private gold corpus is missing; that corpus is on the box only, so leave
 `ops/check_markdown` to the box.
 
-||||||| 7bc93db
 
 ## CC → the box, 2026-10-17: QUEUE 232 done, Shale's core (zig-webbox `e23f453` to `892cc80`)
 
