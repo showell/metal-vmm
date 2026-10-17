@@ -1,6 +1,6 @@
 # metal-vmm
 
-**Active on `master`, 2026-10-09.** A deterministic hypervisor of our own, on
+**Active on `master`.** A deterministic hypervisor of our own, on
 KVM, for one kind of guest: [zig-metal-unikernel](https://github.com/showell/zig-metal-unikernel)'s
 bare-metal kernels, the probes and the real server behind lynrummy.com. It is
 a test machine, never a production one. The same guest with the same seed
@@ -22,18 +22,20 @@ An explorer like Antithesis's, steered by
 toward runs no run has reached yet, is the long-term aim; it is not built,
 and its first step (`docs/SNAPSHOT.md`) is parked.
 
-- **Live work** is in [QUEUE.md](QUEUE.md), one queue for all four repos
-  (zig-coverage-sdk, metal-vmm, zig-metal-unikernel, angry-gopher).
+- **Live work** is in [QUEUE.md](QUEUE.md), one queue for every repo its
+  header names.
 - **A cloud Claude session ("CC")**, which has zig, Python and QEMU under
-  TCG (software emulation, since 2026-10-16) but no KVM, no TAP and no vfat
-  mounts, reads [CLOUD_WORK.md](CLOUD_WORK.md) first.
+  TCG (software emulation) but no KVM, no TAP and no vfat mounts, reads
+  [CLOUD_WORK.md](CLOUD_WORK.md) first.
 - **Agents** read [CLAUDE.md](CLAUDE.md).
 - **"The box"** is Steve's development droplet, where a local Claude works
   with him and KVM and QEMU are available. The guests boot only there.
 
 Every knob is in [KNOBS.md](KNOBS.md); what the machine has found in the guest
-and the application is in [docs/findings.md](docs/findings.md); reviews are in
-[docs/reviews/](docs/reviews/).
+and the application is in [docs/findings.md](docs/findings.md); two kernels
+talking to each other (`PAIR=`) is [docs/TWO-KERNELS.md](docs/TWO-KERNELS.md).
+The box's reviews of CC's branches are in [docs/reviews/](docs/reviews/), each
+dated and frozen at its branch: its line numbers are that branch's.
 
 ## Words this repo uses
 
@@ -72,12 +74,23 @@ filter), and for `check.sh` and `site.sh`, `qemu-system-x86_64`.
 - `./sweep_test.sh`, `./sweep_durable_test.sh` — `sweep.sh`'s verdicts against
   a fake machine; they need zig-coverage-sdk's `tools/report.py` (a sibling
   checkout, or `COVERAGE_SDK=<dir>`).
+- `./nightly_test.sh` — one batch of `nightly.sh` over a fake machine: a
+  failure the report alone finds must reach `failures.log`; needs the same
+  `tools/report.py`.
+- `python3 tools/test_untouched.py`, `python3 tools/test_site_requests.py` —
+  the tests of `sweep.sh`'s helpers in `tools/`: `untouched.py` (a file the
+  request does not touch survives a cut), `site_requests.py` (a site that
+  serves n requests), `fat_taken.py` and `largest_write.py` (clusters taken,
+  and the most one operation writes). Each helper's header says its use.
 - `./sound.sh <image>` — is a disk image still a FAT filesystem; needs only
   `fsck.vfat`.
 
 **Needs `/dev/kvm`**, a built `zig-out/bin/metal-vmm`, and zig-metal-unikernel's
-kernels (`GUESTS`, by default `~/showell_repos/zig-metal-unikernel/probe`, built
-there by `zig build kernels`; `gopher.elf` by `./port.sh && zig build gopher`):
+kernels (`GUESTS`, by default the `probe/` of a zig-metal-unikernel checkout
+beside this one, built there by `zig build kernels`; `gopher.elf` by `zig build
+gopher`, which compiles angry-gopher's and zig-webbox's checkouts beside it,
+or `-Dgopher-root=<dir>` and `-Dwebbox-root=<dir>`). Each script's header
+says what it checks, exactly, and the numbers it holds the guest to:
 
 | | also needs | what it asks |
 |---|---|---|
@@ -87,19 +100,31 @@ there by `zig build kernels`; `gopher.elf` by `./port.sh && zig build gopher`):
 | `./site.sh` | QEMU, curl, the site volume | the real server, here and under QEMU |
 | `./pc_vs_microvm.sh` | the site volume | the PC-shaped machine against the microvm-shaped one |
 | `./lossy.sh` | | which lost frames the guest survives |
-| `./timeouts.sh` | the site disk, mtools | **timeouts judged in the machine's time**: a silent client holds nobody up and is let go at the volume's `idle_timeout_ms`; a reader that pauses just under it gets the whole page (the window probed meanwhile), and just over it is let go; read off each client's opened / answered / closed times. Five seconds for eight runs |
+| `./timeouts.sh` | the site disk, mtools | **timeouts judged in the machine's time**, read off each client's opened / answered / closed times: a silent client holds nobody up and is let go at the conf's `idle_timeout_ms`; a reader that pauses just under it gets the whole page, and just over it is let go; a slow chunked body holds nobody up, and one too slow gets a 408; a slow uploader holds nobody up. Its wall time is unmeasured |
 | `./refused.sh` | `mkfs.vfat`; the site volume for `gopher` | which refused disk requests it survives |
 | `./sweep.sh` | the site volume, zig-coverage-sdk, **a `-Dcoverage` gopher.elf** (`KERNEL=`; a release build reports no properties, and the sweep refuses it) | a range of seeds, each a whole fault schedule |
-| `./pair.sh` | zig-metal-unikernel's `gopher.elf` and `fetch.elf` (`zig build gopher fetch`), the site volume (`SITE`) | **two kernels talking** (`PAIR=`, docs/TWO-KERNELS.md): gopher.elf serves fetch.elf, deterministic; ~50 runs in ~22 s: unhurt twice (byte-identical), the SYN eaten, silent, no ARP, idle, and each side's first 12 and last 8 frames lost in turn, every page against the single-guest run's. Zig-metal-unikernel's tier 3 runs it (`SKIP=pair`) |
-| `./sleeps.sh` | zig-metal-unikernel's `gopher.elf` and `sleeper.elf` (`zig build gopher sleeper`), the site volume (`SITE`), mtools | **a kernel that sleeps** (zig-metal-unikernel's docs/designs/DESIGN-sleep.md): an idle gopher.elf's 60 s under 20,000 exits (307,564 before the sleep), the sleeper's hour of 60 s wakes (`GUEST_S`), each under 1 ms late, the longest rest at 6 ms and 10 s due alike, a request 30 s into a sleep answered in under 20 ms; about 2 s. Zig-metal-unikernel's tier 3 runs it (`SKIP=sleeps`) |
-| `./nightly.sh` | the same | **overnight, detached:** `sweep.sh` with a volume, batch after batch of new seeds for `HOURS` (10), logging as it goes in `~/nightly/<date-time>/` (`progress.log`, `failures.log`, each failing seed's files). `KERNEL_ELF=` a `-Dcoverage` build judges its properties too (through the coverage door, which costs the guest no time); `PEER_REQUEST=requests/post-play.http` sends a write instead of `GET /`, so the volume's faults meet one; `SHAPES=requests/shapes` gives each seed one of ten requests (reads, writes as a player the setup makes, two clients at once), each judged against its own unhurt run |
-| `./plants.sh` | the same, zig-metal-unikernel's port | **does the judge still judge**: the same seeds over a clean kernel, which must fail none, and over one kernel per plant (zig-metal-unikernel's `-Dplant=<name>`, a deliberate bug in its source), each of which must fire (else it is dead) and fail a seed where it fired. Run after every change to the judge. Two plants stand; the full 300 seeds take ~10 minutes |
+| `./pair.sh` | zig-metal-unikernel's `gopher.elf` and `fetch.elf` (`zig build gopher fetch`), the site volume (`SITE`) | **two kernels talking** (`PAIR=`, [docs/TWO-KERNELS.md](docs/TWO-KERNELS.md)): gopher.elf serves fetch.elf, deterministic; about 50 runs: unhurt twice (byte-identical), the SYN eaten, silent, no ARP, idle, and each side's first 12 and last 8 frames lost in turn, every page against the single-guest run's. Zig-metal-unikernel's tier 3 runs it (`SKIP=pair`) |
+| `./sleeps.sh` | zig-metal-unikernel's `gopher.elf` and `sleeper.elf` (`zig build gopher sleeper`), the site volume (`SITE`), mtools | **a kernel that sleeps** (zig-metal-unikernel's docs/designs/DESIGN-sleep.md), judged by its lateness and its halts: an idle server costs few exits; the sleeper's hour of wakes (`GUEST_S`) each on time; the same with its lines on a volume whose write cache cannot be turned off; the longest rest changes nothing the application sees; a request wakes a sleep; and two kernels, the sleeper fetching from gopher.elf (`PAIR_DISK`), with the server silent across two polls (`WIRE_SILENT_S`). Its wall time is unmeasured. Zig-metal-unikernel's tier 3 runs it (`SKIP=sleeps`) |
+| `./nightly.sh` | the same, and **a `-Dcoverage` gopher.elf** (`KERNEL_ELF=`; the default, `probe/gopher.elf`, is the release build zig-metal-unikernel's gates leave there, and the night stops on it) | **overnight, detached:** `sweep.sh` with a volume, batch after batch of new seeds for `HOURS` (10), logging as it goes in `~/nightly/<date-time>/` (`progress.log`, `failures.log`, each failing seed's files); the coverage kernel's properties are judged too (through the coverage door, which costs the guest no time). `PEER_REQUEST=requests/post-play.http` sends a write instead of `GET /`, so the volume's faults meet one; `SHAPES=requests/shapes` gives each seed one of the `*.shape` requests there (reads, writes as a player the setup makes, two clients at once), each judged against its own unhurt run |
+| `./plants.sh` | the same | **does the judge still judge**: the same seeds over a clean kernel, which must fail none, and over one kernel per plant (zig-metal-unikernel's `-Dplant=<name>`, a deliberate bug in its source; the plants are its build.zig's `Plant` enum), each of which must fire (else it is dead) and fail a seed where it fired. Run after every change to the judge; 300 seeds by default |
 | `./check-cc.sh` | the same | the cloud session's branch, in worktrees: built, swept over every request shape for a few seeds, then `plants.sh` — run before its code is reviewed |
+| `./script_story.sh` | `VOLUME_SITE`, the site volume, mtools | **a signed script on the real server, and a disk that fails under it** (QUEUE 200): a bad signature refused, the script signed and unhurt, the volume gone halfway through it, and the next boot refusing the same request as a replay |
 
-"The site volume" is `SITE`, by default
-`~/build/zig-metal-unikernel/probe/gopher/pristine.img`, staged by zig-metal-unikernel's
-`probe/judge_gopher.py` (which needs a loop mount, and so sudo; the scripts
-here only read it).
+"The site volume" is `SITE`: angry-gopher's site as a FAT disk image. The
+scripts here only read it. Build it in zig-metal-unikernel with
+`python3 tools/site_volume.py <out.img>` (from the angry-gopher checkout beside
+it, or a second argument). It writes the image with mtools, so it needs no
+sudo; only `JUDGE_MOUNT=1` reads through a loop mount, with `sudo -n`.
+zig-metal-unikernel's tier 3 and `long.sh` build it fresh at
+`~/build/zig-metal-unikernel/site/pristine.img` and pass it as `SITE`.
+
+**The scripts' own defaults disagree.** `pair.sh` and `sleeps.sh` default
+`SITE` to that path. The others (`sweep.sh`, `site.sh`, `timeouts.sh`,
+`refused.sh`, `pc_vs_microvm.sh`, `nightly.sh`, `script_story.sh`, and
+`VOLUME_SITE` in `plants.sh` and `check-cc.sh`) default to
+`~/build/zig-metal-unikernel/probe/gopher/pristine.img`, which nothing builds.
+Set `SITE` (and `VOLUME_SITE`) by hand: `grep -n 'pristine.img' *.sh` shows
+each default.
 
 ## A storage lab
 
@@ -187,7 +212,7 @@ shortest way into a layer**, and the host half is the emulator.
 
 ## Where it stands
 
-As of 2026-10-09. Two machines: the **microvm-shaped** one (devices in an mmio
+Two machines: the **microvm-shaped** one (devices in an mmio
 window, no interrupts; the one QEMU's `microvm` is compared with) and the
 **PC-shaped** one (`TRANSPORT=pci`). "Checked against QEMU" means `check.sh`
 or `site.sh`; everything else is checked by unit tests and by this machine's
@@ -212,7 +237,9 @@ own repeat runs.
 | the guest's coverage | **works** — its zig-coverage-sdk lines read as printed, a table per run, JSONL for the SDK's report across runs |
 | fuzzing the models | **works** — `zig build fuzz`; nothing may panic and each seed repeats |
 | snapshots | **device side only** — every model's state saved and restored in place (`snapshot.zig`), tested; the vCPU half and branching runs from it are not built |
-| the judge's own check | `plants.sh`: planted bugs the judge must catch, and a clean kernel it must pass; run in full (300 seeds) since 2026-10-10 |
+| a guest that sleeps | **works** — a halt with nothing due moves the clock to the next deadline, so an hour of a sleeping guest costs well under a second (`sleeps.sh`); `GUEST_S` ends a guest that is never quiet |
+| two guests talking | **works** (`PAIR=`, `pair.zig`, `turn.zig`, [docs/TWO-KERNELS.md](docs/TWO-KERNELS.md)) — two processes taking turns, deterministic, gopher.elf serving fetch.elf or the sleeper (`pair.sh`, `sleeps.sh`); `WIRE_TRACE` prints every frame that crosses, `WIRE_SILENT_S` silences one side for a while. Never snapshotted |
+| the judge's own check | `plants.sh`: planted bugs the judge must catch, and a clean kernel it must pass |
 | the explorer | **not built** |
 
 A probe boots in about a tenth of a second, QEMU's `microvm` in about the
@@ -327,9 +354,8 @@ the registers.
                               real rests
 
 With a 5 ms wire each route halts a few times and takes timer and MSI-X
-interrupts both. At 200 ms, `/` halts 361 times, 356 woken by the timer at
-its 1 ms slice, and pays one retransmission timeout, as it should when the
-round trip is longer than the table's least timeout.
+interrupts both. How often a guest halts, and so how much a rest costs, is
+what `sleeps.sh` counts: its header holds the numbers.
 
 ## When a run ends
 
@@ -355,7 +381,7 @@ power-cut knob, or stops making progress:
   guest that rests with nothing to do ends after `PATIENCE_S` seconds of its
   own time (600 by default) with nothing printed and no doorbell rung. An idle
   end is a server's normal end: the disk keeps what the run wrote and the
-  client's lines are printed.
+  client's lines are printed. It still exits 1, since the error says idle.
 - **Watched.** A guest that is never quiet (one that polls on a timer and
   logs every poll) never reaches its patience, so the test says how long it
   watches: `GUEST_S` seconds of guest time, then a normal end, exit 0. A guest that is stuck or faults leaves the image
@@ -363,6 +389,16 @@ power-cut knob, or stops making progress:
 
 The error stream then says what the run cost (exits and guest time), what
 each fault knob did, and the coverage line below.
+
+**The exit code** (`main.zig`'s `main`):
+
+| the run | exits |
+|---|---|
+| the guest exits through the door | the guest's own code |
+| `GUEST_S` ends it | 0 |
+| idle, stuck, a fault, or a disk that will not take the run's writes | 1 |
+| a setting refused, or a pair's client that never starts | 2 |
+| a pair's server (side 0) | its own code when that is not 0; else the client's. A server that ends idle or watched gives the client's |
 
 ## What a run costs
 
@@ -586,6 +622,9 @@ zig-metal-unikernel's history and this repo's [QUEUE-ARCHIVE.md](QUEUE-ARCHIVE.m
   `src/settings.zig` (the knobs, into the faults), `src/knobs.zig` (every
   knob, and what a seed draws), `src/checked.zig` (what each knob's value
   must be: refused, never clamped).
+- **Two machines, one at a time**: `src/turn.zig` (the pure part of a pair:
+  the limit, the wake, the inbox, the end, the messages) and `src/pair.zig`
+  (the host's half: the fork, the socket, the client's settings).
 - **Watching**: `src/coverage.zig` (the guest's coverage lines, one run's and
   many runs').
 - **Checks on this program**: `src/fuzz.zig` and `src/fuzz_main.zig` (the
