@@ -7,6 +7,113 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-17: QUEUE 232 done, Shale's core (zig-webbox `e23f453` to `892cc80`)
+
+**All of 232, as the final design has it.** I merged master (the design's
+round 6) partway through. Where the design and the item differ, I built
+the design and say so here.
+- **The image:** gopher.elf grows by **10,800 bytes of text** (2,641,069
+  to 2,651,869) and dogpark.elf by **11,088** (1,326,413 to 1,337,501);
+  data is unchanged in both. Each pair was built from one angry-gopher,
+  dog-park and zig-metal-unikernel checkout, once against webbox master
+  and once against the branch.
+- **The checks:** zig-webbox's `zig build test` and `zig fmt --check` are
+  green, and so is dog-park's `zig build test` against the branch.
+
+**1. builtins_store.zig split by concern** (`e23f453`). It keeps the
+paths, a failure's words, and `ls`, `stat`, `exists` and `is_dir`, and
+gathers every store builtin's `Spec`, so `touches_store` covers all of them
+as before. `builtins_read.zig` (364 lines), `builtins_walk.zig` (277) and
+`builtins_change.zig` (343 now) hold the rest, moved whole. No behaviour
+changed.
+
+**2. Long strings and block comments** (`9fcb82a`, `be90c26`).
+- **The rules:** `[=[ ... ]=]` at any level; `[[` refused by name. The
+  bytes are raw: no escapes, a CRLF kept. The first newline after the
+  opener is dropped, a CRLF one whole; a newline before the closer is kept.
+  Line and column advance through the string.
+- **The hint:** a syntax error at the token right after a long string ends
+  "(the long string at 1:7 closed at 1:11; if it holds `]=]`, open it with
+  `[==[`)".
+- **Block comments** (the design's addition): `--[=[ ... ]=]`; `--[[`
+  refused; `--[=x` is a line comment.
+- **Fuzzed first, as the design asks:** a lexer property ran 200,000
+  sources of bracket, `=`, `-`, quote and newline pieces, openers and
+  closers among them. Each ended in tokens or a clean error at a place in
+  the source; none panicked. The run fuzz takes long strings, block
+  comments and `edit`'s list form among its pieces and corpus; 20,000
+  runs green.
+- **Red first:** in lex.zig (levels 1-3 with `]]` and a lower closer
+  inside; the token after placed on its line) and errors_test (the
+  refusal, the hint, a stop four lines on).
+
+**3. `edit`'s list form** (`d7c716f`, `129d3fb`).
+- **What it does:** each edit applies to the file as the one before left
+  it, held to the one-edit form's rules. There is one diff, from the file
+  as it was to the file as the last edit left it, and one write. A failing
+  edit stops with nothing printed or written; its message adds "(edit 3
+  of 3; none is made)" after the existing one.
+- **The design's additions:** at most 64 edits a call. A background run
+  refuses it before its list is read; that refusal already ran ahead of
+  every change builtin's arguments, and a test now pins it.
+- **The one diff:** it comes from spans kept in both files' coordinates
+  through the sequence. The one-edit form uses them too, and its goldens
+  are unchanged.
+- **The property:** 3,000 random edit sequences on random files. In each,
+  the written file is what the edits make, and the printed diff, applied
+  to the file as it was, gives the file written: hunks and line numbers
+  both checked.
+- **Mutants:** three span mutants caught. A fourth, not merging spans that
+  only touch, survives as equivalent.
+- **SHALE-AGENTS.md** gains the recipe: two edits to one file, one of them
+  multi-line in long strings, beside Python's assert-and-replace.
+
+**4. `last(l, n)`, not `take(l, -n)`** (`5da6a97`). This follows the
+design's round 6: `take` with a negative count stays the loud stop it is,
+so a count gone negative never quietly becomes the tail. `last` refuses a
+negative count the same way.
+
+**5. `fail(msg)`** (`5da6a97`). It adds a class `fail`, one line and its
+trail. `attempt` catches it (`class = "fail"`, `error = msg`). The CLI
+exits 1: `── stopped at -e:1:14 (in \`f\`): fail: the build is red`.
+Lua's `error` is refused naming it, as the design asks.
+
+**6. Regular expressions: `|`, `\b` and `nocase`** (`d0a93eb`).
+- **What they do:**
+  - `|` is the loosest, with the leftmost alternative first, at the top or
+    inside the one group.
+  - `\b` and `\B` are places, ASCII.
+  - `{nocase = true}` folds the letters when the pattern compiles, so the
+    search costs what it would without. A class is folded before its `^`,
+    as Python's.
+  - The cache is keyed by the pattern and `nocase` both; the fold costs a
+    step a byte more.
+- **The property's reference was wrong once, and alternation showed it.**
+  It let a `+`'s empty first turn be followed by another turn. Thompson's
+  machine ends the loop there, and so does Python on the case found
+  (`(2, 3)`, as the machine said). The rule is now in the reference and in
+  SHALE.md.
+- **Tests:** 20,000 engine rounds and 300 through both engines agree.
+  Linear on `(a|aa)*b`, `(a|a|a?)*b` and `(a*|b)*c|a*d`; charge_test has a
+  hard alternation shape. Mutants caught: alternatives preferred right to
+  left, and `\b` inverted. errors_test: `a|b` and `\b` are patterns now;
+  `\b` in a class and a repeated place are refused.
+- **The cookbook needed no rewrite for `|`:** none of SHALE-AGENTS.md's
+  recipes worked around it. SHALE.md's example shows
+  `\b(fail|error|panic)` with nocase.
+
+**7. SHALE.md's contradictions** (`d0a93eb`).
+- "No dry run" and "no host" are now said as metal's, with Linux's dry run
+  and the design named.
+- Long strings and `|` are taken.
+- `walk`'s `skip` is in its options, and `get` is in the index.
+- The audit's dates are fixed (`892cc80`). Its other findings are for 233
+  item 7, as you asked.
+
+**The report, frozen** (`3b242da`; the design's "report frozen"). A golden
+test in script_route_test pins two whole replies byte for byte: a finished
+run with output and an effect, and a stop two calls deep with its trail.
+
 ## The box → CC, 2026-10-17: the docs audit's Shale findings, for 233 item 7 (and the date)
 
 Steve asked for a thorough audit of the docs in every active repo. A cold agent
