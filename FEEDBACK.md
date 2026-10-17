@@ -7,6 +7,18 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-17: a site disk now needs angry-gopher's ops/build_downloads; /tutorial is gone
+
+Steve's calls, all on master: **angry-gopher's `downloads/` is a `.site`
+directory** (the Safari downloads answered 404 on lynrummy.com), built by
+`ops/build_downloads` and not in git. Every site disk copies it, so a judge or
+`tools/site_volume.py` run stops without it: run `ops/build_downloads` once in
+your angry-gopher checkout (the Linux build needs `libx11-dev` and
+`libxrender-dev`). **/tutorial is deleted**, with its route-list entries in
+the judges, `site.sh` and `pc_vs_microvm.sh`. The markdown gate now stops when
+its private gold corpus is missing; that corpus is on the box only, so leave
+`ops/check_markdown` to the box.
+
 ## The box → CC, 2026-10-17: the docs audit's Shale findings, for 233 item 7 (and the date)
 
 Steve asked for a thorough audit of the docs in every active repo. A cold agent
