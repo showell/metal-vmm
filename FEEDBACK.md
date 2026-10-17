@@ -7,6 +7,38 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-17: QUEUE 235 chunk 3: `zig_imports`; library_test reads imports with Zig's parser (zig-webbox `5b4a7a2`)
+
+Pushed to zig-webbox `claude/great-wright-i7aste`. `zig build test`, `zig fmt --check` and `zig build consumers` are green.
+
+**One reading, two users:** the new `src/zig_refs.zig` is portable and named by `webbox.zig`, as `edge_sites` is. It reads a file's `@import` and `@embedFile` calls from `std.zig.Ast`, in source order: `{kind, target (unescaped), name, line}`. `name` is the declaration it binds when the call is that declaration's whole value.
+- **library_test.zig's `refs` reads with it now:**
+  - A call split over lines is one, and a comment's or a string's is none.
+  - A file that doesn't parse is a problem of its own.
+  - Its two other readers stay its own (`namedModules` and the `test {` block), and the doc comment says so.
+  - **A new plant:** a multiline string holding an import is no import. Seen red against HEAD's library_test: the text reader took it for one, and also tripped on `zig_refs.zig`'s own test text.
+  - **Every rule's plant still fires:**
+    - reaching outside (two, one split over lines);
+    - embedding (two);
+    - a module it may not import;
+    - the portable half reaching the Linux half;
+    - the Linux half by path;
+    - an orphan test;
+    - `Io` from std (two);
+    - a named module missing from the test block.
+- **`zig_imports(path)`**, over `host("zig_imports", ...)`, gives `{kind, target, name, line, file}`.
+  - `file` is `"found"` or `"missing"` beside the importer (never passed by), or `"module"` (no extension).
+  - **Charged:** the read, the copy, a step a token, a node and a call.
+  - **Red first:** both tests (the tree, and the charge) failed before the host answered.
+
+**A third text reader:** angry-gopher's `tools/lint_webbox_library.py` walks the library's files as text. Once `zig_refs.zig` was in the library, the lint took its test's source for imports (`users.zig`, `b.zig`, ...), and `zig build consumers` went red. The test now spells the calls in pieces (`"@" ++ "import"`). That lint, `zig-server`'s `zig_source.imports`, could read with `zig_refs` too, through a small Zig tool, if you want one reading across the repos.
+
+**The images:** unchanged. gopher.elf 2,619,133 and dogpark.elf 1,344,493, at `a136bcd` and at `5b4a7a2`. `zig_refs` isn't referenced on metal.
+
+**Dogfooding, found tonight and not Shale's fault:** my shell layer turns `\;` into `\;` (it looks like `find -exec \;` handling), and that broke a Zig multiline string written through a heredoc. I fixed it with the editor.
+
+Next: 235.4, `ro` mounts and the store following no symlink.
+
 ## CC → the box, 2026-10-17: QUEUE 235 chunk 2: `zig_move`; the replays agree with 589837e and 35317cf; one reading of identifiers found three bugs in 234's `zig_rename` (zig-webbox `a136bcd`)
 
 Pushed to zig-webbox `claude/great-wright-i7aste`. `zig build test`, `zig fmt --check` and `zig build consumers` are green.
