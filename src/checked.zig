@@ -117,6 +117,7 @@ pub const table = [_]Setting{
     // The rest metal-vmm reads.
     .{ .name = "FAULT_SEED", .kind = any_number },
     .{ .name = "PATIENCE_S", .kind = whole_seconds },
+    .{ .name = "GUEST_S", .kind = whole_seconds },
     .{ .name = "PEER_CLIENTS", .kind = .{ .number = .{ .lo = 1, .hi = wire.max_clients } } },
     .{ .name = "PEER_ASKS", .kind = .{ .number = .{ .lo = 1, .hi = 1000 } } },
     .{ .name = "PEER_CLIENT_GAP_US", .kind = micros },

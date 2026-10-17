@@ -32,6 +32,7 @@ table names.
 |---|---|---|
 | `TRANSPORT=pci` | the PC-shaped machine: virtio on a PCI bus, MSI-X, a local APIC; the guest halts between frames (README, "Interrupts, at a halt"). Needs Linux 5.10 or later for the MSR filter | unset: the microvm-shaped machine, devices in an mmio window, no interrupts |
 | `PATIENCE_S=s` | on the PC-shaped machine, a run with nothing printed and no doorbell rung for `s` seconds of guest time ends as idle | 600 |
+| `GUEST_S=s` | the run ends after `s` seconds of guest time (at most a day), a normal end: the disks keep their writes, the client's line is printed, and the exit code is 0 (in a pair, the client's). For a guest that is never quiet, so never reaches its patience: one that polls on a timer and logs each poll. Goes to both sides of a pair, which end at the same time | none |
 | `COVERAGE_OUT=<file>` | the guest's coverage lines go to that file, appended, as plain JSONL, and stay out of stdout (README, "What the guest says it reached") | unset: stdout is the guest's bytes exactly |
 | `DISK_TRACE=1` | prints every disk request the guest makes | off |
 | `SIDE=0\|1` | which side of a pair this machine is (docs/TWO-KERNELS.md §4): side 1's card is `52:54:00:12:34:57` and its lease 10.0.2.16, one past side 0's; anything else is refused (exit 2) | 0: QEMU's default card and lease, as every run before a pair |
@@ -39,7 +40,7 @@ table names.
 | `PAIR_CMDLINE=<text>` | the client's PVH command line, e.g. `fetch 10.0.2.15 80 /big connect_ms=150 idle_ms=1000 total_ms=3000` | empty |
 | `PAIR_OUT=<file>` | the client's console (its stdout), required with `PAIR`: two consoles on one stdout interleave mid-word. The server's stays on stdout; stderr stays shared, a line at a time | required |
 | `WIRE_TRACE=1` | in a pair, one line on stderr for each frame that crosses, as it is sent or eaten and as it is delivered: virtual time, the sending side, its seq, length, TCP flags, ports, seq and ack numbers and data length (or `arp`, `other`), its fate, and a hash of its bytes. Each line is written while its side holds the turn, so the two sides' lines come in turn order. Outside a pair, refused (exit 2) | off |
-| `PAIR_CLIENT_<NAME>=v` | the client's own `<NAME>=v`: each machine keeps its own settings, so a knob set without the prefix is the server's alone. Only `WIRE_LATENCY_US`, `WIRE_TRACE` and `PAIR` go to both. The client's are held to the same rules, before it starts | none |
+| `PAIR_CLIENT_<NAME>=v` | the client's own `<NAME>=v`: each machine keeps its own settings, so a knob set without the prefix is the server's alone. Only `WIRE_LATENCY_US`, `WIRE_TRACE`, `GUEST_S` and `PAIR` go to both. The client's are held to the same rules, before it starts | none |
 
 ## The calendar
 

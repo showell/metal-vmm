@@ -372,6 +372,11 @@ pub const Machine = struct {
     /// How long, in its own time, a guest may rest without doing anything
     /// before the run ends as idle. `PATIENCE_S`; ten minutes by default.
     patience_ns: u64 = 600 * std.time.ns_per_s,
+    /// **HOW LONG A TEST WATCHES**, in the guest's own time: `GUEST_S`. A
+    /// guest that is never quiet (one that polls on a timer and logs every
+    /// poll) never reaches its patience, so the test says when it has seen
+    /// enough, and the run ends as a normal end. Null: no limit.
+    watch_ns: ?u64 = null,
     /// Reads of addresses no device answers. The guest looks for virtio in a
     /// window this program does not fill yet, and a window of zeros is what
     /// "nothing is plugged in there" looks like from inside.
@@ -389,6 +394,12 @@ pub const Machine = struct {
     fn rested(self: *Machine) bool {
         self.quiet = 0;
         return self.time.ns - self.progress_ns > self.patience_ns;
+    }
+
+    /// True once the guest's time reaches `GUEST_S`.
+    fn watched(self: *const Machine) bool {
+        const limit = self.watch_ns orelse return false;
+        return self.time.ns >= limit;
     }
 
     /// An MSR the filter sent here, read: IA32_TSC from this machine's own
@@ -567,6 +578,7 @@ const census = .{
     .{ "quiet", Holds.value, "" },
     .{ "progress_ns", Holds.value, "" },
     .{ "patience_ns", Holds.value, "" },
+    .{ "watch_ns", Holds.value, "" },
     .{ "absent", Holds.value, "" },
 };
 
@@ -782,6 +794,10 @@ fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine: *M
             report(vcpu, machine.ram, text);
             return error.GuestStuck;
         }
+        if (machine.watched()) {
+            std.debug.print("metal-vmm: the guest has run {d} s of its own time, as GUEST_S asked, so the run ends\n", .{machine.time.ns / std.time.ns_per_s});
+            return error.GuestWatched;
+        }
         const exit_reason: kvm.Exit = @enumFromInt(run.exit_reason);
         machine.cost.exit(switch (exit_reason) {
             .io => io: {
@@ -968,15 +984,17 @@ fn reportVolume(machine: *const Machine) void {
 /// client's.
 /// **WHICH ENDS KEEP WHAT THE GUEST WROTE** (QUEUE.md item 42): one that
 /// ended as the guest meant, by its exit door or a power cut it was dealt,
-/// and an idle one, which is a server's normal end. Not a crash, a guest
+/// an idle one, which is a server's normal end, and one watched for as
+/// long as `GUEST_S` asked. Not a crash, a guest
 /// that faulted or got stuck, or anything KVM refused: the image is left as
 /// it was found, and a timeout from outside never gets here at all.
 fn keepsWrites(e: anyerror) bool {
-    return e == error.GuestIdle;
+    return e == error.GuestIdle or e == error.GuestWatched;
 }
 
 test "an idle end keeps the guest's writes; a stuck, faulted or failed one does not" {
     try testing.expect(keepsWrites(error.GuestIdle));
+    try testing.expect(keepsWrites(error.GuestWatched));
     for ([_]anyerror{ error.GuestStuck, error.GuestFaulted, error.KvmFailed, error.Unhandled }) |e| {
         try testing.expect(!keepsWrites(e));
     }
@@ -1337,6 +1355,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         };
     }
     if (count(init.environ, "PATIENCE_S")) |seconds| machine.patience_ns = seconds * std.time.ns_per_s;
+    if (count(init.environ, "GUEST_S")) |seconds| machine.watch_ns = seconds * std.time.ns_per_s;
     // **COVERAGE LINES TO A FILE OF THEIR OWN**, appended: each boot of a
     // sweep adds its lines to the same JSONL, as the judge's do.
     if (init.environ.getPosix("COVERAGE_OUT")) |out_path| {
@@ -1472,13 +1491,16 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
                 return 1;
             };
         };
-        if (e == error.GuestIdle and fetch != null) theClient(init.environ, &card.peer);
-        // A pair's server ending idle is its normal end: the verdict is the
-        // client's.
+        if (keepsWrites(e) and fetch != null) theClient(init.environ, &card.peer);
+        // A pair's server ending idle or watched is its normal end: the
+        // verdict is the client's.
         if (machine.turns != null) {
             const client = endPair(&link, machine.time.ns, client_pid);
-            if (e == error.GuestIdle and side == 0) return client;
+            if (keepsWrites(e) and side == 0) return client;
         }
+        // Watched as long as asked is no verdict on the guest: the judge
+        // reads what it printed.
+        if (e == error.GuestWatched) return 0;
         return e;
     };
     // **WHAT THE WIRE DID, IF IT WAS ASKED TO DO ANYTHING**, on the error
@@ -1703,6 +1725,17 @@ test "a guest that rests past its patience with nothing done is idle; anything d
     machine.progressed();
     machine.time.ns += 5 * std.time.ns_per_s;
     try testing.expect(!machine.rested());
+}
+
+test "a run watched for GUEST_S ends once the guest's time reaches it, and never without it" {
+    var machine = Machine{};
+    machine.time.ns = 100 * std.time.ns_per_s;
+    try testing.expect(!machine.watched());
+    machine.watch_ns = 30 * std.time.ns_per_s;
+    machine.time.ns = 30 * std.time.ns_per_s - 1;
+    try testing.expect(!machine.watched());
+    machine.time.ns += 1;
+    try testing.expect(machine.watched());
 }
 
 test "the census: every field of the machine is named, and is what it says (metal-vmm QUEUE 113)" {

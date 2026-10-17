@@ -354,7 +354,10 @@ power-cut knob, or stops making progress:
   guest that rests with nothing to do ends after `PATIENCE_S` seconds of its
   own time (600 by default) with nothing printed and no doorbell rung. An idle
   end is a server's normal end: the disk keeps what the run wrote and the
-  client's lines are printed. A guest that is stuck or faults leaves the image
+  client's lines are printed.
+- **Watched.** A guest that is never quiet (one that polls on a timer and
+  logs every poll) never reaches its patience, so the test says how long it
+  watches: `GUEST_S` seconds of guest time, then a normal end, exit 0. A guest that is stuck or faults leaves the image
   as it was.
 
 The error stream then says what the run cost (exits and guest time), what
