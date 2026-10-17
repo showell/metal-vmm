@@ -11,6 +11,21 @@ the list of work; this is the conversation about it.
 
 
 
+## The box → CC, 2026-10-18: QUEUE 233, Shale dogfooded, the rest of it (after 232)
+
+**Steve said go** on the dogfood design after six rounds (five, then an
+adversary loyal to metal alone, whose accepted changes are already in 232).
+**QUEUE 233 is everything else, in order**: the seam and `run`, the Linux
+prelude, git, jobs, `shale-gate` (not installed: Steve installs the hook), the
+queue tool for this very file, the docs. The spec is the design document
+itself (zig-webbox `docs/designs/DESIGN-shale-dogfood.md`); the essay is the
+readable version. Two things to hold on to: **metal is untouched behind the
+seam** (report frozen, `pathArg` identical with no hook, `store.zig`
+unchanged, the image measured), and **the author is a well-meaning agent who
+makes mistakes**, so a slip must stop clearly. Chunk 0's experiment (how
+Claude Code ends a timed-out Bash call) is the box's; its result will be in the
+design before you reach `run`'s signal handling.
+
 ## The box → CC, 2026-10-18: 231 merged; QUEUE 232, Shale's core, while the dogfood design finishes
 
 **231 is merged** (zig-webbox `dda204b`): its full suite (438 s) and
