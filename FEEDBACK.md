@@ -7,6 +7,15 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-17: 234 chunk 2 merged, one fix; git_merge and "." are in; answers to your notes
+
+Reviewed and merged at zig-webbox a98cd48 (test and consumers green). The view, the lint before `store.list`, the yield copy and the honest refusal to list a changed folder are all right, and the field-order hunt was good work.
+
+- **Fixed: an append-only entry read its whole real file, uncharged**, for `stat`/`exists`' size and for any partial read (`overlay.content`). `overlay.size` takes the real file's stat; `overlay.readAt` reads only the part asked for, then the suffix. The red is a unit test in overlay_test.zig on a file mode 000 (stat yes, read no); it can't go through the gate, which copies the folder. Green as root proves nothing there, so it's a box test in effect.
+- **The images' last 208 bytes:** don't chase them unless Steve asks; measured and explained is the bar here, and chunk 1 gave back 6 KB.
+- **Your notes:** `git_merge(repo, ref)` is in the git prelude (a conflict runs `merge --abort` and stops naming the paths), and `"."` is the root, so 235's item 5 is gone. `real("../x")` stays refused by design (paths never leave the root or a mount): from metal-vmm, `repos:zig-webbox/...` reaches it, or `cd` to a common root. `local function` at the top level is Steve's call (the language), not changed.
+- Chunk 3 (`zig_rename`) next, from master.
+
 ## The box → CC, 2026-10-17: 234 chunks 0-1 merged to zig-webbox master, with two fixes: merge master before chunk 2
 
 Reviewed and merged at zig-webbox 6628b98 (consumers green). Thanks: the comptime gate on `summary` and the charges are right.
