@@ -5,7 +5,7 @@ angry-gopher, zig-webbox and dog-park: what is open, and who has it.
 **Finished, retired and answered items are in
 [`QUEUE-ARCHIVE.md`](QUEUE-ARCHIVE.md)**, one line each by number with the
 commits they name; their full text is `git show 3697b1c:QUEUE.md` and `git show
-3697b1c:QUEUE-ARCHIVE.md`. New items continue from 234. The conversation between
+3697b1c:QUEUE-ARCHIVE.md`. New items continue from 236. The conversation between
 the two Claudes is [`FEEDBACK.md`](FEEDBACK.md) (older entries:
 [`FEEDBACK-ARCHIVE.md`](FEEDBACK-ARCHIVE.md)); the cloud session's charter is
 [`CLOUD_WORK.md`](CLOUD_WORK.md).
@@ -26,7 +26,7 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
   its message names the commits. Dog Park serves dogpark.lynrummy.com.
 - **Built, not deployed (Steve's):** the Observatory's droplet (228). Dog
   Park's release with `/version` serves (its `/version` names the commit).
-- **CC:** 234, in order. 233 is done and merged. `?` (optional parameters) stays (Steve, 2026-10-17). The `shale-gate` hook is installed on the box (2026-10-17): top-level Claude runs only Shale; subagents are exempt (zig-webbox SHALE-AGENTS.md, "The gate").
+- **CC:** 234, in order, then 235 (it builds on 234). 233 is done and merged. `?` (optional parameters) stays (Steve, 2026-10-17). The `shale-gate` hook is installed on the box (2026-10-17): top-level Claude runs only Shale; subagents are exempt (zig-webbox SHALE-AGENTS.md, "The gate").
 
 ## CC: open
 
@@ -36,6 +36,90 @@ adversarial.** Every item here runs on the host: `zig build test
 takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
+
+**235. Shale reads Zig with Zig's parser: `zig_decls`, `zig_move`, `zig_imports`; read-only mounts; the git prelude's root: CC'S, after 234** (Steve, 2026-10-17: "I agree with your plan to use the zig tokenizer. ... divvy up that work among you, CC, and cold agents"). The evidence: the essay `notes/request-edges-and-zig-quirks.md` (https://github.com/showell/essay-repl-server/blob/master/notes/request-edges-and-zig-quirks.md), "What tooling this argues for", items 2 to 4; and the linux_host split, done by hand: zig-webbox 589837e (linux_writes) and 35317cf (linux_reads). A cold adversarial review shaped this text (the box's, 2026-10-17; it checked the citations at zig-webbox 7e2f379 and Zig 0.16's `lib/std/zig/Ast.zig`). zig-webbox, from master once 234 is merged: it builds on 234's host pattern (`host("zig_rename", ...)` in src/shale_host_linux.zig `call`) and core's `rewrite`. Both engines and the gate; `zig build consumers` before each push. **Metal behind the seam, as in 233 and 234:** gopher.elf's and dogpark.elf's images measured before and after each chunk and unchanged; `script.report` frozen (232's golden); all of it Linux-prelude only, gated at comptime. The box reviews each chunk as it lands and writes the docs' recipe.
+
+**The analysis is Zig's parser and identifier tokens, not types.** Say so in SHALE-AGENTS.md, with the limits below, and that the compiler judges after (`same_tests.shale`).
+
+1. **`zig_decls(path)`: a file's top-level declarations, from `std.zig.Ast`.**
+   - **Parsing:** `Ast.parse(..., .zig)` does not fail on bad syntax: `tree.errors.len != 0` stops the run, naming the first error's line (`tokenLocation`), and gives no partial list.
+   - **Each is a map:**
+     - `kind`: `"fn"`, `"const"`, `"var"`, `"test"`, `"comptime"`, or `"field"` (a file's root may hold container fields; never skipped).
+     - `name` and `name_form`: `name_form` is `"identifier"` (a declaration, a field, `test foo {}`), `"string"` (`test "..."`) or `"none"` (`test {}`, `comptime`), and then `name` is `""`.
+     - `visibility`: `"pub"` or `"file"`. `linkage`: `"none"`, `"extern"` or `"export"`. Both are enums.
+     - `first`/`last`: lines, 1-based, inclusive. `start`/`stop`: bytes.
+     - `comment_above`: `{first, last}` or absent. These are the plain `//` lines directly above it: contiguous, no blank line between them and the declaration or its doc comment.
+   - **The span:**
+     - It starts at its doc comment. Doc comments have no node, so walk back from `tree.firstToken(decl)` over `.doc_comment` tokens. `firstToken` already covers `pub`, `extern`, `export` and `inline`.
+     - It ends at the `}` or `;` that ends it. A var decl's or proto's `lastToken` excludes the `;`, so take the next token when it is `.semicolon`.
+     - `//!` lines belong to no declaration.
+   - **The API:** `rootDecls()`, `fullVarDecl`, `fullFnProto` (`visib_token`, `extern_export_inline_token`, `body_node`), and `.test_decl`'s name token. (`usingnamespace` is gone from 0.16.)
+   - **In file order, spans never overlap, and every gap between spans holds only whitespace and comments** (no token but comment tokens). That is the property, over the repo's own `src/**/*.zig`; "the spans and gaps rebuild the file" alone proves nothing.
+   - **Red first:**
+     - from `git show 589837e^:src/linux_host.zig`:
+       - a `pub fn` with a doc comment;
+       - `const Hold = struct` (:527) with its nested members: only `Hold` is listed;
+       - a `test "..."` block;
+       - `const Statfs = extern struct` (:1363): its kind is `const`, its linkage `none`;
+     - hand-written fixtures for the rest:
+       - an `extern fn` with no body and an `export fn` (their linkage);
+       - a doc comment holding `{`;
+       - `test foo {}` beside `const foo`;
+       - two `test {}`;
+       - a root field;
+       - a parse error.
+   - **Charges:** the file read, its `dupeZ`, and a step per token and per Ast node; the host's charge test (N and 4N).
+   - It replaces the box's `~/shale-scripts/file_map.shale` (regular expressions), which the box retires.
+
+2. **`zig_move(from, to, names, opts?)`: move top-level declarations between files, and say what the move broke** (built on 1).
+   - **Naming what to move:** `names` entries are a bare name, or `{kind = ..., name = ...}` when a bare name matches more than one (`test foo {}` and `const foo`). A name found twice, or not at all, stops it with nothing written. A `name_form = "none"` declaration can't be named, so it can't be moved; say so.
+   - **What it does:**
+     - It cuts each span from `from` with the whitespace after it, up to the next token or comment. That leaves exactly one blank line where the declaration was between two others, and none at the end of the file.
+     - `opts.comment = "doc"` (the default) takes the doc comment; `"doc_and_plain"` also takes `comment_above`.
+     - It puts the declarations in `to` in `from`'s order, one blank line between each and before the first. They go at the end, or after the declaration `opts.after` names; an `after` name missing in `to` stops it.
+     - It writes through core's `rewrite`: one logged `edit` per file, the run's `diffs` setting, the dry run and 234's overlay, budgets.
+   - **It gives** `{moved = n, needs_pub, needs_import, needs_from_from, uses_left}`, each a list of `{name, line}`:
+     - `needs_pub`: moved declarations that are `file`-visible and still used in `from`. 589837e's `Hold` (:527), `Sent` (:593) and `WriteWatch` (:703) were `const X = struct` and needed `pub`. It also lists members `y` of a moved `X` that are not `pub` and are named as `X.y` in `from`: 35317cf's `Progress.Ended`, from `git show 35317cf^:src/linux_host.zig`. It does not add `pub`.
+     - `needs_import`: identifiers in the moved code that name a top-level `const` of `from` whose value is an `@import(...)` (`std`, `Io`, `net`): copy that import into `to`, as `{name, target}`. These are never in `needs_from_from`.
+     - `needs_from_from`: identifiers in the moved code that name any other top-level declaration still in `from`, such as 35317cf's `sleepMs`. Each one needs `from` imported and the name made `pub`, or the helper copied (35317cf copied `sleepMs`). The script chooses.
+     - `uses_left`: each line in `from` that still names a moved declaration, ready for `zig_rename(from_path, "x", "mod.x")`. 589837e's `kept_write_deadline_ms` was already `pub` (:506), and its uses at :483 and :1427 are the red here.
+   - **What the analysis skips:**
+     - an identifier right after `.` (a field, a declaration access, an enum literal: the essay's `.watch`);
+     - a field's declaration, an identifier followed by `:` inside a container (`stream: net.Stream,`).
+   - **Known limits, stated and pinned by a red each, never silent:**
+     - Methods called through a value (`progress.end(.deadline)`, `old.end(.replaced)`) are not reported; 589837e needed `pub` on the three structs' methods.
+     - Names reached through an `@This()` alias (the essay's `host_file`) are not reported.
+     - The compiler finds both.
+     - A local or parameter can't shadow a top-level name in Zig (the essay's quirk 6), so shadowing is no risk: say that as the reason, not as a limit.
+   - **Red first:** the cases above, from both commits. Moving `Hold` lists `std` and `Io` in `needs_import` and not in `needs_from_from`.
+   - **The property:** over one contiguous run of declarations, neither first nor last in the file and separated by single blank lines, moving them to an empty file and back (with `after` the declaration before them) gives `from` byte for byte.
+   - **The recipe** (SHALE-AGENTS.md, the box's after the chunk), in order:
+     1. `zig_move`;
+     2. `zig_rename` for each of `uses_left`;
+     3. `pub` per `needs_pub`;
+     4. the imports per `needs_import`;
+     5. import or copy per `needs_from_from`;
+     6. the new file into the root's `test {}` block (library_test went red without it in both commits);
+     7. `same_tests.shale`.
+     
+     The box reruns 589837e and 35317cf as this recipe on a worktree, against the commits it made by hand, and reports the diffs.
+
+3. **`zig_imports(path)`: a file's `@import` and `@embedFile` calls, from the same Ast.**
+   - **Each is a map:** `{kind = "import" | "embed", target, name, line, file}`.
+     - `name` is the declaration it binds (`const host_io = @import("host_io");` gives `host_io`), or `""` for one used inline (`@import("x.zig").T`).
+     - `file` is `"found"`, `"missing"` or `"module"` (a target with no `.zig`, `.shale` or other extension, such as `std` or `host_io`). A missing file is reported, never skipped.
+   - **One reading:** zig-webbox `src/library_test.zig`'s own reader, `refs` (:38-56), which collects imports and embeds, moves into a module both use, as `edge_sites.parseSites` is shared. Two of its readers stay its own: the root's `pub const NAME = @import("....zig")` names (:97-105) and the `test {` block (:153). Say so there.
+   - **Each of library_test's rules gets a plant that still fires** after the move (a refactor plants its own failures); list them in the commit.
+
+4. **Read-only mounts.**
+   - **The format:** the mounts file is `SHALE_MOUNTS` or `~/.config/shale/mounts` (shale_host_linux.zig `loadMounts` :80; no CLI option). A line may end in ` ro`: `Mount.access: enum { read_write, read_only }`. Any other trailing word is refused, and so is a path with a space. Today's `parseMounts` (:42) reads everything after `=` as the path, so an older binary would take `~/zig-0.16.0 ro` as a path ending " ro": the new reader is the fix, and the box writes ` ro` only once it is merged.
+   - **The refusal:** at one point every change passes (`changeAt` and `rewrite`, and `remove`'s and `create`'s own paths if they do not pass it), `refused: mount <name> is read-only`, before anything is written. A test lists every change builtin (`edit`, `replace`, `create`, `append`, `remove`, `zig_rename`, `zig_move`, `edits_all`) through an `ro` mount, so a new one can't skip it quietly.
+   - **Reads and programs:** a read through it works. A `run` with its `cwd` there runs, since Shale cannot see what a program writes; SHALE-AGENTS.md says so.
+   - It builds on the box's mounts (234's "Not in this item").
+
+5. **The git prelude takes its root.** `git_commit(".", ...)` (and every git prelude call) from the repo's own root stops today: `"."` is not a name (SHALE-WANTS `git-prelude-dot`). `"."` means the root itself. Red first.
+
+**Report** in FEEDBACK after each chunk: commits, tests (red first), both images' sizes.
 
 **234. Shale, from the first afternoon under the ban: diffs as a setting, a dry run that sees its own changes, a rename that knows Zig: CC'S, in order** (Steve, 2026-10-17: "Please come up with fixes to the 6 pain points. Slice off a decent piece of work for CC"). The evidence: the essay `notes/shale-from-the-inside.md` (https://github.com/showell/essay-repl-server/blob/master/notes/shale-from-the-inside.md) and zig-webbox `docs/SHALE-WANTS.md` (quiet-edit, dry-run-overlay, zig-rename). A cold adversarial review shaped this text (the box's, 2026-10-17); where it cites code, the citations were checked at zig-webbox 816ae11. zig-webbox, from master. Both engines and the gate; `zig build consumers` before each push. **Metal behind the seam, as in 233:** gopher.elf's and dogpark.elf's images measured before and after each chunk; `script.report` frozen (232's golden); what metal never uses is gated at comptime (the `host_io` pattern at parse.zig's `shale_preludes`), never only false at runtime.
 
