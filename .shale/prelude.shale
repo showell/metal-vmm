@@ -56,6 +56,20 @@ function queue_archived(text)
   return got
 end
 
+-- The archive's lettered lines (`- **B14.** ...`, the box's and the
+-- proposals' ids), each with its line: an id, like a number, is
+-- archived once.
+function queue_archived_ids(text)
+  local got = {}
+  local i = 0
+  for l in lines(text) do
+    i = i + 1
+    local m = re_find(l, "^- \\*\\*([A-Z][0-9]+)\\.")
+    if m ~= nil then push(got, {id = m.group, line = i}) end
+  end
+  return got
+end
+
 -- FEEDBACK.md's entries (`## <who> → <who>, <date>: <title>`), each with
 -- its line, date and heading; and the headings that are not entries, but
 -- for the one pointing at the archive.
@@ -76,7 +90,8 @@ end
 -- ── checking ────────────────────────────────────────────────────────────
 
 -- **EVERY VIOLATION OF THE GRAMMAR**, `file:line: what`: a number used
--- twice (in QUEUE.md, in the archive, or one in both), QUEUE.md's items
+-- twice (in QUEUE.md, in the archive, or one in both), a lettered id
+-- (`B14`) archived twice, QUEUE.md's items
 -- not newest first within a section, a FEEDBACK heading that is not an
 -- entry's, entries not newest first. Empty when all is well.
 function queue_check(dir?)
@@ -93,6 +108,14 @@ function queue_check(dir?)
       push(got, ap .. ":" .. a.line .. ": " .. a.n .. " is archived twice (also line " .. in_archive[k] .. ")")
     else
       in_archive[k] = a.line
+    end
+  end
+  local ids = {}
+  for a in queue_archived_ids(read_or(ap, "")) do
+    if has_key(ids, a.id) then
+      push(got, ap .. ":" .. a.line .. ": " .. a.id .. " is archived twice (also line " .. ids[a.id] .. ")")
+    else
+      ids[a.id] = a.line
     end
   end
   local seen = {}

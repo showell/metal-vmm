@@ -640,7 +640,8 @@ to insert:
   part.
 - **Numbers are unique across QUEUE.md and QUEUE-ARCHIVE.md together.** An
   archived number is never reused, and the next is one past the highest in
-  either.
+  either. A lettered id (`- **B14.**`, the box's and the proposals') is
+  archived once too.
 - **Within a section of QUEUE.md, items are newest first.**
 - **An archived item is one line**, `- **N.** title: outcome; commits named:
   ...`, the newest at the top of the archive's newest section.

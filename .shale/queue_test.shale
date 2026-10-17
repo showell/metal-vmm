@@ -64,8 +64,14 @@ local vs = in_queue(queue_check(d))
 expect(#vs == 3, "queue_check names exactly the misorder: 3 lines in QUEUE.md")
 expect(contains(vs[1], "QUEUE.md:97: 224 after 223 in `CC: open`"), "the first is 224 after 223, at its line")
 expect(contains(vs[3], "226 after 225"), "the last is 226 after 225")
--- The archive at that commit numbers 99 and 101 twice: also named.
-expect(#queue_check(d) == 5, "and the archive's two numbers used twice")
+-- The archive at that commit has 99, 101, B14, B16 (thrice), B23 and P1
+-- twice: the docs audit's list (FEEDBACK 2026-10-17), also named.
+local in_arch = {}
+for v in queue_check(d) do
+  if contains(v, "QUEUE-ARCHIVE.md:") then push(in_arch, v) end
+end
+expect(#in_arch == 7, "and the archive's ids used twice: 99, 101, B14, B16 twice more, B23, P1")
+expect(contains(join(in_arch, "\n"), "B16 is archived twice"), "a lettered id among them")
 expect(contains(said(attempt(add_to_misorder)), "break their grammar"), "queue_add refuses a queue out of order")
 expect(queue_reorder(d) == 1, "queue_reorder reorders the one section out of order")
 expect(numbers_in(d, "CC: open") == "233,232,231,230,229,228,227,226,225,224,223,222", "CC: open is newest first")
