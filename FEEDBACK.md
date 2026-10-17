@@ -11,6 +11,72 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-17: QUEUE 229 chunks 1 and 2 done (zig-webbox `38b2df9`, `2d2df73`)
+
+Both engines changed together; the gate holds them, and `zig build test` is
+green.
+
+**Chunk 1, a stop's call trail (`38b2df9`).**
+- **How it works:** `Run.calls` records where each call the run is in was
+  made. It is pushed as a call starts, and removed only when the call
+  returns, so a stop finds the whole list. `attempt`'s catch cuts it back,
+  in the walker and in the VM alike. `Stop.trail` is that list.
+- **The report:** its first line is unchanged. A `called from seq N:L:C
+  (in `f`)` line follows for each call, innermost first. A call made inside
+  the prelude reads `called from the prelude:L:C`. The route's one-line log
+  entry is unchanged.
+- **`attempt`:** its failure map gains `trail`, a list of `{line, column,
+  in_function}`. The key is `in_function`, not `function`: `function` is a
+  keyword, so a script could not write `t.function`.
+- **The gate compares trails,** except for a machine-budget stop that both
+  engines make. Those are at the same place but can be at different depths
+  of the same recursion, because each engine's machinery spends memory
+  differently.
+- **Tests:** red first in `errors_test.zig`: a nested call, a recursion, a
+  prelude stop called from the script, the report's lines, and `attempt`.
+  A VM mutant that records every call site as top-level makes the gate
+  panic.
+- **Readers checked:** Dog Park's `test_shale.mjs` only matches
+  `/finished/` and `/stopped/`. No other reader parses past the first
+  line.
+
+**Chunk 2, partial results at a budget (`2d2df73`).**
+- **`walk(p, {keep_reads = n})`:** a part ends, with its `more` entry,
+  before an entry could take the reads left below n. An entry takes at
+  most 2 reads: its stat, plus a listing for a folder. If there is no room
+  for the walk's own listings and one entry, it reads nothing and returns
+  only `{kind = "more"}` at `after`. It counts only, so it is
+  deterministic.
+- **Two new prelude functions:**
+  - `walk_upto(p, opts, keep)` returns `{entries, more, done}`;
+  - `room_for(need)` returns whether `budget()` holds `need`.
+- **The five scripts:** each now prints what it found, then `resume after
+  <path>`, and takes `const START` to go on from there.
+  - `where_the_bytes_are` and `big_files` walk with `keep = 0`.
+  - `chat_topics`, `find_message` and `stale_caches` let the walk take at
+    most half the reads. They guard each topic's work with `room_for` and
+    resume after the last topic they finished.
+- **Red first:** `where_the_bytes_are` on 600 files, under the site's
+  budgets, stopped on reads inside `walk_all` and printed nothing, as it
+  did live.
+- **Tests now:** for that fixture and for the other four scripts on 300
+  topics, chaining runs from each `resume after` adds up to the whole
+  run's count. A prelude test sweeps reads from 3 to 13 and keep from 0 to
+  3: every run keeps what it was told to keep, and the parts add up to the
+  whole walk.
+- **`shale_scale`** counts a `resume after` answer as partial, not a fit.
+  I did not run `zig build shale-scale` itself.
+
+**One cost to know about:** the prelude is parsed and compiled for every
+run, into machine memory. With `walk_upto` and `room_for` its tree crossed
+a chunk's doubling. A run now holds 112 KiB of machine memory after the
+compile, where it held 48 KiB (`interp_test`'s bound now says so).
+- **Proposal:** compile only the prelude functions a script calls. The
+  parser knows its calls. That would also keep the prelude free to grow.
+  Say if you want it.
+
+Next is chunk 3, lenient reads.
+
 ## CC → the box, 2026-10-16: QUEUE 225 chunk 12c written: `WIRE_TRACE` (metal-vmm `6b39572`)
 
 **What it is:** `WIRE_TRACE=1` in a pair. It goes to both sides, and is
