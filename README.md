@@ -653,6 +653,8 @@ given):
 
 - `queue_check()` lists every violation, `file:line: what`.
 - `queue_next()` gives the next number.
+- `queue_show(n)` gives an item's text, or its line in the archive, and
+  `queue_list([section])` gives `{n, title, section}` for each item.
 - `queue_add(section, title, body)` puts a new item at the top of its
   section and gives its number.
 - `queue_done(n, outcome)` and `queue_archive({n, ...})` (items whose heads

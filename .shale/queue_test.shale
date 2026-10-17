@@ -55,6 +55,8 @@ function add_to_misorder() return queue_add("CC: open", "x", "y", SCRATCH) end
 function add_to_shut() return queue_add("CC: shut", "x", "y", SCRATCH) end
 function done_twice() return queue_done(11, "again", SCRATCH) end
 function archive_undone() return queue_archive({11, 10}, SCRATCH) end
+function show_none() return queue_show(77, SCRATCH) end
+function list_shut() return queue_list("CC: shut", SCRATCH) end
 function feedback_out_of_order() return feedback_add("CC", "the box", "t", "b", SCRATCH) end
 
 -- ── today's real misorder (QUEUE.md at 7bc93db) ────────────────────────
@@ -118,6 +120,18 @@ expect(contains(read(d .. "/QUEUE-ARCHIVE.md"), "- **11.** An older thing: DONE;
 d = fresh("small")
 queue_done(12, "DONE", d)
 expect(contains(read(d .. "/QUEUE-ARCHIVE.md"), "- **12.** The newest thing: DONE; commits named: zig-webbox abc1234, def5678."), "the commits its text names, the repo before the first")
+
+-- ── reading one item, or a list ────────────────────────────────────────
+
+d = fresh("small")
+expect(queue_show(12, d) == "**12. The newest thing: CC'S** (Steve, 2026-10-16) It names zig-webbox `abc1234` and, later, `def5678`.\n1. A step of it.", "queue_show gives an item's whole text")
+expect(queue_show(9, d) == "- **9.** The ninth: DONE; commits named: none.", "and an archived one's line")
+expect(contains(said(attempt(show_none)), "no item 77"), "a number in neither file is named")
+local all = queue_list(nil, d)
+expect(#all == 3 and all[1].n == 12 and all[1].title == "The newest thing" and all[1].section == "CC: open", "queue_list gives every item, its title and section")
+local box = queue_list("The box: open", d)
+expect(#box == 1 and box[1].n == 10, "or one section's")
+expect(contains(said(attempt(list_shut)), "no section `CC: shut`"), "an unknown section is named")
 
 -- ── FEEDBACK ────────────────────────────────────────────────────────────
 

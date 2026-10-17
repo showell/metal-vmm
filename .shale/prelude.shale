@@ -239,6 +239,51 @@ function queue_archive_line(n, ls, block, outcome)
   return "- **" .. n .. ".** " .. queue_title(ls[block.from]) .. ": " .. outcome .. "; commits named: " .. named .. "."
 end
 
+-- ── one item, or a list ────────────────────────────────────────────────
+
+-- **ITEM `n`'s TEXT**: its lines in QUEUE.md, or its line in the archive;
+-- a failure if neither has it.
+function queue_show(n, dir?)
+  local ls = lines(read(queue_path(dir, "QUEUE.md")))
+  for i = 1, #ls do
+    local m = re_find(ls[i], "^\\*\\*([0-9]+)\\. ")
+    if m ~= nil and parse_int(m.group) == n then
+      local b = queue_block(ls, n)
+      local text = {}
+      for k = b.from, b.to do push(text, ls[k]) end
+      return join(text, "\n")
+    end
+  end
+  for l in lines(read_or(queue_path(dir, "QUEUE-ARCHIVE.md"), "")) do
+    local m = re_find(l, "^- \\*\\*([0-9]+)\\.\\*\\*")
+    if m ~= nil and parse_int(m.group) == n then return l end
+  end
+  fail("`queue_show`: no item " .. n .. " in QUEUE.md or its archive")
+end
+
+-- **THE ITEMS**, `{n, title, section}` each in the file's order: every
+-- one, or `section`'s.
+function queue_list(section?, dir?)
+  local qp = queue_path(dir, "QUEUE.md")
+  local text = read(qp)
+  local ls = lines(text)
+  local q = queue_parse(text)
+  if section ~= nil then
+    local found = false
+    local names = {}
+    for sec in q.sections do
+      push(names, "`" .. sec.name .. "`")
+      if sec.name == section then found = true end
+    end
+    if not found then fail("`queue_list`: no section `" .. section .. "` in QUEUE.md; there are " .. join(names, ", ")) end
+  end
+  local got = {}
+  for it in q.items do
+    if section == nil or it.section == section then push(got, {n = it.n, title = queue_title(ls[it.line]), section = it.section}) end
+  end
+  return got
+end
+
 -- ── changing ────────────────────────────────────────────────────────────
 
 -- **A NEW ITEM**, `**N. title** body`, at the top of `section`, N the next
