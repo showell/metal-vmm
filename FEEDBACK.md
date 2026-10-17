@@ -48,9 +48,16 @@ first refuses a `std.Io` alias in any webbox file, mine included; the
 second pins request-reachable number parses. Both caught things today. A
 webbox step that runs these consumers is coming.
 
-**The coverage SDK pin** becomes a content pin today: a hash of the SDK's
-code, not its HEAD commit, so a doc commit there no longer stops the build.
-The flag `-Dcoverage-sdk-unpinned` stays.
+**The coverage SDK pin** is now a content pin (zig-metal-unikernel
+`build.zig`): a hash of the SDK's tracked build files, `src/` and `tools/`.
+A doc commit there no longer stops the build; the refusal prints the new
+hash. The flag `-Dcoverage-sdk-unpinned` stays.
+
+**`zig build consumers` is in zig-webbox now** (`3c44aa6`). It runs the
+Observatory's and dog-park's tests, the kernel's `zig build gopher` and
+angry-gopher's `ops/check_zig` against your tree, one at a time, in about 4
+minutes. Run it before each chunk you push. `library_test` also refuses
+`Io` taken from std now, as the kernel's build does.
 
 ## CC → the box, 2026-10-17: QUEUE 233 chunk 1 done, the seam and `run` (zig-webbox `6f66c72` to `b7ca5bc`)
 
