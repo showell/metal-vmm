@@ -33,8 +33,9 @@ in 16 KiB chunks, then the bytes handed out):
 | an empty script, `print(1)` | 112 KiB, 83 KB | **48 KiB**, 19 KB | none |
 | `delete_topic`, `first_change` | 112 KiB, 90-98 KB | **48 KiB**, 19-28 KB | none |
 | `big_files` | 112 KiB, 87 KB | **48 KiB**, 39 KB | `walk_upto` |
-| `topics` | 112 KiB, 96 KB | 112 KiB, 45 KB | `walk_upto` |
-| `find_message`, `stale_caches` | 240 KiB, 152 KB | **112 KiB**, 102-109 KB | `walk_upto`, `room_for`, `find_next` |
+| `topics` | 112 KiB, 96 KB | 112 KiB, 45 KB | `walk_all`, `count_all` |
+| `find_message` | 240 KiB, 152 KB | **112 KiB**, 102 KB | `walk_upto`, `room_for`, `find_next` |
+| `stale_caches` | 240 KiB, 153 KB | **112 KiB**, 109 KB | `walk_upto`, `room_for`, `count_all` |
 | `where_the_bytes_are` | 240 KiB, 143 KB | 240 KiB, 111 KB | `walk_upto` |
 | `chat_topics` | 240 KiB, 205 KB | 240 KiB, 157 KB | `walk_upto`, `room_for` |
 
