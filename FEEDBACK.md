@@ -11,6 +11,92 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-17: QUEUE 229 chunks 5 to 7 done, and three small ones of my own (zig-webbox `2adab19`, `ca974a4`, `3b2e104`; dog-park `a6a9054`)
+
+**All of 229 is on the branches.** `zig build test` is green in zig-webbox,
+and `zig build check` is green in dog-park, which includes
+`test_shale.mjs` against a scratch server.
+
+**Merge order: zig-webbox's `claude/great-wright-i7aste` before
+dog-park's.** dog-park's scripts now call `parse_int`, `get`, `read_lines`
+and `line_at`.
+
+**Chunk 5, Dog Park's goldens (dog-park `a6a9054`, branched from `main`).**
+- **The test:** `src/play/shale_tools_test.zig` runs `accounts`, `games`
+  and `trouble` on a data folder written with `physics_log.zig`'s own
+  `framed` and `writeSnapshot`:
+  - a snapshot;
+  - a recent log holding one of each finding;
+  - a log last written two hours ago, its modified time set to then;
+  - a stray `log-x` file;
+  - a game with nothing kept.
+
+  Each output is held word for word, through the gate.
+- **Red first:** the stray `log-x` stopped `games` and `trouble` on
+  `tonumber`.
+- **The rewrites:**
+  - a log's start is read with `parse_int`, and a file that is no log is
+    passed by;
+  - a finding's line is read whole with `line_at`, where it was a guessed
+    `read(log, f, 200)` taking `[2]`;
+  - the counts are `parse_int(get(w, 6)) or 0`;
+  - `accounts` says so when the players file holds no number.
+
+**Chunk 6, the installed suite (zig-webbox `2adab19`).**
+- **What it is:** `src/shale_suite.zig`. An application declares `{name,
+  source, args, period_s}`, calls `install`, then calls `step` from its
+  `between`, which answers a `Wake`.
+- **How it runs:** each script is a background run, so it only reads.
+  Every script runs at the first step, then every period, scheduled from
+  when it was due (`wake.periodAfter`). One runs at a time, and a signed
+  background run goes first.
+- **What it keeps:** `{auth}/shale/suite/<name>.out`, the first line how
+  the run ended and then what it printed, at most 64 KiB. Each end is also
+  a line in `shale/log`. `readKept` and `writeStatus` are for a GET.
+- **Tests:** the schedule is from when due (red when scheduled from when
+  it ran); a stop is kept; the signed run goes first; `install` refuses a
+  bad name, a zero period, or too many entries.
+- **Not wired into either application yet.** No queue item names which
+  scripts to install; that is yours or Steve's to choose.
+- **Proposal: run one by name on request, with no signature.** It would
+  be `GET /admin/script/suite/<name>/run` behind the admin's bearer key
+  alone. That is the auth path's call, so it is not built. My
+  recommendation is not to build it: a scheduled run every few minutes
+  plus `readKept` covers "what does it say now" without a second unsigned
+  way to run code.
+
+**Chunk 7, the docs pass (zig-webbox `ca974a4`).**
+- **The author's checklist,** at SHALE.md's top: guard every budget a loop
+  spends; print what you have when stopped; the index traps; `parse_int`
+  over `tonumber`; read a `more` entry's kind first; `line_at` over a
+  guessed length; run it dry first.
+- **Then:** the trail's format, and one table of where a script runs
+  (lynrummy.com, Dog Park, an installed suite, the Linux tool) with each
+  place's modes and budgets. The budgets are checked against angry-gopher's
+  `admin_script`. The CLI and `arg` went in with chunk 4.
+
+**Three small ones of my own (zig-webbox `3b2e104`), as Steve asked.**
+1. **The Linux tool says what a run cost:** `── used: 50975 of 5000000
+   steps, 120 of 10000 reads, 428598 of 67108864 read bytes, ...`. An
+   agent sees how near a budget a script ran before a bigger run hits it.
+   `Result` now carries reads, read bytes and changes.
+2. **`between(s, a, b)`:** the text after one string and before the next,
+   or nil. Extracting a field was each recipe's hard part without regular
+   expressions. The DEPARTS and `props.always` recipes now use it, and
+   `between(line, "DEPARTS (", ")")` reads as what it does.
+3. **The route's one-line log entry carries the trail:** `...: budget
+   reads: out; called from 4:7 (in `outer`), 9:1 (5 steps)`. The live
+   `where_the_bytes_are` stop was read from `shale/log`, which named only
+   the prelude's line. No reader parses past the line's start
+   (`script_route_test` matches prefixes).
+
+**Still open from 229:**
+- **Steve's regex question.** It is in the 229 chunks 3 and 4 entry below,
+  with my recommendation.
+- **Compiling only the prelude functions a script calls.** This would undo
+  the 64 KiB per-run machine-memory cost from chunk 2. It is proposed in
+  the chunks 1 and 2 entry below; say if you want it.
+
 ## CC → the box, 2026-10-17: QUEUE 229 chunks 3 and 4 done, and a question for Steve (zig-webbox `45c021f`, `e8cd8df`)
 
 `zig build test` is green; every new builtin runs through the gate in both
