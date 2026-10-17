@@ -11,6 +11,112 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-18: QUEUE 230 chunk 2 done, regular expressions (zig-webbox `f363daa`); a question for Steve
+
+**`re_find(s, pattern)` and `re_match(s, pattern)`, the subset as
+recommended.** The engine is `src/script/regex.zig`, pure, 575 lines;
+the builtins are `builtins_regex.zig`, 78 lines.
+- **What a pattern can hold:** literals, `.` (no newline), classes
+  (`[a-z]`, `[^...]`, a `]` first is the byte), `\d \w \s` inside a
+  class or out, `*`, `+`, `?`, `^`, `$` (the string's ends only), `\n \t
+  \r`, and `\` before punctuation for the byte. **One capture group,** which
+  may repeat. Beyond the list: `\D \W \S`, two lines of code, which I
+  added.
+- **What is refused,** by name and saying what to write instead:
+  - `|`, `{n,m}`, a second `(`, `(?...)`;
+  - `\1`, `\b`, unknown letter escapes;
+  - lazy `*?`, a repetition repeated (`a**`), `[:alpha:]`;
+  - a `)` or `[` left open, a reversed range, a pattern of more than 256
+    bytes.
+
+  All of these are `argument` stops: there is no `limit` class, and the
+  call-bytes caps stop as `argument` too.
+- **`re_find` gives the leftmost match a backtracking matcher finds
+  first:** `{at, text}`, with `at` 1-based as `find`'s, and `group` when
+  the pattern has one (`""` where the match didn't go through it). It gives
+  nil for no match. **`re_match`** says whether there is a match anywhere,
+  as `grep` does; `^...$` pins it to the whole string.
+
+**How it works, and what it costs.**
+- **The machine:** a pattern compiles to a Thompson program. Pike's
+  machine runs the threads in order of preference, with a per-list stamp
+  so each instruction is followed at most once per place.
+- **The charge:** a step per byte of the string, plus one for its end,
+  times the pattern's instructions. The search is offered only as many
+  places as the steps left cover, so it stops at the budget, not after.
+- **The compile:** a pattern compiles once per run. The run's cache keeps
+  the 8 used most recently, by their text, in the machine's memory, freed
+  in `Run.deinit`. A miss costs a step a byte.
+- **Measured** (props_test, exact): `a*b` on 20,000 `a`s is 100,013 steps,
+  which is 20,001 places × 5 instructions, 4 to compile and the call's 4.
+  `(a*)*b` is 180,020 steps (9 instructions), and four times the string
+  is four times the steps, within 1%. `like`'s `*a*a*b` is still the
+  language's only search that backtracks.
+
+**Tests:**
+- **The property, against a backtracking matcher written in the test:**
+  20,000 random patterns of the subset on random strings, with the match's
+  start, end and group text compared. The reference never parses: the
+  generator builds a tree, the test renders the tree to the pattern's
+  text, and the reference reads the tree, so a parser bug can't hide on
+  both sides. 300 more rounds go through a Shale script and both engines,
+  through the gate.
+- **The rule the reference had to state:** a loop's turn that matches
+  nothing ends the loop as failed, as a Thompson machine's does. Perl and
+  Python take that turn instead, so `(a?)*` on "a" gives the group "a"
+  here and "" in Python (checked). SHALE.md says so.
+- **Cost:** the linear-cost property above. charge_test has a case for
+  each builtin, plus two hard shapes (`(a*)*b`, and
+  `a?a?a?a?a*a*a*$`) held to the work-per-step bound.
+- **Errors:** 20 goldens in `errors_test.zig`, one per construct the
+  subset leaves out.
+- **Edge cases** in `builtins_test`: the empty pattern, `$`, `^`, `.`
+  against a newline, a group that took no part, a repeated group, `]` in
+  a class, and twelve patterns used twice, past the cache's eight.
+- **Mutants caught:**
+  - a `*` that prefers fewer;
+  - `.` matching a newline;
+  - new starts after a match;
+  - a wrong group end;
+  - a charge without the instructions factor (exact count: 20,009, where
+    100,013 was expected).
+- **Missed on the first full run:** the linear-cost test's ±100 slack was
+  too tight for a 21-instruction pattern. A search pays its compile and
+  its end once, so the bound is now relative.
+
+`zig build test` and `zig fmt --check` are green.
+
+**The cookbook takes its fields with `re_find`,** and SHALE-AGENTS.md
+says what each task uses (`grep` for the lines, `re_find` for the field;
+`glob` and `count_lines` alone for big files; `edit` with `word` for the
+rename, a literal).
+- **DEPARTS reasons:** `DEPARTS \((\w+)\)`. On zig-metal-unikernel's
+  real `src/tcp*.zig` it counts the same as `grep | sed | uniq -c` (23
+  lines, six reasons).
+- **`props.always` messages:** `props\.always\([^"]*"([^"]*)"`, the
+  call's first string literal. On the real `src/` it gives the same 31
+  lines as Python's `re`.
+- **The doc-reference check:** `(\w+\.zig):\d+`, the name as the group
+  and the number after it. It replaces a seven-line digits helper and two
+  `substitute`s. The doc now calls it "about even with Python" where it
+  said "Python wins".
+
+**Question for Steve: should `m == nil` be allowed when `m` is a map?**
+`re_find` is the first builtin that gives a map or nil. `==` with a map on
+either side is a `type` stop today ("`==` on a list or a map is not in
+this language"), so `if m == nil` stops. `if m then` works, as Lua's
+truthiness does, and that is what the docs say.
+- **My recommendation: yes, but only `==` and `~=` against the literal
+  `nil`.** That is the comparison people will write; a map compared with a
+  map would stay refused.
+- **It is a language change** in both engines and the gate, so it is
+  Steve's call.
+
+Not done: `re_find` from an offset, or every match of a line. A line with
+two fields of one shape takes the first only. That would be the next
+builtin if the cookbook needs it (`re_all(s, pattern)`, a list of
+matches).
+
 ## CC → the box, 2026-10-18: QUEUE 230 chunk 1 done, only the prelude a script calls (zig-webbox `851edeb`)
 
 **A prelude function is parsed and compiled at its first call**, with
