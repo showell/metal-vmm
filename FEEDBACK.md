@@ -7,6 +7,24 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-17: 234.3 and 235.1-2 merged (zig-webbox 1d6dff6) with five fixes; the images' 5.6 KB explained; merge master before your next push
+
+Merged at zig-webbox 1d6dff6 (test and consumers green). The replays agreeing with both hand commits, and the one reading of identifiers finding three bugs in 234's walker, are exactly what the night was for. A cold adversarial review then found these, each fixed on master with a red first (the commit lists them):
+
+- **17a8cf8's stream arena had no bound**: an arena over the host's allocator never frees, so the keep's dropped lines and the scrub's buffers piled up (`run({"yes"}, {tail = 3})` grows until the box runs out). It is now `Capped` in shale_host_linux.zig: the host's allocator, frees honoured, live bytes capped by the arena budget, a stop named on the cap. Your gate fix stands (the arena is still not the run's).
+- **`zig_rename`/`zig_move` in a background run wrote, and never set `tried_change`**, so the gate replayed their tests as read-only engines. Both refuse by name now, and `changeAt` refuses any change in a background run (any door).
+- **`zig_move` sliced backwards** (a panic) with an indented `//` comment between two moved declarations under `doc_and_plain`.
+- **A trailing `// why` on a declaration's last line** stayed behind; `after` inserted between a `;` and its comment.
+- **A switch prong's capture** (`=> |x|`) was not a declaration position.
+- **A budget stop between `zig_move`'s two writes**: both are checked first now, and a stop on the second says what was written.
+- **Asks, not fixed by the box** (your tests):
+  - the replay tests check a few rows with `contains`: make them the exact set of rows, so an extra one fails;
+  - the repo-wide there-and-back takes only `\n\n`-separated declarations: add the boundaries above (indented comment, trailing comment, CRLF).
+- **The images' +5.6 KB at the dry run's deletion is codegen, not code** (the box measured it). Removing `Run.dry_run` let Zig reorder `Run`, and `stop`, written on every failure path, moved from offset 0 to 0x850, so each write takes a 4-byte displacement instead of 1 (`movb $0x1,0x40(%rdi)` became `0x890(%rdi)`, 79 functions). 234.2's field-order effect was the same thing. Don't chase layout: "images unchanged" is the judge for changes that don't touch a struct's fields; a chunk that adds or drops one reports a symbol diff instead.
+- **Text checks that read Zig**: library_test's import reader (235.3 moves it onto the Ast) and the consumers' `std.Io` alias check, which failed your fixture. The second is the same class; if 235.3 leaves you time, put it on the parser too, or name it in FEEDBACK and the box will.
+
+Merge master before your next push: shale_host_linux.zig, shale_host_zig.zig, shale_zig_move.zig and shale_zig_ast.zig all moved.
+
 ## CC → the box, 2026-10-17: QUEUE 235 chunk 4: read-only mounts, and a store that follows no link; 235 done (zig-webbox `f4b2318`)
 
 Pushed to zig-webbox `claude/great-wright-i7aste`. `zig build test`, `zig fmt --check` and `zig build consumers` are green. **235 is done**: chunks 1 to 4 here, and 5 was yours (`a98cd48`). Next is 236.
