@@ -19,8 +19,9 @@ past what it holds, a number past its most, a volume's knob with no
 `VOLUME`. Nothing is read as "no fault" or cut to fit. **Nor is a name in
 these families that metal-vmm does not read**: a misspelling stops the run
 too, apart from the scripts' own names (`VOLUME_SITE`, `VOLUME_SEEDS`,
-`VOLUME_LUN`, `VOLUME_TARGET`: `script_names`). `src/checked.zig` holds what
-each one must be.
+`VOLUME_LUN`, `VOLUME_TARGET`: `script_names`). `src/checked.zig`'s `table`
+holds what most must be; a few it takes as any text and `main.zig` checks
+itself (`SIDE`, `RTC_BOOTS_AT`, `WIRE_SILENT_S`).
 
 The source of truth is `src/settings.zig` (the knobs into the faults),
 `src/knobs.zig` (the full list, and what a seed draws), and the module each
@@ -35,13 +36,13 @@ table names.
 | `GUEST_S=s` | the run ends after `s` seconds of guest time (at most a day), a normal end: the disks keep their writes, the client's line is printed, and the exit code is 0 (in a pair, the client's). For a guest that is never quiet, so never reaches its patience: one that polls on a timer and logs each poll. Goes to both sides of a pair, which end at the same time | none |
 | `COVERAGE_OUT=<file>` | the guest's coverage lines go to that file, appended, as plain JSONL, and stay out of stdout (README, "What the guest says it reached") | unset: stdout is the guest's bytes exactly |
 | `DISK_TRACE=1` | prints every disk request the guest makes | off |
-| `SIDE=0\|1` | which side of a pair this machine is (docs/TWO-KERNELS.md §4): side 1's card is `52:54:00:12:34:57` and its lease 10.0.2.16, one past side 0's; anything else is refused (exit 2) | 0: QEMU's default card and lease, as every run before a pair |
-| `PAIR=<client kernel>` | two machines taking turns (docs/TWO-KERNELS.md §4): this one is side 0, the server, and it forks and execs metal-vmm again as side 1 running `<client kernel>`, joined by a socket. Needs `WIRE_LATENCY_US` over 0 (the lookahead L) and refuses a receiver-side fault knob (`PEER_EAT`, `PEER_LOSS`, `PEER_DAMAGE`, `PEER_DAMAGE_RATE`, `PEER_MANGLE`, `PEER_MANGLE_RATE`, `PEER_MANGLE_KIND`), on either side; exit 2. The exit code is the server's when it failed, else the client's (the server's idle end is its normal one). `WIRE_EAT` and `WIRE_LOSS` count only the frames that cross | unset: one machine |
+| `SIDE=0\|1` | which side of a pair this machine is ([docs/TWO-KERNELS.md](docs/TWO-KERNELS.md) §4): side 1's card is `52:54:00:12:34:57` and its lease 10.0.2.16, one past side 0's; anything else is refused (exit 2). `PAIR` sets it for the client; a server given `SIDE=1` is refused | 0: QEMU's default card and lease, as every run before a pair |
+| `PAIR=<client kernel>` | two machines taking turns ([docs/TWO-KERNELS.md](docs/TWO-KERNELS.md) §4): this one is side 0, the server, and it forks and execs metal-vmm again as side 1 running `<client kernel>`, joined by a socket. Needs `WIRE_LATENCY_US` over 0 (the lookahead L) and refuses a receiver-side fault knob (`PEER_EAT`, `PEER_LOSS`, `PEER_DAMAGE`, `PEER_DAMAGE_RATE`, `PEER_MANGLE`, `PEER_MANGLE_RATE`, `PEER_MANGLE_KIND`), on either side; exit 2. The exit code is the server's when it failed, else the client's (the server's idle end is its normal one). `WIRE_EAT` and `WIRE_LOSS` count only the frames that cross | unset: one machine |
 | `PAIR_CMDLINE=<text>` | the client's PVH command line, e.g. `fetch 10.0.2.15 80 /big connect_ms=150 idle_ms=1000 total_ms=3000` | empty |
 | `PAIR_OUT=<file>` | the client's console (its stdout), required with `PAIR`: two consoles on one stdout interleave mid-word. The server's stays on stdout; stderr stays shared, a line at a time | required |
 | `PAIR_DISK=<file>` | the client's boot disk, a raw image: an application kernel's conf and data (the sleeper's `sleeper.conf` and its lines). Its writes are kept at a normal end, as any disk's are | none: the client has no disk (fetch.elf needs none) |
-| `WIRE_SILENT_S=a-b` | every frame this machine sends from `a` to `b` seconds of its own time is lost, whatever its number (a machine gone quiet, which `WIRE_EAT`'s count cannot say once the other side asks again); `WIRE_EAT` still counts them. The run says how many. In a pair, the side it is set on (`PAIR_CLIENT_WIRE_SILENT_S` for the client) | none |
 | `WIRE_TRACE=1` | in a pair, one line on stderr for each frame that crosses, as it is sent or eaten and as it is delivered: virtual time, the sending side, its seq, length, TCP flags, ports, seq and ack numbers and data length (or `arp`, `other`), its fate, and a hash of its bytes. Each line is written while its side holds the turn, so the two sides' lines come in turn order. Outside a pair, refused (exit 2) | off |
+| `PAIR_FD=n` | set by `PAIR` for the client, never by hand: the client's end of the socket | |
 | `PAIR_CLIENT_<NAME>=v` | the client's own `<NAME>=v`: each machine keeps its own settings, so a knob set without the prefix is the server's alone. Only `WIRE_LATENCY_US`, `WIRE_TRACE`, `GUEST_S` and `PAIR` go to both. The client's are held to the same rules, before it starts | none |
 
 ## The calendar
@@ -65,6 +66,7 @@ a failure. The last three exist to reach zig-metal-unikernel's refusals of a clo
 | `WIRE_EAT=n[,m,lo-hi]` | the guest's nth frame is lost | none |
 | `WIRE_LOSS=k` | one of the guest's frames in `k` is lost (seeded dice) | none |
 | `WIRE_LATENCY_US=us` | each frame takes `us` microseconds of the machine's clock to arrive, each way | 0 |
+| `WIRE_SILENT_S=a-b` | every frame this machine sends from `a` to `b` seconds of its own time is lost, whatever its number (a machine gone quiet, which `WIRE_EAT`'s count cannot say once the other side asks again); `WIRE_EAT` still counts them. The run says how many. In a pair, the side it is set on (`PAIR_CLIENT_WIRE_SILENT_S` for the client) | none |
 
 The wire holds 64 frames and drops the oldest when a 65th comes. What the
 peer has to say on its own (a flood, a timer) waits for room instead, so a
@@ -200,7 +202,7 @@ disk's does. Nothing below changes anything unless `VOLUME` is set.
 | `VOLUME_GONE_AT=n` | from the nth command on, every command is BAD_TARGET, as when a DO volume is detached under a running droplet | none |
 | `VOLUME_SECTOR=n` | READ CAPACITY says a sector is `n` bytes (4096, say) and counts the disk in them; transfers stay 512, since a driver that takes only 512 refuses the disk at bring-up, before any | 512 |
 | `VOLUME_MODE_PAGES=none` | MODE SENSE answers with its header alone, no caching page | the caching page |
-| `VOLUME_WCE_FIXED=1` or `=ignore` | a write cache (`VOLUME_CACHE=1`) that cannot be turned off: MODE SENSE's changeable values say WCE is not changeable, and a MODE SELECT setting WCE=0 is refused (INVALID FIELD IN PARAMETER LIST). With `=ignore` (metal-vmm QUEUE 119) WCE is said to be changeable, the MODE SELECT answers GOOD, and the cache stays on: only the page read back shows it. Without it, MODE SELECT turns the cache off and later writes go through | the cache can be turned off |
+| `VOLUME_WCE_FIXED=1` or `=ignore` (`=0` names the default) | a write cache (`VOLUME_CACHE=1`) that cannot be turned off: MODE SENSE's changeable values say WCE is not changeable, and a MODE SELECT setting WCE=0 is refused (INVALID FIELD IN PARAMETER LIST). With `=ignore` (metal-vmm QUEUE 119) WCE is said to be changeable, the MODE SELECT answers GOOD, and the cache stays on: only the page read back shows it. Without it, MODE SELECT turns the cache off and later writes go through | the cache can be turned off |
 | `VOLUME_SHORT_AT=n` | the nth READ or WRITE moves the first half of its bytes and answers GOOD with the rest as its residual, a legal underrun: a driver that ignores the residual serves a read's stale half, or calls a half-written write done | none |
 | `VOLUME_MAX_TRANSFER=n` | INQUIRY's Block Limits page (B0h) says the disk carries at most n sectors in one command, and a READ or WRITE past it is ILLEGAL REQUEST: zig-metal-unikernel must ask the page and keep its requests within it (QUEUE 180.1; fewer than a cluster refuses the mount) | none |
 | `VOLUME_READ_ONLY_AT=n` | read-only from the nth command: MODE SENSE says WP and every WRITE is DATA PROTECT, while reads and SYNCHRONIZE CACHE still answer, as a DO volume the host has made read-only after an I/O error | none |
@@ -225,23 +227,9 @@ eight) and `PEER_MANGLE` (one in four) are drawn last of all.
 
 **With `VOLUME` set**, a seed also draws the volume's faults, on dice of
 their own (`Knobs.withVolume`), so every knob a seed drew without a volume it
-draws the same with one: `VOLUME_CACHE` (half the time; `lie` a quarter of
-those), `VOLUME_CUT_AFTER`, `VOLUME_SYNC_FAIL` and `VOLUME_SYNC_FAIL_FOR`,
-`VOLUME_ATTENTION_AT`, and `VOLUME_CACHE_KEEPS` half the times it draws
-`VOLUME_CACHE`; and one time in eight, last of all, one of `VOLUME_GONE_AT`,
-`VOLUME_READ_ONLY_AT` and `VOLUME_SHORT_AT`, at a command from 1 to 250: a
-write the volume refuses (QUEUE 135); and, in one seed in sixteen that drew
-none of those three, `VOLUME_GONE_AT` at a command from 1 to 60, so a sweep
-of 300 seeds loses the volume during boot every time (QUEUE 203(a)); and,
-in one seed in four that lost it no way above, `VOLUME_READ_ONLY_AT_WRITE`
-at one of its first 16 writes, so a give-back the volume refuses, and the
-plant `counted_leak_short`, is judged in every sweep (QUEUE 203(c)). Not
-`VOLUME_LATENCY_US`, which a sweep would wait out.
-
-Never drawn: the rates, `PEER_FLOOD_AT_US`, `DISK_BAD_SECTOR`,
-`DISK_READS_ONLY`, `PEER_IGNORE_WINDOW`, `DISK_CACHE`, `PEER_RETRY`,
-`RTC_BOOTS_AT`, `PEER_DRIP_US`, `PEER_PIPELINE`, `DHCP_LEASE_S`; `knobs.zig`
-says why for each.
+draws the same with one. Which volume knobs it draws, with what chance and
+from what range, and which knobs no seed ever draws and why, are in the same
+header of `src/knobs.zig`.
 
 ## `sweep.sh`'s own settings
 
@@ -250,9 +238,9 @@ default); its header is the reference.
 
 | variable | what it does | default |
 |---|---|---|
-| `GUESTS` | where the kernels are | `~/showell_repos/zig-metal-unikernel/probe` |
+| `GUESTS` | where the kernels are | the `probe/` of the zig-metal-unikernel checkout beside this one |
 | `KERNEL` | the guest; it must be built `-Dcoverage` | `$GUESTS/gopher.elf` |
-| `SITE` | the **boot disk** (virtio-blk) every run gets a fresh copy of: the site's files | `~/build/zig-metal-unikernel/probe/gopher/pristine.img` |
+| `SITE` | the **boot disk** (virtio-blk) every run gets a fresh copy of: the site's files (README, "The site volume", says how to build it) | `~/build/zig-metal-unikernel/probe/gopher/pristine.img`, which nothing builds: set it |
 | `PATH_WANTED` | the path fetched | `/` |
 | `TRANSPORT` | the machine | `pci` |
 | `FLOOR=<file>` | a coverage floor the merged report is gated on | none |
