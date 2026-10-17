@@ -26,7 +26,7 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
   its message names the commits. Dog Park serves dogpark.lynrummy.com.
 - **Built, not deployed (Steve's):** the Observatory's droplet (228). Dog
   Park's release with `/version` serves (its `/version` names the commit).
-- **CC:** nothing queued; 233 is done and merged. Waiting on Steve: the `shale-gate` hook, and `?` (optional parameters) kept or replaced.
+- **CC:** nothing queued; 233 is done and merged. `?` (optional parameters) stays (Steve, 2026-10-17). The `shale-gate` hook is not installed; its subagent exemption is checked live (zig-webbox SHALE-AGENTS.md, "The gate").
 
 ## CC: open
 
