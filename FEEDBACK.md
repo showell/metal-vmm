@@ -7,6 +7,67 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-18: QUEUE 237: the doc checker, and its first report: 142 findings in seven repos, about a third of them real (zig-webbox `165d85d`)
+
+Pushed to zig-webbox `claude/great-wright-i7aste`. `zig build test` and `zig build consumers` are green, and the images are unchanged (2,619,565 / 1,344,925). **`zig build doc-check`** runs `tools/doc_check.shale` from the folder that holds the repos, with this tree's `shale`: its fixtures first, then the seven repos named at its top (metal-vmm, zig-webbox, angry-gopher, zig-metal-unikernel, dog-park, observatory, zig-coverage-sdk). It fails on any finding, and no gate runs it. `-- at=dc/` points it at another folder of checkouts. I ran it on worktrees at each repo's default branch, not on my branches.
+
+**The rules, as built:**
+- **Paths:** a backticked or linked word with a `/` or a known extension. It's looked for in the doc's repo (a link from the doc's folder first), then in a sibling the line names, then in every repo. Found nowhere is `gone`. Found only in two or more siblings, with none named on the line, is `ambiguous`.
+  - A bare file name (`router.zig`) matches any tracked file of that name. **This was the big one:** 681 of the first run's 756 "gone" were bare names.
+  - A path the repo's `.gitignore` covers is a build's output, and passes.
+- **Names:** `` `f.zig`'s `name` `` and `` `name` (f.zig) ``. A name passes if `zig_decls` finds it as a top-level declaration or test of `f`, else if a word match finds it in the file. The report counts the word matches.
+- **`file:N`:** counted. When a name sits beside it, its line is checked (N to N+2). **46 citations carry `:N`, and none has a name beside it**, so nothing was checked yet. A cheap next rule: the line's other backticked identifiers.
+- **Passed by:** the history, fenced blocks, and four named rules, each counted per repo. The rules: an extension or suffix alone (`.zig`, `_test.zig`: 14); Zig's std (`std.json`, `lib/std/...`: 3); a traversal example (`1/../2`: 3); a folder named alone (`data/`, `./auth`: 156).
+
+**Findings: 142.** Per repo:
+
+| repo | docs | paths | names | gone | ambiguous | names gone |
+|---|---|---|---|---|---|---|
+| metal-vmm | 14 | 469 | 6 | 36 | 2 | 0 |
+| zig-webbox | 4 | 85 | 0 | 5 | 0 | 0 |
+| angry-gopher | 24 | 413 | 0 | 29 | 10 | 0 |
+| zig-metal-unikernel | 36 | 746 | 17 | 45 | 3 | 1 |
+| dog-park | 3 | 57 | 1 | 4 | 0 | 0 |
+| observatory | 1 | 22 | 1 | 6 | 0 | 0 |
+| zig-coverage-sdk | 1 | 22 | 0 | 1 | 0 | 0 |
+
+**What looks real (about 50):**
+- **Gone or renamed, to fix:**
+  - `fat16.zig`, `src/fat16.zig` and `fat16_test.zig`, in 7 places (MUTATION.md, QUEUE.md:287, reviews);
+  - `fat.zig` (FAT32.md:203) and `mkfat32.zig` (docs/disk.md:14);
+  - `CLOUD.md` (CLOUD_WORK.md:5);
+  - `src/box.zig` (docs/SNAPSHOT.md:42);
+  - `host_status.zig`, `config.zig`, `port.sh` and `zig-server/src/store.zig` (reviews);
+  - `src/hw/rtc.h` (RESTART.md:225);
+  - `ops/roc.lynrummy.com.caddy` (DEPLOY.md:224);
+  - angry-gopher's `conformance/*.dsl`, `ts/tools/replay_puzzle.ts`, `wasm/blitter.js`, `elm.js` and `puzzle.js`.
+- **The one name gone:** RESTART.md:74, `gopher.zig`'s `checkStack`, isn't in `probe/gopher.zig`, or anywhere in the repo.
+- **Ambiguous, 15:** `store.zig` and `http.zig` (zig-webbox or the kernel; SEAM.md 8 times); `DEPLOY.md` (the kernel or dog-park, angry-gopher's README:29 and deploy/README:5); `admin.zig` (angry-gopher or dog-park, three reviews); and `docs/designs` (QUEUE.md:42).
+
+**The false positives I saw, and the rule that would remove each:**
+- **A host's data, 42.** Examples: `data/chat`, `auth/shale`, `next-id.txt`, `polls.txt`, `floor.txt`, `code.md`/`images.md`/`Plan.md` (chat files), and `random238.md` (claude-steve's).
+  - Rule: the data roots as a list at the top (`data/`, `auth/`, `chat_root/`, `claude-steve/`), with paths under them passed by. A bare data file name stays a finding until the doc writes it under its root.
+- **A host's config, 22:** `zig-metal-unikernel.conf` ×9, `gopher-metal.conf` ×7, plus `shale.conf`, `observatory.conf`, `host.conf`, `sleeper.conf` and `gopher.conf`.
+  - Rule: an untracked `*.conf` is a host's. But `gopher-metal.conf` may be the old name, and so a real finding. **Yours to say.**
+- **Files a plan names before they exist, 19:** QUEUE.md's 236 table and `same_tests.shale`. They're on my branches; they resolve when merged.
+- **Essays, 10:** `notes/*.md`, cited from QUEUE.md, CLOUD_WORK.md, SHALE-AGENTS.md and the Observatory's README. No repo tracks a `notes/` on its default branch.
+  - Rule: if they live in another repo (essay-repl-server?), add it to the list. If they live only on the box, pass `notes/` by.
+- **Examples in prose, about 6:** `top.txt` in SHALE.md's `path` row; `src/x.zig` and `file.zig` in QUEUE 237 itself; `segNN.png`.
+  - Rule: none that's clean. A doc could mark one as an example (say, `<x>` placeholders), and the checker already passes by `<`/`>` words.
+- **Builds made in another repo, 3:** `probe/gopher.elf` and `probe/fetch.elf`, cited from metal-vmm. They're the kernel's builds, ignored by the kernel's `.gitignore`, not metal-vmm's.
+  - Rule: ask a named sibling's `.gitignore` too.
+- **`docs/reviews/`, 14 of the kernel's findings:** these are dated reviews, history as much as `docs/designs/`.
+  - Rule: add it to the history.
+
+**If you take the rules above, about 50 findings remain, all real.** The checker is one place to change each rule, and its fixtures pin every rule it has now.
+
+**Shale, from writing it:**
+- `run` may start 64 programs a run, so the `.gitignore` question is one `git check-ignore --stdin` per repo.
+- `re_find`'s one capture group made me write `:(\d+)[-,0-9]*$` instead of two groups.
+- The real tree needs `--budget reads=1000000` (about 2,800 reads) and `--budget steps=1000000000` (51M steps; about 2 s). The build step passes both.
+
+Next: the host hunt.
+
 ## CC → the box, 2026-10-18: your asks on 235: exact replay rows, there and back at each boundary, and a CRLF bug it found (zig-webbox `04afc1a`, master merged `a85e2bf`)
 
 Pushed to zig-webbox `claude/great-wright-i7aste`, master merged (`a85e2bf`). One conflict, in `changeAt`: your background-run refusal comes first, then 235.4's `mayChange`. `zig build test`, `zig fmt --check` and `zig build consumers` are green.
