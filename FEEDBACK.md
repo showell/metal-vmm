@@ -7,6 +7,33 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-18: a cold review of my own night: five of its findings fixed (zig-webbox `37457cd`, `a41f31d`, `0350314`, `8d99573`)
+
+I set a cold reviewer (a subagent) on tonight's ten zig-webbox commits before you review them. **Its verdict:** no memory-safety bugs. It traced every slice from the `zig_*` scratch arena and found that none escapes. It found two real defects, one test that tested nothing, and smaller gaps. Fixed, each red first (or a mutation seen caught), and pushed. `zig build test` and `zig build consumers` are green, and the images are unchanged (2,619,533 / 1,344,893).
+
+- **`job_wait`'s scan** (`37457cd`):
+  - **A log truncated by a new `job_start` and regrown past the old end between two looks was never searched from 0.** Only a shorter log told it the log had begun again. The scan now keeps whose log it searched (the record's pid and start) and begins again for another job's. Pinned by the pure `Scan.from` test.
+  - **A log gone between the stat and the read stopped the run.** It's "not yet" now.
+  - **My "across pieces" case's needle sat inside the first read**, so it would have passed with no overlap at all. It's now 20 bytes either side of the first read's end, taken from the log itself. Removing the overlap (`at += n`) fails it.
+- **The scrubber** (`a41f31d`): **secrets that overlap leaked.** With `abc` and `bcdef`, `abcdef` came out `<secret A>def`. A told secret's span now widens over any secret that starts inside it and runs past its end, and waits when one may still go on.
+- **The doc checker** (`0350314`):
+  - `` `f.zig`'s `Keep.bogus` `` passed on `Keep` alone. A dotted name now needs its last part declared, a field or a member.
+  - The word fallback took any mention, even a comment's. It now needs a declaration, a test name, or a line beginning with the name and `:`, `,` or `=`.
+  - A cited .zig that doesn't parse stopped the whole run. It's now a finding.
+  - A bare file name now resolves to its one file, so its names are checked.
+  - On the real repos the stricter checks still find only `checkStack` missing.
+  - `8d99573`: essay-repl-server joins the list (QUEUE cites the essays there), so the 10 `notes/` findings resolve where it's checked out.
+- **Left as they are, said so you can judge:**
+  - `zig_move` moving CRLF blocks into an LF file keeps their inner CRLFs. Round trips stay exact, so it's a policy question.
+  - The `zig_*` scratch is capped at the whole arena budget, not what's left of it, so a call's peak can approach twice the budget while it lives.
+
+**The night, for merging:**
+- zig-webbox `claude/great-wright-i7aste`: 235's asks, 237, the hunt, and this round.
+- angry-gopher `claude/great-wright-i7aste`: 236.
+- metal-vmm: FEEDBACK only.
+
+Each FEEDBACK entry below names its commits.
+
 ## CC → the box, 2026-10-18: the Linux host hunt, part 2: three more of failure read as absence, in the jobs (zig-webbox `00f5dfd`, `6c89495`)
 
 Pushed to zig-webbox `claude/great-wright-i7aste`. `zig build test` and `zig build consumers` are green. The images are unchanged since part 1 (2,619,533 / 1,344,893). Each fix was seen red first, alone.
