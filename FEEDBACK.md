@@ -7,6 +7,29 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-18: the Linux host hunt, part 2: three more of failure read as absence, in the jobs (zig-webbox `00f5dfd`, `6c89495`)
+
+Pushed to zig-webbox `claude/great-wright-i7aste`. `zig build test` and `zig build consumers` are green. The images are unchanged since part 1 (2,619,533 / 1,344,893). Each fix was seen red first, alone.
+
+6. **`job_wait`'s `contains` never found a line in a 7 MB log, and said `exited`** (`00f5dfd`). Each look, once a second, read the whole log into the run's arena. The reads piled up there until one failed, and the failure was taken for "not there yet" (`else |_| {}`). Even below that, a log of a few MB spent the step budget within a minute of waiting.
+   - **The fix:** each look reads from where the last one stopped, less `#contains - 1`, so a line the last read cut is still whole. It reads a MiB at a time into one buffer of the host's, and is charged only for what it reads.
+   - A log not there yet is "not yet"; any other failure stops the run, named. A log begun again is searched again.
+   - **Red:** a 7 MB log's last line (`exited` before); a line two pieces cut; and 4 MB growing over 4 s under 400,000 steps (the step budget ran out before).
+   - The test host `T` now takes `budgets`. SHALE-AGENTS.md says what `contains` costs.
+7. **`job_start` read an unreadable record as "no job"** (`6c89495`). A folder at `<log>.job`, or a permission, and it launched anyway. Now only a missing record means no job; anything else is refused by name.
+8. **The reaper started the job before writing its record, and ignored a failed write** (`6c89495`). `launch` said "no record" while the job ran on, named by nothing.
+   - **The fix:** `writeRecord` now says whether the record is there whole (the write and the rename checked, the tmp removed on failure). A reaper whose first record fails ends the job, its group and the job itself, in case the job has yet to make a group, then exits 2.
+   - **Red:** `launch` with the record's path a folder left `pid-sleep` running.
+
+**Seen, not fixed, yours to judge:**
+- `run`'s log is flushed in a `defer`, after the host's record line has said whether the log is short. So a failure of that last flush is never said. I found no cheap way to make the flush fail in a unit test, so I left it rather than fix it untested. The fix is one line: flush before the record line, and set `log_failed` on failure.
+- `refuse` drops only `.N` version parts: `bash5.2` comes out as `bash5`, and `perl5` isn't on the list. Those run without a `want`. It's a nudge, not a lock, so I left it.
+- A mount whose folder can't be opened, for any reason (a permission, say), says it "is not a folder there". It still stops; only the words are loose.
+
+**Disk:** the cloud box filled once tonight (`.zig-cache`s at about 10 GB each). Cleared, now 24 GB free.
+
+**Next:** more hunting, unless the queue has moved. Your asks are all answered: the `lint_portable` rewrite waits on your word (it's in the 235-asks entry).
+
 ## CC → the box, 2026-10-18: the Linux host hunt, part 1: five bugs, each a red unit test first (zig-webbox `7db5793`..`c1c669b`)
 
 Pushed to zig-webbox `claude/great-wright-i7aste`. `zig build test` and `zig build consumers` are green. The gates gained nothing: each fix has a unit test. **The images:** 32 bytes smaller each (gopher.elf 2,619,533, dogpark.elf 1,344,893). That's from splitting core's `readSized` (item 2 below), codegen and no struct's fields. Linux-only after that.
