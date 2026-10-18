@@ -346,11 +346,21 @@ pub const trace_max = 160;
 /// seq (`-` for a frame eaten before it had one), the length, what it is
 /// (TCP's flags, seq and ack numbers and data length; ARP; other), its fate,
 /// and a hash of every byte, so a frame changed anywhere changes its line.
+///
+/// **NEVER CUT**: `trace_max` holds the longest line there is (every
+/// number at its most, every flag, a `frame_max` frame: the test builds
+/// it), so a write into the buffer cannot fail; a cut line would make two
+/// runs' traces differ, or agree, for the wrong reason.
 pub fn traceLine(buf: *[trace_max]u8, at: u64, side: u8, seq: ?u64, frame: []const u8, fate: Fate) []const u8 {
     var w: std.Io.Writer = .fixed(buf);
-    w.print("wire {d} side {d} seq ", .{ at, side }) catch {};
-    if (seq) |n| w.print("{d}", .{n}) catch {} else w.writeAll("-") catch {};
-    w.print(" len {d} ", .{frame.len}) catch {};
+    writeTrace(&w, at, side, seq, frame, fate) catch unreachable;
+    return w.buffered();
+}
+
+fn writeTrace(w: *std.Io.Writer, at: u64, side: u8, seq: ?u64, frame: []const u8, fate: Fate) std.Io.Writer.Error!void {
+    try w.print("wire {d} side {d} seq ", .{ at, side });
+    if (seq) |n| try w.print("{d}", .{n}) else try w.writeAll("-");
+    try w.print(" len {d} ", .{frame.len});
     if (frames.tcpIn(frame)) |seg| {
         var flags: [5]u8 = undefined;
         var n: usize = 0;
@@ -360,12 +370,27 @@ pub fn traceLine(buf: *[trace_max]u8, at: u64, side: u8, seq: ?u64, frame: []con
                 n += 1;
             }
         }
-        w.print("tcp {s} {d}>{d} seq {d} ack {d} data {d}", .{ if (n == 0) "-" else flags[0..n], seg.src_port, seg.dst_port, seg.seq, seg.ack, seg.data.len }) catch {};
+        try w.print("tcp {s} {d}>{d} seq {d} ack {d} data {d}", .{ if (n == 0) "-" else flags[0..n], seg.src_port, seg.dst_port, seg.seq, seg.ack, seg.data.len });
     } else if (frame.len >= 14 and frames.readBe16(frame[12..14]) == frames.ethertype_arp) {
-        w.writeAll("arp") catch {};
-    } else w.writeAll("other") catch {};
-    w.print(" {s} sum {x:0>8}\n", .{ @tagName(fate), std.hash.Fnv1a_32.hash(frame) }) catch {};
-    return w.buffered();
+        try w.writeAll("arp");
+    } else try w.writeAll("other");
+    try w.print(" {s} sum {x:0>8}\n", .{ @tagName(fate), std.hash.Fnv1a_32.hash(frame) });
+}
+
+test "WIRE_TRACE's longest line fits trace_max whole: every number at its most, every flag, a frame_max frame" {
+    var out: [frame_max]u8 = undefined;
+    const data = [_]u8{'x'} ** (frame_max - 54);
+    const all = frames.flag_syn | frames.flag_ack | frames.flag_psh | frames.flag_fin | frames.flag_rst;
+    const frame = frames.build(&out, .{ 255, 255, 255, 255 }, std.math.maxInt(u16), std.math.maxInt(u32), std.math.maxInt(u32), all, std.math.maxInt(u16), &data);
+    try testing.expectEqual(@as(usize, frame_max), frame.len);
+    var buf: [trace_max]u8 = undefined;
+    var longest: usize = 0;
+    for (std.enums.values(Fate)) |fate| {
+        const line = traceLine(&buf, std.math.maxInt(u64), std.math.maxInt(u8), std.math.maxInt(u64), frame, fate);
+        try testing.expect(std.mem.endsWith(u8, line, "\n"));
+        longest = @max(longest, line.len);
+    }
+    try testing.expect(longest <= trace_max);
 }
 
 /// **WHAT THE RUN LOOP ASKS OF A PAIR** (main.zig's `Machine.turns`, null
