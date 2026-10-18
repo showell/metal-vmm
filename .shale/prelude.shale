@@ -1,4 +1,4 @@
--- **THE QUEUE, IN SHALE** (metal-vmm QUEUE 233, chunk 6; zig-webbox's
+-- **THE QUEUE, IN SHALE** (metal-vmm QUEUE 233, chunk 6; shale's
 -- dogfood design, "The queue, in Shale"): metal-vmm's own prelude, so any
 -- Shale run in this checkout has it. QUEUE.md, QUEUE-ARCHIVE.md,
 -- FEEDBACK.md and FEEDBACK-ARCHIVE.md have a grammar (README, "The

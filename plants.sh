@@ -48,8 +48,10 @@ mkdir -p "$OUT"
 # The angry-gopher checkout the kernel is compiled from (-Dgopher-root; no
 # copy since zig-metal-unikernel's Phase B step 2b), named by its content id.
 ANGRY_GOPHER="${ANGRY_GOPHER:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/angry-gopher}"
-# The webbox library's checkout (-Dwebbox-root), counted in the content id.
+# The webbox and shale checkouts (-Dwebbox-root, -Dshale-root), counted in
+# the content id.
 WEBBOX="${WEBBOX:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-webbox}"
+SHALE="${SHALE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/shale}"
 
 # The plants: PLANTS, or every one zig-metal-unikernel's build.zig names (its
 # `Plant` enum, `none` aside). A name is the enum's (disk_write_swallowed);
@@ -67,7 +69,7 @@ commit=$(git -C "$GOPHER" rev-parse --short HEAD) || exit 2
 [ -z "$(git -C "$GOPHER" status --porcelain --untracked-files=no)" ] ||
   { echo "zig-metal-unikernel has uncommitted changes; plants build from a commit"; exit 2; }
 sdk=$(git -C "${COVERAGE_SDK:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-coverage-sdk}" rev-parse --short HEAD) || exit 2
-ported=$(GOPHER_ROOT="$ANGRY_GOPHER" WEBBOX_ROOT="$WEBBOX" python3 "$GOPHER/tools/verdicts.py" ids | awk '{print $2}' | cut -c9-20)
+ported=$(GOPHER_ROOT="$ANGRY_GOPHER" WEBBOX_ROOT="$WEBBOX" SHALE_ROOT="$SHALE" python3 "$GOPHER/tools/verdicts.py" ids | awk '{print $2}' | cut -c9-20)
 [ -n "$ported" ] || { echo "zig-metal-unikernel cannot build angry-gopher at $ANGRY_GOPHER as it is (its tools/verdicts.py fresh says why)"; exit 2; }
 mkdir -p "$KERNELS"
 
@@ -82,7 +84,7 @@ build() {
     wt="$OUT/build-$name"
     git -C "$GOPHER" worktree add -q --detach "$wt" "$commit" >&2 || return 2
     building="$wt"
-    (cd "$wt" && zig build gopher -Dcoverage $plant -Dgopher-root="$ANGRY_GOPHER" -Dwebbox-root="$WEBBOX") >&2 && cp "$wt/probe/gopher.elf" "$elf"
+    (cd "$wt" && zig build gopher -Dcoverage $plant -Dgopher-root="$ANGRY_GOPHER" -Dwebbox-root="$WEBBOX" -Dshale-root="$SHALE") >&2 && cp "$wt/probe/gopher.elf" "$elf"
     local ok=$?
     git -C "$GOPHER" worktree remove --force "$wt"
     building=""

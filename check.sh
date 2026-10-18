@@ -39,9 +39,9 @@ fresh_vmm "$HERE"
 VMM="$HERE/zig-out/bin/metal-vmm"
 [ -x "$VMM" ] || { echo "no $VMM; run: zig build"; exit 1; }
 
-# **THE DOCS' CITED PATHS AND NAMES**, this repo's (zig-webbox's
+# **THE DOCS' CITED PATHS AND NAMES**, this repo's (shale's
 # tools/doc_check.shale, a few seconds): the cheapest check, first.
-(cd "$HERE/../zig-webbox" && zig build doc-check -- only=metal-vmm > "$WORK/docs" 2>&1) \
+(cd "$HERE/../shale" && zig build doc-check -- only=metal-vmm > "$WORK/docs" 2>&1) \
     || { echo "FAIL the docs: $(grep -aE 'gone |ambiguous |names gone |findings' "$WORK/docs" | head -5)"; exit 1; }
 echo "PASS the docs' cited paths and names"
 

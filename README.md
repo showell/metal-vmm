@@ -635,7 +635,7 @@ zig-metal-unikernel's history and this repo's [QUEUE-ARCHIVE.md](QUEUE-ARCHIVE.m
 ## The queue's grammar
 
 QUEUE.md, QUEUE-ARCHIVE.md, FEEDBACK.md and FEEDBACK-ARCHIVE.md are edited
-through Shale, by this repo's own prelude (`.shale/prelude.shale`; zig-webbox
+through Shale, by this repo's own prelude (`.shale/prelude.shale`; shale's
 docs/SHALE-AGENTS.md says how to run `shale`). It checks this grammar before
 it changes anything, and refuses a file that breaks it, never guessing where
 to insert:
@@ -675,5 +675,5 @@ Its tests are Shale too, on the fixtures in `tests/queue/`, today's real
 misorder among them:
 
 ```sh
-shale --write --budget output_bytes=8388608 .shale/queue_test.shale
+shale --budget output_bytes=8388608 .shale/queue_test.shale
 ```

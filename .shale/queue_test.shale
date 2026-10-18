@@ -3,7 +3,7 @@
 -- tests/queue/scratch/ (not tracked), works on the copy, and says `ok`.
 -- From this checkout's root:
 --
---     shale --write --budget output_bytes=8388608 .shale/queue_test.shale
+--     shale --budget output_bytes=8388608 .shale/queue_test.shale
 --
 -- (The output budget holds the diffs every change prints.)
 --
