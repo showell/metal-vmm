@@ -31,6 +31,68 @@ All three branches merged, check_zig and consumers green; 234 to 237 archived. A
 
 **238 is yours:** `zig_tokens`, and angry-gopher's lint_portable as a Shale tool, its verdicts held to the Python's before the Python goes.
 
+## CC → the box, 2026-10-18: QUEUE 238: the portable lint in Shale; the Python is gone (angry-gopher `33b2fcf`, `c197e7e`, master merged `b229083`)
+
+angry-gopher's `tools/lint_portable.shale` replaces the Python lint, and `ops/check_zig` runs it: its plants first, then the tree, from the folder holding the repos. The Python and its tests were deleted in the commit that wired it in. The full `ops/check_zig` passes (1m51s), the doc check included.
+
+**The rules as built.** Every rule matches token texts from `zig_tokens`, a run at a time, never overlapping. A string or a comment is one token, so it is never code, and a rule split over lines still fires.
+1. `std.Io.Dir`, `.Clock`, `.Mutex`, `.Group`.
+2. Bare `std.Io` (the next token is not `.`).
+3. `@import("std").Io`, except `.Reader`, `.Writer`, `.Limit`.
+4. `std.Io.Threaded`, `std.Io.net`.
+5. `std.heap`'s host allocators.
+6. `std.process`, `std.posix`, `std.Thread`.
+7. `std.os.`
+8. `std.c.`
+9. `std.time`'s clock functions (its constants pass).
+10. `std.crypto.random`.
+11. `std.fs.X` for any X but `path`.
+12. `std.debug.print`.
+13. `strHash(` on `bcrypt`, `scrypt`, `argon2` or `pwhash.<id>`.
+14. `Io.Dir.cwd(` anywhere but store.zig.
+
+The three import rules come from `zig_imports`:
+- the `webbox_linux` or `shale_linux` module;
+- a path to a Linux file (`linux_host.zig`, `bind.zig` and the rest), which is a finding and is not followed;
+- an application file importing a library file by path. The advice names the module, plus `.name` when the file is not the module's root.
+
+**What is followed.** The closure follows each file's imports from that file's own folder; `webbox` and `shale` are read as their roots. Not served, so not followed or checked:
+- a `test` block;
+- a private declaration that only tests or other test-only declarations use, found by a fixpoint over `zig_decls`' `uses`;
+- an import on a line after `is_test` (`if (@import("builtin").is_test) return @import("gate_test.zig")...`), which Zig never analyzes outside a test build.
+
+**The plants: 86, each must come out as it must.** They are the Python's cases ported one for one, plus:
+- the fixture that tripped the Python: `std.Io` in a string, in a comment and in a multi-line `\\` string, with no finding;
+- a rule split over lines, which fires;
+- a folder's file importing its neighbour (`script/script.zig` → `lex.zig`), resolved from its folder;
+- a library file importing its sibling by path, with no finding;
+- an import behind `is_test`, not followed.
+
+Mutation check: I disabled each of the 14 token rules, the 3 import rules, the Linux-file stop in the closure and the 5 exemptions (test blocks, test-only declarations, test imports, store.zig, `is_test`), one at a time. Each of the 24 failed a plant.
+
+**The verdicts side by side.** test_lint_portable_agrees.py held the two lints together until the switch and was deleted with them.
+
+| | the Python | the Shale |
+|---|---|---|
+| the real tree's set | 107 modules | 130: the same 107, plus 23 |
+| the real tree's findings | none | none |
+| a copy of the tree with one line per rule planted in router.zig | 21 findings | 19: the same, line for line, advice and all, but for two |
+
+- **The 23 extra modules** are `shale/src/script/*.zig`. The Python resolved `script/script.zig`'s imports (`lex.zig` ...) from the tree's top, found nothing there, and never checked them. That was a hole: they reach the route table through `@import("shale")`. All 23 come out clean.
+- **The two findings only the Python made** are `std.Io` and `std.heap.page_allocator` inside the planted string literal. They are the Python's false positives, the class QUEUE 238 named.
+- Two real-tree findings showed up only while I was building the Shale version, and neither was real:
+  - `script/cli.zig`'s `@import("script.zig")` is a library file importing its sibling. A file's tree now decides what counts as "an application file".
+  - `script/gate_test.zig`'s many findings: it is reached only behind `is_test`, which the closure now excludes.
+
+**The cost.** Measured with `time`:
+- The tree: 1.3 s, about 155 million steps, so `ops/check_zig` passes `--budget steps=500000000 --budget arena_bytes=1073741824`. The arena needs more than 256 MB: every file's tokens are held for the run.
+- The plants: 0.2 s.
+- For comparison, the Python's tree run took 3.5 s over its 107 modules. Most of the Shale's steps go to the 14 rules, each scanning every token of 130 files.
+
+**Also in `c197e7e`.** The store-absence lint (tools/lint_store_absence.py) still reads `test_lines` and `test_only_lines`. They moved to `tools/zig_source.py`, with assertions of their own in its self-test, since their tests went with test_lint_portable.py. angry-gopher's README, `docs/SEAM.md` and `chat_store.zig` now name the Shale lint. In QUEUE.md I only took the backticks off item 238's mention of the deleted Python, so this repo's doc check stays at its two findings about essay-repl-server's `notes/` paths, which resolve where essay-repl-server is checked out.
+
+**For merging:** angry-gopher `claude/great-wright-i7aste` (238); metal-vmm, this entry and that QUEUE line.
+
 ## CC → the box, 2026-10-18: a cold review of my own night: five of its findings fixed (zig-webbox `37457cd`, `a41f31d`, `0350314`, `8d99573`)
 
 I set a cold reviewer (a subagent) on tonight's ten zig-webbox commits before you review them. **Its verdict:** no memory-safety bugs. It traced every slice from the `zig_*` scratch arena and found that none escapes. It found two real defects, one test that tested nothing, and smaller gaps. Fixed, each red first (or a mutation seen caught), and pushed. `zig build test` and `zig build consumers` are green, and the images are unchanged (2,619,533 / 1,344,893).
