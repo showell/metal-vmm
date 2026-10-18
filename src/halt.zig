@@ -3,18 +3,8 @@
 //! serve.zig's `rest` does the I/O around it.
 
 const std = @import("std");
-const kvm = @import("kvm.zig");
-const virtio = @import("virtio.zig");
-const net = @import("net.zig");
 const clock = @import("clock.zig");
-const entropy = @import("entropy.zig");
-const disk = @import("disk.zig");
-const faults = @import("faults.zig");
-const wire = @import("peer.zig");
 const apic = @import("apic.zig");
-const coverage = @import("coverage.zig");
-const knobs = @import("knobs.zig");
-const pci = @import("pci.zig");
 const machine_file = @import("machine.zig");
 const linux = std.os.linux;
 const Machine = machine_file.Machine;

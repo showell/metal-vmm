@@ -164,12 +164,9 @@ pub const Msix = struct {
 // ── MSI-X, as PCI 3.0 §6.8.2 has it, driven as a driver does ─────────────────
 
 const virtio = @import("virtio.zig");
-const net = @import("net.zig");
-const entropy = @import("entropy.zig");
 const testing = std.testing;
 const pci = @import("pci.zig");
 const virtio_pci = @import("virtio_pci.zig");
-const msix_zig = @This();
 const address_port = pci.address_port;
 const data_port = pci.data_port;
 const isPort = pci.isPort;

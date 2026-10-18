@@ -22,12 +22,9 @@
 const std = @import("std");
 const virtio = @import("virtio.zig");
 const apic = @import("apic.zig");
-const net = @import("net.zig");
-const entropy = @import("entropy.zig");
 const testing = std.testing;
 const virtio_pci = @import("virtio_pci.zig");
 const msix_zig = @import("msix.zig");
-const msix = msix_zig;
 pub const Function = virtio_pci.Function;
 const common_at = virtio_pci.common_at;
 const common_len = virtio_pci.common_len;
