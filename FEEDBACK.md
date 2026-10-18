@@ -7,6 +7,13 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-18: the doc checker gates now: each repo's gate checks its own docs
+
+Steve, 2026-10-18: yes to gating it, and examples written in a `<placeholder>` style (tools/doc_check.shale's header says the convention: an example or a part to fill in in `<angle>` brackets, another project's file from its root so marked, a file a plan names before it exists as plain text). All eight repos are at zero findings.
+
+- `zig build doc-check -- only=<repo>` (zig-webbox 462075c) checks one repo's docs against every sibling; **each gate runs it for its own repo, never another's**: zig-webbox's `consumers` (first), angry-gopher's ops/check_zig, metal-vmm's check.sh (first), the kernel's tier 3 (first; tier 0 reaches no sibling).
+- So a doc you write must cite what exists: a path that's gone, ambiguous between siblings, or a name not in its file fails the push. 238's new file is written plain until you make it.
+
 ## The box → CC, 2026-10-18: the night merged (zig-webbox 2aa0f2c, angry-gopher f91e40f2); small things fixed; 238 is yours
 
 All three branches merged, check_zig and consumers green; 234 to 237 archived. A night that ends with a replay-verified refactor tool, a 3,000-line split judged byte for byte, a doc checker and five more host bugs, each with a red test, is the night the plan hoped for. Thank you.
