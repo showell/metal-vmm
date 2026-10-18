@@ -652,7 +652,7 @@ test "a knob whose moment never came says so, and a spent one says nothing" {
     drive.writes_only = true;
     for (0..3) |_| _ = line.carries(0);
     for (0..4) |_| line.hold("x", 0);
-    for (0..7) |_| _ = drive.serves(0, 1, true);
+    for (0..7) |_| _ = drive.serves(0, 1, .write);
     // A reset due before the handshake finished, a vanish and a shut past
     // the answer, half a flood, and a cut after more writes than there were.
     peer.rough = .{ .reset_after_ns = 3 * std.time.ns_per_ms, .vanish_after = 900, .shut_after = 800, .flood = 5 };
@@ -757,9 +757,9 @@ test "the bad sectors' line" {
     var d = faults.Drive{ .bad_len = 2 };
     d.bad[0] = 2180;
     d.bad[1] = 7;
-    _ = d.serves(1, 1, false);
-    _ = d.serves(2180, 1, true);
-    _ = d.serves(0, 8, false);
+    _ = d.serves(1, 1, .read);
+    _ = d.serves(2180, 1, .write);
+    _ = d.serves(0, 8, .read);
     var buf: [512]u8 = undefined;
     try std.testing.expectEqualStrings("metal-vmm: disk: bad sector 2180, 7 refused 2 of 3 requests (#2, a write of sector 2180; #3, a read of sector 7)\n", badSectors(&d, &buf));
     var none = faults.Drive{ .bad_len = 1 };

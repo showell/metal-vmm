@@ -327,9 +327,9 @@ test "the volume: its commands, its faults, and the bytes it borrows, saved apar
             const o = switch (r.uintLessThan(u8, 3)) {
                 0 => blk: {
                     r.bytes(v.g.ram[scsi.FakeDriver.data_at..][0..1024]);
-                    break :blk v.g.rw(&v.dev, true, lba, 2);
+                    break :blk v.g.rw(&v.dev, .write, lba, 2);
                 },
-                1 => v.g.rw(&v.dev, false, lba, 2),
+                1 => v.g.rw(&v.dev, .read, lba, 2),
                 else => v.g.synchronize(&v.dev),
             };
             h.update(std.mem.asBytes(&o));
@@ -587,7 +587,7 @@ test "the disk's faults: refusals, a cut, a tear" {
     const step = struct {
         fn f(d: *faults.Drive, r: std.Random, h: *std.hash.Wyhash) void {
             if (d.cut != null) return note(h, 1);
-            if (r.boolean()) note(h, @intFromBool(d.serves(r.int(u16), r.intRangeAtMost(u64, 1, 8), r.boolean()))) else note(h, d.lands(r.int(u16), r.intRangeAtMost(u64, 1, 8)));
+            if (r.boolean()) note(h, @intFromBool(d.serves(r.int(u16), r.intRangeAtMost(u64, 1, 8), if (r.boolean()) .write else .read))) else note(h, d.lands(r.int(u16), r.intRangeAtMost(u64, 1, 8)));
         }
     }.f;
     var fresh = faults.Drive{ .tear = 40, .tear_keep = 2, .bad_len = 2 };

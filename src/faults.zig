@@ -338,14 +338,14 @@ test "two users of the same idea do not move each other's dice" {
     wire.lost.rate = 3;
     drive.refused.rate = 3;
     var alone: [60]bool = undefined;
-    for (&alone) |*x| x.* = drive.serves(0, 1, false);
+    for (&alone) |*x| x.* = drive.serves(0, 1, .read);
 
     var together = Drive{};
     together.refused.rate = 3;
     var mixed: [60]bool = undefined;
     for (&mixed) |*x| {
         _ = wire.carries(0); // the wire is busy at the same time
-        x.* = together.serves(0, 1, false);
+        x.* = together.serves(0, 1, .read);
     }
     try testing.expectEqualSlices(bool, &alone, &mixed);
 }
@@ -353,9 +353,9 @@ test "two users of the same idea do not move each other's dice" {
 test "the disk refuses the request it was told to refuse" {
     var d = Drive{};
     d.refused.named[0] = .one(2);
-    try testing.expect(d.serves(10, 1, false));
-    try testing.expect(!d.serves(11, 1, true));
-    try testing.expect(d.serves(12, 1, false));
+    try testing.expect(d.serves(10, 1, .read));
+    try testing.expect(!d.serves(11, 1, .write));
+    try testing.expect(d.serves(12, 1, .read));
     try testing.expectEqual(@as(u64, 1), d.refused.picked_count);
     // And it remembers what was being asked for, not just when.
     try testing.expectEqual(@as(u64, 11), d.sectors[0]);
@@ -380,6 +380,9 @@ test "a frame arrives when the wire says, and in the order it was sent" {
 /// status byte, and the guest's own disk_fat.zig turns anything but "ok" into
 /// `ReadFailed` or `WriteFailed` — paths that a disk which always works never
 /// reaches.
+/// Which way a disk request goes: the guest reads, or it writes.
+pub const Access = enum { read, write };
+
 pub const Drive = struct {
     /// Which of the guest's requests come back refused. 1 is the first request
     /// it ever makes, read or write.
@@ -493,15 +496,15 @@ pub const Drive = struct {
     /// **IS THIS ONE SERVED?** Called once per request of `sectors` sectors
     /// from `sector`, in order. A bad sector does not move the schedule's
     /// count, so `DISK_REFUSE=n` means the same request with one or without.
-    pub fn serves(self: *Drive, sector: u64, sectors: u64, writing: bool) bool {
+    pub fn serves(self: *Drive, sector: u64, sectors: u64, access: Access) bool {
         self.requests += 1;
-        if (self.writes_only and !writing) return true;
-        if (self.reads_only and writing) return true;
+        if (self.writes_only and access == .read) return true;
+        if (self.reads_only and access == .write) return true;
         const at = self.refused.picked_count;
         if (self.refused.picks()) {
             if (at < self.sectors.len) {
                 self.sectors[@intCast(at)] = sector;
-                self.kinds[@intCast(at)] = if (writing) 'w' else 'r';
+                self.kinds[@intCast(at)] = if (access == .write) 'w' else 'r';
             }
             return false;
         }
@@ -510,7 +513,7 @@ pub const Drive = struct {
             const i: usize = @intCast(self.bad_hits);
             self.bad_at[i] = self.requests;
             self.bad_sectors[i] = hit;
-            self.bad_kinds[i] = if (writing) 'w' else 'r';
+            self.bad_kinds[i] = if (access == .write) 'w' else 'r';
         }
         self.bad_hits += 1;
         return false;
@@ -530,7 +533,7 @@ test "a wire with nothing configured is a wire that does nothing" {
     var d = Drive{};
     try testing.expect(!w.configured());
     try testing.expect(!d.configured());
-    for (0..100) |_| try testing.expect(d.serves(0, 1, false));
+    for (0..100) |_| try testing.expect(d.serves(0, 1, .read));
     for (0..100) |_| try testing.expect(w.carries(0));
     w.hold("now", 12345);
     try testing.expectEqualStrings("now", w.ready(12345).?);
@@ -540,12 +543,12 @@ test "a bad sector refuses every request that touches it, and nothing else" {
     var d = Drive{ .bad_len = 2 };
     d.bad[0] = 2180;
     d.bad[1] = 7;
-    try testing.expect(d.serves(2179, 1, false)); // beside it
-    try testing.expect(!d.serves(2180, 1, false)); // on it
-    try testing.expect(!d.serves(2176, 8, true)); // across it
-    try testing.expect(d.serves(2181, 4, true)); // just past it
-    try testing.expect(!d.serves(0, 8, false)); // across the other
-    try testing.expect(!d.serves(2180, 1, true)); // and again: it stays bad
+    try testing.expect(d.serves(2179, 1, .read)); // beside it
+    try testing.expect(!d.serves(2180, 1, .read)); // on it
+    try testing.expect(!d.serves(2176, 8, .write)); // across it
+    try testing.expect(d.serves(2181, 4, .write)); // just past it
+    try testing.expect(!d.serves(0, 8, .read)); // across the other
+    try testing.expect(!d.serves(2180, 1, .write)); // and again: it stays bad
     try testing.expectEqual(@as(u64, 4), d.bad_hits);
     try testing.expectEqualSlices(u64, &.{ 2, 3, 5, 6 }, d.bad_at[0..4]);
     try testing.expectEqualSlices(u64, &.{ 2180, 2180, 7, 2180 }, d.bad_sectors[0..4]);
@@ -556,13 +559,13 @@ test "a bad sector refuses every request that touches it, and nothing else" {
 test "reads only: the bad sector's reads are refused and its writes land" {
     var d = Drive{ .bad_len = 1, .reads_only = true };
     d.bad[0] = 40;
-    try testing.expect(!d.serves(40, 1, false));
-    try testing.expect(d.serves(40, 1, true));
-    try testing.expect(!d.serves(40, 1, false));
+    try testing.expect(!d.serves(40, 1, .read));
+    try testing.expect(d.serves(40, 1, .write));
+    try testing.expect(!d.serves(40, 1, .read));
     var w = Drive{ .bad_len = 1, .writes_only = true };
     w.bad[0] = 40;
-    try testing.expect(w.serves(40, 1, false));
-    try testing.expect(!w.serves(40, 1, true));
+    try testing.expect(w.serves(40, 1, .read));
+    try testing.expect(!w.serves(40, 1, .write));
 }
 
 test "a bad sector leaves the schedule's count where it was" {
@@ -572,8 +575,8 @@ test "a bad sector leaves the schedule's count where it was" {
     with.bad[0] = 3;
     with.refused.named[0] = .one(4);
     for (1..7) |i| {
-        const a = plain.serves(i, 1, false);
-        const b = with.serves(i, 1, false);
+        const a = plain.serves(i, 1, .read);
+        const b = with.serves(i, 1, .read);
         if (i == 3) try testing.expect(a and !b) else try testing.expectEqual(a, b);
     }
     try testing.expectEqual(@as(u32, 4), with.refused.picked[0]);

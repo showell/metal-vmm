@@ -731,9 +731,12 @@ pub const FakeDriver = struct {
         return o.response == response_ok and o.status == status_good;
     }
 
-    pub fn rw(self: *FakeDriver, d: *Device, writing: bool, lba: u32, sectors: u16) Outcome {
-        const cdb = [10]u8{ if (writing) op_write else op_read, 0, @truncate(lba >> 24), @truncate(lba >> 16), @truncate(lba >> 8), @truncate(lba), 0, @truncate(sectors >> 8), @truncate(sectors), 0 };
-        return self.settled(d, &cdb, if (writing) .to_disk else .from_disk, @as(u32, sectors) * 512);
+    pub fn rw(self: *FakeDriver, d: *Device, access: faults.Access, lba: u32, sectors: u16) Outcome {
+        const cdb = [10]u8{ if (access == .write) op_write else op_read, 0, @truncate(lba >> 24), @truncate(lba >> 16), @truncate(lba >> 8), @truncate(lba), 0, @truncate(sectors >> 8), @truncate(sectors), 0 };
+        return self.settled(d, &cdb, switch (access) {
+            .read => .from_disk,
+            .write => .to_disk,
+        }, @as(u32, sectors) * 512);
     }
 
     pub fn synchronize(self: *FakeDriver, d: *Device) Outcome {
@@ -820,18 +823,18 @@ test "a sector written is the sector read back, and past the end is ILLEGAL REQU
     var g = FakeDriver{};
     g.open(&d);
     for (g.ram[FakeDriver.data_at..][0 .. 2 * 512], 0..) |*b, i| b.* = @truncate(i * 7);
-    const wrote = g.rw(&d, true, 5, 2);
+    const wrote = g.rw(&d, .write, 5, 2);
     try testing.expect(FakeDriver.good(wrote));
     try testing.expectEqual(@as(u32, 0), wrote.residual); // every byte taken
     try testing.expectEqualSlices(u8, g.ram[FakeDriver.data_at..][0 .. 2 * 512], image[5 * 512 ..][0 .. 2 * 512]);
     try testing.expectEqual(@as(u8, 0x60), bits[0]); // sectors 5 and 6
     @memset(g.ram[FakeDriver.data_at..][0 .. 2 * 512], 0);
-    const back = g.rw(&d, false, 5, 2);
+    const back = g.rw(&d, .read, 5, 2);
     try testing.expect(FakeDriver.good(back));
     try testing.expectEqual(@as(u32, 0), back.residual);
     try testing.expectEqual(@as(u32, response_len + 1024), back.used);
     try testing.expectEqualSlices(u8, image[5 * 512 ..][0 .. 2 * 512], g.ram[FakeDriver.data_at..][0 .. 2 * 512]);
-    const past = g.rw(&d, false, 15, 2);
+    const past = g.rw(&d, .read, 15, 2);
     try testing.expectEqual(status_check_condition, past.status);
     try testing.expectEqual(key_illegal_request, past.key);
     try testing.expectEqual(asc_lba_out_of_range, past.asc);
@@ -852,10 +855,10 @@ test "VOLUME_CACHE=1: WCE said, writes held until SYNCHRONIZE CACHE, and a power
     g.open(&d);
     try testing.expectEqual(@as(?bool, true), g.wce(&d));
     @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
+    try testing.expect(FakeDriver.good(g.rw(&d, .write, 1, 1)));
     try testing.expect(FakeDriver.good(g.synchronize(&d)));
     @memset(g.ram[FakeDriver.data_at..][0..512], 'b');
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 2, 1)));
+    try testing.expect(FakeDriver.good(g.rw(&d, .write, 2, 1)));
     // Read back from the cache before the cut.
     try testing.expectEqual(@as(u8, 'b'), image[2 * 512]);
     c.lose();
@@ -874,7 +877,7 @@ test "VOLUME_CACHE=lie: WCE=0 said and writes held, so a driver that believes it
     g.open(&d);
     try testing.expectEqual(@as(?bool, false), g.wce(&d));
     @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 3, 1)));
+    try testing.expect(FakeDriver.good(g.rw(&d, .write, 3, 1)));
     c.lose();
     try testing.expectEqual(@as(u8, 'o'), image[3 * 512]);
     var buf: [256]u8 = undefined;
@@ -888,7 +891,7 @@ test "VOLUME_CUT_AFTER: the write the power goes after lands, and is never answe
     var g = FakeDriver{};
     g.open(&d);
     @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
+    try testing.expect(FakeDriver.good(g.rw(&d, .write, 1, 1)));
     const served = d.served;
     _ = g.send(&d, 0, 0, &[10]u8{ op_write, 0, 0, 0, 0, 4, 0, 0, 1, 0 }, .to_disk, 512);
     try testing.expectEqual(served, d.served);
@@ -927,10 +930,10 @@ test "VOLUME_SYNC_FAIL: the nth SYNCHRONIZE CACHE fails, keeps nothing, and the 
     var g = FakeDriver{};
     g.open(&d);
     @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
+    try testing.expect(FakeDriver.good(g.rw(&d, .write, 1, 1)));
     try testing.expect(FakeDriver.good(g.synchronize(&d)));
     @memset(g.ram[FakeDriver.data_at..][0..512], 'b');
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 2, 1)));
+    try testing.expect(FakeDriver.good(g.rw(&d, .write, 2, 1)));
     // The second and third fail as a medium error, as v18's `synchronize`
     // reads one: not ILLEGAL REQUEST, so not taken for a disk with no cache.
     for (0..2) |_| {
@@ -956,7 +959,7 @@ test "VOLUME_LATENCY_US: each command answered at once, and owed to the clock" {
     var d = vol.device();
     var g = FakeDriver{};
     g.open(&d);
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
+    try testing.expect(FakeDriver.good(g.rw(&d, .write, 1, 1)));
     try testing.expect(FakeDriver.good(g.synchronize(&d)));
     try testing.expectEqual(@as(u64, 4 * std.time.ns_per_ms), vol.owed_ns);
     var buf: [256]u8 = undefined;
@@ -970,14 +973,14 @@ test "VOLUME_ATTENTION_AT: the nth command meets UNIT ATTENTION, is not performe
     var g = FakeDriver{};
     g.open(&d);
     @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
+    try testing.expect(FakeDriver.good(g.rw(&d, .write, 1, 1)));
     // The second: told, not written; the third, the same write again, lands.
     @memset(g.ram[FakeDriver.data_at..][0..512], 'b');
     const told = g.send(&d, 0, 0, &[10]u8{ op_write, 0, 0, 0, 0, 2, 0, 0, 1, 0 }, .to_disk, 512);
     try testing.expectEqual(key_unit_attention, told.key);
     try testing.expectEqual(asc_capacity_changed, told.asc);
     try testing.expectEqual(@as(u8, 'o'), image[2 * 512]);
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 2, 1)));
+    try testing.expect(FakeDriver.good(g.rw(&d, .write, 2, 1)));
     try testing.expectEqual(@as(u8, 'b'), image[2 * 512]);
     try testing.expectEqual(@as(u64, 1), vol.attentions);
     // INQUIRY is never told: one pending waits for the next command.
@@ -993,9 +996,9 @@ test "VOLUME_GONE_AT: from the nth command, BAD_TARGET, and nothing written" {
     var g = FakeDriver{};
     g.open(&d);
     @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
+    try testing.expect(FakeDriver.good(g.rw(&d, .write, 1, 1)));
     for (0..3) |_| {
-        const o = g.rw(&d, true, 2, 1);
+        const o = g.rw(&d, .write, 2, 1);
         try testing.expectEqual(response_bad_target, o.response);
     }
     try testing.expectEqual(response_bad_target, g.synchronize(&d).response);
@@ -1013,17 +1016,17 @@ test "VOLUME_READ_ONLY_AT_WRITE: read-only from the nth WRITE, however many read
     g.open(&d);
     @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
     // Reads first, any number: none of them counts.
-    for (0..5) |_| try testing.expect(FakeDriver.good(g.rw(&d, false, 1, 1)));
+    for (0..5) |_| try testing.expect(FakeDriver.good(g.rw(&d, .read, 1, 1)));
     try testing.expectEqual(@as(?u64, null), vol.read_only_at);
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
-    const refused = g.rw(&d, true, 2, 1);
+    try testing.expect(FakeDriver.good(g.rw(&d, .write, 1, 1)));
+    const refused = g.rw(&d, .write, 2, 1);
     try testing.expectEqual(status_check_condition, refused.status);
     try testing.expectEqual(key_data_protect, refused.key);
     try testing.expectEqual(@as(u8, 'o'), image[2 * 512]);
     // From that command on, as VOLUME_READ_ONLY_AT: reads answer, writes don't.
     try testing.expect(vol.read_only_at != null);
-    try testing.expect(FakeDriver.good(g.rw(&d, false, 1, 1)));
-    try testing.expectEqual(status_check_condition, g.rw(&d, true, 3, 1).status);
+    try testing.expect(FakeDriver.good(g.rw(&d, .read, 1, 1)));
+    try testing.expectEqual(status_check_condition, g.rw(&d, .write, 3, 1).status);
     try testing.expectEqual(@as(u64, 2), vol.protected);
     var buf: [256]u8 = undefined;
     var want: [64]u8 = undefined;
@@ -1038,13 +1041,13 @@ test "VOLUME_READ_ONLY_AT: from the nth command WP is said, writes are DATA PROT
     var g = FakeDriver{};
     g.open(&d);
     @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
-    const refused = g.rw(&d, true, 2, 1);
+    try testing.expect(FakeDriver.good(g.rw(&d, .write, 1, 1)));
+    const refused = g.rw(&d, .write, 2, 1);
     try testing.expectEqual(status_check_condition, refused.status);
     try testing.expectEqual(key_data_protect, refused.key);
     try testing.expectEqual(asc_write_protected, refused.asc);
     try testing.expectEqual(@as(u8, 'o'), image[2 * 512]);
-    try testing.expect(FakeDriver.good(g.rw(&d, false, 1, 1)));
+    try testing.expect(FakeDriver.good(g.rw(&d, .read, 1, 1)));
     try testing.expectEqual(@as(u8, 'a'), g.ram[FakeDriver.data_at]);
     try testing.expect(FakeDriver.good(g.synchronize(&d)));
     // MODE SENSE's header says WP.
@@ -1059,7 +1062,7 @@ test "VOLUME_SYNC_US: a SYNCHRONIZE CACHE costs that much more than another comm
     var d = vol.device();
     var g = FakeDriver{};
     g.open(&d);
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1)));
+    try testing.expect(FakeDriver.good(g.rw(&d, .write, 1, 1)));
     try testing.expect(FakeDriver.good(g.synchronize(&d)));
     try testing.expectEqual(@as(u64, 12 * std.time.ns_per_ms), vol.owed_ns);
     var buf: [256]u8 = undefined;
@@ -1087,16 +1090,16 @@ test "VOLUME_SHORT_AT: the nth transfer moves half, answers GOOD, and says the r
     var g = FakeDriver{};
     g.open(&d);
     @memset(g.ram[FakeDriver.data_at..][0 .. 2 * 512], 0xAB);
-    const first = g.rw(&d, true, 0, 2); // transfer 1: whole
+    const first = g.rw(&d, .write, 0, 2); // transfer 1: whole
     try testing.expect(FakeDriver.good(first));
     try testing.expectEqual(@as(u32, 0), first.residual);
-    const second = g.rw(&d, true, 4, 2); // transfer 2: half
+    const second = g.rw(&d, .write, 4, 2); // transfer 2: half
     try testing.expect(FakeDriver.good(second));
     try testing.expectEqual(@as(u32, 512), second.residual);
     try testing.expectEqual(@as(u8, 0xAB), image[4 * 512 + 511]);
     try testing.expectEqual(@as(u8, 0), image[5 * 512]); // the half never written
     @memset(g.ram[FakeDriver.data_at..][0 .. 2 * 512], 0x11);
-    const third = g.rw(&d, false, 4, 2); // transfer 3: whole again
+    const third = g.rw(&d, .read, 4, 2); // transfer 3: whole again
     try testing.expectEqual(@as(u32, 0), third.residual);
     try testing.expectEqual(@as(u64, 1), vol.shortened);
 }
@@ -1112,11 +1115,11 @@ test "MODE SELECT turns a write cache off: later writes go through, and what was
     try testing.expectEqual(@as(?bool, true), g.wce(&d));
     try testing.expectEqual(@as(?bool, true), g.changeable(&d));
     @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 1, 1))); // held
+    try testing.expect(FakeDriver.good(g.rw(&d, .write, 1, 1))); // held
     try testing.expect(FakeDriver.good(g.select(&d, false)));
     try testing.expectEqual(@as(?bool, false), g.wce(&d));
     @memset(g.ram[FakeDriver.data_at..][0..512], 'b');
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 2, 1))); // through
+    try testing.expect(FakeDriver.good(g.rw(&d, .write, 2, 1))); // through
     c.lose();
     try testing.expectEqual(@as(u8, 'o'), image[1 * 512]);
     try testing.expectEqual(@as(u8, 'b'), image[2 * 512]);
@@ -1154,7 +1157,7 @@ test "MODE SELECT to a cache that lies: WCE=0 is what it says already, and it go
     g.open(&d);
     try testing.expect(FakeDriver.good(g.select(&d, false)));
     @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 3, 1)));
+    try testing.expect(FakeDriver.good(g.rw(&d, .write, 3, 1)));
     c.lose();
     try testing.expectEqual(@as(u8, 'o'), image[3 * 512]);
 }
@@ -1218,7 +1221,7 @@ test "VOLUME_WCE_FIXED=ignore: WCE is said to be changeable, a MODE SELECT turni
     // Only reading the page back shows it: the cache is on, and holds.
     try testing.expectEqual(@as(?bool, true), g.wce(&d));
     @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 3, 1)));
+    try testing.expect(FakeDriver.good(g.rw(&d, .write, 3, 1)));
     c.lose();
     try testing.expectEqual(@as(u8, 'o'), image[3 * 512]);
 }
@@ -1244,7 +1247,7 @@ test "VOLUME_RESET_AT: a reset says POWER ON, and a write cache turned off is on
     try testing.expectEqual(asc_power_on, told.asc);
     try testing.expectEqual(@as(?bool, true), g.wce(&d));
     @memset(g.ram[FakeDriver.data_at..][0..512], 'a');
-    try testing.expect(FakeDriver.good(g.rw(&d, true, 3, 1)));
+    try testing.expect(FakeDriver.good(g.rw(&d, .write, 3, 1)));
     c.lose();
     try testing.expectEqual(@as(u8, 'o'), image[3 * 512]);
     var buf: [512]u8 = undefined;
@@ -1306,9 +1309,9 @@ test "VOLUME_MAX_TRANSFER: INQUIRY's Block Limits page says the most one command
         // Up to the most, served; one sector more, refused (0 is no limit).
         // The write's data is not zero, so a refused one that wrote shows
         // (metal-vmm QUEUE 186.2: data and image were both zero).
-        try testing.expect(FakeDriver.good(g.rw(&d, false, 0, 4)));
+        try testing.expect(FakeDriver.good(g.rw(&d, .read, 0, 4)));
         @memset(g.ram[FakeDriver.data_at..][0 .. 5 * 512], 0xAB);
-        const past = g.rw(&d, true, 0, 5);
+        const past = g.rw(&d, .write, 0, 5);
         if (most == 0) {
             try testing.expect(FakeDriver.good(past));
             try testing.expectEqual(@as(u8, 0xAB), image[0]);

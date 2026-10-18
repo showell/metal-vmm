@@ -445,7 +445,7 @@ pub const Block = struct {
         // marked, and the guest gets the one thing a real disk gives it when
         // it cannot do the work.
         const asked = (buffer(ram, data).len + sector_bytes - 1) / sector_bytes;
-        if (!self.refusals.serves(readInt(u64, ram, head.addr +| 8), asked, readInt(u32, ram, head.addr) == type_out)) {
+        if (!self.refusals.serves(readInt(u64, ram, head.addr +| 8), asked, if (readInt(u32, ram, head.addr) == type_out) .write else .read)) {
             writeInt(u8, ram, status.addr, status_ioerr);
             return 1;
         }
