@@ -555,7 +555,7 @@ the wire, the peer, the boot disk, the volume and the seeds.
 ### What the guest says it reached
 
 A zig-metal-unikernel kernel built `-Dcoverage` writes zig-coverage-sdk's JSONL
-lines to **the coverage door** (port 0xE2, `main.zig`): it finds the door at
+lines to **the coverage door** (port 0xE2, `serve.zig`): it finds the door at
 boot, then hands over each line as one 32-bit `out` of its address, one exit
 a line. No exit through the door ticks the clock or counts as progress, so a
 coverage kernel runs as its release build does, exit for exit. (A guest that
@@ -596,8 +596,14 @@ zig-metal-unikernel's history and this repo's [QUEUE-ARCHIVE.md](QUEUE-ARCHIVE.m
 - `src/clock.zig` — the machine's time: one counter, and the three devices
   that report it. **Read this one first if you read only one.**
 - `src/entropy.zig` — the seeded generator and the device that hands it out.
-- `src/main.zig` — the processor's starting state, the serial port, the exit
-  door, and the loop that serves them. Beside it: `src/loader.zig` (the ELF,
+- `src/main.zig` — the run put together: the guest loaded, the machine and
+  its devices made, served, and reported. Its parts: `src/boot.zig` (the
+  PVH handshake: guest memory's layout, the start_info, the GDT, protected
+  mode), `src/machine.zig` (`Machine`: the serial port, the exit door, the
+  interval timer, the virtio window, and the census of its fields),
+  `src/serve.zig` (the run loop: each exit answered, and what a stop says)
+  and `src/client_files.zig` (the client's request read from its file, and
+  its answer said and written). Beside them: `src/loader.zig` (the ELF,
   and the marked instructions rewritten), `src/processor.zig` (CPUID and the
   MSRs this program answers), `src/halt.zig` (what wakes a halted guest),
   `src/reports.zig` (what a run says at its end) and `src/cost.zig` (what it

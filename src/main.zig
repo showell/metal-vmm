@@ -59,6 +59,10 @@ const pair = @import("pair.zig");
 const boot = @import("boot.zig");
 const machine_file = @import("machine.zig");
 const serve_file = @import("serve.zig");
+const client_files = @import("client_files.zig");
+const readAll = client_files.readAll;
+const request_max = client_files.request_max;
+const theClient = client_files.theClient;
 const serve = serve_file.serve;
 const readLittle = machine_file.readLittle;
 const Machine = machine_file.Machine;
@@ -103,42 +107,6 @@ const Wake = halt.Wake;
 const wakes = halt.wakes;
 
 // ── putting it together ──────────────────────────────────────────────────────
-
-/// **THE MOST ONE CLIENT'S REQUEST MAY BE** (`PEER_REQUEST`): a whole
-/// document past angry-gopher's 1 MiB cap (limits.zig, `body.doc`), so a
-/// client can be refused with 413 as well as answered.
-const request_max = 2 << 20;
-/// Each client's request, read from its file. Not on the stack: eight of
-/// them are 16 MiB.
-var request_bufs: [wire.max_clients][request_max]u8 = undefined;
-
-/// **A FILE, WHOLE, OR AN ERROR**: read until its end, however many reads
-/// that takes, into `into`. A file larger than `into` is `error.TooLarge`,
-/// never its first `into.len` bytes: a request cut short is a different
-/// request (QUEUE B23, a 17,000-byte head sent as its first 8,192 bytes).
-fn readAll(path: [:0]const u8, into: []u8) error{ Unreadable, Empty, TooLarge }![]const u8 {
-    const opened = linux.open(path.ptr, .{ .ACCMODE = .RDONLY }, 0);
-    if (linux.errno(opened) != .SUCCESS) return error.Unreadable;
-    const fd: linux.fd_t = @intCast(opened);
-    defer _ = linux.close(fd);
-    var len: usize = 0;
-    while (true) {
-        if (len == into.len) {
-            // Full: the file must end here.
-            var one: [1]u8 = undefined;
-            const more = linux.read(fd, &one, 1);
-            if (linux.errno(more) != .SUCCESS) return error.Unreadable;
-            if (more != 0) return error.TooLarge;
-            break;
-        }
-        const n = linux.read(fd, into[len..].ptr, into.len - len);
-        if (linux.errno(n) != .SUCCESS) return error.Unreadable;
-        if (n == 0) break;
-        len += n;
-    }
-    if (len == 0) return error.Empty;
-    return into[0..len];
-}
 
 /// What the volume was asked, if one was attached (`VOLUME`): a run without
 /// one says nothing new.
@@ -196,70 +164,6 @@ test "an idle end keeps the guest's writes; a stuck, faulted or failed one does 
     for ([_]anyerror{ error.GuestStuck, error.GuestFaulted, error.KvmFailed, error.Unhandled }) |e| {
         try testing.expect(!keepsWrites(e));
     }
-}
-
-/// **WHAT THE CLIENT GOT, IN ONE LINE** on stdout, so a run here can be
-/// compared with a run under QEMU where curl says the same thing; and its
-/// body and whole answer to files, when asked (`PEER_BODY`, `PEER_RESPONSE`),
-/// every client's. See `reports.client`.
-fn theClient(environ: std.process.Environ, peer: *const wire.Peer) void {
-    // **A REAL PAGE DOES NOT FIT ON A LINE.** The probes answer with a
-    // sentence and the line is compared against curl's; a guest serving an
-    // actual site answers with kilobytes, so the body goes to a file when one
-    // is asked for and the line says how much there was.
-    //
-    // **AN ANSWER KEPT IN PART IS NOT WRITTEN AS IF WHOLE.** The client keeps
-    // the first `reply.len` bytes of what came back. Past that, the files
-    // would hold a page's beginning and a comparison of two of them (pc_vs_microvm.sh)
-    // would pass on half a page: they are not written, and the line says why,
-    // so whatever reads them fails for want of them.
-    //
-    // **EVERY CLIENT'S ANSWER** (metal-vmm QUEUE 126): client k's goes
-    // beside the first's, at `<file>.k` (`reports.answerPath`), so a sweep
-    // can hold each client to the same client unhurt.
-    const body_stem = environ.getPosix("PEER_BODY");
-    const response_stem = environ.getPosix("PEER_RESPONSE");
-    if (body_stem != null or response_stem != null) {
-        for (0..reports.answered(peer)) |i| {
-            const c = peer.clientConst(i);
-            if (!reports.keptWhole(c)) {
-                var line: [200]u8 = undefined;
-                const text = if (i == 0)
-                    std.fmt.bufPrint(&line, "metal-vmm: the answer was {d} bytes and the client keeps {d}; PEER_BODY and PEER_RESPONSE are not written\n", .{ c.received, c.reply.len }) catch "metal-vmm: the answer was cut; PEER_BODY and PEER_RESPONSE are not written\n"
-                else
-                    std.fmt.bufPrint(&line, "metal-vmm: client {d}'s answer was {d} bytes and the client keeps {d}; its PEER_BODY and PEER_RESPONSE are not written\n", .{ i + 1, c.received, c.reply.len }) catch "metal-vmm: a client's answer was cut; its PEER_BODY and PEER_RESPONSE are not written\n";
-                _ = linux.write(2, text.ptr, text.len);
-                continue;
-            }
-            var name: [4200]u8 = undefined;
-            if (body_stem) |stem| if (reports.answerPath(stem, i, &name)) |into| writeOut(into, c.body()) else writeFailed(stem);
-            if (response_stem) |stem| if (reports.answerPath(stem, i, &name)) |into| writeOut(into, c.whole()) else writeFailed(stem);
-        }
-    }
-    var buf: [4096]u8 = undefined;
-    const text = reports.client(peer, &buf);
-    _ = linux.write(1, text.ptr, text.len);
-}
-
-/// Writes `bytes` to `path`, all of them, or says on stderr that it could
-/// not: a file left short or missing is never silent.
-fn writeOut(path: [:0]const u8, bytes: []const u8) void {
-    const opened = linux.open(path.ptr, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
-    if (linux.errno(opened) != .SUCCESS) return writeFailed(path);
-    const fd: linux.fd_t = @intCast(opened);
-    defer _ = linux.close(fd);
-    var done: usize = 0;
-    while (done < bytes.len) {
-        const n = linux.write(fd, bytes[done..].ptr, bytes.len - done);
-        if (linux.errno(n) != .SUCCESS or n == 0) return writeFailed(path);
-        done += n;
-    }
-}
-
-fn writeFailed(path: [:0]const u8) void {
-    var line: [4200]u8 = undefined;
-    const text = std.fmt.bufPrint(&line, "metal-vmm: could not write {s} whole\n", .{path}) catch "metal-vmm: could not write an answer's file whole\n";
-    _ = linux.write(2, text.ptr, text.len);
 }
 
 /// The file, mapped rather than read: it is only ever looked at, and the
@@ -553,7 +457,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         };
     }
     if (count(init.environ, "PATIENCE_S")) |seconds| machine.patience_ns = seconds * std.time.ns_per_s;
-    if (init.environ.getPosix("WIRE_SILENT_S")) |text| card.line.silent = silentOf(text) orelse {
+    if (init.environ.getPosix("WIRE_SILENT_S")) |text| card.line.silent = settings.silentOf(text) orelse {
         std.debug.print("metal-vmm: WIRE_SILENT_S={s}: not a-b, seconds, a before b (KNOBS.md)\n", .{text});
         return 2;
     };
@@ -602,7 +506,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
             }
             @memcpy(name[0..from.len], from);
             name[from.len] = 0;
-            plan.requests[plan.named] = readAll(name[0..from.len :0], &request_bufs[plan.named]) catch |e| {
+            plan.requests[plan.named] = readAll(name[0..from.len :0], &client_files.request_bufs[plan.named]) catch |e| {
                 switch (e) {
                     error.TooLarge => std.debug.print("metal-vmm: the request in {s} is larger than {d} bytes, the most a client sends\n", .{ from, request_max }),
                     error.Empty => std.debug.print("metal-vmm: the request in {s} is empty\n", .{from}),
@@ -617,7 +521,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         // A client that asks again keeps the connection; one that asks once
         // says it will close, as curl's judge does.
         const close = if (plan.asks > 1) "" else "Connection: close\r\n";
-        machine.request = std.fmt.bufPrint(&request_bufs[0], "GET {s} HTTP/1.1\r\nHost: 10.0.2.15\r\n{s}\r\n", .{ target, close }) catch null;
+        machine.request = std.fmt.bufPrint(&client_files.request_bufs[0], "GET {s} HTTP/1.1\r\nHost: 10.0.2.15\r\n{s}\r\n", .{ target, close }) catch null;
     }
 
     // **A PAIR** (`PAIR=<client kernel>`, docs/TWO-KERNELS.md §4; QUEUE
@@ -632,7 +536,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         return 2;
     }
     if (machine.pair) {
-        const lookahead_ns = startPair(init.environ, init.environ.block.view().slice) orelse return 2;
+        const lookahead_ns = pair.startPair(init.environ, init.environ.block.view().slice) orelse return 2;
         if (init.environ.getPosix("PAIR_FD")) |text| {
             if (side != 1) {
                 std.debug.print("metal-vmm: the pair's client is side 1 (SIDE=1)\n", .{});
@@ -648,7 +552,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
                 std.debug.print("metal-vmm: the pair's server is side 0: SIDE is the client's, set by PAIR\n", .{});
                 return 2;
             }
-            const spawned = spawnClient(init.environ, &complaint_buf) orelse return 2;
+            const spawned = pair.spawnClient(init.environ, &complaint_buf) orelse return 2;
             link = .init(spawned.fd, 0, lookahead_ns, .off);
             client_pid = spawned.pid;
         }
@@ -697,7 +601,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         // A pair's server ending idle or watched is its normal end: the
         // verdict is the client's.
         if (machine.turns != null) {
-            const client = endPair(&link, machine.time.ns, client_pid);
+            const client = pair.endPair(&link, machine.time.ns, client_pid);
             if (keepsWrites(e) and side == 0) return client;
         }
         // Watched as long as asked is no verdict on the guest: the judge
@@ -731,105 +635,8 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         };
     }
     if (fetch != null) theClient(init.environ, &card.peer);
-    if (machine.turns != null) return pair.combined(code, endPair(&link, machine.time.ns, client_pid));
+    if (machine.turns != null) return pair.combined(code, pair.endPair(&link, machine.time.ns, client_pid));
     return code;
-}
-
-/// **WHAT A PAIR REFUSES AT ITS START** (turn.zig's `checkStart`): no
-/// lookahead, or a receiver-side fault knob. L in nanoseconds, or null,
-/// said.
-fn startPair(environ: std.process.Environ, entries: []const [*:0]const u8) ?u64 {
-    var name_buf: [1024][]const u8 = undefined;
-    const set = pair.names(entries, &name_buf) orelse {
-        std.debug.print("metal-vmm: PAIR: more than {d} settings in the environment to check\n", .{name_buf.len});
-        return null;
-    };
-    const lookahead = turn.checkStart(count(environ, "WIRE_LATENCY_US"), set) catch |e| {
-        switch (e) {
-            error.NoLookahead => std.debug.print("metal-vmm: PAIR needs WIRE_LATENCY_US over 0: the lookahead, which no frame across takes less than\n", .{}),
-            error.ReceiverSideFault => std.debug.print("metal-vmm: PAIR refuses a receiver-side fault knob ({s}): it would fault only the local peer's frames\n", .{receiverSideSet(set)}),
-        }
-        return null;
-    };
-    return @intCast(lookahead);
-}
-
-fn receiverSideSet(set: []const []const u8) []const u8 {
-    for (set) |name| for (turn.receiver_side) |r| if (std.mem.eql(u8, name, r)) return name;
-    return "?";
-}
-
-/// **THE CLIENT, STARTED**, its settings held to the same rules as the
-/// server's before it is: refused here, not by a child the server then
-/// waits for.
-fn spawnClient(environ: std.process.Environ, buf: []u8) ?pair.Spawned {
-    const kernel = environ.getPosix("PAIR") orelse return null;
-    const fds = pair.socketPair() catch {
-        std.debug.print("metal-vmm: no socket for the pair\n", .{});
-        return null;
-    };
-    const S = struct {
-        var text: [64 * 1024]u8 = undefined;
-        var lines: [256][*:0]const u8 = undefined;
-    };
-    const n = pair.childEnvironment(environ.block.view().slice, fds[1], &S.text, &S.lines) orelse {
-        std.debug.print("metal-vmm: the pair's client's settings do not fit\n", .{});
-        return null;
-    };
-    const env = S.lines[0..n];
-    if (checked.complaint(env, buf)) |why| {
-        std.debug.print("metal-vmm: the pair's client: {s} (KNOBS.md)\n", .{why});
-        return null;
-    }
-    // No default: the one there was, a shared stdout, interleaves the two
-    // consoles mid-word (pair.spawn).
-    const out = environ.getPosix("PAIR_OUT") orelse {
-        std.debug.print("metal-vmm: a pair needs PAIR_OUT=<file> for the client's console (KNOBS.md)\n", .{});
-        return null;
-    };
-    _ = startPair(environ, env) orelse return null;
-    // Both are environment values, so each ends in the NUL its entry has.
-    const command_line: [*:0]const u8 = if (environ.getPosix("PAIR_CMDLINE")) |c| @ptrCast(c.ptr) else "";
-    // The client's boot disk, if it has one (an application kernel reads its
-    // conf and keeps its data there); its writes are kept at a normal end.
-    const client_disk: [*:0]const u8 = if (environ.getPosix("PAIR_DISK")) |d| @ptrCast(d.ptr) else "";
-    return pair.spawn(fds, @ptrCast(kernel.ptr), client_disk, command_line, env, @ptrCast(out.ptr)) catch {
-        std.debug.print("metal-vmm: the pair's client would not start\n", .{});
-        return null;
-    };
-}
-
-/// `a-b`, whole seconds, `a` before `b`, as the wire's silent window.
-fn silentOf(text: []const u8) ?@FieldType(faults.Wire, "silent") {
-    const dash = std.mem.indexOfScalar(u8, text, '-') orelse return null;
-    const a = std.fmt.parseInt(u64, text[0..dash], 10) catch return null;
-    const b = std.fmt.parseInt(u64, text[dash + 1 ..], 10) catch return null;
-    if (a >= b or b > std.time.s_per_day) return null;
-    return .{ .from_ns = a * std.time.ns_per_s, .to_ns = b * std.time.ns_per_s };
-}
-
-test "WIRE_SILENT_S is a-b in whole seconds, a before b, at most a day" {
-    try testing.expectEqual(@as(u64, 180 * std.time.ns_per_s), silentOf("180-300").?.?.from_ns);
-    try testing.expectEqual(@as(?@FieldType(faults.Wire, "silent"), null), silentOf("300-180"));
-    try testing.expectEqual(@as(?@FieldType(faults.Wire, "silent"), null), silentOf("180"));
-    try testing.expectEqual(@as(?@FieldType(faults.Wire, "silent"), null), silentOf("a-b"));
-}
-
-/// **THE PAIR'S END** on this side: its line, `stopped` said and the other
-/// side's heard, and the client reaped. The client's verdict (0 on the
-/// client's own side), or 1 if the pair did not end cleanly.
-fn endPair(link: *pair.Link, at: u64, client_pid: ?linux.pid_t) u8 {
-    var buf: [512]u8 = undefined;
-    std.debug.print("{s}", .{link.line(&buf)});
-    var failed = false;
-    link.finish(at) catch |e| {
-        std.debug.print("metal-vmm: the pair did not end cleanly: {s}\n", .{@errorName(e)});
-        failed = true;
-    };
-    const pid = client_pid orelse return @intFromBool(failed);
-    const code = pair.reap(pid);
-    std.debug.print("metal-vmm: the pair's client (side 1) exited {d}\n", .{code});
-    return if (failed and code == 0) 1 else code;
 }
 
 // ── the parts that can be checked without a processor ────────────────────────
@@ -870,23 +677,5 @@ test {
     _ = @import("boot.zig");
     _ = @import("machine.zig");
     _ = @import("serve.zig");
-}
-
-test "a request file is read whole, past one read's worth, and one too large is refused, not cut" {
-    const path = "/tmp/metal-vmm-readall-test";
-    var bytes: [20_000]u8 = undefined;
-    for (&bytes, 0..) |*b, i| b.* = @truncate(i *% 31);
-    const fd = linux.open(path, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o600);
-    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(fd));
-    try std.testing.expectEqual(bytes.len, linux.write(@intCast(fd), &bytes, bytes.len));
-    _ = linux.close(@intCast(fd));
-    defer _ = linux.unlink(path);
-
-    var room: [32 * 1024]u8 = undefined;
-    try std.testing.expectEqualSlices(u8, &bytes, try readAll(path, &room));
-    var exact: [20_000]u8 = undefined;
-    try std.testing.expectEqualSlices(u8, &bytes, try readAll(path, &exact));
-    var small: [8192]u8 = undefined;
-    try std.testing.expectError(error.TooLarge, readAll(path, &small));
-    try std.testing.expectError(error.Unreadable, readAll("/tmp/metal-vmm-readall-no-such-file", &small));
+    _ = @import("client_files.zig");
 }

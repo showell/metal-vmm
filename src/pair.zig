@@ -16,6 +16,10 @@
 const std = @import("std");
 const linux = std.os.linux;
 const turn = @import("turn.zig");
+const pair = @import("pair.zig");
+const checked = @import("checked.zig");
+const settings = @import("settings.zig");
+const count = settings.count;
 
 pub const client_prefix = "PAIR_CLIENT_";
 /// The settings both sides take as the server has them.
@@ -538,4 +542,85 @@ test "two scripted guests take turns over a real socket: no frame arrives late, 
         try testing.expectEqual(keep[run][1].sent, keep[run][0].delivered);
     }
     for (0..2) |k| try testing.expectEqualSlices(u64, logs[0][k], logs[1][k]);
+}
+
+/// **WHAT A PAIR REFUSES AT ITS START** (turn.zig's `checkStart`): no
+/// lookahead, or a receiver-side fault knob. L in nanoseconds, or null,
+/// said.
+pub fn startPair(environ: std.process.Environ, entries: []const [*:0]const u8) ?u64 {
+    var name_buf: [1024][]const u8 = undefined;
+    const set = pair.names(entries, &name_buf) orelse {
+        std.debug.print("metal-vmm: PAIR: more than {d} settings in the environment to check\n", .{name_buf.len});
+        return null;
+    };
+    const lookahead = turn.checkStart(count(environ, "WIRE_LATENCY_US"), set) catch |e| {
+        switch (e) {
+            error.NoLookahead => std.debug.print("metal-vmm: PAIR needs WIRE_LATENCY_US over 0: the lookahead, which no frame across takes less than\n", .{}),
+            error.ReceiverSideFault => std.debug.print("metal-vmm: PAIR refuses a receiver-side fault knob ({s}): it would fault only the local peer's frames\n", .{receiverSideSet(set)}),
+        }
+        return null;
+    };
+    return @intCast(lookahead);
+}
+
+fn receiverSideSet(set: []const []const u8) []const u8 {
+    for (set) |name| for (turn.receiver_side) |r| if (std.mem.eql(u8, name, r)) return name;
+    return "?";
+}
+
+/// **THE CLIENT, STARTED**, its settings held to the same rules as the
+/// server's before it is: refused here, not by a child the server then
+/// waits for.
+pub fn spawnClient(environ: std.process.Environ, buf: []u8) ?pair.Spawned {
+    const kernel = environ.getPosix("PAIR") orelse return null;
+    const fds = pair.socketPair() catch {
+        std.debug.print("metal-vmm: no socket for the pair\n", .{});
+        return null;
+    };
+    const S = struct {
+        var text: [64 * 1024]u8 = undefined;
+        var lines: [256][*:0]const u8 = undefined;
+    };
+    const n = pair.childEnvironment(environ.block.view().slice, fds[1], &S.text, &S.lines) orelse {
+        std.debug.print("metal-vmm: the pair's client's settings do not fit\n", .{});
+        return null;
+    };
+    const env = S.lines[0..n];
+    if (checked.complaint(env, buf)) |why| {
+        std.debug.print("metal-vmm: the pair's client: {s} (KNOBS.md)\n", .{why});
+        return null;
+    }
+    // No default: the one there was, a shared stdout, interleaves the two
+    // consoles mid-word (pair.spawn).
+    const out = environ.getPosix("PAIR_OUT") orelse {
+        std.debug.print("metal-vmm: a pair needs PAIR_OUT=<file> for the client's console (KNOBS.md)\n", .{});
+        return null;
+    };
+    _ = startPair(environ, env) orelse return null;
+    // Both are environment values, so each ends in the NUL its entry has.
+    const command_line: [*:0]const u8 = if (environ.getPosix("PAIR_CMDLINE")) |c| @ptrCast(c.ptr) else "";
+    // The client's boot disk, if it has one (an application kernel reads its
+    // conf and keeps its data there); its writes are kept at a normal end.
+    const client_disk: [*:0]const u8 = if (environ.getPosix("PAIR_DISK")) |d| @ptrCast(d.ptr) else "";
+    return pair.spawn(fds, @ptrCast(kernel.ptr), client_disk, command_line, env, @ptrCast(out.ptr)) catch {
+        std.debug.print("metal-vmm: the pair's client would not start\n", .{});
+        return null;
+    };
+}
+
+/// **THE PAIR'S END** on this side: its line, `stopped` said and the other
+/// side's heard, and the client reaped. The client's verdict (0 on the
+/// client's own side), or 1 if the pair did not end cleanly.
+pub fn endPair(link: *pair.Link, at: u64, client_pid: ?linux.pid_t) u8 {
+    var buf: [512]u8 = undefined;
+    std.debug.print("{s}", .{link.line(&buf)});
+    var failed = false;
+    link.finish(at) catch |e| {
+        std.debug.print("metal-vmm: the pair did not end cleanly: {s}\n", .{@errorName(e)});
+        failed = true;
+    };
+    const pid = client_pid orelse return @intFromBool(failed);
+    const code = pair.reap(pid);
+    std.debug.print("metal-vmm: the pair's client (side 1) exited {d}\n", .{code});
+    return if (failed and code == 0) 1 else code;
 }

@@ -262,3 +262,19 @@ test "the knobs reach the wire, the disk and the peer, a seed's or the environme
         try testing.expectEqual(a_drive.writes_only, b_drive.writes_only);
     }
 }
+
+/// `a-b`, whole seconds, `a` before `b`, as the wire's silent window.
+pub fn silentOf(text: []const u8) ?@FieldType(faults.Wire, "silent") {
+    const dash = std.mem.indexOfScalar(u8, text, '-') orelse return null;
+    const a = std.fmt.parseInt(u64, text[0..dash], 10) catch return null;
+    const b = std.fmt.parseInt(u64, text[dash + 1 ..], 10) catch return null;
+    if (a >= b or b > std.time.s_per_day) return null;
+    return .{ .from_ns = a * std.time.ns_per_s, .to_ns = b * std.time.ns_per_s };
+}
+
+test "WIRE_SILENT_S is a-b in whole seconds, a before b, at most a day" {
+    try testing.expectEqual(@as(u64, 180 * std.time.ns_per_s), silentOf("180-300").?.?.from_ns);
+    try testing.expectEqual(@as(?@FieldType(faults.Wire, "silent"), null), silentOf("300-180"));
+    try testing.expectEqual(@as(?@FieldType(faults.Wire, "silent"), null), silentOf("180"));
+    try testing.expectEqual(@as(?@FieldType(faults.Wire, "silent"), null), silentOf("a-b"));
+}

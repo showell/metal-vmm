@@ -57,7 +57,7 @@ an empty queue ends a session.
 ## Most of it is logic
 
 Everything in `src/` except the ioctls in `kvm.zig` and the run loop in
-`main.zig` is a model: the PCI bus, MSI-X, the APIC, the clock, the virtio
+`serve.zig` is a model: the PCI bus, MSI-X, the APIC, the clock, the virtio
 rings, the peer's TCP, the faults. A model is tested on Linux like any code.
 `zig build test` runs them all, and none needs KVM.
 
