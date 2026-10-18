@@ -7,6 +7,35 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-18: the Linux host hunt, part 1: five bugs, each a red unit test first (zig-webbox `7db5793`..`c1c669b`)
+
+Pushed to zig-webbox `claude/great-wright-i7aste`. `zig build test` and `zig build consumers` are green. The gates gained nothing: each fix has a unit test. **The images:** 32 bytes smaller each (gopher.elf 2,619,533, dogpark.elf 1,344,893). That's from splitting core's `readSized` (item 2 below), codegen and no struct's fields. Linux-only after that.
+
+1. **`job_start` refused a log whose job had ended** (`7db5793`): the race I hit in 236. `job_wait` said `exited`, and a `job_start` on the same log right after was refused at random ("a job still runs"). The reaper, its last write made, hadn't yet exited.
+   - **The fix:** a record whose end is written has nothing left to write, so now only a live group holds the log, since a child it left may still write there.
+   - **Red first:** a done record with a living reaper, and start-wait three times on one log. SHALE-AGENTS.md says so.
+2. **`zig_*` kept every parse in the run's arena** (`a03e528`). That's why test_roots.shale needed `arena_bytes=2000000000`.
+   - **The fix:** the source's copy, tokens, Ast and plan now grow in an arena over the host's allocator, capped by the arena budget while they live (your `Capped`, now pub), and freed when the call returns. The run's arena keeps names, targets, and a change's new text.
+   - **Core gains `readSizedIn`**, `readSized`'s read into a given allocator.
+   - **Red first:** `zig_decls` of shale_host_linux.zig (58,759 bytes) ten times kept 609,364 bytes a call. It now keeps under twice the file (about 102 KB, the list it gives).
+   - **test_roots.shale now runs angry-gopher's whole tree within the default budgets.** Once this is on master, the two `--budget` flags in angry-gopher's ops/check_zig can go. I left them so an older `shale` still passes.
+3. **The keep freed lines twice when an allocation failed** (`bfa1197`). It passed a match's `before` lines on and then emptied the ring. A failure part way left lines in two places, and `deinit` freed them again.
+   - **This is a real path:** `Capped` refuses at the arena budget.
+   - **The fix:** each line leaves the ring before it is passed, and `deinit` frees each ring from where it starts.
+   - **Red first:** every allocation the keep makes, refused in turn (`std.testing.FailingAllocator`), gave a double free, then a leak once half-fixed. Now neither.
+4. **The scrubber told part of a secret** (`e46bc2a`). With secrets `abc` and `abcdef`, `abcdef` came out `<secret SHORT>def`: the first whole match won. And `abc` at a read's end was told at once, though the next read might have gone on to the longer one.
+   - **The fix:** a secret the rest of the stream may be the start of is waited for, the longest whole match is told, and what's held at the end is scrubbed.
+   - **Red first:** whole, split, and held at the end.
+   - **Left as it was, yours to decide:** a *prefix* of a secret that the program prints and never finishes (`abcde` of `abcdef`) comes out raw, as before.
+5. **A failing sink left the program running** (`737efaf`, `c1c669b`). `run` returned the sink's error (the keep at the cap) straight from its loop. The program went on running, then sat as a zombie, for as long as `shale` lived: its death signal fires when `shale` exits, not on a stop.
+   - **The fix:** an `errdefer` kills the group and reaps the leader.
+   - **Red first:** a new fixture verb, `pid-sleep MS`, prints its pid. After the failure, /proc still held the program, running.
+   - **Consumers caught my first try:** angry-gopher's request-edge harness flagged the test sink's `parseInt`, which sat outside a `test {}` block. The sink now lives in its test.
+
+**Read and found sound:** mounts' parse and `ro`; the keep's head and tail ring and its oracle fuzz; spawn's exec-failure pipe, signalfd and drain; the jobs' record writes (tmp then rename, a tmp per reaper).
+
+**Next:** the rest of the hunt (shale_host_jobs' `wait` under a record rewritten mid-read, `osPath` and mounts against `..`), unless the queue says otherwise.
+
 ## CC → the box, 2026-10-18: QUEUE 237: the doc checker, and its first report: 142 findings in seven repos, about a third of them real (zig-webbox `165d85d`)
 
 Pushed to zig-webbox `claude/great-wright-i7aste`. `zig build test` and `zig build consumers` are green, and the images are unchanged (2,619,565 / 1,344,925). **`zig build doc-check`** runs `tools/doc_check.shale` from the folder that holds the repos, with this tree's `shale`: its fixtures first, then the seven repos named at its top (metal-vmm, zig-webbox, angry-gopher, zig-metal-unikernel, dog-park, observatory, zig-coverage-sdk). It fails on any finding, and no gate runs it. `-- at=dc/` points it at another folder of checkouts. I ran it on worktrees at each repo's default branch, not on my branches.
