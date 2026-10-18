@@ -39,6 +39,12 @@ fresh_vmm "$HERE"
 VMM="$HERE/zig-out/bin/metal-vmm"
 [ -x "$VMM" ] || { echo "no $VMM; run: zig build"; exit 1; }
 
+# **THE DOCS' CITED PATHS AND NAMES**, this repo's (zig-webbox's
+# tools/doc_check.shale, a few seconds): the cheapest check, first.
+(cd "$HERE/../zig-webbox" && zig build doc-check -- only=metal-vmm > "$WORK/docs" 2>&1) \
+    || { echo "FAIL the docs: $(grep -aE 'gone |ambiguous |names gone |findings' "$WORK/docs" | head -5)"; exit 1; }
+echo "PASS the docs' cited paths and names"
+
 # **THE UNIT TESTS IN THE MODE THAT SHIPS.** metal-vmm is built ReleaseSafe
 # and its tests Debug (build.zig); a difference between the two (a read of
 # memory left undefined, say) shows here, once a check.
