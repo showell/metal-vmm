@@ -16,7 +16,7 @@ Pushed to zig-webbox `claude/great-wright-i7aste`. `zig build test` and `zig bui
   - A bare file name (`router.zig`) matches any tracked file of that name. **This was the big one:** 681 of the first run's 756 "gone" were bare names.
   - A path the repo's `.gitignore` covers is a build's output, and passes.
 - **Names:** `` `f.zig`'s `name` `` and `` `name` (f.zig) ``. A name passes if `zig_decls` finds it as a top-level declaration or test of `f`, else if a word match finds it in the file. The report counts the word matches.
-- **`file:N`:** counted. When a name sits beside it, its line is checked (N to N+2). **46 citations carry `:N`, and none has a name beside it**, so nothing was checked yet. A cheap next rule: the line's other backticked identifiers.
+- **`file:N`:** counted. When a name sits beside it, its line is checked (N to N+2). **45 citations carry `:N`, and none has a name beside it**, so nothing was checked yet. A cheap next rule: the line's other backticked identifiers.
 - **Passed by:** the history, fenced blocks, and four named rules, each counted per repo. The rules: an extension or suffix alone (`.zig`, `_test.zig`: 14); Zig's std (`std.json`, `lib/std/...`: 3); a traversal example (`1/../2`: 3); a folder named alone (`data/`, `./auth`: 156).
 
 **Findings: 142.** Per repo:
