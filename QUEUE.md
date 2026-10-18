@@ -26,7 +26,7 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
   its message names the commits. Dog Park serves dogpark.lynrummy.com.
 - **Built, not deployed (Steve's):** the Observatory's droplet (228). Dog
   Park's release with `/version` serves (its `/version` names the commit).
-- **CC (tonight, unsupervised; the essay `notes/cc-overnight-plan.md`):** 234's report if not sent, then **235, then 236, then 237**; if time is left, a bug hunt in the Linux host (`shale_spawn`, `shale_jobs`, `shale_host_jobs`, `shale_keep`, the secret scrubber's carry across chunks, mounts), each bug a red unit test, nothing new in the gates. A FEEDBACK entry per chunk, so whatever finished can be merged; both images measured each chunk. 233 is done and merged. **The dry run is deleted** (Steve, 2026-10-17; zig-webbox b994ce6): every run writes, `--write` is gone (the gate refuses it), and on Linux git is the undo. Merge master before you push. `?` (optional parameters) stays (Steve, 2026-10-17). The `shale-gate` hook is installed on the box (2026-10-17): top-level Claude runs only Shale; subagents are exempt (zig-webbox SHALE-AGENTS.md, "The gate").
+- **CC:** 238. The night's 234 to 237 are merged and archived (2026-10-18).
 
 ## CC: open
 
@@ -36,6 +36,13 @@ adversarial.** Every item here runs on the host: `zig build test
 takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
+
+**238. angry-gopher's portable lint on Zig's parser: `zig_tokens`, and `lint_portable` as a Shale tool: CC'S** (the box, 2026-10-18, taking CC's offer in FEEDBACK "your asks on 235"). angry-gopher's `tools/lint_portable.py` (349 lines) reads Zig as text: its rules, the `test {}` finder, `test_only_lines` and the import closure are regexes over lines, and it flagged a Zig string in a fixture (`std.Io` in a string is not code). It is the last of the text readers of Zig in the gates, after library_test's import reader (235.3) and edge_sites (tokens). zig-webbox and angry-gopher, from master.
+
+1. **`zig_tokens(p)`** in the Linux prelude: `{tag, text, line}` per token over `shale_zig_ast.tokens`, the one tokenizer (the reading `zig_rename` and `zig_move` share). Comments are tokens only where Zig makes them (doc comments); a plain comment and a string's bytes are never code. Charged a step a token; the parse in the scratch arena (a03e528). Red first, and one-reading: its tokens are the ones `zig_rename`'s plan reads.
+2. **The lint as a Shale tool**, angry-gopher `tools/lint_portable.shale`, replacing the Python: the import closure over `zig_imports` (as test_roots.shale does), test-only declarations by `zig_decls` span, and each rule over `zig_tokens`. **Its verdicts on the tree are the Python's** before the Python goes: the same modules, the same findings (held as a test until the switch), then the Python and its tests are deleted in the same commit that wires the Shale one into `ops/check_zig`.
+   - **Plants, one per rule**, each still firing after the move (a refactor plants its own failures); plus the fixture that tripped the Python: `std.Io` in a string and in a comment, no finding.
+3. **Report** in FEEDBACK: the rules as built, the plants, the Python's and the Shale's verdicts side by side, the run's cost.
 
 
 ## Parked
