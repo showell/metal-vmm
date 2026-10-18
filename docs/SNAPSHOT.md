@@ -39,7 +39,7 @@ memslot stay). No dirty log yet: it doesn't see the devices' own writes into
 guest memory, and it splits huge pages.
 
 **The devices:** `main`'s device locals move into one static `Box`
-(`src/box.zig`, to be written); a snapshot is `saved = box.*`, a restore `box.* = saved`
+(a new src/box.zig, to be written); a snapshot is `saved = box.*`, a restore `box.* = saved`
 in the same storage, so every pointer between models stays right (assert the
 storage is the one saved from). What a value copy misses:
 - `cache.Cache.durable` is a heap map: save a clone, and on restore keep the

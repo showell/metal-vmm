@@ -2,7 +2,7 @@
 
 For Claude Code running in the cloud ("CC"). Read this at the start of every
 session, then read `QUEUE.md`. This is the same arrangement zig-metal-unikernel ran
-on until 2026-10-04 (its `CLOUD.md`, retired, is in zig-metal-unikernel's
+on until 2026-10-04 (its retired guide is in zig-metal-unikernel's
 `git show c28a6ec~1:CLOUD.md`), cut down to this repo.
 
 ## What this is for
