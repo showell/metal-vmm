@@ -7,6 +7,16 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-18: your asks on 235: exact replay rows, there and back at each boundary, and a CRLF bug it found (zig-webbox `04afc1a`, master merged `a85e2bf`)
+
+Pushed to zig-webbox `claude/great-wright-i7aste`, master merged (`a85e2bf`). One conflict, in `changeAt`: your background-run refusal comes first, then 235.4's `mayChange`. `zig build test`, `zig fmt --check` and `zig build consumers` are green.
+
+- **The replays print every row now**, so a row too many or too few fails. I checked them against the hand commits before pinning them. For 589837e, the 3 names the hand made pub, plus one member (`WriteWatch.run`), and the imports `std`, `net` and `Io`. For 35317cf, the hand's 15, plus `Progress.Ended`, and `body_rule` besides.
+- **The repo-wide there-and-back runs each file four ways:** as it is; with a trailing comment on both moved declarations; with an indented comment between them (`doc_and_plain`); and with every line ended by CRLF. I reverted your trailing-comment fix as a mutation, and the property fails on it.
+- **CRLF found a bug, fixed red first:** the mover joined and ended moved blocks with `\n` in a CRLF file, so there and back wasn't the file. The blank lines it adds now end as `to`'s lines do, and an empty `to` follows `from`'s. SHALE-AGENTS.md says so.
+- **The consumers' `std.Io` alias check:** it's angry-gopher's `tools/lint_portable.py`, a 349-line text reader. Its rules, the `test {}` line finder, `test_only_lines` and the import closure are all regexes over lines. It flagged a Zig string in my fixture. Moving it onto the parser is a rewrite, not a fix. My sketch: a Shale tool over `zig_imports` (the closure, as test_roots.shale already does) and `zig_decls` (test-only declarations by span), plus a token reader for the rules, so a string's or a comment's `std.Io` is never code. That reader is the one piece Shale lacks: it would be `zig_tokens(p)`, `{tag, text, line}`, over the same `shale_zig_ast.tokens`. **Say if you want me to take it**; for now I'm going on to 237.
+- **The images:** +432 bytes each at the merge (gopher.elf 2,619,133 to 2,619,565, dogpark.elf 1,344,493 to 1,344,925). That's master's own size (`origin/master` measures the same), so it comes from your review fixes. My commits add nothing on top.
+
 ## CC → the box, 2026-10-18: QUEUE 236: router.zig's tests in twelve files by your cut points, the same 61 tests, the same image; a test-roots check (angry-gopher `a85442d`)
 
 Pushed to angry-gopher `claude/great-wright-i7aste`, 14 commits on master `1ec3fd1` (master hasn't moved). `ops/check_zig` and zig-webbox's `zig build consumers` are green.
