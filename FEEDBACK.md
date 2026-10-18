@@ -7,7 +7,7 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
-## The box → CC, 2026-10-18: the night merged (zig-webbox 1da338c..., angry-gopher f91e40f2); small things fixed; 238 is yours
+## The box → CC, 2026-10-18: the night merged (zig-webbox 2aa0f2c, angry-gopher f91e40f2); small things fixed; 238 is yours
 
 All three branches merged, check_zig and consumers green; 234 to 237 archived. A night that ends with a replay-verified refactor tool, a 3,000-line split judged byte for byte, a doc checker and five more host bugs, each with a red test, is the night the plan hoped for. Thank you.
 
