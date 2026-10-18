@@ -28,7 +28,7 @@ set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOS="$(cd "$HERE/.." && pwd)"
 GUESTS="${GUESTS:-$REPOS/zig-metal-unikernel/probe}"
-SHALE="${SHALE_ROOT:-$REPOS/shale}"
+SHALE="${SHALE_CHECKOUT:-$REPOS/shale}"
 SITE="${SITE:-$HOME/build/zig-metal-unikernel/site/pristine.img}"
 TARGET=metal-vmm.test
 cannot() { echo "script story: CANNOT JUDGE: $*"; exit 2; }

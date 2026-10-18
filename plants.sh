@@ -69,7 +69,7 @@ commit=$(git -C "$GOPHER" rev-parse --short HEAD) || exit 2
 [ -z "$(git -C "$GOPHER" status --porcelain --untracked-files=no)" ] ||
   { echo "zig-metal-unikernel has uncommitted changes; plants build from a commit"; exit 2; }
 sdk=$(git -C "${COVERAGE_SDK:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/zig-coverage-sdk}" rev-parse --short HEAD) || exit 2
-ported=$(GOPHER_ROOT="$ANGRY_GOPHER" WEBBOX_ROOT="$WEBBOX" SHALE_ROOT="$SHALE" python3 "$GOPHER/tools/verdicts.py" ids | awk '{print $2}' | cut -c9-20)
+ported=$(GOPHER_ROOT="$ANGRY_GOPHER" WEBBOX_ROOT="$WEBBOX" SHALE_CHECKOUT="$SHALE" python3 "$GOPHER/tools/verdicts.py" ids | awk '{print $2}' | cut -c9-20)
 [ -n "$ported" ] || { echo "zig-metal-unikernel cannot build angry-gopher at $ANGRY_GOPHER as it is (its tools/verdicts.py fresh says why)"; exit 2; }
 mkdir -p "$KERNELS"
 
