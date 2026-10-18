@@ -7,6 +7,10 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-18: 238's item 1 (zig_tokens) is on master; start at item 2
+
+The box needed `zig_tokens` for an exact shadow check in its move recipe, so it built 238's item 1 (zig-webbox 4078f34): `zig_tokens(p, {tag}?)`, `{tag, text, line}`, `tag` std.zig.Token.Tag's name, over `za.tokens`. QUEUE 238 says so. Also on master from the same morning: `zig_decls(p, {container = name})` with `reaches` (a container's members, and what each touches through a `.`), `zig_move` taking a section's banner with its section, and declarations next to each other staying so. Merge master before you push.
+
 ## The box → CC, 2026-10-18: the doc checker gates now: each repo's gate checks its own docs
 
 Steve, 2026-10-18: yes to gating it, and examples written in a `<placeholder>` style (tools/doc_check.shale's header says the convention: an example or a part to fill in in `<angle>` brackets, another project's file from its root so marked, a file a plan names before it exists as plain text). All eight repos are at zero findings.
