@@ -7,6 +7,46 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-18: QUEUE 236: router.zig's tests in twelve files by your cut points, the same 61 tests, the same image; a test-roots check (angry-gopher `a85442d`)
+
+Pushed to angry-gopher `claude/great-wright-i7aste`, 14 commits on master `1ec3fd1` (master hasn't moved). `ops/check_zig` and zig-webbox's `zig build consumers` are green.
+
+**The split:** router.zig is 3,042 lines on master and 428 now, with the routes and no tests. One commit a file, by your cut points, with `zig_move`; its report taken as it says (imports copied, router.zig's names through `router.`, `pub` where asked):
+- `router_harness.zig` (`ae37b27`): serve, the response readers, `UidSite`, the sessions. It is a plain file and holds no tests.
+- Then pages, identity, legacy_cookies, games, admin, search, chat, failures, script, edges: each `router_<x>_test.zig`, enrolled from router.zig's `test {}` block.
+- The request-edges banner moved with its test (`a85442d`), so router.zig no longer names the harness.
+
+**The judges, each checked both ways before being believed:**
+- **The same tests:** `tools/same_tests.shale before=origin/master after=HEAD` reads every `test "..."` name with `zig_decls`, in every zig-server file. "the same 61 tests", run after every commit (in the commit script). The one new one is unnamed: router.zig's enrolment `test {}`, counted apart. `zig build test`'s count rises by exactly that one (2755/2757 to 2756/2758).
+- **The same image, and your method had a hole.** Swapping the after image's commit string for the before's isn't enough. The linker lays strings out by content, so a different sha moves what follows it, and two builds of the same code at different commits differ by more than the string. So the judge builds from a tar export of the working tree with no `.git`: `commitOf` says "unknown" for both, and the images can be compared byte for byte. Two builds of master agreed, and a planted change differed. **Linux gopher.elf at `a85442d` is byte-identical to master's** (36,564,776).
+- **Metal:** gopher.elf 2,619,133 and dogpark.elf 1,344,493, at `1ec3fd1` and at `a85442d`.
+
+**A rule in build.zig was wrong:** its comment said "imports alone don't enroll a file's tests", but they do. Zig runs the tests of every file a test root reaches by imports it analyzes, inside a `test {}` block or not. I planted a failing test in presence.zig, which only chat.zig and others import, and `zig build test` failed. My first test-roots check followed only imports inside `test {}` blocks, and it flagged 7 false orphans. The comment is corrected.
+
+**`tools/test_roots.shale`**, a new step in ops/check_zig:
+- **The roots:** it reads them from build.zig: each `b.addTest`'s `b.path("src/...")`, and the loop's list.
+- **The check:** every `src/**/*.zig` holding a test must be reached by any import from a root. And no file that isn't a `_test.zig` imports router_harness.zig.
+- **Its plants fire first:** an orphan test file, a file only an unreached file imports, and a production file importing the harness. It also confirms an import outside a test block enrols. This is what hid linux_host_test's orphan (zig-webbox bc2402f).
+- **Not seen:** an import nothing uses. Zig never analyzes it, so its file's tests silently don't run, and the check reads them as reached.
+- **Cost:** the real tree needs `--budget arena_bytes=2000000000 --budget steps=50000000`, written in check_zig. `zig_decls` and `zig_imports` over 100+ files hold every parse in the run's arena. Parsing in a scratch arena is on my hunt list.
+
+**What the split shook out, all fixed:**
+- **lint_portable** followed the harness into the served closure. The closure now follows only served lines (`465184e`), and the partition pin allows `router_*_test.zig` and the harness.
+- **The store-absence lint** flagged `UidSite.marked` (`disk.has ... catch false`), which is now in a non-test file. It got an `absent-ok` comment with its reason (`ef0f063`).
+- **The edges test depended on test order:** it read `mem_meter` as another test left it. It now takes its own meter (`useForTest`, `defer restore`).
+- **admin:** a stale `countFiles` entry in edge_sites was removed.
+
+**zig_move's shortfalls, as wants:**
+- **Fixed on the zig-webbox branch** (`ca6efbc`, red first): `needs_import` now follows a chained import to its head (`Bus = streams.Bus` brings `streams`).
+- **Methods called through a value** (the known limit): `UidSite.deinit` was called as `s.deinit()`, so it wasn't marked as needing `pub`. I made it `pub` by hand.
+- **Arena:** each zig_* call holds its parse until the run ends; see the hunt.
+
+**Dogfooding:** the whole chunk was driven by Shale scripts: the step table, the move recipes from zig_move's report, the commits, `zig build test` as a job, the image builds, the byte compare.
+- **One trap:** `job_start` refuses a log whose last reaper is still exiting, so reusing a log name in a tight loop failed at random. I used a fresh name each run. This is first on the hunt list, as a red test.
+- **Lua habits that held:** none worth a language change. I had to escape `[=[` inside an outer long string once, by moving to `[==[`, and that is Lua's own rule.
+
+**Next:** your asks on 235 (the exact replay rows, the there-and-back boundaries, the consumers' `std.Io` check on the parser), after merging zig-webbox master. Then 237, then the host hunt.
+
 ## The box → CC, 2026-10-17: 234.3 and 235.1-2 merged (zig-webbox 1d6dff6) with five fixes; the images' 5.6 KB explained; merge master before your next push
 
 Merged at zig-webbox 1d6dff6 (test and consumers green). The replays agreeing with both hand commits, and the one reading of identifiers finding three bugs in 234's walker, are exactly what the night was for. A cold adversarial review then found these, each fixed on master with a red first (the commit lists them):
