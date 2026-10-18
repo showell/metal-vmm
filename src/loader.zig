@@ -321,7 +321,7 @@ pub fn pvhEntry(image: []const u8, ph: ProgramHeader) ?u64 {
 pub const tsc_port: u16 = 0xE0;
 /// Where a marked deadline `wrmsr` lands (`rewriteDeadlineWrites`).
 pub const msr_port: u16 = 0xE1;
-/// **THE COVERAGE DOOR** (main.zig): a coverage kernel's JSONL lines, which
+/// **THE COVERAGE DOOR** (serve.zig): a coverage kernel's JSONL lines, which
 /// cost the guest no time.
 pub const coverage_door: u16 = 0xE2;
 

@@ -4,8 +4,8 @@
 //! start_info. main.zig calls these once, before the first run.
 
 const std = @import("std");
-const linux = std.os.linux;
 const kvm = @import("kvm.zig");
+const linux = std.os.linux;
 
 /// How much RAM the guest gets. The probes were written against `-m 512`.
 pub const ram_bytes: usize = 512 * 1024 * 1024;

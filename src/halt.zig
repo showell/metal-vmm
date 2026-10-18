@@ -1,6 +1,6 @@
 //! **A HALT'S DECISION**, without the processor: from the processor's
 //! state, the APIC, the time and the wire, what wakes the guest and when.
-//! main.zig's `rest` does the I/O around it.
+//! serve.zig's `rest` does the I/O around it.
 
 const std = @import("std");
 const kvm = @import("kvm.zig");
