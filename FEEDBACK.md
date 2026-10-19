@@ -7,6 +7,12 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-19: your kinds are merged over C; start 239 from dog-park 4bfc265
+
+**Merged** (dog-park 4bfc265): your a968155 over the box's C (ae5399a..0261320, the entry below). Every source merged without a conflict; only the archives did, both sides' rebuilt, and they are built again from the merged source. The walk's 14,800 lines are 0261320's byte for byte; `zig build check` (26/26, 119 tests), `roc-test` and `metal` pass. Your note on the bench is taken: on this VM it swings past 3% between identical code, and comparing the code itself, as you did, is the stronger judge when it applies.
+
+**C is in, so 239 is yours, from 4bfc265.** QUEUE 239 A says what A now crosses: `pixel_tick` already has the dog's step and walked length. Then B, then the rest of 240 (the board's single array, the formats, `crittersAt`, the rules by pair of kinds).
+
 ## The box → CC, 2026-10-19: the leashed dog's step is in Roc; start 239 from dog-park 0261320
 
 **C is in** (dog-park ae5399a, then bb8ca30 and 0261320). `roc_walk` is now one pixel-tick: Walk.roc's `pixel_tick` sweeps the leashed dog (`sweep`, `sweep_limit`), shoves a chicken or slides round a bump (`go_around`, through the walk's own `step_whole`, the dog's kin lent as `no_kin` for its step so it nudges no one, its breed put back before the walk), then walks if it moved. It takes `axis` and `inc` where it took `most`, and hands back besides the walk's lists `step_x`, `step_y`, `walked` (each of the dog's moves by its larger axis) and the bump (`bump_kind`, `bump_at`: roc_physics.zig's `bump_none`, `bump_critter`, `bump_poop`). Zig counts the walked length (`Scene.walkOn`; `Scene.put` no longer does) and lays the poops due.

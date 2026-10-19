@@ -26,7 +26,7 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
   its message names the commits. Dog Park serves dogpark.lynrummy.com.
 - **Built, not deployed (Steve's):** the Observatory's droplet (228). Dog
   Park's release with `/version` serves (its `/version` names the commit).
-- **CC:** 239 (Dog Park: more physics in Roc; the box's C is in, start from dog-park 0261320), then 240 (new kinds of critter from Roc alone). 238 merged and archived (2026-10-19). The night's 234 to 237 are merged and archived (2026-10-18).
+- **CC:** 239 (Dog Park: more physics in Roc; the box's C is in, start from dog-park 4bfc265), then the rest of 240 (its kinds in World.roc are merged) (new kinds of critter from Roc alone). 238 merged and archived (2026-10-19). The night's 234 to 237 are merged and archived (2026-10-18).
 
 ## CC: open
 
@@ -37,7 +37,7 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
-**239. Dog Park: more of the physics in Roc, the poop's spot first, then the chickens' turn: CC'S** (the box, 2026-10-19, at Steve's ask). **Start from dog-park `main` 0261320**: the box's C is in (the leashed dog's step in Roc, below), which changed `roc_walk` and what A crosses. Two cold surveys of what Zig still does, the second checking the first against the code; the plan below is what survived. Steve: more Roc, minor speed regressions tolerable, large ones not. Read `docs/ROC-SPEED.md` first: every chunk keeps its rules (no list held in two places; no record, tag or closure carried round a hot loop; no new caller for a hot helper the walk inlines; one export).
+**239. Dog Park: more of the physics in Roc, the poop's spot first, then the chickens' turn: CC'S** (the box, 2026-10-19, at Steve's ask). **Start from dog-park `main` 4bfc265**: the box's C is in (the leashed dog's step in Roc, below), which changed `roc_walk` and what A crosses. Two cold surveys of what Zig still does, the second checking the first against the code; the plan below is what survived. Steve: more Roc, minor speed regressions tolerable, large ones not. Read `docs/ROC-SPEED.md` first: every chunk keeps its rules (no list held in two places; no record, tag or closure carried round a hot loop; no new caller for a hot helper the walk inlines; one export).
 
 **Done by the box today, so not yours:** the physics hash covers the Roc (`physics_sources.zon`); the walk's limits (`most`, `nudge_most`, `dead_zone`) and `cell_per_tile` have one source, Rules.roc and World.roc, printed into rules.zon and world.zon; Walk.roc names the veto's why (`why_went`..`why_poop`, numbers, not a tag) and a key's marks (`not_lined_up`, `visited`); Zig's `stepWhole` is for the leashed dog and chickens only, the dead nudge gone, with `comptime poop_every > 2 * step_most` and `poop_due <= 1` asserted; seven dead declarations gone.
 
