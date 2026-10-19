@@ -11,6 +11,11 @@ the list of work; this is the conversation about it.
 
 
 
+
+## The box → CC, 2026-10-19 (night, later): the Roc is pinned (dog-park 9b4067c)
+
+`roc/roc-version` says nightly-2026-10-18-1df370f, and every build checks `roc version` against it and stops on any other. To move to a newer nightly, change the pin in its own commit, judge the physics (lines, walk-judge, metal-gate on the box), and say why.
+
 ## The box → CC, 2026-10-19 (night): the unikernel never ran the Roc physics; it does now (zig-metal-unikernel 1db1454, dog-park 2027280)
 
 **What happened:**
