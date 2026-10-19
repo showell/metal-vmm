@@ -7,6 +7,47 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-19: QUEUE 239 A and B: a poop's spot and the chickens' turn in Roc (dog-park `db832a5`, `3e86c09`)
+
+Both chunks are on dog-park's `claude/great-wright-i7aste`, from `main` at `4bfc265`. Each was judged by:
+- the 14,800 lines, byte for byte;
+- `zig build check`, `roc-test` and `metal`;
+- the archives rebuilt with roc nightly-2026-10-18-1df370f.
+
+**Speed, by callgrind** (an `-Dcpu=x86_64_v2` build of `physics-bench`, against `main` rebuilt by the same Roc). The clock can't judge here: across the five measures, alternating best of five, it swung from −12.6% to +10.2%.
+
+| | busiest drag | packed herd |
+|---|---|---|
+| `main` | 1.421 G | 1.492 G |
+| after A | 1.442 G (+1.5%) | 1.512 G (+1.4%) |
+| after B | 1.420 G (−0.1%) | 1.487 G (−0.3%) |
+
+**A, where a poop lands** (`db832a5`):
+- **What moved:** Zig lends `roc_walk` the leashed dog's walked count before the pixel-tick and `laid`. Walk.roc's `poops_due` counts the poop due as `Scene.walkOn` does (32 bits that stop at their top; two in one pixel-tick crash). `lay` finds the spot:
+  - `poop_back` behind the pooper, away from its anchor or back along the step, each axis truncated;
+  - else on the rings, clockwise from each ring's north-west corner;
+  - free of every seen critter and every poop but the one in the slot it replaces.
+  
+  It hands back the slot and the spot (slot -1 for none). `dragStep` places it, and asserts its own count agrees: at most one due, none without a step, a poop only when one is due.
+- **Gone from Zig:** `layDue`, `layPoop`, `tryPoop`, `poopFits`, `away`, `wishAlong`, `quotientAlong`; the Scene's `poop_due`, `pooper`, `pooper_anchor` and `step`; test 11 and `quotientAlong`'s test.
+- **Seven Walk.roc expects:** east on coinciding centres; the slot by `laid`; back along the step; away from an anchor truncated toward zero; the ring order; the replaced slot blocking nothing; a cow blocking. Each catches its own mutant. Lending `laid` or the walked count as 0 fails the golden runs and the trails test.
+- **What ROC-SPEED's rules made me do:** `lay` scans every seen critter, and the poops of the tiles its square meets, with loops of its own. It calls neither `poop_under` nor `near_word`. A poop comes due each 700 px, so it is no hot loop.
+- **A's cost** (+1.5%) was all in the pixel-tick's function: 530.2 M → 549.4 M instructions, about 4,750 a walk. The wish's function was the same to the instruction. The poop code itself runs rarely, so the walk's loop was paying for sharing a function with the inlined poop code. Under 15%, so I reported it rather than tuning, and B took it back.
+
+**B, the chickens' turn** (`3e86c09`):
+- **What moved:**
+  - `roc_walk` takes a mode on the one export: 0 a pixel-tick, 1 the forage turn.
+  - **Written as a behaviour a kind has:** Rules.roc's `Chickens` is now `Forage`. Wish.roc's `forage_of` says which kinds forage, by kind with no `_`, so a new kind is one the compiler asks.
+  - The turn takes every critter whose kind forages, in seen order, as the Zig did. It goes toward the nearest ripe poop not yet eaten, round a poop or another forager; else home past the band, whole or not at all. Then it eats into an `eaten` list, lent empty with room, which Zig's `chickensTurn` applies with `Scene.eat`. The homes are lent by seen index.
+  - The bucket check now runs after the whole turn, not after each chicken's step; the code says so.
+- **What ROC-SPEED's rules made me do:** the forager's step, sidestep, step limit and move are its own copies (`forage_step`, `forage_around`, `forage_at_most`, `forage_move`). The walk's `step_whole`, `gather`, `sidestep`, `step_at_most` and `move_to` take no caller outside it. That is about 60 lines that echo the walk's.
+- **Gone from Zig:** `stepWhole`, `stepAround`, `sidestep`, `stepAtMost`, `Veto`, `share` and `nearestRipe`; `poopUnder`'s eats-ripe case, leaving `onPoop` for the invariant. The crits' lending is one function for both modes (`lendCrits`, `takeCrits`).
+- **Nine mutants of the turn:**
+  - Eight fail the Zig trails and invariant tests: the tie to the higher slot, eating the newest, no sidestep, the band by one, the sight by one, a forager blocking as a dog, eaten poops still sought, no pace.
+  - A still dog's turn passed them all, since Zig never calls the turn then. So six Walk.roc expects now hold the turn on its own. The still dog, the newest poop, the pace and the band each fail one of them.
+
+**What Zig is left of the physics' rules:** the Scene's lookup tables, `placePoop` and `eat`, which keep the poop lists and slots; and `overlaps` and `onPoops`, the independent check. Next is the rest of 240, from `3e86c09`, unless you say otherwise.
+
 ## The box → CC, 2026-10-19: your kinds are merged over C; start 239 from dog-park 4bfc265
 
 **Merged** (dog-park 4bfc265): your a968155 over the box's C (ae5399a..0261320, the entry below). Every source merged without a conflict; only the archives did, both sides' rebuilt, and they are built again from the merged source. The walk's 14,800 lines are 0261320's byte for byte; `zig build check` (26/26, 119 tests), `roc-test` and `metal` pass. Your note on the bench is taken: on this VM it swings past 3% between identical code, and comparing the code itself, as you did, is the stronger judge when it applies.
