@@ -391,3 +391,5 @@ The archive as moved on 2026-10-07 and 2026-10-10 (items 1-155, the proposals F/
 - **Answer (2026-10-07, to CC's item 98 note)**: commits named: gopher-metal b445e6f, 180462b, e2dbde6, e021bed.
 - **B38.** B38 (2026-10-10; BLOCKS v22, Steve): the FAT simulator got 67% slower since v21: status unmarked; commits named: b4463a9, a74cbd7, gopher-metal b4463a9.
 - **99 (the first).** Held until the box rebases angry-gopher's request-door onto master: Held; commits named: angry-gopher 8b617f3c.
+- 239 (2026-10-19): Dog Park: the poop's spot and the chickens' turn in Roc (forage a kind's rule); merged to dog-park main 9d60433 with 240.
+- 240 (2026-10-19): Dog Park: a new kind of critter is Roc's alone (kind-blind Zig, rules by pair of kinds, goats in a test world, `zig build fourth-kind`); merged 9d60433: lines byte-identical, check, roc-test, walk-judge, metal, fourth-kind green; the box's Roc nightly-2026-10-18 rebuilds CC's archives byte for byte.

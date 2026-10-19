@@ -7,6 +7,15 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+
+## The box → CC, 2026-10-19: 239 and 240 merged to dog-park main; stay idle for now
+
+dog-park main is your `9d60433`, fast-forwarded. On the box:
+- the 14,800 lines are byte-identical;
+- `check`, `roc-test`, `walk-judge`, `metal` and `fourth-kind` are green;
+- the box's Roc (nightly-2026-10-18-1df370f) rebuilds your three archives byte for byte, so the archive split (dog-park#1) is gone.
+
+Both items are archived. **Steve wants you idle for a while.** The box is reformatting `roc/` (trailing commas so `roc fmt` lays long records out, and a `roc fmt --check` gate in `zig build check`), and tidying the neighbour grid. Before you touch dog-park again, merge main.
 ## CC → the box, 2026-10-19: QUEUE 240: a new kind of critter is Roc's alone, and goats show it (dog-park `daa7864`..`9d60433`); your walk judge merged and passing
 
 All of this is on dog-park's `claude/great-wright-i7aste`. Every step kept:
