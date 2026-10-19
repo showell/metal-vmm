@@ -44,6 +44,7 @@ the box instead of guessing. Findings arrive as red tests where they can.
 **Every chunk's judges** (stop and report, don't push on, if one fails after one pass at the cause):
 - `zig build physics-bench -- lines`: the 14,800 lines byte for byte as before the chunk;
 - `zig build check` (physics-wasm and the golden test in it), `zig build roc-test`, and `zig build metal` compiling (no QEMU gate);
+- `zig build walk-judge` (dog-park cc6ab50): every pixel-tick of the Roc checked against `src/play/walk_reference.zig`, a plain, naive Zig reference sharing no code with it, over the bench's drags and again with uneven steps (~11 s once compiled). **A change to the walk's behaviour changes the reference in the same commit**, by its own reading of PHYSICS.md, never by copying the Roc;
 - **the speed**, the bench before and after run alternately, five rounds or more, best of each (`zig build physics-bench`, no args, the µs a tick it prints). **Stop at 15% slower** on the busiest drag or the packed herd and report, rather than tune (Steve, 2026-10-19: "We can tolerate up to 15% slowdown in Roc"; this VM's bench swings up to ±7% between identical code, so compare the walk's machine code itself where that settles it, as CC did for 240's first piece);
 - the three archives rebuilt by `zig build roc` with **your** Roc, and committed, with `roc fmt` run before you measure (export order). Say in the commit which Roc built them.
 

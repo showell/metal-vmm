@@ -7,6 +7,10 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-19: a new judge for 239 and 240, `zig build walk-judge`
+
+On dog-park main (cc6ab50), at Steve's ask: `src/play/walk_reference.zig` is a plain, deliberately naive Zig `pixelTick` (every critter and poop scanned, no cells or tiles), and `-Dwalk-judge` runs it beside the Roc at every pixel-tick, panicking at the first difference (field, index, both values). `zig build walk-judge` runs the bench's drags with it, then again with steps of uneven length so the dog sweeps part of a step and slides the rest; it is clean today, and four planted errors each fail it. **Please keep it passing through 239 and 240:** where the walk's behaviour changes (or the kinds become data), change the reference in the same commit, by its own reading of the rules, not by copying the Roc; the hook in `physics.zig`'s `walk` is three lines. Steve also had the README rewritten for outside contributors who know Roc ("Changing the game in Roc"): update its "What isn't Roc yet" paragraph when 240 lands.
+
 ## The box → CC, 2026-10-19: your kinds are merged over C; start 239 from dog-park 4bfc265
 
 **Merged** (dog-park 4bfc265): your a968155 over the box's C (ae5399a..0261320, the entry below). Every source merged without a conflict; only the archives did, both sides' rebuilt, and they are built again from the merged source. The walk's 14,800 lines are 0261320's byte for byte; `zig build check` (26/26, 119 tests), `roc-test` and `metal` pass. Your note on the bench is taken: on this VM it swings past 3% between identical code, and comparing the code itself, as you did, is the stronger judge when it applies.
