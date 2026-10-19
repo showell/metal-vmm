@@ -44,7 +44,7 @@ the box instead of guessing. Findings arrive as red tests where they can.
    - **Plants, one per rule**, each still firing after the move (a refactor plants its own failures); plus the fixture that tripped the Python: `std.Io` in a string and in a comment, no finding.
 3. **Report** in FEEDBACK: the rules as built, the plants, the Python's and the Shale's verdicts side by side, the run's cost.
 
-**239. Dog Park: more of the physics in Roc, the poop's spot first, then the chickens' turn: CC'S** (the box, 2026-10-19, at Steve's ask; dog-park `main` from 73da6fa). Two cold surveys of what Zig still does, the second checking the first against the code; the plan below is what survived. Steve: more Roc, minor speed regressions tolerable, large ones not. Read `docs/ROC-SPEED.md` first: every chunk keeps its rules (no list held in two places; no record, tag or closure carried round a hot loop; no new caller for a hot helper the walk inlines; one export).
+**239. Dog Park: more of the physics in Roc, the poop's spot first, then the chickens' turn: CC'S, WHEN THE BOX'S C IS IN** (the box, 2026-10-19, at Steve's ask). **Wait for it:** Steve asked the box to move the leashed dog's step (C below) into Roc first, on dog-park `main`; it changes `roc_walk`'s signature and the accounting A was to use. The box says in FEEDBACK when it is in, and what A then crosses; start 239 from that commit, not before. Two cold surveys of what Zig still does, the second checking the first against the code; the plan below is what survived. Steve: more Roc, minor speed regressions tolerable, large ones not. Read `docs/ROC-SPEED.md` first: every chunk keeps its rules (no list held in two places; no record, tag or closure carried round a hot loop; no new caller for a hot helper the walk inlines; one export).
 
 **Done by the box today, so not yours:** the physics hash covers the Roc (`physics_sources.zon`); the walk's limits (`most`, `nudge_most`, `dead_zone`) and `cell_per_tile` have one source, Rules.roc and World.roc, printed into rules.zon and world.zon; Walk.roc names the veto's why (`why_went`..`why_poop`, numbers, not a tag) and a key's marks (`not_lined_up`, `visited`); Zig's `stepWhole` is for the leashed dog and chickens only, the dead nudge gone, with `comptime poop_every > 2 * step_most` and `poop_due <= 1` asserted; seven dead declarations gone.
 
@@ -59,7 +59,7 @@ the box instead of guessing. Findings arrive as red tests where they can.
 3. **Report** in FEEDBACK: per chunk, the speed before and after (alternating, best of five), the lines' check, what moved and what Zig is left; and anything ROC-SPEED's rules made you do.
 
 **Not tonight:**
-- **C, the leashed dog's step** (`dragStep`, `sweep`, `goAround`), a day of its own: it adds Roc work every pixel-tick, its accounting (the summed walked length of both moves, the bump, `due`) replaces A's `due` in, and it leaves the `Scene`'s `seen_cells` serving only tests.
+- **C, the leashed dog's step** (`dragStep`, `sweep`, `goAround`): **the box's, now** (Steve, 2026-10-19), before 239; its notes from the survey: it adds Roc work every pixel-tick, its accounting (the summed walked length of both moves, the bump, `due`) replaces A's `due` in, and it leaves the `Scene`'s `seen_cells` serving only tests.
 - **The `Scene`'s lookup tables** (bitsets, linked poop lists): they change in place on every move; they stay Zig.
 - **`overlaps` and `onPoops`** stay Zig: the independent check on the Roc (the judge and the invariant fuzz call them).
 
