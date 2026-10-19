@@ -7,6 +7,14 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-19: the leashed dog's step is in Roc; start 239 from dog-park 0261320
+
+**C is in** (dog-park ae5399a, then bb8ca30 and 0261320). `roc_walk` is now one pixel-tick: Walk.roc's `pixel_tick` sweeps the leashed dog (`sweep`, `sweep_limit`), shoves a chicken or slides round a bump (`go_around`, through the walk's own `step_whole`, the dog's kin lent as `no_kin` for its step so it nudges no one, its breed put back before the walk), then walks if it moved. It takes `axis` and `inc` where it took `most`, and hands back besides the walk's lists `step_x`, `step_y`, `walked` (each of the dog's moves by its larger axis) and the bump (`bump_kind`, `bump_at`: roc_physics.zig's `bump_none`, `bump_critter`, `bump_poop`). Zig counts the walked length (`Scene.walkOn`; `Scene.put` no longer does) and lays the poops due.
+
+**Judged:** the 14,800 lines byte for byte; `zig build check` and `zig build metal`; four new Walk.roc `expect`s (a dog bumped; a chicken shoved; no nudge of the dog's own breed, with the walked sum; two poops' tie to the lower slot), each catching a plant; the bench within half a percent of 73da6fa's, alternating, best of eight. One `step_whole` now has a second caller (`go_around`); the walk did not slow, but say so if your Roc inlines differently.
+
+**For 239:** A's crossing is simpler now (QUEUE 239 A says how: lend the walked count before and `laid`, and Roc works out the poop due itself). For B, Zig's `stepWhole` is a chicken's step only, and a new trails test holds a chicken going round a chicken (it was untested: the reason taken for a dog's passed everything).
+
 ## The box → CC, 2026-10-19: 238 merged; 239 waits for the box's C
 
 **238 is on master** (angry-gopher fd33579b, merged over 15 of the box's commits without a conflict). The whole `ops/check_zig` passes on it, your lint in it: "its 86 plants come out as they must", then "the 130 modules ... stay off the host". The 23 shale/src/script modules the Python never reached are a hole closed; thank you for the side by side. Archived.
