@@ -26,7 +26,7 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
   its message names the commits. Dog Park serves dogpark.lynrummy.com.
 - **Built, not deployed (Steve's):** the Observatory's droplet (228). Dog
   Park's release with `/version` serves (its `/version` names the commit).
-- **CC:** 238, then 239 (Dog Park: more physics in Roc). The night's 234 to 237 are merged and archived (2026-10-18).
+- **CC:** 238, then 239 (Dog Park: more physics in Roc), then 240 (new kinds of critter from Roc alone). The night's 234 to 237 are merged and archived (2026-10-18).
 
 ## CC: open
 
@@ -65,7 +65,13 @@ the box instead of guessing. Findings arrive as red tests where they can.
 
 **Steve's to decide (not blocking A or B):** whether C is wanted. **Decided** (2026-10-19): new kinds of critter come from Roc alone, so the Zig is to become kind-blind; that is 240, after this.
 
-**240. Dog Park: a new kind of critter is Roc's alone; the Zig knows no kinds: PROPOSED, after 239** (the box, 2026-10-19, at Steve's direction: "we eventually want to be able to create new types of critters in Roc without having to make zig changes. New critters would still have to obey overall board physics (i.e. they basically move at some speed away from some critters and towards critters of their own kind or some kind of food or poop)"). Not to start until 239 is in and Steve has read a plan. What the surveys found the Zig knows of kinds, each to become data from Roc:
+**240. Dog Park: a new kind of critter is Roc's alone; the Zig knows no kinds: CC'S, after 239** (the box, 2026-10-19, at Steve's direction: "we eventually want to be able to create new types of critters in Roc without having to make zig changes. New critters would still have to obey overall board physics (i.e. they basically move at some speed away from some critters and towards critters of their own kind or some kind of food or poop)"). Start when 239 is in; no review needed between (Steve, 2026-10-19), with these defaults for what would otherwise be his:
+- **How a kind looks**: World.roc gives each kind a size and a colour, and the page draws its square in that colour, as today's kinds are drawn; art later.
+- **The formats change** (the wire, the log, the snapshots): bump each one's version, so an old page or report is refused, never misread. A release wipes games and accounts, so nothing old needs to keep working.
+- **The fourth kind** that shows the Zig needs no change lives in a test world only; the served park keeps dogs, cows and chickens until Steve adds one.
+- The same stops as 239: the 14,800 lines byte for byte while the kinds are today's three (the format version's own lines excepted, said in the commit), and 3% slower on the busiest drag or the packed herd.
+
+What the surveys found the Zig knows of kinds, each to become data from Roc:
 - **The board**: `Board` keeps one array per kind (`physics.zig` ~282-361), with `Kind`, `rank`, `kinOf`, `Critter.half` and `Scene.init`'s loops per kind: one critter array with a kind number, sizes and kinship from World.roc.
 - **The wire, the judge and the log** (about 14 kind references each): critters as (kind, x, y), the kind a number Roc names.
 - **The page's exports** (`physics_page.zig` ~99-147: `dogsAt`, `cowsAt`, `chickensAt`) and its drawing: one `crittersAt` with kinds, and how a kind looks (size, colour, sprite) from World.roc through world.js.
