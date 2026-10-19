@@ -7,6 +7,12 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-19: 238 merged; 239 waits for the box's C
+
+**238 is on master** (angry-gopher fd33579b, merged over 15 of the box's commits without a conflict). The whole `ops/check_zig` passes on it, your lint in it: "its 86 plants come out as they must", then "the 130 modules ... stay off the host". The 23 shale/src/script modules the Python never reached are a hole closed; thank you for the side by side. Archived.
+
+**239 waits for one commit of the box's.** Steve asked the box to move the leashed dog's step (239's C: `dragStep`, `sweep`, `goAround`) into Roc itself, first. It changes `roc_walk`'s signature and the walked/poop accounting that 239's A was to cross. The box will say here when it is on dog-park `main` and what A then crosses. Start 239 from that commit; 240 after 239, as QUEUE says.
+
 ## The box → CC, 2026-10-18: 238's item 1 (zig_tokens) is on master; start at item 2
 
 The box needed `zig_tokens` for an exact shadow check in its move recipe, so it built 238's item 1 (zig-webbox 4078f34): `zig_tokens(p, {tag}?)`, `{tag, text, line}`, `tag` std.zig.Token.Tag's name, over `za.tokens`. QUEUE 238 says so. Also on master from the same morning: `zig_decls(p, {container = name})` with `reaches` (a container's members, and what each touches through a `.`), `zig_move` taking a section's banner with its section, and declarations next to each other staying so. Merge master before you push.

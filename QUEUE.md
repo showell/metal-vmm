@@ -26,7 +26,7 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
   its message names the commits. Dog Park serves dogpark.lynrummy.com.
 - **Built, not deployed (Steve's):** the Observatory's droplet (228). Dog
   Park's release with `/version` serves (its `/version` names the commit).
-- **CC:** 238, then 239 (Dog Park: more physics in Roc), then 240 (new kinds of critter from Roc alone). The night's 234 to 237 are merged and archived (2026-10-18).
+- **CC:** 239 (Dog Park: more physics in Roc), once the box's C is in (FEEDBACK says), then 240 (new kinds of critter from Roc alone). 238 merged and archived (2026-10-19). The night's 234 to 237 are merged and archived (2026-10-18).
 
 ## CC: open
 
@@ -36,13 +36,6 @@ adversarial.** Every item here runs on the host: `zig build test
 takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
-
-**238. angry-gopher's portable lint on Zig's parser: `zig_tokens`, and `lint_portable` as a Shale tool: CC'S** (the box, 2026-10-18, taking CC's offer in FEEDBACK "your asks on 235"). angry-gopher's tools/lint_portable.py (349 lines; deleted at the switch, angry-gopher `c197e7e`) reads Zig as text: its rules, the `test {}` finder, `test_only_lines` and the import closure are regexes over lines, and it flagged a Zig string in a fixture (`std.Io` in a string is not code). It is the last of the text readers of Zig in the gates, after library_test's import reader (235.3) and edge_sites (tokens). shale (Shale's own repo since 2026-10-18; its Zig builtins are there) and angry-gopher, from master.
-
-1. **`zig_tokens(p)`: done by the box** (zig-webbox 4078f34, `zig_tokens(p, {tag}?)`, `{tag, text, line}` over `za.tokens`; with it the box's zig_split checks an import's name exactly). Start at 2.
-2. **The lint as a Shale tool**, angry-gopher's tools/lint_portable.shale (new), replacing the Python: the import closure over `zig_imports` (as test_roots.shale does), test-only declarations by `zig_decls` span, and each rule over `zig_tokens`. **Its verdicts on the tree are the Python's** before the Python goes: the same modules, the same findings (held as a test until the switch), then the Python and its tests are deleted in the same commit that wires the Shale one into `ops/check_zig`.
-   - **Plants, one per rule**, each still firing after the move (a refactor plants its own failures); plus the fixture that tripped the Python: `std.Io` in a string and in a comment, no finding.
-3. **Report** in FEEDBACK: the rules as built, the plants, the Python's and the Shale's verdicts side by side, the run's cost.
 
 **239. Dog Park: more of the physics in Roc, the poop's spot first, then the chickens' turn: CC'S, WHEN THE BOX'S C IS IN** (the box, 2026-10-19, at Steve's ask). **Wait for it:** Steve asked the box to move the leashed dog's step (C below) into Roc first, on dog-park `main`; it changes `roc_walk`'s signature and the accounting A was to use. The box says in FEEDBACK when it is in, and what A then crosses; start 239 from that commit, not before. Two cold surveys of what Zig still does, the second checking the first against the code; the plan below is what survived. Steve: more Roc, minor speed regressions tolerable, large ones not. Read `docs/ROC-SPEED.md` first: every chunk keeps its rules (no list held in two places; no record, tag or closure carried round a hot loop; no new caller for a hot helper the walk inlines; one export).
 
