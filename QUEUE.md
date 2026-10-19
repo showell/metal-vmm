@@ -26,7 +26,7 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
   its message names the commits. Dog Park serves dogpark.lynrummy.com.
 - **Built, not deployed (Steve's):** the Observatory's droplet (228). Dog
   Park's release with `/version` serves (its `/version` names the commit).
-- **CC:** 238. The night's 234 to 237 are merged and archived (2026-10-18).
+- **CC:** 238, then 239 (Dog Park: more physics in Roc). The night's 234 to 237 are merged and archived (2026-10-18).
 
 ## CC: open
 
@@ -43,6 +43,27 @@ the box instead of guessing. Findings arrive as red tests where they can.
 2. **The lint as a Shale tool**, angry-gopher's tools/lint_portable.shale (new), replacing the Python: the import closure over `zig_imports` (as test_roots.shale does), test-only declarations by `zig_decls` span, and each rule over `zig_tokens`. **Its verdicts on the tree are the Python's** before the Python goes: the same modules, the same findings (held as a test until the switch), then the Python and its tests are deleted in the same commit that wires the Shale one into `ops/check_zig`.
    - **Plants, one per rule**, each still firing after the move (a refactor plants its own failures); plus the fixture that tripped the Python: `std.Io` in a string and in a comment, no finding.
 3. **Report** in FEEDBACK: the rules as built, the plants, the Python's and the Shale's verdicts side by side, the run's cost.
+
+**239. Dog Park: more of the physics in Roc, the poop's spot first, then the chickens' turn: CC'S** (the box, 2026-10-19, at Steve's ask; dog-park `main` from 73da6fa). Two cold surveys of what Zig still does, the second checking the first against the code; the plan below is what survived. Steve: more Roc, minor speed regressions tolerable, large ones not. Read `docs/ROC-SPEED.md` first: every chunk keeps its rules (no list held in two places; no record, tag or closure carried round a hot loop; no new caller for a hot helper the walk inlines; one export).
+
+**Done by the box today, so not yours:** the physics hash covers the Roc (`physics_sources.zon`); the walk's limits (`most`, `nudge_most`, `dead_zone`) and `cell_per_tile` have one source, Rules.roc and World.roc, printed into rules.zon and world.zon; Walk.roc names the veto's why (`why_went`..`why_poop`, numbers, not a tag) and a key's marks (`not_lined_up`, `visited`); Zig's `stepWhole` is for the leashed dog and chickens only, the dead nudge gone, with `comptime poop_every > 2 * step_most` and `poop_due <= 1` asserted; seven dead declarations gone.
+
+**Every chunk's judges** (stop and report, don't push on, if one fails after one pass at the cause):
+- `zig build physics-bench -- lines`: the 14,800 lines byte for byte as before the chunk;
+- `zig build check` (physics-wasm and the golden test in it), `zig build roc-test`, and `zig build metal` compiling (no QEMU gate);
+- **the speed**, the bench before and after run alternately, five rounds or more, best of each (`zig build physics-bench`, no args, the µs a tick it prints). **Stop at 3% slower** on the busiest drag or the packed herd and report, rather than tune;
+- the three archives rebuilt by `zig build roc` with **your** Roc, and committed, with `roc fmt` run before you measure (export order). Say in the commit which Roc built them.
+
+1. **A. Where a poop lands (~3-4 h; first).** `layDue`, `layPoop`, `tryPoop`, `poopFits` and `away` move into `roc_walk`; `placePoop` stays Zig (it changes the poop lists and the slot bookkeeping). At most one poop comes due a pixel-tick (asserted now), so the walk takes the step vector (`step_x`, `step_y`, in place of `most`, which it is the size of: "ahead" with no anchor is the pooper plus the step) and whether one is due and its slot, and hands back `poop_x`, `poop_y` and the slot, an `I32`, -1 for none (no `Bool` in the returned record: padding; update `roc_physics.zig`'s `@sizeOf(Walked)` assert). A ring search of its own, not a new caller of `poop_under`. Then `wishAlong` and `quotientAlong` (its wasm-only branch) have only test callers: delete them and physics_test.zig's tests at :296 (test 11's checksum; the Roc runs on wasm32 under `physics-wasm`, which keeps that guarantee) and :343. Judges besides the common: physics_trails_test.zig :70, :92, :275, :305; add Walk.roc `expect`s for the ring order and for coinciding centres going east.
+2. **B. The chickens' turn as a mode of `roc_walk` (~5-6 h; after A).** `chickensTurn` and `nearestRipe`, and the chicken cases of `stepWhole`/`stepAround`/`poopUnder`'s `eats_ripe`. A mode number on the one export, not a second export. **Its own chicken step**: Walk.roc's `step_whole` and `gather` take no second caller (they would let a chicken shove chickens, which Zig vetoes, and may stop inlining). A chicken's own step is blocked only by the newest poop, which is never eaten, so what one chicken eats matters only to the next ones' `nearestRipe` and the eating: **lend an eaten list with room** (Roc allocates nothing; `roc_alloc` panics), hand it back, and Zig's `eat()` applies it. Roc has no chicken homes today (`layout.chickenHome(n)`, printed by world.roc, not in World.roc, and `Crit` has no chicken number): lend them as a read-only list by seen index. Chickens visit in seen order, as now. Judges: physics_trails_test.zig :204, :218, :234, :245, :133; physics_test.zig :411 (the invariant fuzz). The `bucketsHold` asserts at each chicken (now in `chickensTurn`) can then run only after the call: say so in the code.
+3. **Report** in FEEDBACK: per chunk, the speed before and after (alternating, best of five), the lines' check, what moved and what Zig is left; and anything ROC-SPEED's rules made you do.
+
+**Not tonight:**
+- **C, the leashed dog's step** (`dragStep`, `sweep`, `goAround`), a day of its own: it adds Roc work every pixel-tick, its accounting (the summed walked length of both moves, the bump, `due`) replaces A's `due` in, and it leaves the `Scene`'s `seen_cells` serving only tests.
+- **The `Scene`'s lookup tables** (bitsets, linked poop lists): they change in place on every move; they stay Zig.
+- **`overlaps` and `onPoops`** stay Zig: the independent check on the Roc (the judge and the invariant fuzz call them).
+
+**Steve's to decide (not blocking A or B):** whether C is wanted; whether `Board` as one critter array with a kind byte comes before any new critter kind (the per-kind code also lives in the wire, judge, log and the page's exports); and whether 3% is his "minor".
 
 
 ## Parked
