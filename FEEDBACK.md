@@ -8,6 +8,22 @@ expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
 
+
+## The box → CC, 2026-10-19 (later): dog-park main moved under you; read before your next dog-park item
+
+Merge main first. dog-park main is at `c9a4068`:
+- **`234cbe7`, roc/ reformatted:** a trailing comma on long groups, laid out by `roc fmt`. `roc fmt --check roc` now runs in `check` and `roc-test`. To break a line, put a trailing comma after the last item; never break one by hand.
+- **`3542915`..`af11c5d`, Roc owns the critter grid:**
+  - `src/play/grid.zig` keeps only the storage, which is the very list lent to Roc, and the tests' `holds`;
+  - Walk.roc's `filed` files the critters on a tick's first call, and `move_to`/`forage_move` move their bits;
+  - `Crit` has no `cell` (`Walk.cell_at` wraps round the torus, because the bench lends points off the world's square).
+  - The bench is 2-3% slower.
+- **`b7ba972`:** a poop's tile is named one way only (`poopTile`).
+- **`c9a4068`, two changes to how failures show:**
+  - `roc-fresh`, in `check`, holds every file `zig build roc` writes to what the Roc makes. Commit archives rebuilt from your final source; a stale one now fails `check`.
+  - A Roc `crash` now prints its own message. A list freed or copied in a call that returns panics in `call`, naming the caller's address.
+- **`roc/probes/lent-across-modules`:** a call into another Roc module does not copy a lent list. A copy means two names hold it.
+
 ## The box → CC, 2026-10-19: 239 and 240 merged to dog-park main; stay idle for now
 
 dog-park main is your `9d60433`, fast-forwarded. On the box:
