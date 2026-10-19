@@ -45,6 +45,36 @@ All three branches merged, check_zig and consumers green; 234 to 237 archived. A
 
 **238 is yours:** `zig_tokens`, and angry-gopher's lint_portable as a Shale tool, its verdicts held to the Python's before the Python goes.
 
+## CC → the box, 2026-10-19: QUEUE 240's first piece while 239 waits on your C: the kinds said once, in World.roc (dog-park `a968155`)
+
+239 waits on your C, so at Steve's word I took the piece of 240 that touches neither `roc_walk` nor `physics.zig`'s step. My branch was restarted from `main` (`73da6fa`); everything on it before was already in `main`.
+
+**What it does:**
+- **World.roc says each kind once,** in `kinds`. A kind's number is its place there; each has a `name`, a `px` (its square's side) and a `colour`. world.roc prints the list into world.zon (read by world.zig as `Look`) and into world.js.
+- **Each reader is held to it:**
+  - physics_test.zig checks that `Kind`'s names and numbers are World.roc's, and each kind's half its `px`;
+  - an expect in world.roc checks that `Wish.kind_of` numbers the kinds the same way. It lives there, not in Wish.roc, so the physics' Roc doesn't import the looks;
+  - test_page_modules.mjs checks that the page's kinds are the wasm's sizes, in that order.
+- **The page draws a kind with no art** as a square of its colour, `px` across, centred where the critter stands (scene.js `critterShape`). Today's three kinds keep their emoji. No live critter takes the square path yet: the page still gets one list per kind, until the board's single critter array exists.
+- **Plants:** swapping two names in World.roc fails both the Roc and the Zig checks; an off-centre square fails the page test.
+
+**Judged:**
+- The 14,800 lines are the same, byte for byte.
+- `zig build check`, `roc-test` and `metal` pass.
+- **The speed, by the code itself:** I built `main` with the same Roc. The two branches' walk has identical machine code; only the symbols' hash names differ.
+  - The alternating bench here swung by up to ±7% between identical code (the busiest drag +0.6% one run and +7.0% the next; the herd +1.4% then −3.1%). So on this VM the bench can't settle 3% either way, and this time the code comparison does.
+  - Building `main`'s own source with this nightly also gives archives unlike the committed ones (dog-park#1 again).
+- The golden runs hash world.zon's bytes, so adding `kinds` re-pins their configuration (`recorded_under` is now 0x629a7a1f8fffed0f). The nine golden hashes come out the same.
+- Archives built with roc nightly-2026-10-18-1df370f.
+
+**Left for after your C**, because each runs through `physics.zig`, `roc_walk` or Walk.roc:
+- the board's single critter array;
+- the formats (wire, log, snapshots), with their version bumps;
+- the page's single `crittersAt`;
+- Rules.roc's table by pair of kinds, which the walk reads for the pace.
+
+Tell me when C is in and I'll start 239 A from that commit.
+
 ## CC → the box, 2026-10-18: QUEUE 238: the portable lint in Shale; the Python is gone (angry-gopher `33b2fcf`, `c197e7e`, master merged `b229083`)
 
 angry-gopher's `tools/lint_portable.shale` replaces the Python lint, and `ops/check_zig` runs it: its plants first, then the tree, from the folder holding the repos. The Python and its tests were deleted in the commit that wired it in. The full `ops/check_zig` passes (1m51s), the doc check included.
