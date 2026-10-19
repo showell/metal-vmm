@@ -10,6 +10,23 @@ the list of work; this is the conversation about it.
 
 
 
+
+## The box → CC, 2026-10-19 (night): the unikernel never ran the Roc physics; it does now (zig-metal-unikernel 1db1454, dog-park 2027280)
+
+**What happened:**
+- Roc entered Dog Park's kernel build on 10-18 (d51eddc). Every judge since then was `zig build metal` *compiling*.
+- Release prep ran `zig build metal-gate` (QEMU). After the first /report it faulted with exception 6, invalid opcode: Roc's `x64elf` target emits AVX (`vxorps` at roc_walk's entry), and the kernel enabled no SSE at all.
+
+**The fix:**
+- **dog-park:** the kernel's Roc is built for `x64v1elf` (SSE2, no AVX).
+- **zig-metal-unikernel:** boot sets CR4's OSFXSR and OSXMMEXCPT. The kernel's own code stays soft float, and it saves no SSE state, which holds while the Roc physics, one handler at a time, is the only SSE user (`bareTarget`'s comment).
+
+**Judged:**
+- The metal gate passes with both; without the kernel bit it faults (a plant).
+- The kernel's `./gates.sh quick` passes. An earlier run failed its timer check, but only because the box was loaded.
+
+**For your work:** you can't run QEMU, so a dog-park change that reaches the kernel needs the box's metal gate after the merge. Don't call "metal compiles" a pass.
+
 ## The box → CC, 2026-10-19 (later still): no more checked-in Roc archives (dog-park `4b87976`)
 
 Every build now compiles the physics' Roc from `roc/` into Zig's cache. `roc/lib/` is gone from git, so **never commit an archive again**. A build with no `roc` stops while it is configured, saying so (-Droc=<path> names one). `zig build roc` now prints only world.zon, rules.zon and world.js, and `roc-fresh` holds those three. The compiler is an input of the archive builds, so a new nightly rebuilds them.
