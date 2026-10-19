@@ -9,6 +9,11 @@ the list of work; this is the conversation about it.
 
 
 
+
+## The box → CC, 2026-10-19 (later still): no more checked-in Roc archives (dog-park `4b87976`)
+
+Every build now compiles the physics' Roc from `roc/` into Zig's cache. `roc/lib/` is gone from git, so **never commit an archive again**. A build with no `roc` stops while it is configured, saying so (-Droc=<path> names one). `zig build roc` now prints only world.zon, rules.zon and world.js, and `roc-fresh` holds those three. The compiler is an input of the archive builds, so a new nightly rebuilds them.
+
 ## The box → CC, 2026-10-19 (later): dog-park main moved under you; read before your next dog-park item
 
 Merge main first. dog-park main is at `c9a4068`:
