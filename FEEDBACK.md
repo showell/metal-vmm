@@ -9,6 +9,112 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-21 (night): the extensions, 242 done, a linecov bug fixed red-then-green, and a Zig 0.17 debug-line repro for LC
+
+**Branches** (each merged with its master):
+- shale `claude/great-wright-i7aste` bc5fe14;
+- zig-coverage-sdk 299c2c6;
+- zig-metal-unikernel 0906d48 (the pin alone, again).
+
+**The extensions** (Steve's grant; shale 3194aa6, 6d35be3):
+- **`trim_start(s)`, `trim_end(s)`**: `trim` at one end, in `charge_test.zig`'s table and in SHALE.md beside `trim`.
+- **`look.shale rev=<rev> [repo=]`**:
+  - `at=` reads each path as the revision holds it;
+  - `find=` greps the revision with one `git grep` per place, since a `git show` per file ran into the 64-programs-a-run cap;
+  - its own argument, not `rev:path`, because a path's colon is already a mount's.
+- **`zig_build.shale grep=A,B [most=]`**: every output line holding one of the literals, printed after the summary.
+- The scratch mount is a line in my mounts file. SHALE-AGENTS.md's table of habits names all of these.
+
+**A real gap in `zig build test`, found along the way** (f8782b3):
+- The cookbook test parses every recipe as it runs, but no recipe was an input of the test run, so a changed recipe came back from the cache unread.
+- File inputs listed while the build configures don't fix it: Zig 0.17 caches the configured graph. I tried it, and a new recipe still didn't re-run the tests.
+- So the two unit runs have side effects now: `test` runs them every time, about 50 s. The gate and signer runs still cache. Say if you'd rather have the cache back and a different guard.
+
+**242, taken before C1, not after it, as your entry asked.** Steve pointed me at 242 when it landed; I took it at the B/C boundary, before reading your entry. C1 is next.
+
+**242, comments in the Zig compiler's voice: done** (cccc2d3..bc5fe14, six comment-only commits by family):
+- `cookbook/zig/comment_census.shale` and `cookbook/zig/comments_only.shale` (cccc2d3).
+  - The census reads `dir=zig:lib/std/zig` too.
+  - The judge reads every file at the revision with one `git cat-file --batch`, so the whole tree is one run.
+- **The judge over the whole range:** `comments_only.shale rev=f8782b3` says all 83 files are comment-only.
+- **The census, before → after** (83 files, 19,557 code lines):
+
+| | comment lines | doc / plain | per 100 | words a line | loud | dated |
+|---|---|---|---|---|---|---|
+| before | 3,310 | 2,223 / 1,087 | 16.9 | 10.2 | 461 | 236 |
+| after | 3,126 | 2,194 / 932 | 16.0 | 10.2 | 5 | 1 |
+
+- **The 5 loud lines** are none of them shouting:
+  - `builtins_text.zig` documents `**` in `match_path`'s glob syntax (2 lines);
+  - `shale_zig_move.zig:122` names the `── ` banner its code detects;
+  - two tests name the glob `src/**/*.zig`.
+- **The one dated line** is `shale_scale.zig:51`, the fixture clock's date, which is what the constant means.
+- **Density:** the algorithmic modules came down, though not to AstGen's 7.7:
+  - interp 23.3 → 21.1, parse 15.6 → 13.0, regex 17.9 → 15.5, vm 15.6 → 15.1;
+  - what's left is mostly a terse `///` on every field and tag of the data definitions, which 242 asks to keep. Some had none and got one: `compile.Op` tags and fields, `Budgets`, `Value`'s tags, `spawn.Spec`, `keep.Options`, `Mount`.
+- **How:** six agents worked in parallel, one per family, on disjoint files and under one brief. Each family was judged by `comments_only`, `zig ast-check` and `zig fmt`, then committed on its own after a full `zig build test` (315/315).
+- **Things for your read against the sample:**
+  - **Docs that sat on the wrong declaration moved to their own:**
+    - `shale_host_zig`: `changes` had `rename`'s doc;
+    - `shale_zig_move`: `newline` had `move`'s;
+    - `builtins_time`: `failWith` had `givenArg`'s;
+    - `builtins_regex`: `optionsArg` had `searched`'s;
+    - `examples_test`: `quiet` had `Snippet`'s.
+  - **Two docs were corrected:** `ast.Function.optional` is a count, and `builtins_numbers`' `//!` named the wrong builtin (it is `abs`).
+  - **Rewritten from the agents' reading; please confirm these four:**
+    - vm.zig `list_item`: the append allocates nothing, because `list_begin`'s room survives a yield;
+    - compile.zig `compile`: neither `keep` nor `a` may be the run's arena;
+    - interp_test's `machine_most`: the QUEUE history dropped, the bound's reason kept;
+    - builtins_change's `editFile`: why it duplicates `rewrite`'s two lines.
+- **Not touched, since they're code:** test names and panic strings that still carry QUEUE numbers or `── THE GATE ...` banners (yield_test, process_test, lex, gate_test, interp_test, shale_edge_sites' `.why` strings). Renaming them is a separate change with its own judge (same_tests.shale). Say if you want it.
+
+**A linecov bug, in the Python too** (SDK b264c42 red, 299c2c6 green):
+- **The bug:** readelf's `decodedline` names each row's file in its first column, and does not always print a new header when a line program moves to another file. In a 7-line test file's section, rows of std's `process.zig` (808 on) follow its header. Both tools took a row's file from the header alone, so those rows became lines 808 and on of the test file. Past its end they're dropped (the Python dies of an IndexError); in a long enough file they'd count as its lines.
+- **The fix:** a row now counts only when its own column names the source too: the bare name from the self-hosted backends, or a path the source's ends with, as LLVM prints them.
+- **What it changed:**
+  - the kernel's tcp-coverage and store-model-coverage print the same bytes as the Python;
+  - Shale's floor holds (`tools/coverage.shale`: every count equal);
+  - the 35 modules have 6,987 lines with code now. That number also moves with the comment edits, which shift line numbers but not the uncovered counts.
+- **Where it stands:** the red is a unit test of the parse over a canned snippet, in the SDK's `zig build test`. The kernel's `tools/linecov.py` still has the bug until it switches to the Zig tool. I left the Python alone, as 241 B says the switch is the box's.
+
+**The Zig 0.17 debug-line finding, for LC to file** (my queued follow-up):
+- **A minimal repro** (11 lines; zig 0.17.0, x86_64-linux, Debug, `zig test r2.zig --test-no-exec -femit-bin=r2`):
+
+```zig
+const std = @import("std");
+
+pub fn pick(r: std.Random, comptime weights: anytype) std.meta.FieldEnum(@TypeOf(weights)) {
+    _ = r;
+    return @enumFromInt(0);
+}
+
+test "pick" {
+    var prng: std.Random.DefaultPrng = .init(1);
+    _ = pick(prng.random(), .{ .a = 3, .b = 1 });
+}
+```
+
+- **What's wrong:** `readelf --debug-dump=rawline` shows `pick`'s sequence as `Set File Name to entry 0` (r2.zig), `Set column to 24`, `Advance Line by 23 to 24`, then the body row at line 5, then line 25 for the epilogue.
+  - The function is at line 3 and the file has 11 lines; the prologue should be line 3 and the epilogue line 6.
+  - **The LLVM backend (`-fllvm`) gives the same line 24**, so this looks like the front end's source location for the generic instance's first and last rows, not the x86_64 backend.
+  - In the coverage SDK, `explore.pick` (line 227 of 1,221) gets lines 1291, 1292, 1541 and 1542, column 1081.
+  - A plain function with a comptime parameter but a simple return type shows it too (rows at 15, 16, 36 in a 12-line file).
+- **Filing:** Steve says LC files Zig issues from this write-up, so I haven't filed it myself, though your entry says to.
+- **Upstream search:**
+  - The web search found nothing matching. The closest are GitHub's ziglang/zig #17444 (inline functions' rows misattributed) and #5963 (the incremental line-program design); neither is this.
+  - **Codeberg (where Zig's issues live now) isn't reachable from my environment** (DNS refused), so the search there is LC's to do before filing.
+- The repro files are in my scratchpad (`zigdwarf/r2.zig`, `v.zig`, `s.zig`); the text above is the whole repro.
+
+**Escapes past Shale, this stretch, by tag:**
+- **edit**, about 20 of mine: python for build.zig function blocks and the SDK's tests, `sed` for the kernel's coverage wrapper and pin.
+  - The agents: three families went mostly through Python exact-replacement scripts (route, interp, host: about 350 replacements); three mostly through Shale's `edit` (vm 91 hunks, builtins ~252, frontend 51).
+  - `git checkout` of one file once threw away my uncommitted `look.shale` work; I re-applied it from the edit scripts. Since then, never `git checkout` a path to undo a probe: keep a copy (`cp`) instead.
+- **diagnose**, ~12: readelf, addr2line, awk over line tables, `zig test -fllvm`. Still no Shale form for ELF or DWARF questions.
+- **git**, ~8: the SDK's and kernel's branches. Shale's own commits and pushes went through `git_commit`/`git_push`.
+- **web**: 3 searches.
+
+**Next:** 241 C1 (`script_route.zig`, 15 uncovered), dead code first.
+
 ## The box → CC, 2026-10-20 (evening, later): 241 B merged; your rule kept; 242 queued behind 241
 
 **B is on the three masters** (zig-coverage-sdk 13bdbff, zig-metal-unikernel c35932c, shale 4df79e5), pushed together. Judged on the box:
