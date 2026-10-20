@@ -24,6 +24,78 @@ the list of work; this is the conversation about it.
 
 **C1-C5** (1362d4a..2a90434, and the parse leak red/green) are pushed but not reported: report them, and I'll judge them together.
 
+## CC → the box, 2026-10-21: 241 C1-C7, every line of C1-C6 run by a unit test (125 uncovered to 0), one bug red-then-green, C7 measured
+
+**Branch:** shale `claude/great-wright-i7aste` fc9f353 (on bc5fe14, your last read). One commit per chunk; C3's bug is two more.
+
+**Judges, at fc9f353:**
+- `zig build test`: 341/341, no skips, 50-54 s (B's chunk: 51 s);
+- `zig build fuzz`: 15 hunts ran;
+- `zig build doc-check -- only=shale`: clean;
+- `zig build consumers`: green in 3 min 21 s, all of it: metal-vmm's queue test, dog-park's tests, the kernel's gopher.elf, angry-gopher's `ops/check_zig`, and the lints. dog-park needs Roc on the PATH; with Roc nightly-2026-10-18-1df370f there, it builds.
+
+**Coverage, B's baseline to now** (uncovered lines; `coverage/lines.txt` moved in each chunk's commit):
+
+| chunk | module: before → now | commit |
+|---|---|---|
+| C1 | script_route 15 → 0 | 1362d4a |
+| C2 | regex 21 → 0, builtins_regex 2 → 0 | f6a7a68 |
+| C3 | lex 3 → 0, parse 8 → 0 (diag was 0) | 6f37749 red, cb38c82 fix, c77f9fc |
+| C4 | compile 15, vm 5, process 5, collect 5 → 0; value 7 → 5 and builtins 6 → 4 by the same tests | fc740ad |
+| C5 | interp 16, value 5, script 6, builtins 4 → 0 (builtins_store was 0) | 2a90434 |
+| C6 | builtins_change 1, lists 3, walk 2, time 2, format 1, suite 2, cli 1 → 0 (read, text, numbers were 0) | 129aa78 |
+| C7 | measured, not held (below) | fc9f353 |
+
+So C1-C6 total 6,835 of 7,006 lines ran over all 35 modules.
+
+**The bug (C3), red then green:**
+- `parse.parseMeasured` leaked a prelude's `loaded` array (8 bytes) when the function list's `toOwnedSlice` after it failed.
+- Found by an allocation sweep over a parse.
+- 6f37749 is red; cb38c82 takes the slice first and frees it by hand if `loaded` cannot be had. An errdefer would free twice when the prelude's check fails later; the sweep shows that.
+
+**Dead code, deleted or made an assert** (each named in its commit):
+- C2: regex search's last arm asserts `.set`.
+- C3: `isConst`'s `return false` became `for ... else unreachable`.
+- C4: `compile.patch` asserts its one jump; the assign target's `else` is the index; the VM's binop `.concat/.and/.or` arm is gone; the VM's `OutOfMemory` arm in `Machine.run` folded.
+- C5 has two that change a type or a promise, **please look at both**:
+  - **`interp.Error` is `error{Stop}`**, no longer `error{ Stop, OutOfMemory }`. Every allocation the walker and the VM make already turns into a stop through `oom`/`machineOom`, and the compiler agreed: narrowing the set broke exactly two sites, `attempt`'s arm and `script.runOn`'s arm, both dead. The VM's matching `if (e == error.OutOfMemory)` in `Task.step` and `main` went too. Hosts and builtins compile unchanged.
+  - **A const read is `consts[i].?`**, and `constUnset` is gone from both engines. The parser makes a const visible only to the top level below it and to functions declared after it, and a function can be called only below its own line, so no read can find a const unset. SHALE.md said "a function that reads a const before its line has run stops with an error"; it now says why that cannot happen. Under ReleaseSafe a broken guarantee would now be a panic, not a stop. If you would rather keep a defensive stop on the site, the old line comes back with an exemption.
+- C5's switch arms: `.table => unreachable`, `.mod`'s `else => unreachable`, and the like fold into the case that runs; one `assert` each where the remaining case needs one.
+- C6: cli's `setBudget` takes the index `budgetIndex` already gave, so its `return false` for an unknown name is gone.
+
+**Exemptions:** 3, each a function, listed by `tools/coverage.shale`:
+- **`printIsTheInterpreters`** (builtins.zig, 2 lines): `print` is the interpreter's own; this function only fills its slot in the table.
+- **spawn's `child` (20 lines) and `fail` (4 lines):** they run in the forked child between fork and exec, and linecov puts a child's bytes back and lets it go before it runs a line (B's design).
+
+**A new rule in the report** (fc9f353): a mark on a top-level function's `fn` line exempts the whole function, listed once with its line count. It is stale if every line ran. You asked for *one* exemption on `child`; 24 marks, one per line, would have been noise. If the rule should stay per line, say so and I'll put the marks back on each line.
+
+**C7, the Linux host, measured** (uncovered / lines with code; tests' own lines not counted):
+- spawn 4 / 295 (+24 exempt): the four are `pidfd_open` refusing, a kernel refusal;
+- jobs 21 / 162;
+- host_jobs 20 / 172;
+- host_run 12 / 164;
+- host_linux 29 / 423;
+- host_zig 32 / 475;
+- zig_ast 4 / 164;
+- zig_move 2 / 203;
+- host_setup 4 / 83;
+- keep 0 / 218;
+- cli 0 / 237.
+
+Most of the rest are `else => return run.fail(pos, .type, ...)` refusals of a wrong-typed argument, and allocation-failure arms. Not taken further, as Steve's answer says.
+
+**Escapes past Shale, C1-C7, counted by tag** (I did not keep a line each time, which I should have; these are counts from this session's history):
+- **want: look**, about 45: `sed -n a,bp` and `grep -n` to read around a line. `look.shale at=` covers these; I took the shell out of habit.
+- **want: edit-multi**, about 25: exact multi-line replacements by a Python heredoc. `edit`'s list form covers most of them; two did not fit it, a test appended to a file's end and a function rewritten whole.
+- **want: zig-build**, about 15: `zig build test -Dtest-filter=X | grep`, where `zig_build.shale step=test args=` would serve.
+- **want: git**, about 8: commits and pushes by `git`.
+- **out-of-scope: probe**, about 6: one-line scripts written to /tmp to see how a stop reads, as the CLI would show it.
+
+So the honest number for C5-C7 is that I worked mostly in the shell. The wants above are habits, not missing features, except `edit` appending at a file's end (`edit(p, {append = ...})`?), which I'd propose.
+
+**Next:** D1, the generator of well-formed scripts and its invariants as hunts. Then D2 (Zig's fuzzer on the lexer, the small experiment first), E, and F.
+
+
 ## CC → the box, 2026-10-21 (night): the extensions, 242 done, a linecov bug fixed red-then-green, and a Zig 0.17 debug-line repro for LC
 
 **Branches** (each merged with its master):
