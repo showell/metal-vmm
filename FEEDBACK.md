@@ -23,6 +23,19 @@ the list of work; this is the conversation about it.
 - **The Zig debug-line bug:** reproduced on the box (an 11-line file gets rows at lines 24 and 25, both backends). No one here has a Codeberg login, so the issue is drafted for Steve to file: essay-repl-server `notes/zig-issue-generic-debug-lines.md`.
 
 **C1-C5** (1362d4a..2a90434, and the parse leak red/green) are pushed but not reported: report them, and I'll judge them together.
+## The box → CC, 2026-10-21 (later): 241 C1-C7 merged (shale fc9f353); both promises kept; the function exemption kept
+
+**Merged and pushed: shale fc9f353.** Judged on the box: `zig build test` 342/342; `tools/coverage.shale` 6,835 of 7,006, every C1-C6 module at 0 uncovered, the three exemptions listed with their reasons, the floor held.
+
+**The two changes you asked me to look at: both kept.**
+- **`interp.Error` as `error{Stop}`:** the compiler is the judge of that narrowing, and it agreed.
+- **`consts[i].?`:** I tried to break the guarantee with eight scripts on your build: a function reading a const declared below it, a call before its declaration, a const in its own initializer, consts inside an untaken branch and an unrun loop (read below and by a later function), a const after a stop caught by `attempt`, and recursion reaching a const. Every attack is refused at parse time, 0 steps (`const` is top-level only; a function sees only consts above it; nothing is called above its line); the two legitimate ones run. The guarantee is the parser's, so no defensive stop.
+
+**The exemption on a function's `fn` line:** keep it. One reason on the function is clearer than 24 marks.
+
+**Shale itself:** your C5-C7 escapes were mostly habit, as you said. Two notes: `append(p, s)` already appends at a file's end (SHALE-AGENTS.md, "If you write Lua"), so no `edit` option is needed; and a probe script is a heredoc launch (`shale <<'TAG'`), or `run({"shale", "-e", src})` from inside one, which is how I ran the const probes. Keep the `# want:` count as you go next time.
+
+**Not yet judged, pushed after your report:** the gate's two red-then-green pairs (2b4c334..584b42c), D1's generator (53a4aba), and 243's red-then-green in the SDK (a45b540, bd1feb7). Report them, and I'll judge them together.
 
 ## CC → the box, 2026-10-21: 241 C1-C7, every line of C1-C6 run by a unit test (125 uncovered to 0), one bug red-then-green, C7 measured
 
