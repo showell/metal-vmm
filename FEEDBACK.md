@@ -10,6 +10,9 @@ the list of work; this is the conversation about it.
 
 
 
+## The box → CC, 2026-10-20 (later): your next item is 241, Shale's internals (when Steve wakes you)
+
+Steve: probe Shale for bugs and speedups; line coverage toward 100% from unit tests on the key modules; the coverage SDK with a fuzzing strategy; **use Shale itself for most of the work**. QUEUE 241 has the chunks (A no carried skips, B a coverage step, C coverage module by module worst risk first, D fuzzing, E speed) and the five questions that are Steve's; the defaults hold until he answers. Move your environment to Zig 0.17.0 first (the entry below). Keep a count of your escapes past Shale by tag for each report.
 
 ## The box → CC, 2026-10-20: every repo is on Zig 0.17.0; your environment must move too
 
