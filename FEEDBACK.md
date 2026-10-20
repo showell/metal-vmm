@@ -37,6 +37,38 @@ the list of work; this is the conversation about it.
 
 **Not yet judged, pushed after your report:** the gate's two red-then-green pairs (2b4c334..584b42c), D1's generator (53a4aba), and 243's red-then-green in the SDK (a45b540, bd1feb7). Report them, and I'll judge them together.
 
+## CC → the box, 2026-10-21 (late): 241 D's last two parts, and two Zig fuzzer notes for LC
+
+**Branch:** shale `claude/great-wright-i7aste` 47104b0 (on 53a4aba).
+
+**The explore experiment** (shale commit after 53a4aba):
+- The generator is driven by `explore.explore` at its default share of blind runs (0.2), against all blind (1.0): 400 runs each, two seeds.
+- It counts the cases about generated scripts each reached:
+  - seed 1: 7 blind, 7 explored;
+  - seed 2: 9 blind, 8 explored.
+- **No gain.** The generator draws plainly, with no `explore.pick`, so the explorer can only re-roll a run's future, and a script's cases are mostly set by its first draws.
+- Named choices for the statement and mischief draws are the next measure. It's an experiment, so it asserts only that the runs ran.
+
+**D2, Zig's own fuzzer on the front end** (47104b0):
+- **The tests:** a `std.testing.fuzz` test of the lexer on any bytes, and one of the parser on sources of the language's pieces. Built plainly, each runs its corpus and an empty input, as an ordinary unit test.
+- **The small experiment,** `zig build test -Dtest-llvm --fuzz=10K`:
+  - the lexer: 10,489 runs, 485 unique, no failure, 1.5 min including the LLVM builds;
+  - the parser alone (`-Dtest-filter`): 10,493 runs, 235 unique, no failure.
+- No bugs found, so no red tests. The envelope reader and regex against its reference can follow the same pattern, if you want them.
+
+**Two Zig 0.17 fuzzer notes, for LC to research and file** (not filed; Steve's rule):
+1. **On Zig's own x86_64 backend (the Debug default), `--fuzz` fails with `corrupted coverage file .zig-cache/v/<id>: pcs_len was zero`.**
+   - A one-test project shows the same; with `use_llvm = true` it fuzzes (10,020 runs in 12 s).
+   - The cause is known in the source: `lib/compiler/test_runner.zig` ~553, "Some compiler backends are not capable of handling fuzz testing yet", returns early.
+   - The trouble is the message from `lib/compiler/Maker/Fuzz.zig` ~643: it calls an uninstrumented binary's empty coverage "corrupted", where it could say the backend can't fuzz and name `-fllvm`.
+   - My searches found nothing on that message. Repro: an 8-line `build.zig` and a 9-line test, in my scratchpad as `zf/`; I can paste them.
+2. **With two `std.testing.fuzz` tests in one binary, the 10K run reported and fuzzed only the first.** The other ran only as a unit test. I haven't read why; it may be by design for a bounded run. Worth a look before calling it a bug.
+
+Shale's `build.zig` gains `-Dtest-llvm` for (1).
+
+**Next:** E (speed): the baseline first, five alternating bench runs, best of each. Then F.
+
+
 ## CC → the box, 2026-10-21 (later): 241 D1 (a generator, four hunts, the gate's two false refusals red-then-green) and 243 (linecov's guard, the kernel on it)
 
 **Branches:**
