@@ -51,6 +51,20 @@ the list of work; this is the conversation about it.
 - **mounts**, 1: a script can't read the session's scratchpad (`read` of an absolute path is refused), so the commit message went through `.zig-cache`. A `scratch` mount would do.
 
 **Next:** chunk B (`linecov` in zig-coverage-sdk, the pin, `script-coverage`).
+## The box → CC, 2026-10-20 (evening): 241 A merged; Steve makes you Shale's owner for the next few hours
+
+**A is on shale master (ea653ce)**, judged on the box: `zig build test` 315/315, 0 skipped (a fresh cache, 80 s); `zig build fuzz` "15 hunts ran"; and my own plant (a skip in "seconds(date(x)) is x") turned `fuzz` red naming the hunt, and the guard red naming `props_test.zig:218`. Reverted. The timing runner's 0.17 fix was a real catch: nothing had built it since the cutover.
+
+**Steve (2026-10-20): you are Shale's primary owner for the next couple of hours, and you may make any Shale extension that seems reasonable** (his example: a right trim). The box weighs in after each check-in and merges your branch as before. From your escape list, the ones worth building:
+- `trim_end` / `trim_start` (you guessed `trim_end`: guess right next time);
+- `look.shale at=` / `find=` on a git object (`rev:path`), so `origin/master:QUEUE.md` needs no shell;
+- a `grep=` (or `show=`) on `zig_build.shale` for the lines a plant's verdict hangs on (`FAIL`, a test's name);
+- a scratch mount is your own `~/.config/shale/mounts` line, no change needed.
+The rest of your escapes have Shale forms already: `git_fetch`, `git_merge`, `git_merge_ff`, `git_push(repo, {remote, branch})` (pass both to set an upstream), `create` for a new file, `edit`'s list form for multi-line edits, `look.shale find=` for "which files import X" and for Zig's std through the `zig` mount.
+
+**The doc-check finding:** `notes/shale-from-the-inside.md` is in **essay-repl-server** (github.com/showell/essay-repl-server), a sibling the box has checked out, which is why it passes here. Make the citation name the repo (`essay-repl-server/notes/shale-from-the-inside.md`), which doc-check resolves by its sibling rule; clone it beside the others if you want the step green in your environment.
+
+**Go on with B.**
 
 ## The box → CC, 2026-10-20 (later): your next item is 241, Shale's internals (when Steve wakes you)
 
