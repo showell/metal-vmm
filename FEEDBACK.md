@@ -37,6 +37,42 @@ the list of work; this is the conversation about it.
 
 **Not yet judged, pushed after your report:** the gate's two red-then-green pairs (2b4c334..584b42c), D1's generator (53a4aba), and 243's red-then-green in the SDK (a45b540, bd1feb7). Report them, and I'll judge them together.
 
+## CC → the box, 2026-10-21 (night, later): 241 F, both preludes at 100%, from the engine
+
+**Branch:** shale `claude/great-wright-i7aste` 12016a1.
+
+**Judges:** `zig build test` green; `fuzz` 20 hunts ran; `doc-check` clean; `consumers` green.
+
+**F1, every prelude function called** (5371dc6):
+- A cookbook test finds each of the two preludes' 43 functions in `src/**/*_test.zig`, as `name(` or `attempt(name,`.
+- A helper no test calls by name counts when a function that is reached calls it: `git_text`, `git_opts`, `git_real`, `git_call`, `edit_word_byte` and `edit_words` are reached so.
+- One reached by neither fails the test, by name. The plant, `function git_planted(x)`, turned it red.
+- It is a Zig test, not a Shale script as the item said: the unit test is what has to fail, and it prints the list. If you want the Shale listing as well, it's a short recipe.
+
+**F2, lines from the engine** (12016a1):
+- **`interp.LineHook`**, in a test build only (`builtin.is_test`; elsewhere it is `void`, and the VM's loop holds no trace of it).
+  - The VM calls it at each op with the running function's name and the op's line. It charges nothing.
+  - Shale's test host keeps each line of the Linux and git preludes' functions, written per process to `.zig-cache/coverage/prelude_hits/`.
+- **Lines with code:** a cookbook test compiles each prelude whole, parsed as a script after the preludes it calls, and writes every op's line in its own functions.
+- **The report:** `tools/coverage.shale` clears the old hits, and lists both preludes in the table with the same floor and the `-- coverage: not run, <why>` mark.
+  - A function's own `function` line is left out, as Zig's `}` is: its code is the return a function ending in `return` never reaches.
+  - A hit off a line with code: none (the two sets agree).
+- **Before → now:**
+  - Linux 142/142 → 142/142;
+  - git 156/162 → 161/161.
+- **The git prelude's six lines:**
+  - `git_commit`'s `if add == nil then add = nil` folded away;
+  - the other five each got a test: a git that runs out of time (a pre-commit hook that sleeps past `timeout_ms`), one ended by a signal (a hook that kills it), a merge of no ref, and a merge whose pre-merge-commit hook outlasts its time.
+- **The table:** 35 modules and 2 preludes, 7,167 of 7,338 lines with code ran.
+
+**Where 241 stands:**
+- A-F done;
+- the explorer with named choices, and E's Op layout, are left;
+- `slot`'s bounds check is yours.
+
+Next I'll take whatever the queue holds. With nothing new, I'll do E's Op layout and explore's named choices, each measured.
+
+
 ## CC → the box, 2026-10-21 (night): 241 E, two speedups in the VM, steps unchanged, and one I'd like you to decide
 
 **Branch:** shale `claude/great-wright-i7aste` e2f09a5.
