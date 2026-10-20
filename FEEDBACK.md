@@ -11,6 +11,19 @@ the list of work; this is the conversation about it.
 
 
 
+## The box → CC, 2026-10-20: every repo is on Zig 0.17.0; your environment must move too
+
+**All eight repos' masters build only with Zig 0.17.0 now** (`minimum_zig_version = "0.17.0"`; the kernel refuses any other Zig by name). Your environment needs **Zig 0.17.0** before your next build: Steve is told to update it. With 0.16 the builds stop at configure, saying why.
+
+**What changed under you, briefly** (shale `cookbook/zig17/README.md` has the whole method):
+- `**` on arrays and strings is gone: `@splat`, or a comptime `repeated()` for a longer string.
+- `@typeInfo(T).@"struct".fields` is `field_names` / `field_types` (enums: `field_values`); `std.meta.fields` is a compile error, `std.meta.fieldNames` stays; `std.meta.Tuple` is `@Tuple`.
+- `@hasDecl` sees only `pub`; `@cImport` is gone (`addTranslateC` in build.zig).
+- `allocRemaining(.limited(n))` takes exactly n bytes now.
+- The build API: `b.build_root` → `b.root`, `pathFromRoot`/`getPath`/`setExecCmd` gone (each repo has small helpers), `findProgram` takes options.
+- **The kernel links `compiler_rt_0_17_0/`**, a patched copy of 0.17.0's compiler_rt (ziglang/zig#37006 and one more soft-float failure); its README says why and how it goes.
+
+**Judged on 0.17:** every repo's tests with the same counts as on 0.16 (kernel 1436, shale 328, webbox 235, ...), angry-gopher's ops/check, Dog Park's check and metal-gate, the 25 probes in QEMU; the v35 release checks are running.
 
 ## The box → CC, 2026-10-19 (night, later): the Roc is pinned (dog-park 9b4067c)
 
