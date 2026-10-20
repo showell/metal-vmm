@@ -10,6 +10,48 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-20: 241 A done: the hunt has its own root, a runner that counts, and nothing is skipped (shale `claude/great-wright-i7aste` ea653ce)
+
+**Built** (one commit on shale master 84473cb; master had nothing newer to merge):
+- `src/script/hunt.zig` imports exactly build.zig's `hunt_files` (fuzz_test, lex_fuzz_test, props_test and a new `builtins_hunt_test.zig` holding the arena sweep). build.zig checks the list at comptime against hunt.zig's imports, as the kernel checks `unit_files`. script.zig's test block no longer imports the three. Every skip and `options_of`'s `expensive` field are gone; `-Dscript-fuzz` stays.
+- `test` compiles the hunt (`test_step.dependOn(&hunt.step)`); only `fuzz` runs it, under `tools/hunt_runner.zig`. The runner fails on any test that returns an error, a skip among them, and prints `N hunts ran`.
+- `src/script/hunt_guard_test.zig`, beside portable_test.zig's scan, fails on a skip anywhere in `src/` or `tools/`, and on a `test "expensive` outside `hunt_files` (handed the list through `shale_test_options`). It builds both strings at comptime, so it does not trip on itself.
+- README's Checks section says all this.
+
+**Three things the item didn't foresee:**
+1. **The hunt files reach the script module as the `shale` module, not by path.** By path, `script.zig` joins the hunt's module, and so does its `test {}` block, so every unit test ran in the hunt. Zig also won't put one file in two modules (`file exists in modules 'root' and 'shale'`). So the sweep can't take `Fixture` from builtins_test.zig as the item says: that file is the `shale` module's. It has a 20-line fixture of its own, the part the sweep uses, with the reason in its header. lex_fuzz_test takes `script.lex.Lexer` the same way.
+2. **hunt.zig's block is `comptime {}`, not `test {}`.** A root `test {}` is itself a test function: the first run said `16 hunts ran`.
+3. **`tools/timing_runner.zig` didn't compile on Zig 0.17.** `testing.allocator_instance` is a `SafeAllocator` now, initialised as the 0.17 test runner does it. Nothing ran `-Dtest-timing` since the cutover, so no one saw. Fixed in the same commit, and it no longer counts a skip as passing (the guard would refuse the name anyway).
+
+**The numbers:**
+- `zig build test`: **315/315, 0 skipped**, 62 s on a fresh cache dir. Before: 313 of 328 passed with 15 skipped, 53 s on a warm cache, so the two times aren't comparable. The +2 tests are the guard's; the rest of the gap is compiling the hunt.
+- `zig build fuzz`: **`15 hunts ran`**, 41 s.
+- **The plants**, each reverted (the output is in the commit message):
+  - an `if (true) return error.SkipZigTest;` in props_test's split/join hunt makes `fuzz` fail with `FAIL (SkipZigTest) ... 15 hunts ran: 1 failed, 0 leaked`, and the guard with `src/script/props_test.zig:139 names the skip`;
+  - a stray `test "expensive sweep: a stray hunt" {}` at the end of builtins_test.zig makes the guard fail with `src/script/builtins_test.zig:1008 opens a hunt outside build.zig's hunt_files`.
+- `zig build consumers`: **every application green against this tree, run by hand.** The step itself stops at its first link, `doc-check only=shale`, on the finding below:
+  - metal-vmm's queue tool: exit 0;
+  - dog-park `zig build test`: 31 s, with Roc nightly-2026-10-18-1df370f on the PATH;
+  - zig-metal-unikernel `zig build gopher`: 90 s;
+  - angry-gopher `ops/check_zig`: 147 s.
+- **`zig build doc-check -- only=shale`: red, but not from this change.** It finds one gone path: `docs/SHALE-AGENTS.md:481` cites `notes/shale-from-the-inside.md`. No checkout I have holds a `notes/` folder (box-local, I guess). That line is on master as it is. If the essay is in a repo, tell me which and I'll add it; otherwise the citation wants a repo-qualified path.
+
+**Escapes past Shale, by tag** (counted by hand from my session, the `# want:` lines kept as they happened):
+- **find** (`grep -rn` / `grep -n` / `find`), ~10. Mostly one-off "which files import X" and Zig std lookups (`testing.zig`, `test_runner.zig`), which I reached for before trying `look.shale find=`. The one I did through look.shale (`find=SkipZigTest in=src,tools like=*.zig`) was exactly right.
+- **read** (`sed -n` / `head` / `cat`), ~10. Whole-file orientation reads (build.zig 1-260, runners, fixtures) and one item cut from QUEUE.md on `origin/master`: look.shale can't read a git object.
+- **build** (`zig build fuzz`, `-Dtest-filter`, `doc-check`, `zig fmt`, called directly), ~9. `zig_build.shale step=test` served for the summaries. For the plants I wanted a single `grep FAIL` line, which the recipe's tail doesn't give.
+- **git** (fetch / merge / push / status by shell), ~8. Only the commit went through `git_commit`.
+- **edit** outside `edit`/`edits_all`, 7:
+  - 3 new files by heredoc (should be `create`);
+  - 2 `sed -i` one-liners;
+  - 2 python multi-line edits. Habit: the list form would have done.
+  - Inside Shale: 8 `edit`/`edits_all` calls made every move and every build.zig change.
+- **shell**, ~6: the sibling repos' 0.17 setup, the mounts file, the plants' backups and restores, finding a Roc for dog-park, and consumers' links by hand.
+- **language**, 1: I guessed `trim_end` (only `trim` exists).
+- **mounts**, 1: a script can't read the session's scratchpad (`read` of an absolute path is refused), so the commit message went through `.zig-cache`. A `scratch` mount would do.
+
+**Next:** chunk B (`linecov` in zig-coverage-sdk, the pin, `script-coverage`).
+
 ## The box → CC, 2026-10-20 (later): your next item is 241, Shale's internals (when Steve wakes you)
 
 Steve: probe Shale for bugs and speedups; line coverage toward 100% from unit tests on the key modules; the coverage SDK with a fuzzing strategy; **use Shale itself for most of the work**. QUEUE 241 has the chunks (A no carried skips, B a coverage step, C coverage module by module worst risk first, D fuzzing, E speed) and the five questions that are Steve's; the defaults hold until he answers. Move your environment to Zig 0.17.0 first (the entry below). Keep a count of your escapes past Shale by tag for each report.
