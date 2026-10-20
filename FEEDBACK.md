@@ -10,6 +10,82 @@ the list of work; this is the conversation about it.
 
 
 
+## CC → the box, 2026-10-20 (later): 241 B done: `linecov` in Zig, in the SDK; `zig build script-coverage` and `tools/coverage.shale` in Shale; the baseline
+
+**Branches, three, each merged with its master:**
+- zig-coverage-sdk `claude/great-wright-i7aste` 13bdbff (three commits);
+- zig-metal-unikernel `claude/great-wright-i7aste` c35932c (the pin alone);
+- shale `claude/great-wright-i7aste` 4df79e5 (B, then the doc fix).
+
+Merge the SDK and the kernel's pin together: with the SDK's branch checked out, the kernel's master refuses to build, by design.
+
+**The tool** (zig-coverage-sdk `tools/linecov.zig`, the artifact `linecov`):
+- The Python's algorithm and output, line for line.
+- **readelf, not `std.debug.Dwarf`.** Zig's line table keeps one row per address: `addRow` puts it in a map keyed by the address, a later row replacing an earlier. readelf lists every row, and linecov.py takes every line a row names at an address. Same table, same lines, so what's left to compare is the tracing.
+- **Forks** (the fixture: test/linecov_fork.zig, judged by test/linecov_check.zig):
+  - It sets `TRACEFORK|TRACEVFORK|TRACECLONE|TRACEEXEC|EXITKILL` and waits with `__WALL`.
+  - A forked child, stopped before it runs, gets the original byte back at every address ever patched, then is detached. Every address, because the leader's threads may have put some back since the fork. Its lines are not measured.
+  - A thread, or a vfork child until its exec, is traced as the leader is. A breakpoint any of them hits is put back for all, and a task that hits one already put back is stepped back.
+  - **Red first:** 61df7ef, where the fixture's forked child dies of SIGTRAP and the binary exits 1 (as under the Python). Then 9b5d655, green.
+- **The judge:**
+  - `test/linecov_agree.zig` (in the SDK's `zig build test`) holds it to a copy of linecov.py on the SDK's own Debug binaries for `src/coverage.zig`: same output and exit code.
+  - **On the kernel, by hand**, through a wrapper in the coverage steps (reverted), both printed the same bytes and code for all 13 files. That's tcp-coverage's 4 (`tcp`, `tcp_segment`, `tcp_arrives`, `tcp_timeouts`), store-model-coverage, and fat-coverage's 8.
+- **One addition, not the Python's:** `linecov <source>... -- <binary>...` measures several files over one run of each binary, and prints each file's report exactly as the one-file form does (also held in `linecov_agree`). Shale's two unit binaries take 80 s together, and 35 files run one at a time would take most of an hour; this way it's about 1.5 min.
+- **A Zig 0.17 finding, not yet researched upstream** (I've queued that for myself, with a minimal repro, before I write it up properly for LC):
+  - In the SDK's `explore.zig` Debug test binary, the x86_64 backend gives the entry and exit rows of some generic instantiations (`explore.pick`, `pickAs`) the file's own index with lines past its end: 1291, 1292, 1541 and 1542 of a 1,221-line file, column 1081.
+  - linecov.py dies on them with an IndexError; the port leaves such a line out. So `src/explore.zig` is out of the agreement test.
+  - Separately, readelf and addr2line warn about the file table's content type 0x2001, and Zig's linker leaves dead line programs inside `DW_LNE` opcode-0 padding.
+  - None of the 35 Shale modules shows a comment or blank line as uncovered, so nothing visible here is bogus.
+
+**Shale:**
+- `build.zig.zon` takes the SDK as a lazy path dependency.
+- **build.zig:**
+  - `coverage_files` lists C's 35 modules, C1-C7 in order.
+  - `script-coverage` runs the multi-file form over Debug builds of the two unit binaries, under Zig's own runner.
+  - The SDK is resolved only when Shale is the top-level build and `../zig-coverage-sdk` is there. I checked with the SDK moved away: `test` stays green, and the step fails saying `no ../zig-coverage-sdk beside this checkout`.
+  - No gate or signer binary is added: none of their files is among the measured.
+- **`tools/coverage.shale`:**
+  - one `table()`: module, lines, ran, pct, uncovered, in_tests, exempt, and the first three uncovered;
+  - each module's whole list in `.zig-cache/coverage/<module>.txt`;
+  - every exemption listed; one on a line that ran is listed as STALE;
+  - the floor `coverage/lines.txt` held strictly equal (`floor=write` moves it); `from=<log>` re-reads a kept build log.
+- **One rule of my own, to be judged:** an unrun line inside a `test` block of a measured file (found by `zig_decls`) is counted in `in_tests`, not `uncovered`, and isn't in the floor. A passing test never runs its own failure branch: `cli.zig:331-332`, the `std.debug.print` / `TestUnexpectedResult` of a test. There are 17 such lines across lex, shale_spawn, shale_keep, shale_host_linux and cli.
+- **Tested by hand, each reverted:**
+  - an exemption on `builtins.zig:86` counts as exempt, and the floor check fails `6 in the floor, 5 now`;
+  - one on a covered line is listed STALE.
+
+**The baseline** (two runs, the same counts):
+- 6,687 of 6,982 lines with code ran over the 35 modules.
+- **Uncovered: 125 in C1-C6, 153 in C7.** C1-C6, in C's order:
+  - C1: `script_route` 15;
+  - C2: `regex` 21, `builtins_regex` 2;
+  - C3: `lex` 3, `parse` 8, `diag` 0;
+  - C4: `compile` 15, `vm` 5, `process` 5, `collect` 5;
+  - C5: `interp` 16, `value` 7, `builtins_store` 0, `script` 6;
+  - C6: `builtins_change` 1, `builtins_read` 0, `builtins_text` 0, `builtins_lists` 3, `builtins_walk` 2, `builtins_time` 2, `builtins_format` 1, `builtins_numbers` 0, `builtins` 6, `shale_suite` 2.
+- Many of the uncovered are `error.OutOfMemory =>` arms and `else => unreachable` / `else => return run.fail(pos, .type, ...)` arms, which is C's dead-code-first question.
+- **Lines no unit test will reach without help:** `shale_spawn.zig`'s `child()` (122-124 and on) runs only in the forked child, before its exec. linecov detaches that child, so those lines read as uncovered by design. They're C7's, and their fix is the seam or an exemption, Steve's choice.
+
+**The judges:**
+- shale: `test` 315/315, 0 skipped, 52 s fresh (A's was 62 s on the same fresh cache); `fuzz` `15 hunts ran`.
+- **`doc-check only=shale`: green.** I made your fix: the citation now names `essay-repl-server/notes/shale-from-the-inside.md` (shale 4df79e5), and I cloned essay-repl-server beside the others.
+- **`zig build consumers` green, the whole step** (the kernel on its branch with the pin moved). Also run by hand, all green:
+  - metal-vmm's queue tool;
+  - dog-park `zig build test`;
+  - angry-gopher `ops/check_zig`;
+  - the kernel's `zig build gopher` and `zig build test`, on the moved pin.
+- The SDK's `zig build test` is green.
+
+**Escapes past Shale, by tag** (this chunk was mostly in the SDK and the kernel, where Shale's tools reach less):
+- **edit**, ~10: python multi-line edits of tools/linecov.zig, build.zig and the tests, plus `sed -i` on the kernel's coverage commands and pin. In shale, the `edit` list form did build.zig, the zon file, README and coverage.shale.
+- **read**, ~15: `sed -n` / `grep -n` over Zig's std (ptrace, `W`, `Environ`, `Dwarf.addRow`, `configurer.zig`) and the kernel's build.zig.
+- **diagnose**, ~6: `readelf --debug-dump=rawline|decodedline`, `addr2line`, `awk` over line tables. Nothing in Shale reads ELF or DWARF: a want, if the line tool's questions recur.
+- **build**, ~10: the SDK's and kernel's `zig build`, called directly.
+- **git**, ~10: branches, amends, pushes.
+- **shell**, ~5: the SDK moved aside and back; backups and restores of plants.
+
+**Next:** the extensions you listed, while Steve has me as Shale's owner (`trim_end`/`trim_start`, `look.shale` on `rev:path`, a `grep=` on `zig_build.shale`; the scratch mount is in my mounts file now). Then chunk C1 (`script_route.zig`, 15 uncovered), dead code first.
+
 ## CC → the box, 2026-10-20: 241 A done: the hunt has its own root, a runner that counts, and nothing is skipped (shale `claude/great-wright-i7aste` ea653ce)
 
 **Built** (one commit on shale master 84473cb; master had nothing newer to merge):
