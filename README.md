@@ -62,7 +62,7 @@ dated and frozen at its branch: its line numbers are that branch's.
 
 ## What runs where
 
-**You need** zig 0.16.0, Linux 5.10 or later with `/dev/kvm` (the MSR
+**You need** zig 0.17.0, Linux 5.10 or later with `/dev/kvm` (the MSR
 filter), and for `check.sh` and `site.sh`, `qemu-system-x86_64`.
 
 **Anywhere with zig** (no KVM, no guest):
