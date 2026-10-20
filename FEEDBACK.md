@@ -37,6 +37,43 @@ the list of work; this is the conversation about it.
 
 **Not yet judged, pushed after your report:** the gate's two red-then-green pairs (2b4c334..584b42c), D1's generator (53a4aba), and 243's red-then-green in the SDK (a45b540, bd1feb7). Report them, and I'll judge them together.
 
+## CC → the box, 2026-10-21 (night): 241 E, two speedups in the VM, steps unchanged, and one I'd like you to decide
+
+**Branch:** shale `claude/great-wright-i7aste` e2f09a5.
+
+**The measure here.** This machine is noisy: best-to-worst spreads of 5-56% over five bench runs of the same code, against your ±7%.
+- So each change gets two measures:
+  - **callgrind's instruction count:** deterministic. It runs a case through a ReleaseSafe `shale` built for `x86_64_v3`, since valgrind cannot decode the AVX-512 a native build uses;
+  - **`script-bench`**, before and after alternately, best of five, read by the new `tools/bench.shale`.
+- `tools/bench.shale` prints each case's best per engine, its spread, and the after/before ratio, and fails if a case's steps differ.
+- The walker's code is unchanged in both, so its ratio is the noise: 0.94 to 1.08.
+
+**Baseline** (five runs, best of each): the VM is only about level with the walker on loops (a loop 35.3 ms against 37.9; a while loop 28.5 against 26.6). The callgrind profile of the loop case put about 500 instructions on each iteration:
+- 63M in `slot` (`&m.r.stack.items[m.r.base + s]`);
+- 90M in ArrayList push and pop;
+- 51M in `arith`;
+- and the per-op slice and enters checks.
+
+**E1, e9cf047: `pop` shortens the stack** instead of `ArrayList.pop`.
+- `ArrayList.pop` writes `undefined` over the slot (a store of 0xAA in a safe build) and returns an optional.
+- **Instructions:** 513,971,778 to 474,971,734, 7.6% fewer.
+- **Bench, the VM after over before:** loop 0.93, while 0.87, list 0.91, calls 0.84, read 0.83.
+
+**E2, e2f09a5: `+ - < <= > >=` on two integers inline.** `arith` and `compare` take every other case, an overflow among them, so every value, error and step is as before.
+- **Instructions:** loop 474,971,734 to 422,971,714 (10.9% fewer); while 317,471,202 to 273,471,157 (13.9% fewer).
+- **Bench:** loop 0.88, `..` 0.89, join 0.86; the rest inside the noise.
+- **Across both:** steps the same in every case; shale-scale's table byte for byte the same, each time.
+
+**Yours to decide, not landed: `slot` without its bounds check** (`stack.items.ptr[...]`).
+- It saves another 24M on the loop case: 475.0M to 451.0M, 5.1%.
+- The compiler sizes every frame, so the check should never fire; but a compiler bug would then read the wrong slot silently instead of panicking.
+- On a sandbox that runs strangers' scripts I'd keep the check unless you say otherwise. A middle way is to cache the frame's slice in the Machine at each call, return and yield, which keeps a check against a shorter length; I haven't measured it.
+
+**Not yet tried:** `compile.Op`'s 40 bytes (the loop touches tag, a and enters; pos and the rest only on a stop), and the per-op slice and enters checks, about 30% of the loop's ops.
+
+**Next:** F (the preludes' coverage). Then back to E for the Op layout, if you want it.
+
+
 ## CC → the box, 2026-10-21 (late): 241 D's last two parts, and two Zig fuzzer notes for LC
 
 **Branch:** shale `claude/great-wright-i7aste` 47104b0 (on 53a4aba).
