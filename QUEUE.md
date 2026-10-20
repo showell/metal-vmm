@@ -140,6 +140,36 @@ The preludes (`src/shale_prelude_linux.shale`, `src/shale_prelude_git.shale`) ar
 1. **Every prelude function called by some test:** a Shale script lists each prelude's `function` names (a `re_lines` over the source) and each test file's calls of them, and prints any never called; a unit test fails when one is uncalled.
 2. **Lines, from the engine:** the walker and the VM know each step's source position, so a run can record which lines of each prelude it executed (a test-only hook, or `--coverage=<file>` on the CLI that appends `source:line` once each). Then `tools/coverage.shale` reports the preludes beside the Zig modules, with the same floor file and the same exemption comment (`-- coverage: not run, <why>`). The hook must not change step counts (E's rule).
 **Done:** both preludes' functions all called; their line coverage in the table, at 100% or with listed exemptions. **The box judges:** the report on the box; a planted uncalled function turns the test red.
+**242. Shale's Zig comments in the Zig compiler authors' voice: CC'S, after 241** (Steve, 2026-10-20: "I want the commenting style to mimic the zig compiler authors ... mimic the tone and level of detail within reason in the zig files used to build shale"). Every `.zig` file that builds Shale: `src/**`, `tools/*.zig`, `build.zig`. Comments only; no code changes. Take it at a 241 chunk boundary, not inside one.
+
+**The sample:** `lib/std/zig/AstGen.zig` from Zig 0.17.0 (`zig:lib/std/zig/AstGen.zig` through the box's mount; in your install, `<zig>/lib/std/zig/AstGen.zig`), the compiler's front end (AST to ZIR), 11,520 lines of code. Read its first 400 lines and a few long functions (`expr`, `fnDecl`, `blockExpr`). For field and variant docs, its companion `lib/std/zig/Zir.zig`. `Parse.zig` beside them is the nearest relative of Shale's `parse.zig`.
+
+**What the box measured (2026-10-20), comment lines per 100 code lines; "loud" = a comment with `**` or an ALL-CAPS heading:**
+
+| file | per 100 | words a line | loud |
+|---|---|---|---|
+| zig: tokenizer.zig / Parse.zig / AstGen.zig (algorithms) | 1 / 3 / 7 | 8-10 | 0 |
+| zig: Ast.zig / Zir.zig / Io/Reader.zig (data, APIs) | 25 / 33 / 34 | 6-9 | 0 |
+| shale: vm.zig / parse.zig / interp.zig / regex.zig | 15 / 15 / 23 / 17 | 10-11 | 10 / 17 / 27 / 5 |
+
+**The voice, from the sample:**
+- `//!` at the top: one or two plain sentences of what the file is. "Ingests an AST and produces ZIR code." "Represents in-progress parsing, will be converted to an Ast after completion."
+- `///` on a public declaration, a field, an enum tag: declarative, present tense, exact; what it is, its invariants, how it is used. "Arithmetic multiplication. Asserts no integer overflow." "Uses the `pl_node` union field. Payload is `Bin`." "Used for temporary allocations; freed after AstGen is complete." "If the location does not have a known result type, returns `null`."
+- `//` inside a body: rare, and only what the code can't say: why, an invariant relied on, a recovery, a workaround, frankly and in "we". "Likely just a missing comma; give error but continue parsing." "We can't get field pointers of an untyped inferred alloc, so must perform a ..." "This is a terrible workaround for Sema's inability to load from a .alloc_inferred ptr".
+- Never: bold, ALL-CAPS headings, `── section ──` banners, dates, people, QUEUE numbers, "Steve said", what the code used to do. History is the commit message's ([[no narrative in prose]] already says so; this makes it the rule for comments too).
+
+**Within reason, for Shale:**
+- Algorithmic modules (parse, compile, vm, interp, regex, the host) come down toward AstGen's density: a comment where a reader would otherwise stop and wonder, no more. The data definitions (`compile.Op`, `value.Value`, `Budgets`, the stop classes, `Mount`) keep a `///` on every field and tag, in Zir's terse form.
+- A doc that carries a rule a caller must keep (a budget's charge, a refusal and why, what a builtin guarantees) stays, rewritten plain. Where a heading said something the code does not, keep the sentence and drop the shouting.
+- A reference that explains a workaround (an upstream Zig issue) may stay as a link, as Zig's own code does; a reference to our QUEUE or FEEDBACK goes.
+- Tests: a test's name is its doc, so a comment in a test only says what the name can't.
+
+**How, in Shale:**
+1. **A census recipe first,** `cookbook/zig/comment_census.shale`: per file, code lines, `///`+`//!` lines, `//` lines, per 100, words a line, loud lines (the table above, which the box made with a Shale heredoc; make it a recipe with `dir=` and a `top=` for the loudest files). It is the before/after for every commit.
+2. **One module (or a small family) a commit, comment-only.** The judge is Shale's own tokens: `zig_tokens(p)` on the file before and after, comments dropped, must be the same list of tags and texts (a recipe, `cookbook/zig/comments_only.shale`, that takes `rev=` and the files and says "comment-only" or names the first token that differs). A commit that fails it is split.
+3. `edit`'s list form for the rewrites, `look.shale` to read around, `zig_build.shale step=test` once per commit (comment-only changes cannot change a test, but a stray edit can).
+
+**Done:** every Shale `.zig` file with 0 loud lines and no QUEUE/date/person references in comments; the algorithmic modules within reach of the sample's density; the census table before and after in FEEDBACK; each commit judged comment-only by the recipe. **The box judges:** the census on the box; `comments_only.shale` over the whole range; `zig build test` and `doc-check` green; a read of two modules against the sample, with notes back where the voice drifted.
 
 ## Parked
 
