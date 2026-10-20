@@ -128,12 +128,18 @@ How in Shale: `zig_build.shale step=script-bench` with its log, and a Shale scri
 
 **Report** in FEEDBACK, per chunk: what was built, the numbers (coverage per module before/after, hunts' counts and reach, bench before/after), the bugs as red/green commits, the dead code deleted, and the escapes past Shale counted by tag.
 
-**Steve's to decide (none blocks A; B's defaults hold until he says otherwise):**
-- **Where line coverage lives.** Default: a Zig `linecov` in zig-coverage-sdk (shared with the kernel, whose pin moves once). Otherwise: in Shale's `tools/` alone, or CC runs `linecov.py` (Python) as the kernel does.
-- **A line no unit test can reach:** an exemption marker (say `// coverage: not run, <why>`, after the SDK's `// coverage: not scanned, <why>`), or always restructured until the line goes. Default until he says: listed in FEEDBACK, no marker.
-- **SDK properties inside Shale's own modules** (`vm.zig`, `parse.zig`) rather than only in the hunt harness: they would reach every application that builds Shale (the kernel's gopher.elf, angry-gopher, dog-park) and need Shale's files cataloged. Default: the harness only.
-- **The Linux host's share of 100%:** C7 at 100% too, or a lower bar for an agent's tool than for what runs on the site.
-- **The preludes** (`shale_prelude_linux.shale`, `shale_prelude_git.shale`) are Shale code, which no line tool sees: whether their functions want a coverage of their own (each called by some test) as a later item.
+**Steve's answers (2026-10-20):**
+- **Line coverage lives in zig-coverage-sdk:** the Zig `linecov` there, shared with the kernel, whose pin moves once (B as written).
+- **A line no unit test can reach takes an exemption comment:** `// coverage: not run, <why>`, on the line, the why a real reason (a kernel refusal, an allocation that fails only outside a budget). The report counts exemptions per module beside the uncovered lines, and `tools/coverage.shale` lists every one, so they stay visible and few. Deleting or restructuring stays the first choice (C's "dead code first").
+- **SDK properties in the hunt harness only**, never in Shale's own modules (D2 as written).
+- **100% for the strategic modules, not the whole codebase yet:** C1-C6 (what the site runs: the route, regex, the front end, compiler/VM, interp and budgets, the builtins) are held to 100%. C7, the Linux host, is measured and reported, not held to it.
+
+### F. The preludes' coverage (after C; Steve: "should be fairly easy")
+
+The preludes (`src/shale_prelude_linux.shale`, `src/shale_prelude_git.shale`) are Shale code, which no line tool sees. Two steps, the first cheap:
+1. **Every prelude function called by some test:** a Shale script lists each prelude's `function` names (a `re_lines` over the source) and each test file's calls of them, and prints any never called; a unit test fails when one is uncalled.
+2. **Lines, from the engine:** the walker and the VM know each step's source position, so a run can record which lines of each prelude it executed (a test-only hook, or `--coverage=<file>` on the CLI that appends `source:line` once each). Then `tools/coverage.shale` reports the preludes beside the Zig modules, with the same floor file and the same exemption comment (`-- coverage: not run, <why>`). The hook must not change step counts (E's rule).
+**Done:** both preludes' functions all called; their line coverage in the table, at 100% or with listed exemptions. **The box judges:** the report on the box; a planted uncalled function turns the test red.
 
 ## Parked
 
