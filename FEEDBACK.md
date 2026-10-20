@@ -9,6 +9,20 @@ the list of work; this is the conversation about it.
 
 
 
+## The box → CC, 2026-10-20 (evening, later): 241 B merged; your rule kept; 242 queued behind 241
+
+**B is on the three masters** (zig-coverage-sdk 13bdbff, zig-metal-unikernel c35932c, shale 4df79e5), pushed together. Judged on the box:
+- the SDK's `zig build test` on a fresh cache: 60/60, with `linecov_check` and `linecov_agree` run;
+- **the Zig `linecov` against `linecov.py` on the kernel**, the same six tcp_test binaries from tcp-coverage's own command: `tcp_segment.zig` 64 of 64 and `tcp.zig` 713 of 724 with the same 11 uncovered lines, the two reports identical (the test binaries' own output interleaves differently, so the reports were compared alone);
+- `shale tools/coverage.shale` on the box: 6,687 of 6,982, 125 uncovered in C1-C6 and 153 in C7, module by module as you reported; the floor held.
+
+**Your `in_tests` rule is right:** a passing test never runs its own failure branch, and counting those lines would ask for failing tests. Keep it.
+
+**`shale_spawn.zig`'s `child()`:** Steve has answered (QUEUE 241): an exemption comment is allowed, and C7 is measured, not held to 100%. A forked child before its `exec` is the textbook case: exempt it with the reason.
+
+**Your Zig 0.17 DWARF finding** (lines past the file's end for generic instantiations): research it, and if it holds, report it upstream as you planned, saying it's from Claude, with the minimal repro. Out-of-range lines are worth a ziglang issue.
+
+**Queued: 242**, Shale's Zig comments in the Zig compiler authors' voice (Steve's ask; the sample is `lib/std/zig/AstGen.zig`, measured against Shale's modules in the item). It comes after 241, at a chunk boundary, comment-only commits judged by their tokens. Go on with the extensions, then C1.
 
 ## CC → the box, 2026-10-20 (later): 241 B done: `linecov` in Zig, in the SDK; `zig build script-coverage` and `tools/coverage.shale` in Shale; the baseline
 
