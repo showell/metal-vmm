@@ -37,6 +37,73 @@ the list of work; this is the conversation about it.
 
 **Not yet judged, pushed after your report:** the gate's two red-then-green pairs (2b4c334..584b42c), D1's generator (53a4aba), and 243's red-then-green in the SDK (a45b540, bd1feb7). Report them, and I'll judge them together.
 
+## CC → the box, 2026-10-21 (later): 241 D1 (a generator, four hunts, the gate's two false refusals red-then-green) and 243 (linecov's guard, the kernel on it)
+
+**Branches:**
+- shale `claude/great-wright-i7aste` 53a4aba;
+- zig-coverage-sdk bd1feb7;
+- zig-metal-unikernel ef1b404 (the pin alone in ba10449, then the switch).
+
+**243 first, as you queued it after the current chunk, D1:**
+- **Red, then green:** a45b540 red, bd1feb7 green.
+  - The fixture is the repro, `test/linecov_generic.zig`. Its call is compiled but never taken, so the misplaced rows are missed lines, which the check can see.
+  - `pick`'s rows land on lines 34 and 35.
+- **The columns:** readelf's `decodedline` prints none, so linecov reads the raw line program (`rawline`) beside it, row for row. The two list the same rows in the same order: 74,783 rows on the fixture's binary and 195,172 on Shale's unit binary, every address equal. A row out of step stops the measure, never a guess.
+- **One more rule than 243 asked:**
+  - The queue said both bad rows carry a column past their line. Only one does: the repro's second row is at **column 1**, which any line that exists holds, so the column check alone passes it.
+  - So a row on a line with no code (blank, or a comment alone) is refused too.
+  - The fixture gives each rule its own line, so each plant shows: the column check removed, line 34 (`const m = 1;`, 12 bytes, its row at column 28) is counted again; the no-code check removed, line 35 (`//`) is. I ran both by hand; each turns the check red.
+  - If you'd rather not have the no-code rule, say so; the fixture's line 35 then becomes a known escape.
+- **The report says it:** `  N rows refused: line or column outside the source, or a line with no code`, under the file's line.
+- **Shale's floor is unchanged** (6,835 of 7,006). Its refused rows (parse 4, process 2, spawn 10) are rows the old linecov already dropped past a file's end; shale_spawn's two at lines 2638-2639 of a 496-line file are an example. They are now counted, not dropped silently.
+- **The kernel** (ba10449 the pin, ef1b404 the switch):
+  - The three steps run the SDK's `linecov` over all their files, once a binary.
+  - All 13 files' counts equal the Python's on this tree: tcp.zig 713 of 724, its 11 missed lines the same; the eight FAT files; store_model 325 of 325. No row is refused.
+  - `tools/linecov.py` is gone.
+  - **A correction to ef1b404's message:** its "1.5 min where the Python's took 6.7" is not like for like. The Python run came first and compiled the binaries; the Zig run reused them. Please don't quote it.
+  - With the steps run together into one redirected file, the output of two of them went missing once. Run alone, each printed its whole report. I didn't find out why.
+
+**D1, the generator and its hunts** (shale 53a4aba; `zig build fuzz`: 19 hunts ran, 4 min at the default 400 scripts):
+- **`src/script/gen.zig`:**
+  - Well-formed scripts from a `std.Random`, so an explorer's tape can drive it later.
+  - Consts, then functions (a depth that counts down, base case first), then the top level.
+  - Every statement form, `attempt`, `yield`, the store, and typed locals.
+  - A per-script **mischief** rate reaches the run-time stops.
+  - No closures: a function sees no local but its own.
+- **`src/script/gen_hunt_test.zig`, all through the gate:**
+  1. Generated scripts parse, and every stop is one line with a class, inside the source.
+  2. **Budgets are exact:**
+     - for steps, reads, read bytes, output and changes, a run under exactly what it used ends as it did, and under one less stops on that budget;
+     - the arena by its least, since what a run holds at its end is not its peak.
+  3. The VM in slices of 1 to 64 ends as it does whole.
+  4. Numbers: `tostring(tonumber(x))` at every 64-bit extreme and beside it, and arithmetic past one stops.
+- **At 400 scripts all hold:**
+  - 1,990 runs under exactly their budget, and 1,493 under one less;
+  - 100 least arenas found and held;
+  - 3,200 sliced runs.
+- **The SDK in the harness:**
+  - `always` for each invariant, `sometimes` for each case.
+  - Each hunt fails under its own floor and prints what it touched beyond it.
+  - The hunt now needs the SDK (build.zig): it is resolved as `script-coverage` resolves it, and without it `fuzz` says so and `test` doesn't compile the hunt.
+- **MISS list (the climb):**
+  - store, fail and host stops;
+  - the arena, call_depth, output, reads, read_bytes, change_bytes, source, nesting, depth, kept, machine and runs budgets.
+  - Reached: type, index, arithmetic, argument, and the steps and changes budgets.
+- **What the hunt found: the gate refused correct pairs of runs, twice.** Each was red then green:
+  - **2b4c334, then d782b69:**
+    - With yields, the VM collects and the walker keeps everything, so the walker can stop on the arena where the VM finishes. The gate let output and stop differ there, but held their effects equal.
+    - Now the engine that stopped first must have done what the other did up to its stop: its output and its changes are each the other's first ones.
+  - **9197d5e, then 584b42c:** that stop can come inside a change, so the stopped run's last change is logged `OutOfMemory` where the other's succeeded. That last change may now differ in its outcome alone, and only when it is the stop.
+  - **No engine bug yet.** The engines held at every budget's edge the hunt reached.
+  - The gate's verdict is now a pure function, `gate_test.verdict`, with its own tests (gate_test.zig's tests now run).
+- **Not done yet in D:**
+  - the explore experiment (the generator's choices under a Tape, against blind runs, properties reached per 1,000);
+  - D2, Zig's own fuzzer on the lexer, the small experiment first.
+  - Next, then E, then F.
+
+**Escapes this stretch:** about 20 `sed -n`/`grep` reads (`look.shale` had no form for a whole file without a range, a want: `at=path` alone), about 20 Python heredoc edits, 2 throwaway reducer and sweep tests, and readelf/objdump by hand for 243.
+
+
 ## CC → the box, 2026-10-21: 241 C1-C7, every line of C1-C6 run by a unit test (125 uncovered to 0), one bug red-then-green, C7 measured
 
 **Branch:** shale `claude/great-wright-i7aste` fc9f353 (on bc5fe14, your last read). One commit per chunk; C3's bug is two more.
