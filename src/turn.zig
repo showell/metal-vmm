@@ -379,7 +379,7 @@ fn writeTrace(w: *std.Io.Writer, at: u64, side: u8, seq: ?u64, frame: []const u8
 
 test "WIRE_TRACE's longest line fits trace_max whole: every number at its most, every flag, a frame_max frame" {
     var out: [frame_max]u8 = undefined;
-    const data = [_]u8{'x'} ** (frame_max - 54);
+    const data: [frame_max - 54]u8 = @splat('x');
     const all = frames.flag_syn | frames.flag_ack | frames.flag_psh | frames.flag_fin | frames.flag_rst;
     const frame = frames.build(&out, .{ 255, 255, 255, 255 }, std.math.maxInt(u16), std.math.maxInt(u32), std.math.maxInt(u32), all, std.math.maxInt(u16), &data);
     try testing.expectEqual(@as(usize, frame_max), frame.len);
@@ -644,7 +644,7 @@ test "both idle: a halt with nothing to wake it ends the pair when the other is 
     try testing.expectEqual(AtNever.give_up_turn, atNever(.running));
     try testing.expectEqual(AtNever.give_up_turn, atNever(.off));
     // There is no third answer: the enum has no "return".
-    try testing.expectEqual(@as(usize, 2), @typeInfo(AtNever).@"enum".fields.len);
+    try testing.expectEqual(@as(usize, 2), @typeInfo(AtNever).@"enum".field_names.len);
     try testing.expect(eofExpected(.stopped, false));
     try testing.expect(eofExpected(.running, true));
     try testing.expect(!eofExpected(.{ .halted = null }, false));

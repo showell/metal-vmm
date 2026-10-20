@@ -339,17 +339,19 @@ pub fn socketPair() Error![2]linux.fd_t {
 
 /// **THE CLIENT'S VERDICT**: its exit code, or 128 and its signal.
 pub fn reap(pid: linux.pid_t) u8 {
-    var status: u32 = 0;
+    // waitpid fills an i32 (Zig 0.17); W reads a u32.
+    var raw: i32 = 0;
     while (true) {
-        const rc = linux.waitpid(pid, &status, 0);
+        const rc = linux.waitpid(pid, &raw, 0);
         switch (linux.errno(rc)) {
             .SUCCESS => break,
             .INTR => continue,
             else => return 1,
         }
     }
+    const status: u32 = @bitCast(raw);
     if (linux.W.IFEXITED(status)) return linux.W.EXITSTATUS(status);
-    return 128 +| @as(u8, @truncate(@intFromEnum(linux.W.TERMSIG(status))));
+    return 128 +| @as(u8, @truncate(@backingInt(linux.W.TERMSIG(status))));
 }
 
 // ── what can be checked without a guest: two Links over a real socket ─────

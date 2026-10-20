@@ -93,7 +93,7 @@ pub const Response = struct {
             self.phase = .done;
             return;
         }
-        if (header(head, "transfer-encoding")) |te| if (std.ascii.indexOfIgnoreCase(te, "chunked") != null) {
+        if (header(head, "transfer-encoding")) |te| if (std.ascii.findIgnoreCase(te, "chunked") != null) {
             self.phase = .chunk_size;
             return;
         };

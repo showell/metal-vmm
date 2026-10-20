@@ -168,12 +168,12 @@ pub fn pointersIn(comptime Ty: type, comptime path: []const u8) []const u8 {
         .pointer => |p| if (@typeInfo(p.child) == .@"fn") "" else path ++ "\n",
         .@"struct" => |st| blk: {
             var all: []const u8 = "";
-            for (st.fields) |f| all = all ++ pointersIn(f.type, path ++ "." ++ f.name);
+            for (st.field_names, st.field_types) |name, ty| all = all ++ pointersIn(ty, path ++ "." ++ name);
             break :blk all;
         },
         .@"union" => |u| blk: {
             var all: []const u8 = "";
-            for (u.fields) |f| all = all ++ pointersIn(f.type, path ++ "." ++ f.name);
+            for (u.field_names, u.field_types) |name, ty| all = all ++ pointersIn(ty, path ++ "." ++ name);
             break :blk all;
         },
         .optional => |o| pointersIn(o.child, path ++ "?"),
@@ -188,8 +188,8 @@ pub fn pointersIn(comptime Ty: type, comptime path: []const u8) []const u8 {
 fn isCode(comptime T: type) bool {
     const info = @typeInfo(T);
     if (info != .@"struct") return false;
-    for (info.@"struct".fields) |f| {
-        const fi = @typeInfo(f.type);
+    for (info.@"struct".field_types) |ty| {
+        const fi = @typeInfo(ty);
         if (fi != .pointer or @typeInfo(fi.pointer.child) != .@"fn") return false;
     }
     return true;
@@ -206,12 +206,12 @@ pub fn pointeesIn(comptime Ty: type) []const u8 {
         .pointer => |p| if (p.size == .one and (@typeInfo(p.child) == .@"struct" or @typeInfo(p.child) == .@"union") and !isCode(p.child)) nameOf(p.child) ++ "\n" else "",
         .@"struct" => |st| blk: {
             var all: []const u8 = "";
-            for (st.fields) |f| all = all ++ pointeesIn(f.type);
+            for (st.field_types) |ty| all = all ++ pointeesIn(ty);
             break :blk all;
         },
         .@"union" => |u| blk: {
             var all: []const u8 = "";
-            for (u.fields) |f| all = all ++ pointeesIn(f.type);
+            for (u.field_types) |ty| all = all ++ pointeesIn(ty);
             break :blk all;
         },
         .optional => |o| pointeesIn(o.child),
@@ -270,7 +270,7 @@ test "the premise: every pointer in a model is one a restore keeps right, or a g
         }
         // A saver saves the type it is the saver of.
         for (models) |M| if (saverOf(M)) |S| {
-            if (@typeInfo(@TypeOf(S.save)).@"fn".params[0].type.? != *const M)
+            if (@typeInfo(@TypeOf(S.save)).@"fn".param_types[0].? != *const M)
                 @compileError("snapshot.zig: the saver of " ++ nameOf(M) ++ " saves something else");
         };
     }

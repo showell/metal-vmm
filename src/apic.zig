@@ -108,8 +108,8 @@ pub const Apic = struct {
     count_ends: ?u64 = null,
     /// The IRR, vectors raised and not yet taken, and the ISR, those taken
     /// and not yet ended by an EOI (§11.8.4).
-    irr: std.StaticBitSet(256) = .initEmpty(),
-    isr: std.StaticBitSet(256) = .initEmpty(),
+    irr: std.StaticBitSet(256) = .empty,
+    isr: std.StaticBitSet(256) = .empty,
     /// How many of each were taken, for a run's closing account.
     timer_fired: u64 = 0,
     raised: u64 = 0,
@@ -129,7 +129,7 @@ pub const Apic = struct {
     }
 
     fn mode(self: *const Apic) Mode {
-        return @enumFromInt((self.lvt_timer >> 17) & 3);
+        return @fromBackingInt(@intCast((self.lvt_timer >> 17) & 3));
     }
 
     /// The divide configuration's divisor: bits 3, 1 and 0 (§11.5.4).

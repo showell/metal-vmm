@@ -942,7 +942,14 @@ test "a client reading a stream holds its connection open, however much comes" {
     var at: u32 = 5001;
     _ = peer.answer(fakeSegment(&theirs, flag_ack | flag_psh, at, 0, head), 0).?;
     at += head.len;
-    const event = "data: a message for the room\n\n" ** 40;
+    // Forty events end to end (0.17 has no string repetition).
+    const event = comptime blk: {
+        const one = "data: a message for the room\n\n";
+        var out: [one.len * 40]u8 = undefined;
+        for (0..40) |i| @memcpy(out[i * one.len ..][0..one.len], one);
+        const done = out;
+        break :blk &done;
+    };
     for (0..100) |_| {
         const ack = tcpIn(peer.answer(fakeSegment(&theirs, flag_ack | flag_psh, at, 0, event), 0).?).?;
         at += event.len;

@@ -98,7 +98,7 @@ fn sources(names: *[64][64]u8, lens: *[64]usize) !usize {
 
 fn readSource(name: []const u8, into: []u8) ![]const u8 {
     var path: [128]u8 = undefined;
-    const p = try std.fmt.bufPrintZ(&path, "src/{s}", .{name});
+    const p = try std.mem.printSentinel(&path, "src/{s}", .{name}, 0);
     const opened = linux.open(p, .{ .ACCMODE = .RDONLY }, 0);
     if (linux.errno(opened) != .SUCCESS) return error.CannotOpen;
     const fd: linux.fd_t = @intCast(opened);

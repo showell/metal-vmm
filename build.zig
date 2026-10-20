@@ -11,8 +11,8 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-    const optimize = b.option(std.builtin.OptimizeMode, "optimize", "how metal-vmm and fuzz are built (ReleaseSafe)") orelse .ReleaseSafe;
-    const test_optimize = b.option(std.builtin.OptimizeMode, "test-optimize", "how the unit tests are built (Debug)") orelse .Debug;
+    const optimize = b.option(std.builtin.OptimizeMode, "optimize", "how metal-vmm and fuzz are built (ReleaseSafe)") orelse .safe;
+    const test_optimize = b.option(std.builtin.OptimizeMode, "test-optimize", "how the unit tests are built (Debug)") orelse .debug;
 
     const exe = b.addExecutable(.{
         .name = "metal-vmm",
@@ -26,7 +26,7 @@ pub fn build(b: *std.Build) void {
 
     const run = b.addRunArtifact(exe);
     run.step.dependOn(b.getInstallStep());
-    if (b.args) |args| run.addArgs(args);
+    run.addPassthruArgs();
     b.step("run", "Start a guest: zig build run -- <kernel.elf>").dependOn(&run.step);
 
     const tests = b.addTest(.{ .root_module = b.createModule(.{
@@ -53,5 +53,4 @@ pub fn build(b: *std.Build) void {
     fuzz.root_module.addOptions("fuzz_options", fuzz_options);
     b.installArtifact(fuzz);
     b.step("fuzz", "Every guest-facing model under a seeded stream of guest input: zig build fuzz -Dseeds=n").dependOn(&b.addRunArtifact(fuzz).step);
-
 }

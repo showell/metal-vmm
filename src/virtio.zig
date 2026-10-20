@@ -178,8 +178,8 @@ pub const Device = struct {
     may_dma: bool = true,
 
     pub fn read(self: *Device, offset: u64, len: u32) u64 {
-        if (offset >= @intFromEnum(Reg.config)) {
-            const at: usize = @intCast(offset - @intFromEnum(Reg.config));
+        if (offset >= @backingInt(Reg.config)) {
+            const at: usize = @intCast(offset - @backingInt(Reg.config));
             // Past the end of what this device keeps there is nothing, which
             // reads as zero, as the rest of the window does.
             if (at >= self.config.len) return 0;
@@ -189,7 +189,7 @@ pub const Device = struct {
             }
             return value;
         }
-        return switch (@as(Reg, @enumFromInt(offset))) {
+        return switch (@as(Reg, @fromBackingInt(@intCast(offset)))) {
             .magic => magic_value,
             .version => version,
             .device_id => self.id,
@@ -206,7 +206,7 @@ pub const Device = struct {
     }
 
     pub fn write(self: *Device, ram: []u8, offset: u64, value: u32) void {
-        switch (@as(Reg, @enumFromInt(offset))) {
+        switch (@as(Reg, @fromBackingInt(@intCast(offset)))) {
             .device_features_sel => self.device_features_sel = value,
             .driver_features_sel => self.driver_features_sel = value,
             // Whatever it takes, it may have; word 0 is kept.
@@ -522,7 +522,7 @@ pub const Block = struct {
 const testing = std.testing;
 
 test "an empty slot is empty, and the device's slot says what it is" {
-    var image = [_]u8{0} ** 1024;
+    var image: [1024]u8 = @splat(0);
     var blk = Block{ .image = &image };
     var d = blk.device();
     try testing.expectEqual(@as(u64, magic_value), d.read(0x000, 4));
@@ -534,10 +534,10 @@ test "an empty slot is empty, and the device's slot says what it is" {
 }
 
 test "the feature the guest insists on is in the high word, and only there" {
-    var image = [_]u8{0} ** 512;
+    var image: [512]u8 = @splat(0);
     var blk = Block{ .image = &image };
     var d = blk.device();
-    var ram = [_]u8{0} ** 64;
+    var ram: [64]u8 = @splat(0);
     d.write(&ram, 0x014, 1); // select the high word
     try testing.expectEqual(@as(u64, 1), d.read(0x010, 4)); // VERSION_1
     d.write(&ram, 0x014, 0);
@@ -545,10 +545,10 @@ test "the feature the guest insists on is in the high word, and only there" {
 }
 
 test "FEATURES_OK reads back, because the driver checks whether it was granted" {
-    var image = [_]u8{0} ** 512;
+    var image: [512]u8 = @splat(0);
     var blk = Block{ .image = &image };
     var d = blk.device();
-    var ram = [_]u8{0} ** 64;
+    var ram: [64]u8 = @splat(0);
     d.write(&ram, 0x070, 1 | 2 | status_features_ok);
     try testing.expect(d.read(0x070, 4) & status_features_ok != 0);
     d.write(&ram, 0x070, 0); // a reset starts the driver over
@@ -603,7 +603,7 @@ const FakeGuest = struct {
 };
 
 test "a sector asked for is the sector that arrives" {
-    var image = [_]u8{0} ** (512 * 4);
+    var image: [512 * 4]u8 = @splat(0);
     for (image[512 * 2 ..][0..512], 0..) |*b, i| b.* = @truncate(i);
     var blk = Block{ .image = &image };
     var d = blk.device();
@@ -619,7 +619,7 @@ test "a sector asked for is the sector that arrives" {
 }
 
 test "a sector written is a sector that can be read back" {
-    var image = [_]u8{0} ** (512 * 4);
+    var image: [512 * 4]u8 = @splat(0);
     var blk = Block{ .image = &image };
     var d = blk.device();
     var guest = FakeGuest{};
@@ -632,7 +632,7 @@ test "a sector written is a sector that can be read back" {
 }
 
 test "several sectors in one request, which is what a run of clusters costs" {
-    var image = [_]u8{0} ** (512 * 8);
+    var image: [512 * 8]u8 = @splat(0);
     for (image[512 * 3 ..][0 .. 512 * 2], 0..) |*b, i| b.* = @truncate(i / 7);
     var blk = Block{ .image = &image };
     var d = blk.device();
@@ -645,7 +645,7 @@ test "several sectors in one request, which is what a run of clusters costs" {
 }
 
 test "a sector past the end of the image is an error, not a read of something else" {
-    var image = [_]u8{0} ** 512;
+    var image: [512]u8 = @splat(0);
     var blk = Block{ .image = &image };
     var d = blk.device();
     var guest = FakeGuest{};
@@ -655,7 +655,7 @@ test "a sector past the end of the image is an error, not a read of something el
 }
 
 test "a kind of request this device does not know is refused by name" {
-    var image = [_]u8{0} ** 512;
+    var image: [512]u8 = @splat(0);
     var blk = Block{ .image = &image };
     var d = blk.device();
     var guest = FakeGuest{};
@@ -666,7 +666,7 @@ test "a kind of request this device does not know is refused by name" {
 test "nothing happens until the queue is ready" {
     // A doorbell before the driver has finished setting up must not walk a
     // ring that is not there yet.
-    var image = [_]u8{0} ** 512;
+    var image: [512]u8 = @splat(0);
     var blk = Block{ .image = &image };
     var d = blk.device();
     var guest = FakeGuest{};

@@ -337,13 +337,13 @@ test "a time no clock here can hold is refused, not overflowed (metal-vmm QUEUE 
     const micro = [_][]const u8{ "WIRE_LATENCY_US", "PEER_RESET_AT", "PEER_FLOOD_AT_US", "PEER_FLOOD_GAP_US", "PEER_SHUT_FOR_US", "PEER_DRIP_US", "PEER_CLIENT_GAP_US", "VOLUME_SYNC_US", "VOLUME_LATENCY_US" };
     var text: [96]u8 = undefined;
     for (micro) |name| {
-        const line = std.fmt.bufPrintZ(&text, "{s}={d}", .{ name, std.time.us_per_hour + 1 }) catch unreachable;
+        const line = std.mem.printSentinel(&text, "{s}={d}", .{ name, std.time.us_per_hour + 1 }, 0) catch unreachable;
         if (says(&.{ line, "VOLUME=/tmp/v.img" }) == null) {
             std.debug.print("{s} is taken, and overflows when read as nanoseconds\n", .{line});
             return error.Taken;
         }
     }
-    const seconds = std.fmt.bufPrintZ(&text, "PATIENCE_S={d}", .{std.time.s_per_day + 1}) catch unreachable;
+    const seconds = std.mem.printSentinel(&text, "PATIENCE_S={d}", .{std.time.s_per_day + 1}, 0) catch unreachable;
     if (says(&.{seconds}) == null) {
         std.debug.print("{s} is taken, and overflows when read as nanoseconds\n", .{seconds});
         return error.Taken;

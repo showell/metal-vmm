@@ -253,7 +253,7 @@ pub const Wire = struct {
         slot.lie = true;
         @memcpy(slot.bytes[0..copy.len], copy);
         self.next += 1;
-        self.mangled[@intFromEnum(kind)] += 1;
+        self.mangled[@backingInt(kind)] += 1;
     }
 
     /// The next frame that has arrived, or nothing. In the order they were

@@ -346,7 +346,7 @@ pub fn mangledKinds(line: *const faults.Wire, buf: []u8) []const u8 {
     var any = false;
     for (line.mangled, 0..) |n, i| {
         if (n == 0) continue;
-        const k: mangle.Kind = @enumFromInt(i);
+        const k: mangle.Kind = @fromBackingInt(@intCast(i));
         const out = std.fmt.bufPrint(buf[at..], "{s} {d} {s} ({s})", .{ if (any) "," else "", n, @tagName(k), k.check() }) catch break;
         at += out.len;
         any = true;

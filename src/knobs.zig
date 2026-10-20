@@ -483,7 +483,7 @@ test "a volume's knobs are drawn only with a volume, on dice of their own" {
     // With the three that refuse a write (metal-vmm QUEUE 135): one of
     // them at most a seed, at a command from 1 to 250.
     const vol = [_][]const u8{ "VOLUME_CACHE", "VOLUME_CUT_AFTER", "VOLUME_SYNC_FAIL", "VOLUME_SYNC_FAIL_FOR", "VOLUME_ATTENTION_AT", "VOLUME_CACHE_KEEPS", "VOLUME_GONE_AT", "VOLUME_READ_ONLY_AT", "VOLUME_SHORT_AT", "VOLUME_READ_ONLY_AT_WRITE" };
-    var turned = [_]bool{false} ** vol.len;
+    var turned: [vol.len]bool = @splat(false);
     for (0..500) |seed| {
         const plain = Knobs.fromSeed(seed);
         var with = Knobs.fromSeed(seed);

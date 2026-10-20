@@ -488,7 +488,7 @@ const sec = std.time.ns_per_s;
 /// A DHCP request as the guest builds one.
 fn fakeDiscover(out: []u8, kind: u8, mac: [6]u8, xid: [4]u8) []const u8 {
     @memset(out[0..400], 0);
-    @memcpy(out[0..6], &[_]u8{0xFF} ** 6);
+    @memcpy(out[0..6], &@as([6]u8, @splat(0xFF)));
     @memcpy(out[6..12], &mac);
     writeBe16(out[12..14], ethertype_ipv4);
     const ip = out[14..][0..20];

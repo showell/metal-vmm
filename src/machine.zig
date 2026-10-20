@@ -432,44 +432,44 @@ test "the census: every field of the machine is named, and is what it says (meta
     const snapshot = @import("snapshot.zig");
     comptime {
         @setEvalBranchQuota(2_000_000);
-        const fields = @typeInfo(Machine).@"struct".fields;
-        for (fields) |f| {
+        const machine = @typeInfo(Machine).@"struct";
+        for (machine.field_names, machine.field_types) |f_name, f_type| {
             const holds: Holds = for (census) |c| {
-                if (std.mem.eql(u8, c[0], f.name)) {
+                if (std.mem.eql(u8, c[0], f_name)) {
                     if ((c[1] == .box or c[1] == .input or c[1] == .host) and c[2].len == 0)
-                        @compileError("machine.zig: Machine." ++ f.name ++ " is not saved with the machine: say why in its census line");
+                        @compileError("machine.zig: Machine." ++ f_name ++ " is not saved with the machine: say why in its census line");
                     break c[1];
                 }
-            } else @compileError("machine.zig: Machine." ++ f.name ++ " is in no line of `census`: say how a snapshot gets it back");
+            } else @compileError("machine.zig: Machine." ++ f_name ++ " is in no line of `census`: say how a snapshot gets it back");
             switch (holds) {
-                .value => if (snapshot.pointersIn(f.type, "Machine." ++ f.name).len > 0)
-                    @compileError("machine.zig: Machine." ++ f.name ++ " is called a value, and holds a pointer: " ++ snapshot.pointersIn(f.type, "Machine." ++ f.name)),
+                .value => if (snapshot.pointersIn(f_type, "Machine." ++ f_name).len > 0)
+                    @compileError("machine.zig: Machine." ++ f_name ++ " is called a value, and holds a pointer: " ++ snapshot.pointersIn(f_type, "Machine." ++ f_name)),
                 .model => {
-                    const M = pointee(f.type);
+                    const M = pointee(f_type);
                     for (snapshot.models) |known| {
                         if (known == M) break;
-                    } else @compileError("machine.zig: Machine." ++ f.name ++ " points at " ++ @typeName(M) ++ ", which is not in snapshot.models");
+                    } else @compileError("machine.zig: Machine." ++ f_name ++ " points at " ++ @typeName(M) ++ ", which is not in snapshot.models");
                 },
-                .apart => if (snapshot.saverOf(pointee(f.type)) == null)
-                    @compileError("machine.zig: Machine." ++ f.name ++ " is said to be saved apart, and snapshot.saverOf has no saver for " ++ @typeName(pointee(f.type))),
-                .box => if (f.type != []u8)
-                    @compileError("machine.zig: Machine." ++ f.name ++ " is called guest memory, and is not bytes"),
+                .apart => if (snapshot.saverOf(pointee(f_type)) == null)
+                    @compileError("machine.zig: Machine." ++ f_name ++ " is said to be saved apart, and snapshot.saverOf has no saver for " ++ @typeName(pointee(f_type))),
+                .box => if (f_type != []u8)
+                    @compileError("machine.zig: Machine." ++ f_name ++ " is called guest memory, and is not bytes"),
                 .input => {
-                    const T = switch (@typeInfo(f.type)) {
+                    const T = switch (@typeInfo(f_type)) {
                         .optional => |o| o.child,
-                        else => f.type,
+                        else => f_type,
                     };
                     const info = @typeInfo(T);
-                    if (info != .pointer or !info.pointer.is_const)
-                        @compileError("machine.zig: Machine." ++ f.name ++ " is called an input, and is not read-only memory");
+                    if (info != .pointer or !info.pointer.attrs.@"const")
+                        @compileError("machine.zig: Machine." ++ f_name ++ " is called an input, and is not read-only memory");
                 },
-                .host => if (snapshot.pointersIn(f.type, "").len > 0)
-                    @compileError("machine.zig: Machine." ++ f.name ++ " is called the host's, and holds a pointer"),
+                .host => if (snapshot.pointersIn(f_type, "").len > 0)
+                    @compileError("machine.zig: Machine." ++ f_name ++ " is called the host's, and holds a pointer"),
             }
         }
         for (census) |c| {
-            for (fields) |f| {
-                if (std.mem.eql(u8, c[0], f.name)) break;
+            for (machine.field_names) |f_name| {
+                if (std.mem.eql(u8, c[0], f_name)) break;
             } else @compileError("machine.zig: `census` names Machine." ++ c[0] ++ ", which is not a field");
         }
     }

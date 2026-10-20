@@ -220,7 +220,7 @@ pub fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine
                 return error.KvmFailed;
             },
         }
-        if (@as(kvm.Exit, @enumFromInt(run.exit_reason)) == .io) {
+        if (@as(kvm.Exit, @fromBackingInt(@intCast(run.exit_reason))) == .io) {
             const io = kvm.ioExit(page);
             if (io.port == coverage_door) {
                 const data = kvm.ioData(page, io);
@@ -259,7 +259,7 @@ pub fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine
             std.debug.print("metal-vmm: the guest has run {d} s of its own time, as GUEST_S asked, so the run ends\n", .{machine.time.ns / std.time.ns_per_s});
             return error.GuestWatched;
         }
-        const exit_reason: kvm.Exit = @enumFromInt(run.exit_reason);
+        const exit_reason: kvm.Exit = @fromBackingInt(@intCast(run.exit_reason));
         machine.cost.exit(switch (exit_reason) {
             .io => io: {
                 const io = kvm.ioExit(page);
@@ -358,7 +358,7 @@ pub fn serve(vcpu: linux.fd_t, page: []align(std.heap.page_size_min) u8, machine
                 return error.KvmFailed;
             },
             else => |reason| {
-                std.debug.print("metal-vmm: unhandled exit {d}\n", .{@intFromEnum(reason)});
+                std.debug.print("metal-vmm: unhandled exit {d}\n", .{@backingInt(reason)});
                 return error.Unhandled;
             },
         }

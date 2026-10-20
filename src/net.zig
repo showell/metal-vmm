@@ -246,7 +246,7 @@ const testing = std.testing;
 
 test "a frame with nowhere to go waits on the wire rather than vanishing" {
     var card = Net{};
-    var ram = [_]u8{0} ** 256;
+    var ram: [256]u8 = @splat(0);
     var d = card.device();
     // No receive buffers have been posted, so delivery fails and says so...
     try testing.expect(!card.deliver(&d, &ram, &.{ 1, 2, 3 }));
@@ -286,7 +286,7 @@ test "the wire loses the peer's nth frame, and damages another so its checksum f
 test "the next thing on this side: the peer's own timer, past a frame stuck for want of a buffer" {
     var card = Net{};
     card.peer.rough = .{ .retransmits = true };
-    var ram = [_]u8{0} ** 256;
+    var ram: [256]u8 = @splat(0);
     var d = card.device();
     _ = card.connect(&d, &ram, "GET");
     // The SYN has no buffer to go to: due now, it waits for the guest.
@@ -301,7 +301,7 @@ test "the next thing on this side: the peer's own timer, past a frame stuck for 
 
 test "with nothing configured, nothing on this side ever happens on its own" {
     var card = Net{};
-    var ram = [_]u8{0} ** 256;
+    var ram: [256]u8 = @splat(0);
     var d = card.device();
     _ = card.connect(&d, &ram, "GET");
     try testing.expect(card.nextDue(0) == null);
@@ -312,7 +312,7 @@ test "with nothing configured, nothing on this side ever happens on its own" {
 test "the peer sends no faster than the wire has room, and waits for the guest without stalling a halt" {
     var card = Net{};
     card.peer.rough = .{ .flood = 200, .flood_gap_ns = 0 };
-    var ram = [_]u8{0} ** 256;
+    var ram: [256]u8 = @splat(0);
     var d = card.device();
     _ = card.connect(&d, &ram, "GET"); // the client's SYN: one frame in flight
     card.pump(&d, &ram, 0);
@@ -329,7 +329,7 @@ test "the peer sends no faster than the wire has room, and waits for the guest w
 test "a request in more segments than the wire holds goes as the guest takes them, none pushed out" {
     var card = Net{};
     card.peer.rough.mss = 2;
-    var ram = [_]u8{0} ** 256;
+    var ram: [256]u8 = @splat(0);
     var d = card.device();
     const request: [130]u8 = @splat('a');
     _ = card.connect(&d, &ram, &request);
@@ -359,7 +359,7 @@ test "an answer to the guest while the wire is full waits for room too, none pus
 
     var card = Net{};
     card.peer.rough.mss = 2;
-    var ram = [_]u8{0} ** 256;
+    var ram: [256]u8 = @splat(0);
     var d = card.device();
     const request: [400]u8 = @splat('a');
     _ = card.connect(&d, &ram, &request);
@@ -400,7 +400,7 @@ test "in a pair, a frame to the other machine crosses and its own peer never see
     var across: Across = .{};
     var pair: turn.Pair = .{ .side = 0, .lookahead_ns = 1000, .sendFn = Across.take, .ctx = &across };
     var card = Net{ .pair = &pair };
-    var ram = [_]u8{0} ** 256;
+    var ram: [256]u8 = @splat(0);
     var d = card.device();
     // The guest's SYN to the other machine, 10.0.2.16.
     var theirs: [2048]u8 = undefined;

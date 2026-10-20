@@ -19,7 +19,7 @@ pub const Cost = struct {
     longest_halt_ns: u64 = 0,
 
     pub fn exit(self: *Cost, kind: Kind) void {
-        self.exits[@intFromEnum(kind)] += 1;
+        self.exits[@backingInt(kind)] += 1;
     }
 
     /// A halt that moved the clock by `ns`.
@@ -34,7 +34,7 @@ pub const Cost = struct {
     }
 
     fn of(self: *const Cost, kind: Kind) u64 {
-        return self.exits[@intFromEnum(kind)];
+        return self.exits[@backingInt(kind)];
     }
 
     /// What the run around these counts did, from the devices' own counts.
