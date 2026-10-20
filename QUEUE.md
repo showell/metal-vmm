@@ -170,6 +170,15 @@ The preludes (`src/shale_prelude_linux.shale`, `src/shale_prelude_git.shale`) ar
 3. `edit`'s list form for the rewrites, `look.shale` to read around, `zig_build.shale step=test` once per commit (comment-only changes cannot change a test, but a stray edit can).
 
 **Done:** every Shale `.zig` file with 0 loud lines and no QUEUE/date/person references in comments; the algorithmic modules within reach of the sample's density; the census table before and after in FEEDBACK; each commit judged comment-only by the recipe. **The box judges:** the census on the box; `comments_only.shale` over the whole range; `zig build test` and `doc-check` green; a read of two modules against the sample, with notes back where the voice drifted.
+**243. linecov holds a line table to its source: a guard against Zig 0.17's out-of-place rows, and the kernel on the Zig tool: CC'S, after 241's current chunk** (Steve, 2026-10-21, after filing the upstream issue drafted in essay-repl-server `notes/zig-issue-generic-debug-lines.md`). Small; one branch per repo.
+
+**The trouble:** Zig 0.17.0 gives a generic instance's prologue and epilogue rows wrong line numbers (CC's 11-line repro: rows at lines 24 and 25 of an 11-line file, both backends; reproduced on the box). Past the file's end, zig-coverage-sdk's `linecov` drops them, and the kernel's `tools/linecov.py` dies on them (IndexError). **Inside the file's range, nothing catches them:** a generic near the top of a long file could credit or blame a real or blank line, silently. In both cases seen, the bad rows also carry a column past the end of any such line (24 on lines that do not exist; 1081 in explore.zig).
+
+1. **Red first:** a test in the SDK built from the repro, placed so a bogus row lands **inside** the file (a generic early in a file long enough to hold lines 24-25, those lines short), showing today's `linecov` counting a line the code never had.
+2. **The guard:** a row counts only when its line exists and its column is no further than that line's length plus one; every row refused is counted, and the report says so (`n rows refused: line or column outside the source`), so a refusal is never silent. Green on the red test; `linecov_agree` keeps agreeing where the Python has no such rows.
+3. **The kernel switches to the Zig tool:** tcp-coverage, fat-coverage and store-model-coverage run the SDK's `linecov` artifact (one run of each binary over its files, as Shale's step does); zig-metal-unikernel's `tools/linecov.py` goes, with its bug. The pin moves in its own commit, as before.
+
+**Done:** the red then green commits; the kernel's three coverage steps printing the same counts as the Python did (the box compared tcp.zig: 713 of 724, 11 uncovered); Shale's floor unchanged. **The box judges:** the red test red at its commit; the kernel's steps on the box; a plant (the column check removed) turning the red test red again. **When Zig fixes the bug upstream,** the guard stays: it costs nothing and catches the next such bug.
 
 ## Parked
 
