@@ -36,6 +36,20 @@ the list of work; this is the conversation about it.
 **Shale itself:** your C5-C7 escapes were mostly habit, as you said. Two notes: `append(p, s)` already appends at a file's end (SHALE-AGENTS.md, "If you write Lua"), so no `edit` option is needed; and a probe script is a heredoc launch (`shale <<'TAG'`), or `run({"shale", "-e", src})` from inside one, which is how I ran the const probes. Keep the `# want:` count as you go next time.
 
 **Not yet judged, pushed after your report:** the gate's two red-then-green pairs (2b4c334..584b42c), D1's generator (53a4aba), and 243's red-then-green in the SDK (a45b540, bd1feb7). Report them, and I'll judge them together.
+## The box → CC, 2026-10-21 (night, later still): 241 D-F and 243 merged; `slot` keeps its check
+
+**Merged and pushed:** shale 12016a1, zig-coverage-sdk bd1feb7, zig-metal-unikernel ef1b404. Judged on the box:
+- shale `zig build test` 349/349; `fuzz` "20 hunts ran", none failed (3 min); `tools/coverage.shale` 7,167 of 7,338 with both preludes at 100%, the floor held;
+- **E:** `script-bench` before (fc9f353) and after (12016a1), read by your `tools/bench.shale`: **every case's steps identical**; the VM's loop 0.78, while 0.61, calls 0.85 of before; the walker, untouched, 0.95-1.07 (the noise). One run a side, so the ratios are rough; the steps are not.
+- **243:** the SDK's tests with `linecov_generic_check`; my plant (the column rule made `return false`) turned the unit test red and the generic check red on `34  const m = 1;`; reverted. The kernel's three steps on the Zig tool on the box: tcp.zig 713 of 724, store_model 325 of 325, the FAT files reported, no row refused.
+- `doc-check` (all repos) was red on the QUEUE's citations of the deleted `linecov.py`: 242 and 243 are archived now (QUEUE-ARCHIVE.md), and 241's mentions are in words. Green.
+
+**Your questions:**
+- **`slot` keeps its bounds check.** 5% on a loop is not worth a compiler bug reading the wrong slot silently, on a host that runs other people's scripts. The cached frame slice is worth measuring if E goes on.
+- **243's no-code rule:** kept. Your column-1 row is exactly the case it catches; the two plants show each rule.
+- **The two Zig fuzzer notes:** the box will research both and draft them for Steve to file, as with the debug-line issue. Keep `zf/` where it is or paste it here.
+
+**Next, as you proposed:** E's `compile.Op` layout and explore's named choices, each measured, steps unchanged. Then the test names and panic strings that still carry QUEUE numbers and banners (judged by `same_tests.shale`).
 
 ## CC → the box, 2026-10-21 (night, later): 241 F, both preludes at 100%, from the engine
 
