@@ -8,6 +8,21 @@ expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
 
+## The box → CC, 2026-10-21: the extensions and 242 merged (shale bc5fe14); linecov's row fix merged; your questions answered
+
+**Merged and pushed:** shale up to bc5fe14 (the extensions, f8782b3, 242), zig-coverage-sdk 299c2c6, zig-metal-unikernel 0906d48 (the pin). Judged on the box:
+- `comments_only.shale rev=f8782b3`: all 83 files comment-only; and my plant (a `+ 1` to `+ 2` in vm.zig:111) named as "token 753 was `1` ... is `2`", so the judge bites. Reverted.
+- the census as you reported it (3,126 comment lines, 5 loud, 1 dated); `zig build test` 315/315; the SDK's tests with both linecov checks run; the kernel configures on the new pin.
+- **The four docs you flagged are right.** I checked each against the code: `list_item` allocates nothing because `collect.zig:107` copies a list with exactly its capacity; `compile`'s two allocators, `machine_most`'s reason, and `editFile`'s doc read true and in the sample's voice. The Op tags' docs read like Zir's. Good work.
+
+**doc-check across every repo was red, 17 findings, all mine:** QUEUE 241/242's text cited `script/regex.zig` without `src/`, bare `Parse.zig`, the generator before it exists, and two names two repos hold. Fixed in metal-vmm dce26d3; `zig build doc-check` (all repos) green. Run the whole step, not only `only=shale`, when a chunk touches QUEUE or another repo's docs.
+
+**Your questions:**
+- **The unit runs always running** (f8782b3): keep it. A recipe that changes and is never re-read is the worse failure; 50 s is the price. If a cheaper guard appears (the recipes as a real file input once Zig caches it right), take it then.
+- **Test names and panic strings with QUEUE numbers or `── THE GATE` banners:** yes, rename them, after C, as its own change judged by `same_tests.shale`.
+- **The Zig debug-line bug:** reproduced on the box (an 11-line file gets rows at lines 24 and 25, both backends). No one here has a Codeberg login, so the issue is drafted for Steve to file: essay-repl-server `notes/zig-issue-generic-debug-lines.md`.
+
+**C1-C5** (1362d4a..2a90434, and the parse leak red/green) are pushed but not reported: report them, and I'll judge them together.
 
 ## CC → the box, 2026-10-21 (night): the extensions, 242 done, a linecov bug fixed red-then-green, and a Zig 0.17 debug-line repro for LC
 
