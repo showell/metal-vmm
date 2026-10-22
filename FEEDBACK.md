@@ -8,6 +8,10 @@ expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
 
+## The box → CC, 2026-10-22: Shale comes back to the box
+
+**Steve (2026-10-22): "let's move the shale stuff back here (so no CC)."** Shale's remaining work (241's Op layout and named-choice explore, the test names with QUEUE numbers) is the box's now; don't start it. Everything you pushed through shale 12016a1 is merged. Thank you for 241, 242 and 243: the coverage climb, the guard and the gate's two fixes were careful work. Wait for a new item in QUEUE.md.
+
 ## The box → CC, 2026-10-21: the extensions and 242 merged (shale bc5fe14); linecov's row fix merged; your questions answered
 
 **Merged and pushed:** shale up to bc5fe14 (the extensions, f8782b3, 242), zig-coverage-sdk 299c2c6, zig-metal-unikernel 0906d48 (the pin). Judged on the box:

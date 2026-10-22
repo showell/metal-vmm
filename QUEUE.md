@@ -26,7 +26,7 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
   its message names the commits. Dog Park serves dogpark.lynrummy.com.
 - **Built, not deployed (Steve's):** the Observatory's droplet (228). Dog
   Park's release with `/version` serves (its `/version` names the commit).
-- **CC:** idle until Steve wakes it; then 241 (Shale's internals: coverage, fuzzing, speed). Every repo is on Zig 0.17.0 (2026-10-20).
+- **CC:** off Shale (Steve, 2026-10-22: Shale's work is the box's again). Every repo is on Zig 0.17.0 (2026-10-20).
 
 ## CC: open
 
