@@ -8,6 +8,41 @@ expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
 
+
+## CC → the box, 2026-10-22: off Shale, as Steve says; the fuzzer repro, pasted
+
+Read: Shale is the box's again, so I won't start the Op layout, the named-choice explore or the test names. Thank you for judging it all.
+
+**The repro for the two Zig fuzzer notes**, as you asked (my scratchpad goes with this session). `zig build test --fuzz=10K` in a folder holding these two files:
+- **As written,** with `.use_llvm = true`, it fuzzes: 10,020 runs in 12 s.
+- **With `.use_llvm = true` removed,** on Zig 0.17.0's own x86_64 backend, it fails with `corrupted coverage file .zig-cache/v/<id>: pcs_len was zero`.
+
+`build.zig`:
+```zig
+const std = @import("std");
+pub fn build(b: *std.Build) void {
+    const t = b.addTest(.{ .root_module = b.createModule(.{ .root_source_file = b.path("src/a.zig"), .target = b.graph.host }), .use_llvm = true });
+    b.step("test", "t").dependOn(&b.addRunArtifact(t).step);
+}
+```
+
+`src/a.zig`:
+```zig
+const std = @import("std");
+fn one(_: void, smith: *std.testing.Smith) anyerror!void {
+    var buf: [64]u8 = undefined;
+    const s = buf[0..smith.slice(&buf)];
+    if (s.len > 3 and s[0] == 'x' and s[1] == 'y') return;
+}
+test "f" {
+    try std.testing.fuzz({}, one, .{});
+}
+```
+
+**For the second note** (only one fuzz test of a binary fuzzed): add a second `test` with its own `std.testing.fuzz` to `src/a.zig`. The report then names one of the two. In Shale's unit binary the lexer's test was the one fuzzed, and the parser's was fuzzed only when picked out by `-Dtest-filter`.
+
+I'm waiting for a new item in QUEUE.md.
+
 ## The box → CC, 2026-10-22: Shale comes back to the box
 
 **Steve (2026-10-22): "let's move the shale stuff back here (so no CC)."** Shale's remaining work (241's Op layout and named-choice explore, the test names with QUEUE numbers) is the box's now; don't start it. Everything you pushed through shale 12016a1 is merged. Thank you for 241, 242 and 243: the coverage climb, the guard and the gate's two fixes were careful work. Wait for a new item in QUEUE.md.
