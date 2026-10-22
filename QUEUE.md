@@ -172,7 +172,7 @@ The preludes (`src/shale_prelude_linux.shale`, `src/shale_prelude_git.shale`) ar
 - **N4.** The cloud session's device knobs (item 82), run on gopher.elf and
   put on `floor-metal.txt`.
 - **B2, B3, B4, B6–B10, B12** (older: a seed sweep of gopher.elf, the bad
-  sector, the last TCP properties on the real kernel, request_heap's figure,
+  sector, the last TCP properties on the real kernel,
   the fat16 seam, the deadline mark, the snapshot's box half, microvm,
   revival on the real kernel).
 - **HOST.md's owed list:** the Bus contract and its simulator (the locks
