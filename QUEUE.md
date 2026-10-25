@@ -218,6 +218,11 @@ The preludes (`src/shale_prelude_linux.shale`, `src/shale_prelude_git.shale`) ar
   that builds gopher.elf then needs the pinned Roc
   (`nightly-2026-10-09-258ab27`, roc-webbox `tools/get_roc.sh`). To judge on
   KVM: the judges, boot time, the toolchain in the lynrummy.com kernel.
+  **Re-judged on 2026-10-25 with master merged** (zig-metal-unikernel
+  `083bff4` with the diff, cobble-webbox `93452a9`, zig-webbox `baa7766`,
+  shale `8b2c701`, angry-gopher `dc3445e`): under TCG every case passes but
+  `/version` (unstamped), the 40 MB upload included, refused as Linux
+  refuses it; 237 s.
   **The diff's Roc inputs now follow Route.roc's imports** (`chat/Paths.roc`,
   `chat/ZigText.roc`): without them a change to either would link a stale
   router. Also, for C1 (roc-webbox docs/ROC-CHAT.md R6): angry-gopher `zig build
