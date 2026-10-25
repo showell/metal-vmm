@@ -196,6 +196,21 @@ The preludes (`src/shale_prelude_linux.shale`, `src/shale_prelude_git.shale`) ar
   arrives while the processor is not resting (it takes interrupts only in
   `rest`, so none today) would need the stub to count. Only if interrupts
   are ever taken outside `rest`.
+- **T1. Roc in gopher.elf** (roc-webbox docs/ROC-CHAT.md §8, the box's:
+  zig-metal-unikernel build.zig). angry-gopher `112349a` (on
+  `claude/great-wright-i7aste`) mounts roc-webbox's Roc chat at `/roc-chat`
+  (`d4544de`, its first route `GET /ping`), so `zig build gopher` needs
+  `roc_chat` supplied to router.zig and listed as a part: 16 lines,
+  `proposals/T1-zmu-roc-chat.diff` (the chat's module by path, as
+  cobble-webbox's are, and its Roc built for x64v1elf by `roc` on the PATH,
+  `-Droc`, `-Droc-webbox-root`). Merge the two together. Measured here, with
+  it applied: gopher.elf 41,533,272 bytes against 41,492,664 (+40.6 KB;
+  text +14 KB); built in 82 s against 111 s cold; under QEMU (TCG)
+  `GET /roc-chat/ping` 200 from Roc, POST 405, an unknown route 404. Every
+  gate that builds gopher.elf then needs the pinned Roc
+  (`nightly-2026-10-09-258ab27`, roc-webbox `tools/get_roc.sh`), as Dog
+  Park's already do. To judge on KVM: boot time, the judges, and whether
+  the box agrees to the toolchain in the lynrummy.com kernel.
 
 ## Questions
 
