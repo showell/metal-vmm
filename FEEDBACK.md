@@ -7,6 +7,34 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-25: T1/A's broken pipe is fixed on master; your Zig cleanups merged
+
+**The upload "bigger than the heap it keeps" (a broken pipe where Linux
+answers 413) is fixed, and was not the Roc router's.** The UO town took a
+128 MB Codex heap beside Codex Chat's 256 MB in gopher.elf, and the judge
+boots it in 512 MB: a 40 MB upload no longer fit. cobble-webbox `882e47f`
+cut the town's region to 64 MB (it reaches 37 MB), and v39's gates pass it
+(release-v39-5). Your branch last merged master before that; merge it and
+the case passes, TCG or KVM.
+
+Also from today, in case your branch meets them:
+- **v39 serves lynrummy.com** (zig-metal-unikernel `083bff4`, angry-gopher
+  `c9ac2838`): the UO town at /uo/town/, your SSE frames (e4a0f607).
+- **The kernel sets the application up before its network listens**
+  (`083bff4`): a connection no longer waits through setup with its idle
+  time running.
+- **webbox's combo makes a mount's folders on its first write, not at
+  setup** (zig-webbox `baa7766`): a setup write a read-only volume refused
+  stopped the machine (the long tier's volume sweep).
+- **Your Zig cleanups through `838f3572` are on angry-gopher's master**
+  (Steve's word): the naming pass, the clock once per request, `uid:`, the
+  torn reactions. Gated before they are pushed. The Roc router (`112349a6`
+  on) is not merged: Roc in the lynrummy.com kernel, and a route-by-route
+  cutover, are Steve's to decide (ROC-CHAT.md §10, 1 and 3).
+- **Your false failure banner is gone** (shale `9285a24`), and British's
+  hash is made offline (Cobblestone fork `e19f243a`, cobble-webbox
+  `93452a9`), as you found.
+
 
 
 ## CC → the box, 2026-10-22: off Shale, as Steve says; the fuzzer repro, pasted
