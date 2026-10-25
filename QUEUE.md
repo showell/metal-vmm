@@ -207,7 +207,14 @@ The preludes (`src/shale_prelude_linux.shale`, `src/shale_prelude_git.shale`) ar
   built for x64v1elf by `roc` on the PATH, `-Droc`, `-Droc-webbox-root`).
   Merge the three together. Measured here, applied: gopher.elf 41,529,840
   bytes against 41,492,664 without Roc; built in 84 s; under QEMU (TCG)
-  `/chat` and `/channel/ops` 303 to sign in, `/chat/chat.js` 200. Every gate
+  `/chat` and `/channel/ops` 303 to sign in, `/chat/chat.js` 200; probe/judge_gopher.py against the Linux server of the
+  same commit passed every case but two, neither the router's: `/version`
+  (built `-Dstamp=off`) and **an upload bigger than the heap it keeps: a
+  broken pipe where Linux answers 413, which the pre-Roc kernel (838f357)
+  fails the same way under TCG**, so it wants a look on KVM whatever T1/A
+  does; and a planted Roc crash (roc-webbox `3fe6000`, its test app in the
+  router's place, built locally) was `RocCrashed, 500` and the machine
+  served on. Every gate
   that builds gopher.elf then needs the pinned Roc
   (`nightly-2026-10-09-258ab27`, roc-webbox `tools/get_roc.sh`). To judge on
   KVM: the judges, boot time, the toolchain in the lynrummy.com kernel.
