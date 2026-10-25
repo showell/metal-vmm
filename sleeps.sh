@@ -107,9 +107,15 @@ cost() {
     esac
 }
 
-# watched <tag> <code> <s>: the run ended as GUEST_S asked, with exit 0.
+# watched <tag> <code> <s>: the run ended as GUEST_S asked, with exit 0. The
+# run ends at the first exit past GUEST_S (serve.zig), and a guest resting
+# then exits when its rest ends: up to the kernel's longest rest (10 s) past
+# it, so the whole seconds said are <s> to <s>+10, where in the rest's phase
+# a boot puts them.
 watched() {
-    [ "$2" = 0 ] && grep -q "run $3 s of its own time, as GUEST_S asked" "$WORK/$1.err"
+    local said
+    said=$(sed -n 's/^metal-vmm: the guest has run \([0-9]*\) s of its own time, as GUEST_S asked.*/\1/p' "$WORK/$1.err" | tail -1)
+    [ "$2" = 0 ] && [ -n "$said" ] && [ "$said" -ge "$3" ] && [ "$said" -le $(($3 + 10)) ]
 }
 
 # steady <tag> <n> <period ns>: n lines, each due a period after the one
