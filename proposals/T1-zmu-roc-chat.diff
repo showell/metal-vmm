@@ -1,15 +1,16 @@
 diff --git a/build.zig b/build.zig
-index 5f70927..bd7669a 100644
+index 5f70927..3d90780 100644
 --- a/build.zig
 +++ b/build.zig
-@@ -276,6 +276,20 @@ pub fn build(b: *std.Build) void {
+@@ -276,6 +276,21 @@ pub fn build(b: *std.Build) void {
      const codex_chat = b.createModule(.{ .root_source_file = .{ .cwd_relative = b.fmt("{s}/src/chat_app.zig", .{cobble_root}) } });
      const uo_town = b.createModule(.{ .root_source_file = .{ .cwd_relative = b.fmt("{s}/src/uo_app.zig", .{cobble_root}) } });
      const cobble_assets: std.Build.LazyPath = .{ .cwd_relative = b.fmt("{s}/assets.zon", .{cobble_root}) };
-+    // **THE ROC CHAT** (roc-webbox, docs/ROC-CHAT.md T1), which angry-gopher
-+    // mounts under /roc-chat, from its own checkout: chat_hosted.zig, its Roc
-+    // (chat/main.roc) built for this machine's target by `roc` on the PATH
-+    // (-Droc=<path>). -Droc-webbox-root=<dir> names another checkout.
++    // **THE ROC CHAT'S ROUTER** (roc-webbox, docs/ROC-CHAT.md §3), which
++    // angry-gopher's /chat and /channel go through, from its own checkout:
++    // chat_hosted.zig (std alone, so not a part), its Roc (chat/main.roc)
++    // built for this machine's target by `roc` on the PATH (-Droc=<path>).
++    // -Droc-webbox-root=<dir> names another checkout.
 +    const roc_webbox_root = b.option([]const u8, "roc-webbox-root", "the roc-webbox checkout") orelse
 +        pathFromRoot(b, "../roc-webbox");
 +    const roc_chat = b.createModule(.{ .root_source_file = .{ .cwd_relative = b.fmt("{s}/src/chat_hosted.zig", .{roc_webbox_root}) } });
@@ -17,13 +18,13 @@ index 5f70927..bd7669a 100644
 +        const roc = b.option([]const u8, "roc", "the Roc compiler for the Roc chat (default: `roc` on the PATH)") orelse "roc";
 +        const run = b.addSystemCommand(&.{ roc, "build", "chat/main.roc", "--target=x64v1elf" });
 +        run.setCwd(.{ .cwd_relative = roc_webbox_root });
-+        for ([_][]const u8{ "chat/main.roc", "platform/main.roc", "platform/File.roc", "platform/Http.roc" }) |f| run.addFileInput(.{ .cwd_relative = b.fmt("{s}/{s}", .{ roc_webbox_root, f }) });
++        for ([_][]const u8{ "chat/main.roc", "chat/Route.roc", "chat/platform/main.roc", "chat/platform/Chat.roc", "chat/platform/Host.roc" }) |f| run.addFileInput(.{ .cwd_relative = b.fmt("{s}/{s}", .{ roc_webbox_root, f }) });
 +        roc_chat.addObjectFile(run.addPrefixedOutputFileArg("--output=", "chat-x64v1elf.a"));
 +    }
      // The kernel's parts every application's kernel shares, exported for
      // `addAppKernel` (a dependent package reaches them through it, not by
      // name): `metal`, `host_io`, `webbox` and `shale` above, and `gm_build`.
-@@ -292,6 +306,7 @@ pub fn build(b: *std.Build) void {
+@@ -292,6 +307,7 @@ pub fn build(b: *std.Build) void {
              .{ .name = "build_options", .module = build_opts.createModule() },
              .{ .name = "codex_chat", .module = codex_chat },
              .{ .name = "uo_town", .module = uo_town },
@@ -31,11 +32,3 @@ index 5f70927..bd7669a 100644
          },
      });
      const gopher = appKernel(b, b, .{
-@@ -303,6 +318,7 @@ pub fn build(b: *std.Build) void {
-         .parts = &.{
-             .{ .module = codex_chat, .assets = cobble_assets },
-             .{ .module = uo_town, .assets = cobble_assets },
-+            .{ .module = roc_chat, .assets = .{ .cwd_relative = b.fmt("{s}/chat-assets.zon", .{roc_webbox_root}) } },
-         },
-     });
-     const gopher_imports = [_]std.Build.Module.Import{

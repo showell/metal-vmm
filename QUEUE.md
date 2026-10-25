@@ -196,21 +196,21 @@ The preludes (`src/shale_prelude_linux.shale`, `src/shale_prelude_git.shale`) ar
   arrives while the processor is not resting (it takes interrupts only in
   `rest`, so none today) would need the stub to count. Only if interrupts
   are ever taken outside `rest`.
-- **T1. Roc in gopher.elf** (roc-webbox docs/ROC-CHAT.md §8, the box's:
-  zig-metal-unikernel build.zig). angry-gopher `112349a` (on
-  `claude/great-wright-i7aste`) mounts roc-webbox's Roc chat at `/roc-chat`
-  (`d4544de`, its first route `GET /ping`), so `zig build gopher` needs
-  `roc_chat` supplied to router.zig and listed as a part: 16 lines,
-  `proposals/T1-zmu-roc-chat.diff` (the chat's module by path, as
-  cobble-webbox's are, and its Roc built for x64v1elf by `roc` on the PATH,
-  `-Droc`, `-Droc-webbox-root`). Merge the two together. Measured here, with
-  it applied: gopher.elf 41,533,272 bytes against 41,492,664 (+40.6 KB;
-  text +14 KB); built in 82 s against 111 s cold; under QEMU (TCG)
-  `GET /roc-chat/ping` 200 from Roc, POST 405, an unknown route 404. Every
-  gate that builds gopher.elf then needs the pinned Roc
-  (`nightly-2026-10-09-258ab27`, roc-webbox `tools/get_roc.sh`), as Dog
-  Park's already do. To judge on KVM: boot time, the judges, and whether
-  the box agrees to the toolchain in the lynrummy.com kernel.
+- **T1/A. Roc in gopher.elf: the chat's router** (roc-webbox
+  docs/ROC-CHAT.md §7 milestone 1, the box's: zig-metal-unikernel build.zig).
+  angry-gopher `bb9ad6c` (on `claude/great-wright-i7aste`) sends every /chat
+  and /channel request through roc-webbox's Roc router (`a7aa6ab`): Roc
+  parses the path and runs the prelude, and chat.zig serves the route once
+  the call has ended. So `zig build gopher` needs `roc_chat` supplied to
+  router.zig: 16 lines, `proposals/T1-zmu-roc-chat.diff` (the module by
+  path, as cobble-webbox's are, imports std alone so it is no part; its Roc
+  built for x64v1elf by `roc` on the PATH, `-Droc`, `-Droc-webbox-root`).
+  Merge the three together. Measured here, applied: gopher.elf 41,529,840
+  bytes against 41,492,664 without Roc; built in 84 s; under QEMU (TCG)
+  `/chat` and `/channel/ops` 303 to sign in, `/chat/chat.js` 200. Every gate
+  that builds gopher.elf then needs the pinned Roc
+  (`nightly-2026-10-09-258ab27`, roc-webbox `tools/get_roc.sh`). To judge on
+  KVM: the judges, boot time, the toolchain in the lynrummy.com kernel.
 
 ## Questions
 
