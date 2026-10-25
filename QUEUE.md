@@ -218,6 +218,12 @@ The preludes (`src/shale_prelude_linux.shale`, `src/shale_prelude_git.shale`) ar
   that builds gopher.elf then needs the pinned Roc
   (`nightly-2026-10-09-258ab27`, roc-webbox `tools/get_roc.sh`). To judge on
   KVM: the judges, boot time, the toolchain in the lynrummy.com kernel.
+  **The diff's Roc inputs now follow Route.roc's imports** (`chat/Paths.roc`,
+  `chat/ZigText.roc`): without them a change to either would link a stale
+  router. Also, for C1 (roc-webbox docs/ROC-CHAT.md R6): angry-gopher `zig build
+  codec-bench -- <transcript>` decodes a transcript in Zig and in Roc and
+  gives time and peak memory; native, synthetic 5.4 MB: 2.1x the time, 1.5x
+  the memory. The largest production transcript, on metal, is the box's.
 
 ## Questions
 

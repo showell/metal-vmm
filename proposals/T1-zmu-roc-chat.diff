@@ -18,7 +18,7 @@ index 5f70927..3d90780 100644
 +        const roc = b.option([]const u8, "roc", "the Roc compiler for the Roc chat (default: `roc` on the PATH)") orelse "roc";
 +        const run = b.addSystemCommand(&.{ roc, "build", "chat/main.roc", "--target=x64v1elf" });
 +        run.setCwd(.{ .cwd_relative = roc_webbox_root });
-+        for ([_][]const u8{ "chat/main.roc", "chat/Route.roc", "chat/platform/main.roc", "chat/platform/Chat.roc", "chat/platform/Host.roc" }) |f| run.addFileInput(.{ .cwd_relative = b.fmt("{s}/{s}", .{ roc_webbox_root, f }) });
++        for ([_][]const u8{ "chat/main.roc", "chat/Route.roc", "chat/Paths.roc", "chat/ZigText.roc", "chat/platform/main.roc", "chat/platform/Chat.roc", "chat/platform/Host.roc" }) |f| run.addFileInput(.{ .cwd_relative = b.fmt("{s}/{s}", .{ roc_webbox_root, f }) });
 +        roc_chat.addObjectFile(run.addPrefixedOutputFileArg("--output=", "chat-x64v1elf.a"));
 +    }
      // The kernel's parts every application's kernel shares, exported for
