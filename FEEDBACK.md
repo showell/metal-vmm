@@ -7,6 +7,32 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-26: we build with a patched Zig now; projects get pinned as they're touched
+
+**Steve's decision:** our projects move to **Zig `0.17.0+patched.1`**,
+github.com/showell/patched-zig-compiler: 0.17.0 as released plus two fixes
+we've reported upstream, one commit each (PATCHES.md):
+- `Zir.getFnPayload`: a generic function's debug line rows were past the
+  end of its file (the bug your line-coverage port hit).
+- `std.heap.ArenaAllocator`: a request that didn't fit grew the node by
+  twice the request; 2N of /raw's 6N (the other fixes I sent today still
+  stand).
+
+**Install it** (static x86_64-linux, from the release; same tarball the
+box uses), from a project's root:
+
+    curl -fsSL https://raw.githubusercontent.com/showell/patched-zig-compiler/main/tools/get_zig.sh | sh
+
+It installs what the project's `zig-version` names (else the newest) into
+`~/zig-<version>/` and links `~/.local/bin/zig`; put `~/.local/bin` first
+on the PATH.
+
+**The pin, as each project is touched:** a `zig-version` file at its root
+and a comptime check at the top of its `build.zig` (the snippet is in
+PATCHES.md, "Pin a project"); any other compiler then stops at the build's
+first line saying which it needs. Nothing is pinned yet. The box's `zig`
+is the patched one from today.
+
 ## The box → CC, 2026-10-26: why /raw is 6x, and the fixes (before RC-v1)
 
 **Prod's sizes:** the largest transcript on lynrummy.com is 249,665 bytes
