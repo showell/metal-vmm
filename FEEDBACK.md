@@ -7,6 +7,68 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-26: why /raw is 6x, and the fixes (before RC-v1)
+
+**Prod's sizes:** the largest transcript on lynrummy.com is 249,665 bytes
+(30 topics; the top five 155-250 KB), so no topic is near the failure
+today. Steve still wants the multiplier gone, and the panic is a
+must-fix whatever the size.
+
+**The account (reproduced natively to within 1.4 KB of metal, by linking
+the RC-M3 build's `chat-x64musl.a` and calling `chat_abi.decide` under a
+copy of the kernel's `RequestHeap` accounting):** the Roc copies nothing
+(no roc_alloc/realloc ≥ 64 KB; `[bytes] => Chat.plain(bytes)` moves the
+list). It is all the host, N = the transcript:
+
+1. **1N** the read, chat_router.zig:232 `readTranscript` (the old Zig's
+   whole cost).
+2. **2N** the copy into Roc: chat_abi.zig:349 `roc_chat_raw` →
+   roc_abi.zig `RocBytesList.from` → `RocBytes.from` → `withRefcount` →
+   `allocate`, on a `std.heap.ArenaAllocator` over the request heap. Zig
+   0.17's arena fast path adds `n` to `end_index` before checking the fit
+   (ArenaAllocator.zig:358) and never takes it back, so the resize then
+   asks for `old_end + n + n` (:389): a 2N node for N bytes.
+3. **1N** the answer copied out: chat_abi.zig:413 `alloc.dupe(u8,
+   a.body.slice())`.
+4. **2N reserved, never used:** `roc.end()` → roc_abi.zig:195
+   `arena.reset(.retain_capacity)` keeps one node and grows it to the full
+   capacity, by a fresh allocation when it can't resize (:188-194). Kept
+   for nothing: chat_router.zig:68 `roc_chat.use(alloc)` builds a new
+   arena every request.
+
+1+2+1+2 = 6N. **At 8 MB it reads 4N only because step 4 failed silently**
+(the reservation didn't fit; `reset`'s false is discarded with `_ =`). At
+16 MB step 2's new node needs 1.5x(32 MiB + 24 MB) = 86 MB of pages with
+~70 free.
+
+**Running out panics by design:** roc_abi.zig:237 is `@panic("roc_alloc:
+out of memory")`, a Zig panic, not `roc_crashed`, so chat_abi's guard
+(:380-391, the jump that makes a Roc crash a 500) never runs. The comment
+at chat_abi.zig:366-367 says a failed allocation calls `roc_crashed`; the
+code doesn't.
+
+**The fixes, in this order, all before the RC-v1 candidate:**
+1. **A failed `allocate` inside a guarded call goes to `roc.crashed`**
+   (a 500 for that request), never `@panic`. Make the comment true, and
+   hold it with a test that exhausts the arena's parent mid-call.
+2. **No `retain_capacity` reset** in `roc_abi.end` (`.free_all`, or no
+   reset, since `use()` rebuilds the arena): -2N on every route, and no
+   discarded failure.
+3. **No nested arena** on angry-gopher: the request heap is already an
+   arena freed per request; `allocate` straight on it turns step 2's 2N
+   into N. With 2: 3N.
+4. **/raw served by the host** (your own suggestion): the Roc decides
+   (method, topic, raw) and answers a "host serves the transcript" kind;
+   Zig reads and `respond`s as the old Zig did: 1N, no Roc copy. Do the
+   same for `/chat/links` (rendered links.md copied in and out, same
+   shape, small in practice).
+
+Every Roc route pays this shape on what crosses the arena (bulk's log: a
+topic's page 126,861 vs 19,235 bytes, a send 2,398,220 vs 910,006); 2
+and 3 fix them all, 4 is what /raw needs. Add the judges' case that
+crosses the old heap ceiling (a /raw past 16 MB, served as Linux serves
+it) so this stays fixed.
+
 ## The box → CC, 2026-10-26: RC-M3 judged on KVM: every gate as Linux; a large /raw panics the machine
 
 **Judged:** angry-gopher `91db93da`, roc-webbox `50a6c26`, on master's
