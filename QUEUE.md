@@ -281,13 +281,31 @@ The preludes (`src/shale_prelude_linux.shale`, `src/shale_prelude_git.shale`) ar
   the Roc now; stamina 420,061,184 bytes after 7 and 300, as before;
   gopher.elf 41,712,520 bytes. Asked of the box: the judges and the QEMU
   gates on KVM, and what differs.
+- **RC-M4. Milestone for the box to judge: C7's pages, /chat/recent,
+  /chat/images and /chat/code** (CC, 2026-10-26). On
+  `claude/great-wright-i7aste`: roc-webbox `fda82aa`, angry-gopher
+  `0214f78`, T1/A's diff with chat/Feeds.roc, chat/Recent.roc and
+  chat/Time.roc added to its Roc inputs (line 21; it applies to
+  zig-metal-unikernel master `083bff4`). The three pages are the Roc's,
+  their streams Zig's: chat/Feeds.roc reads a member's images.md and code.md
+  as images_store and code_store do and writes the pages' JSON;
+  chat/Recent.roc names, dates, excerpts and orders the rows recent.zig
+  `gatherRows` reads (the host keeps every read, and the choice between a
+  message's date and a file's, which decides whether there is a stat). Held
+  by twins over random feed files (3000), messages (3000) and rows made to
+  tie (1500), by the scenario, and by failures injected; every mutant
+  killed (34 of the Roc, two of the host). Under QEMU (TCG): every gate as
+  Linux but `/version` (unstamped), 259 s; stamina 420,061,184 bytes after
+  7 and 300; gopher.elf 41,642,416 bytes (smaller: recent's page code left
+  the Zig). The judges ask for /chat/recent but not /chat/images or
+  /chat/code; those two are held here only.
 - **RC-v1. What "mostly Roc" means: the release candidate's scope** (CC,
   2026-10-26, proposed; the box takes or trims it). **Roc in v1, done on
   the branch:** the router's prelude for every /chat and /channel path (the
   scripts, the gate, presence), and the routes RC-M1 lists. **Roc in v1, to
   do before the candidate:** (the send is done, RC-M2; raw
-  and links, RC-M3) the HTML of
-  /chat/recent, /chat/images and /chat/code (C7, not their streams).
+  and links, RC-M3; the HTML of /chat/recent, /chat/images and /chat/code,
+  RC-M4, not their streams).
   **Zig in v1, delegated by the router:** docs, the reading list (`saved`)
   and search (Steve); every SSE stream (a topic's /stream,
   /chat/notifications, /chat/sidebar/stream, the feeds' /stream), which
@@ -296,8 +314,14 @@ The preludes (`src/shale_prelude_linux.shale`, `src/shale_prelude_git.shale`) ar
   uploads cases as they are); the static scripts; and, as hosted
   functions, the fan-out (C5) and every store writer (C8). By request
   count that leaves the chat's pages, actions and sends in Roc, and its
-  long-lived and byte-moving routes in Zig. If the box would rather a
-  smaller candidate, the cut is after send: C7's pages can follow v1.
+  long-lived and byte-moving routes in Zig. (Taken whole by the box,
+  2026-10-26.)
+  **THE CANDIDATE, MARKED** (CC, 2026-10-26): roc-webbox `fda82aa`,
+  angry-gopher `0214f78` on `claude/great-wright-i7aste`, with T1/A's diff
+  as it stands in this repo on zig-metal-unikernel master `083bff4`. Every
+  item of the scope above is on the branch; RC-M1 to RC-M4 are its
+  milestones. Asked of the box: judge it on KVM as the release, and say
+  what must change before Steve ships it.
 
 ## Questions
 

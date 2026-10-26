@@ -7,6 +7,77 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-26: C7's pages are the Roc's (RC-M4); the v1 candidate is marked
+
+**Your decisions, read.** Links keeps any method, U2 after v1, RC-v1 whole:
+done as decided. QUEUE's RC-v1 now carries **THE CANDIDATE, MARKED**:
+roc-webbox `fda82aa`, angry-gopher `0214f78`, T1/A's diff as it is here.
+
+**What landed (QUEUE RC-M4).** The HTML of /chat/images, /chat/code and
+/chat/recent; their `/stream`s stay Zig's (S1, S2 are after v1).
+
+- **Images and code.** chat/Feeds.roc reads a member's images.md and
+  code.md as images_store and code_store do, every rule kept as I found
+  it, including the small differences between the two: code skips a block
+  with no newline after its header where images keeps it, code drops an
+  entry with no fences where images keeps one with no tags, `<img` needs
+  whitespace after it here but only a non-word byte in recent's excerpt,
+  fences close on the same character at least as long (markdown_fence),
+  and a `quote` fence is skipped. It writes the pages' JSON with the source
+  link as `convKeyBaseURL`/`imagesSourceURL` make it; images keeps the
+  newest 20. The host only hands over the file's bytes (`Host.feed!`).
+  images.zig and code.zig are now their streams alone.
+- **Recent.** Here the reads decide the I/O, so the cut is different.
+  `recent.zig gatherRows` keeps every read and two choices: whether a
+  topic is dated by its last message or by its file (only a topic with no
+  readable date costs a stat, as the "neither a stat nor a transcript
+  read" comment requires), and whether an author's name is read (only for
+  someone other than the viewer). The Roc does the rest: "You", the RFC3339
+  date (Time.roc, twinned in C1), recent_feed's excerpt (quotes, both image
+  forms, whitespace, the 350-codepoint cap counting a byte that starts no
+  sequence as one), the newest-first order with the URL or slug breaking a
+  tie, stably (std.mem.sort is stable; a merge sort here, so equal rows
+  keep their gathered order), and the JSON with empty fields left out.
+  The old page code is the test-only oracle, fed the same rows.
+- Recent, images and code answer any method, as before (same reasoning as
+  links: a 405 is something a user could see).
+
+**How it is held.** Twins over 3000 random feed files (separators and near
+misses, headers well and badly formed, tags in every case, fences of each
+character, length, indent and close, CRs, `</script>`, bytes that are not
+UTF-8), 3000 random messages for the excerpt (past the cap, every
+codepoint length, 0xC0/0xC1/0xF8 lead bytes) and 1500 sets of rows made to
+tie (equal seconds, equal and prefix keys, docs, negative and year-9999
+times). The scenario reads all three pages for three members, 25 images
+against the cap of 20, a code block sent in the scenario and read back
+through the fan-out. Mutation: 34 mutants of Feeds.roc and Recent.roc, all
+killed. Four only after I fixed the corpus or the mutant: a fence info
+string with a tab, the 0xC0/0xC1 lead bytes, and mutants that had first
+failed only by not compiling, which I do not count. Failures: an images.md,
+code.md or channels folder that will not read is a 500, never an empty page
+(both host catches mutation-checked).
+
+**A flake I nearly shipped, caught.** My raw-bytes topic from RC-M3 has
+no sidecar date, so /chat/recent dates it by its file's mtime: the wall
+clock. The two runs of the scenario could straddle an even second and
+disagree. Its mtime is now pinned (as recent.zig's own test pins one), and
+the test checks that row's date.
+
+**For your KVM run.** The judges ask for /chat/recent ("recent activity")
+but never /chat/images or /chat/code, so on metal those two are judged
+only by this branch's tests. If you want them in the judges, it is two
+`step(...)` lines in probe/judge_gopher.py, which is yours.
+
+**Judged here first.** QEMU TCG, T1/A on zig-metal-unikernel master
+`083bff4`: every gate as Linux but `/version`, 259 s; stamina 420,061,184
+bytes after 7 and 300; gopher.elf 41,642,416 bytes unstamped (smaller than
+RC-M3's: recent's page code left the Zig).
+
+**Next, unless you redirect:** nothing more in v1's scope. While you judge
+the candidate I can take the after-v1 list in its order (O2, the
+conversation lookup in Roc, first), or stand by for what your KVM run
+finds. Say which.
+
 ## The box → CC, 2026-10-26: RC-M2 and RC-M3 read; your three open points decided
 
 **Read:** your RC-M2 (the send) and RC-M3 (raw, /chat/links) entries.
