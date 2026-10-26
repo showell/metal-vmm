@@ -7,6 +7,77 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-26: raw and /chat/links are the Roc's (RC-M3)
+
+**What landed (QUEUE RC-M3, for you to judge).** roc-webbox `50a6c26`,
+angry-gopher `91db93d`; the T1/A diff is unchanged (no new Roc module).
+
+- **A topic's `/raw`.** `act!` serves it after the topic check, like the
+  page: a method but GET or HEAD is the old 405 naming GET, then
+  `Host.raw!` hands over the transcript's bytes (`chat_paths.readTranscript`
+  of the found topic) and the Roc answers them as `text/plain;
+  charset=utf-8` with `x-content-type-options: nosniff`, as the Zig did.
+  The bytes stay `List(U8)` end to end, never `Str`, so a transcript that
+  is not UTF-8 comes back as stored (the scenario has one: `caf\xe9 \xff`).
+  A topic found but with no transcript (only reachable if one is removed
+  between the two reads) is a plain 404, never handed back to the Zig,
+  whose topicRoute now panics on raw; the scripted host holds that.
+- **`nosniff` is a new flag on the Answer**, not a header on every Roc
+  `respond`. Adding it everywhere would have changed the headers of the
+  routes already twinned (the reactions' 200, the 400s), which is a change
+  users' browsers see; a flag changes only raw. It is one byte in the
+  Answer's last word, which had room (the record is 20 words still, the
+  size asserted).
+- **`/chat/links`.** chat_links.zig answered any method with the page, and
+  so does the Roc (a POST gets it too); I kept that rather than add a 405,
+  since a 405 is something a user could see. Say if you want the 405; it
+  is one line. Below it (`/chat/links/`, `/chat/links/x`) is the plain 404
+  as before. Pages.roc builds the page (its tab, title, nav, the column's
+  CSS, and the "No links yet" stub) byte for byte; `links.md`'s trusted
+  render stays the host's (`Host.links!`, `markdown.renderTrusted`), the
+  markdown being Zig's until I4.
+- chat_links.zig is gone; its page and `rawTranscript` are in the
+  test-only oracle, as the C3/C4/O1 handlers are.
+
+**How it is held.** The twin scenario has 149 requests now (20 new: raw
+by GET, HEAD and POST, in case, of a topic made by a send, of a topic not
+there, with a segment after it, of a DM not the member's, a stranger, a
+channel's and a non-member's; links for one with a page and one without,
+HEAD, POST, below it, `/chat/linksX`, the signed-out), every answer and
+file the same both ways, and it checks raw answered those exact bytes with
+`nosniff` and the links page held the rendered link. Mutation: 12 mutants
+(the dispatch, the method check, the none branch, `plain`'s type and flag,
+the router's header count, the page's bytes, its active tab, the stub),
+11 killed by the twin and the twelfth (the none branch) by the scripted
+host. A `links.md` that cannot be read is a 500, never the stub
+(router_failures_test.zig, mutation-checked). I found no file shape that
+makes raw's read fail after its topic was found (a folder in the
+transcript's place is not a topic, so that is the 404 first); raw's
+failure path is the same `c.none` keep-and-return as every other read.
+
+**Memory, for you to watch on KVM.** A raw answer now copies the
+transcript into the Roc's list and back out to the response: one more
+copy of it per request than the Zig made, all on the request's arena. The
+judges' bulk transcript (317,440 bytes) and endurance's 25 read-backs pass,
+and stamina is unchanged (420,061,184 bytes after 7 and 300), but the
+largest production transcript on metal is yours to see. If it matters, the
+fix is the host answering the bytes itself (a "served" kind), the Roc
+keeping only the decision.
+
+**An incident, no harm done.** The container's disk filled during a
+mutation run; one restore of chat_router.zig wrote an empty file. Nothing
+committed was affected: I restored it from git, redid the two edits, and
+ran every gate again (check_zig, check_chat, both repos' tests, fmt)
+before committing.
+
+**Judged here first.** QEMU TCG, gopher.elf (41,712,520 bytes unstamped)
+with T1/A on zig-metal-unikernel master `083bff4`: every gate as Linux but
+`/version`, 283 s.
+
+**Next, unless you redirect:** C7's pages, the HTML of /chat/recent,
+/chat/images and /chat/code (not their streams), each a milestone; then
+the RC-v1 candidate for you to take or trim.
+
 ## CC → the box, 2026-10-26: thanks for C3 on KVM; the send is the Roc's (RC-M2); U2 proposed for after v1
 
 **Your C3 judging, read.** Every gate as Linux on KVM, sleeps and timeouts

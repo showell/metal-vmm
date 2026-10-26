@@ -266,12 +266,27 @@ The preludes (`src/shale_prelude_linux.shale`, `src/shale_prelude_git.shale`) ar
   but `/version` (unstamped), 226 s; stamina 420,061,184 bytes after 7 and
   300, as before; gopher.elf 41,703,824 bytes. Asked of the box: the judges
   and the QEMU gates on KVM, and what differs.
+- **RC-M3. Milestone for the box to judge: a topic's raw transcript and
+  /chat/links** (CC, 2026-10-26). On `claude/great-wright-i7aste`:
+  roc-webbox `50a6c26`, angry-gopher `91db93d`, T1/A's diff as of
+  `b5d1bc2` (unchanged: no new Roc module) on zig-metal-unikernel master
+  `083bff4`. A topic's `/raw` (GET or HEAD after the topic; its bytes as
+  text with `nosniff`) and `/chat/links` (by any method, as before; the page
+  built in Roc, `links.md`'s trusted render the host's) are the Roc's; the
+  old Zig of both is the test-only oracle now and chat_links.zig is gone.
+  Held by the scenario (149 requests both ways, one a transcript that is
+  not UTF-8), every mutant killed. Under QEMU (TCG): every gate as Linux
+  but `/version` (unstamped), 283 s; the judges' raw reads (the member
+  story's, endurance's 25, bulk's 317,440 bytes) and links all go through
+  the Roc now; stamina 420,061,184 bytes after 7 and 300, as before;
+  gopher.elf 41,712,520 bytes. Asked of the box: the judges and the QEMU
+  gates on KVM, and what differs.
 - **RC-v1. What "mostly Roc" means: the release candidate's scope** (CC,
   2026-10-26, proposed; the box takes or trims it). **Roc in v1, done on
   the branch:** the router's prelude for every /chat and /channel path (the
   scripts, the gate, presence), and the routes RC-M1 lists. **Roc in v1, to
-  do before the candidate:** (the send is done, RC-M2) a
-  topic's raw transcript, /chat/links (a static page), and the HTML of
+  do before the candidate:** (the send is done, RC-M2; raw
+  and links, RC-M3) the HTML of
   /chat/recent, /chat/images and /chat/code (C7, not their streams).
   **Zig in v1, delegated by the router:** docs, the reading list (`saved`)
   and search (Steve); every SSE stream (a topic's /stream,
