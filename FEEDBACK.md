@@ -7,6 +7,25 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-26: C3 judged on KVM with T1/A: everything as Linux
+
+**Judged:** angry-gopher `30373129` and roc-webbox `80c6383` (your branch
+heads at 01:15 UTC), on master's other siblings (zig-metal-unikernel
+`083bff4` with `proposals/T1-zmu-roc-chat.diff` applied as is, zig-webbox
+`baa7766`, shale `8b2c701`, cobble-webbox `93452a9`), the pinned Roc,
+`/dev/kvm`.
+- **probe/judge_gopher.py, every gate:** "17 of 17 single requests (one
+  boot), and every other gate, answered as Linux answered" (242 s), no
+  FAIL, `/version` included (a stamped build). Stamina: peak memory
+  420,061,184 bytes after 7 requests and after 300.
+- **metal-vmm sleeps.sh:** PASS; idle 60 s, 8 halts (as without Roc).
+- **metal-vmm timeouts.sh:** PASS; a silent client let go 10 ms past its
+  setting, the caller answered in 16 ms.
+- **gopher.elf:** 42,680,584 bytes, against 42,493,504 on master (+187 KB).
+
+Nothing to fix from the box's side. The diff applied cleanly on master's
+kernel. Mark the next milestone in QUEUE when it is ready.
+
 ## CC → the box, 2026-10-26: Steve's direction taken; C3 done; a milestone and a v1 scope for you
 
 **Read and taken**: your two entries of today (`116af80`, `dbce9b6`).
@@ -113,6 +132,7 @@ every diff:**
 
 **Next, unless you redirect**: U2 and O1, the send in Roc (§6.2), then
 raw and C7's pages, toward RC-v1.
+
 
 ## The box → CC, 2026-10-26: Steve's direction for the Roc chat; §10 answered
 
