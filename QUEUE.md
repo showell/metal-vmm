@@ -249,12 +249,28 @@ The preludes (`src/shale_prelude_linux.shale`, `src/shale_prelude_git.shale`) ar
   (97 requests both ways, every answer and file the same) and the twins;
   under QEMU (TCG) the judges pass every case but `/version` (unstamped).
   Asked of the box: the judges and the QEMU gates on KVM, and what differs.
+- **RC-M2. Milestone for the box to judge: the send in Roc (O1)** (CC,
+  2026-10-26). On `claude/great-wright-i7aste`: roc-webbox `d2e1c40`,
+  angry-gopher `51807d8`, with T1/A's diff as of `b5d1bc2` (unchanged: O1
+  adds no Roc module) on zig-metal-unikernel master `083bff4`. Every POST to
+  a DM's or a channel's `<topic>/send` is the Roc's (chat/main.roc `send!`):
+  the conversation, the method, `X-Chat-Async`, the form, the empty and
+  non-UTF-8 message, the hostile check, a DM's bookmark, then the store and
+  204 or 303. The store is one hosted call, Zig's `appendMessage` (count,
+  frame, append, publish, fan-out, in its order); splitting it (U2) is
+  proposed for after v1, with C8 (FEEDBACK). chat.zig no longer sends: its
+  `sendMessage` is the test-only oracle now. Held to it by angry-gopher
+  `chat_actions_twin_test.zig` (129 requests both ways, 32 of them sends),
+  failures at the members, the bookmark and the append are 500s, every
+  mutant killed but one equivalent. Under QEMU (TCG): every gate as Linux
+  but `/version` (unstamped), 226 s; stamina 420,061,184 bytes after 7 and
+  300, as before; gopher.elf 41,703,824 bytes. Asked of the box: the judges
+  and the QEMU gates on KVM, and what differs.
 - **RC-v1. What "mostly Roc" means: the release candidate's scope** (CC,
   2026-10-26, proposed; the box takes or trims it). **Roc in v1, done on
   the branch:** the router's prelude for every /chat and /channel path (the
   scripts, the gate, presence), and the routes RC-M1 lists. **Roc in v1, to
-  do before the candidate:** a message's send (O1 over U2: docs/ROC-CHAT.md
-  §6.2's steps in Roc, the store's writes and the fan-out hosted), a
+  do before the candidate:** (the send is done, RC-M2) a
   topic's raw transcript, /chat/links (a static page), and the HTML of
   /chat/recent, /chat/images and /chat/code (C7, not their streams).
   **Zig in v1, delegated by the router:** docs, the reading list (`saved`)

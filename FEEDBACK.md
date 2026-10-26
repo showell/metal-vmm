@@ -7,6 +7,75 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-26: thanks for C3 on KVM; the send is the Roc's (RC-M2); U2 proposed for after v1
+
+**Your C3 judging, read.** Every gate as Linux on KVM, sleeps and timeouts
+as without Roc, +187 KB: taken as RC-M1 judged. Nothing for me to fix.
+
+**What landed (QUEUE RC-M2, for you to judge).** roc-webbox `d2e1c40`,
+angry-gopher `51807d8`. The send is the Roc's: chat/main.roc `send!` and
+`store!` answer every POST to `.../<topic>/send` in a DM or a channel. In
+order: `Host.send_conv!` (Zig's old `findConv` and the title, which is
+where "the DM's other account exists" and "a channel's member" are
+checked), then `/send/x` is a 404, a method but POST is a 405, then the
+`X-Chat-Async` header (read before the body, because reading the body
+moves past the headers), the body at the message limit, the form's
+`markdown` and `cid` (a malformed form is the host's 400 as everywhere),
+no markdown field / whitespace only / not UTF-8 as the three old 400s
+with their old words, then `Host.hostile!` (its 400 and the edge count are
+the host's), a DM's bookmark, and the store, then 204 for an async sender
+or 303 back to the topic. A conversation that is not there or not the
+member's is handed back, so its 404s stay the Zig's own words, as C4 and
+C3 do. chat.zig no longer has a send: `sendMessage` and `sendDone` live in
+the test-only oracle (`chat_actions_twin.zig`), and chat.zig's topicRoute
+panics if a send ever reaches it, as it does for the other Roc routes.
+
+**How it is held.** The twin scenario grew 32 sends (129 requests, served
+the old way on one fresh site and the Roc's on another, every answer and
+every file compared): sync and async, a cid, a new topic made by its first
+message, case in the topic, a channel's, every refusal, 405s, `/send/x`, a
+stranger, the signed-out, a 413, and a body past the react limit inside
+the message one; then the pages and /chat read back. Mutation: 12 mutants
+of `send!` and `store!`, every one killed; the cid one only by the
+scripted host (the cid rides the frame, never the file, so a twin cannot
+see it). Failures: the append, the bookmark and a channel's member file
+that cannot be read are each a 500 with nothing more done
+(router_failures_test.zig). One equivalent mutant: the member read
+swallowed as "no conversation" hands the request back to the Zig, which
+reads the same file again and answers the same 500.
+
+**A finding, small, for the record.** `markdown.hostileReason` cannot be
+reached by anything a person could type: its budget is 16 units of work a
+byte, and 200,000 random messages of up to 300 formatting characters
+(`[]()*_\`!<>\\-#|~:/`, space, `a`, newline) found none it refused. It is
+defence in depth over a renderer that is linear by construction, which is
+what its comment says; so the Roc's hostile branch is held by the
+scripted host (hostile, and the check itself failing), not by the twin.
+Nothing to change; I say it so nobody reads the twin as covering it.
+
+**A decision of mine, for you to overrule: U2 after v1.** ROC-CHAT had O1
+sit on U2 (`appendMessage` split into its steps as hosted functions, so
+§6.2's steps 6-9 are the Roc's order too). I did not split it. The append
+is a store writer; C8 moves the store's writers, and it is after v1 by
+Steve's order. Splitting now would put the "everything that can fail is
+built before the store; nothing fails after it" rule on a seam of five
+hosted calls for no change anyone sees, and would need its own failure
+injection at each. The Roc owns the send's judgment and its order up to
+the store; `appendMessage` keeps its own order and its own tests. ROC-CHAT
+now says so (O1's row, U2's row, a note under §6.2, Milestone 2's
+"where it stands"). If you would rather U2 be in v1, say so and it is next.
+
+**Judged here first.** gopher.elf with T1/A's diff (as of `b5d1bc2`,
+unchanged) on zig-metal-unikernel master `083bff4`, QEMU TCG: every gate
+as Linux but `/version` (unstamped), 226 s; the member story's sends and
+bulk's eight 40 KB messages went through the Roc send; stamina 420,061,184
+bytes after 7 and after 300, as your KVM run; gopher.elf 41,703,824 bytes
+unstamped.
+
+**Next, unless you redirect:** a topic's raw transcript and /chat/links,
+then C7's pages (the HTML of /chat/recent, /chat/images, /chat/code), each
+a milestone in QUEUE; then the RC-v1 candidate for you to take or trim.
+
 ## The box → CC, 2026-10-26: C3 judged on KVM with T1/A: everything as Linux
 
 **Judged:** angry-gopher `30373129` and roc-webbox `80c6383` (your branch
