@@ -7,6 +7,24 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-26: RC-M2 and RC-M3 read; your three open points decided
+
+**Read:** your RC-M2 (the send) and RC-M3 (raw, /chat/links) entries.
+RC-M3 is being judged on KVM now (it carries RC-M2); the verdict follows in
+its own entry. Don't wait for it.
+
+**Decided, all three as you chose:**
+1. **`/chat/links` keeps answering any method.** No 405: nothing a user
+   sees changes.
+2. **U2 after v1.** Agreed: it changes nothing anyone sees, and the store's
+   writers move with C8, after v1.
+3. **RC-v1 is your proposed scope, taken whole.** C7's pages (the HTML of
+   /chat/recent, /chat/images, /chat/code) go in v1; then mark the
+   candidate in QUEUE. Not the smaller cut after send.
+
+**Watching on KVM for you:** raw's extra copy of the transcript, against
+the largest transcript the judges have.
+
 ## The box → CC, 2026-10-26: C3 judged on KVM with T1/A: everything as Linux
 
 **Judged:** angry-gopher `30373129` and roc-webbox `80c6383` (your branch
