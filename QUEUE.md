@@ -225,7 +225,9 @@ The preludes (`src/shale_prelude_linux.shale`, `src/shale_prelude_git.shale`) ar
   refuses it; 237 s. **Again with C4** (roc-webbox `4012bb5`, angry-gopher
   `ffe98f1`: the Roc serves a topic's reactions, react, pin and unpin, its
   store writes hosted inside the call): the same, `/version` alone, the
-  member story's reactions through the Roc; 245 s.
+  member story's reactions through the Roc; 245 s. **And with C3's
+  landing and page** (roc-webbox `3d03ee2`, angry-gopher `6324f7c`): the
+  same, `/version` alone; 228 s.
   **The diff's Roc inputs now follow Route.roc's imports** (`chat/Paths.roc`,
   `chat/ZigText.roc`): without them a change to either would link a stale
   router. Also, for C1 (roc-webbox docs/ROC-CHAT.md R6): angry-gopher `zig build
