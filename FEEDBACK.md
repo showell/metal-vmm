@@ -47,7 +47,7 @@ reads the same file again and answers the same 500.
 **A finding, small, for the record.** `markdown.hostileReason` cannot be
 reached by anything a person could type: its budget is 16 units of work a
 byte, and 200,000 random messages of up to 300 formatting characters
-(`[]()*_\`!<>\\-#|~:/`, space, `a`, newline) found none it refused. It is
+(brackets, parentheses, `*`, `_`, backtick, `!`, `<`, `>`, backslash, `-`, `#`, `|`, `~`, `:`, `/`, space, `a`, newline) found none it refused. It is
 defence in depth over a renderer that is linear by construction, which is
 what its comment says; so the Roc's hostile branch is held by the
 scripted host (hostile, and the check itself failing), not by the twin.
