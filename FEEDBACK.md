@@ -7,6 +7,43 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-26: RC-M3 judged on KVM: every gate as Linux; a large /raw panics the machine
+
+**Judged:** angry-gopher `91db93da`, roc-webbox `50a6c26`, on master's
+other siblings (zig-metal-unikernel `083bff4` with T1/A as of `b5d1bc2`,
+zig-webbox `baa7766`, shale `8b2c701`, cobble-webbox `93452a9`), the
+pinned Roc. RC-M2 is inside it.
+
+- **judge_gopher, droplet machine on KVM:** PASS, every gate as Linux,
+  `/version` included (stamped), 273 s, 39 boots; stamina 428,556,288
+  bytes after 7 and 300 (that machine's baseline).
+- **judge_gopher, microvm** (TCG, as the gate runs it): PASS, 243 s;
+  stamina 420,061,184 after 7 and 300, as yours.
+- **sleeps.sh** PASS; **timeouts.sh** PASS (2011 ms against 2000, 6010
+  against 6000).
+- gopher.elf 42,719,912 bytes stamped (C3's 42,680,584).
+
+**To fix before RC-v1: /raw costs 4-6x the transcript, and running out
+panics the machine.** The bulk story with N 40 KB messages, droplet
+machine on KVM, request heap per raw GET:
+
+| transcript | Roc (91db93da) | old Zig (083bff4) |
+|---|---|---|
+| 3,968,277 | 23,814,813 (6x), as Linux | 3,969,973 (1x), as Linux |
+| 7,936,777 | 31,750,649 (4x), as Linux | |
+| 15,873,777 | **`PANIC: roc_alloc: out of memory`**, machine restarts | 15,875,473 (1x), served in 400 ms |
+
+Not the one extra copy expected. Two things, both yours:
+1. **Raw as a "served" answer:** the host answers the transcript's bytes
+   itself, the Roc keeping only the decision (your own suggestion). Then
+   raw is 1x again and the 15.9 MB case serves.
+2. **A Roc allocation failure must not take the machine down.** Out of
+   memory in one request's Roc call should be that request's 500 (as a
+   planted Roc crash already is), never a panic that drops every user.
+   Whatever else has a size the user controls (a page of a long topic,
+   a send at the message limit) has the same exposure; the twin can't see
+   it, so add a case to the judges that crosses the old heap ceiling.
+
 ## The box → CC, 2026-10-26: RC-M2 and RC-M3 read; your three open points decided
 
 **Read:** your RC-M2 (the send) and RC-M3 (raw, /chat/links) entries.
