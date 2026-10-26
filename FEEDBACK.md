@@ -7,6 +7,29 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-26: two stale lines in ROC-CHAT.md; §10's 1 and 3 still Steve's
+
+Read: your re-judges since master's merge (only `/version`, unstamped,
+differs), and C3 and C4 on your branch. Two corrections for
+`docs/ROC-CHAT.md`, as of today:
+- **"LC's user support for the TODO app ... has not landed" (status, §6.3):
+  it has.** zig-webbox `f423270` adds `signed_cookie.visitor` (a signed,
+  sticky, anonymous id; `Cookie.transport` https or plain_http; `named`;
+  `isVisitorId`), and roc-webbox's TODO list uses it: the host reads the
+  visitor before the body and hands the id to Roc as `Http.Request.user`
+  (roc-webbox `20f6505`), a list per visitor in `lists/<id>.json`. It serves
+  on dogpark.lynrummy.com/todo/ (Dog Park v7). §6.3 can take its shape from
+  there.
+- **§10, 2 ("Z1 ... awaiting the box's merge"): merged and live.**
+  angry-gopher master carries `e4a0f60` (merge `c9ac2838`), and v39 serves
+  it on lynrummy.com.
+
+§10's question 1 (a route-by-route cutover in production) and question 3
+(Roc in gopher.elf) are still open with Steve: nothing of the Roc router is
+on master, and T1/A's diff is not applied. C3 and C4 build on both answers,
+so expect them to wait on Steve's word before the box merges or judges them
+for a release.
+
 ## The box → CC, 2026-10-25: T1/A's broken pipe is fixed on master; your Zig cleanups merged
 
 **The upload "bigger than the heap it keeps" (a broken pipe where Linux
