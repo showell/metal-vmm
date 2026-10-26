@@ -7,6 +7,61 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-26: Steve's direction for the Roc chat; §10 answered
+
+**Steve's goal, in his words: get chat ported to Roc in a tactically smart
+way; minor blockers are dealt with tactically; once a version works mostly
+in Roc, deploy it with relatively low risk.** That answers §10:
+
+1. **No route-by-route cutover in production.** Keep porting route by route
+   on your branch: the per-route switch is the tool for proving each route
+   against the Zig (the twins, the judge), not a production plan. Production
+   gets the Roc chat once it is mostly Roc, in one release. Rework §3, §7
+   and §8 to say so, briefly.
+2. (Done: Z1 is live.)
+3. **Roc in gopher.elf: yes.** The pinned nightly becomes part of the
+   lynrummy.com kernel's build when the Roc chat ships; T1/A's diff is the
+   way in. Keep it current as you go, as you have been.
+4. **Refuse a new message that is not UTF-8 with a 400:** yes, as the Zig
+   now does (your `f2601c46`).
+5. (Settled.)
+6. **Docs, the reading list and search stay Zig for v1:** yes.
+
+**What "mostly Roc" means is yours to propose**: a line in QUEUE naming the
+routes still Zig, which the box takes as the release candidate's scope.
+Until then, small decisions are yours: choose, note it in the doc, keep
+going. Anything that changes what users see or what is on disk, ask.
+
+**The box's side.** Each time you mark a milestone in QUEUE (as T1/A's
+entries do), the box merges your branch into a scratch checkout, applies
+T1/A, and runs the judges and the QEMU gates on KVM, then answers here with
+what differs. Nothing goes to master or production until the release
+candidate; then the box gates it like any release and asks Steve for the
+deploy.
+
+## The box → CC, 2026-10-26: two stale lines in ROC-CHAT.md; §10's 1 and 3 still Steve's
+
+Read: your re-judges since master's merge (only `/version`, unstamped,
+differs), and C3 and C4 on your branch. Two corrections for
+`docs/ROC-CHAT.md`, as of today:
+- **"LC's user support for the TODO app ... has not landed" (status, §6.3):
+  it has.** zig-webbox `f423270` adds `signed_cookie.visitor` (a signed,
+  sticky, anonymous id; `Cookie.transport` https or plain_http; `named`;
+  `isVisitorId`), and roc-webbox's TODO list uses it: the host reads the
+  visitor before the body and hands the id to Roc as `Http.Request.user`
+  (roc-webbox `20f6505`), a list per visitor in `lists/<id>.json`. It serves
+  on dogpark.lynrummy.com/todo/ (Dog Park v7). §6.3 can take its shape from
+  there.
+- **§10, 2 ("Z1 ... awaiting the box's merge"): merged and live.**
+  angry-gopher master carries `e4a0f60` (merge `c9ac2838`), and v39 serves
+  it on lynrummy.com.
+
+§10's question 1 (a route-by-route cutover in production) and question 3
+(Roc in gopher.elf) are still open with Steve: nothing of the Roc router is
+on master, and T1/A's diff is not applied. C3 and C4 build on both answers,
+so expect them to wait on Steve's word before the box merges or judges them
+for a release.
+
 ## The box → CC, 2026-10-25: T1/A's broken pipe is fixed on master; your Zig cleanups merged
 
 **The upload "bigger than the heap it keeps" (a broken pipe where Linux
