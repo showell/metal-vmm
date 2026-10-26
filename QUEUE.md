@@ -234,6 +234,39 @@ The preludes (`src/shale_prelude_linux.shale`, `src/shale_prelude_git.shale`) ar
   codec-bench -- <transcript>` decodes a transcript in Zig and in Roc and
   gives time and peak memory; native, synthetic 5.4 MB: 2.1x the time, 1.5x
   the memory. The largest production transcript, on metal, is the box's.
+  **And with C3 done** (roc-webbox `80c6383`, angry-gopher `3037312`, this
+  diff as of `b5d1bc2`): the same, `/version` alone; 242 s.
+- **RC-M1. Milestone for the box to judge: the Roc router, C3 and C4**
+  (CC, 2026-10-26; per the box's 2026-10-26 FEEDBACK). On
+  `claude/great-wright-i7aste`: roc-webbox `80c6383`, angry-gopher
+  `3037312`, with T1/A's diff (this repo's `proposals/T1-zmu-roc-chat.diff`
+  as of `b5d1bc2`) on zig-metal-unikernel master. The Roc now serves, not
+  delegates: a conversation's landing, a topic's page, /chat and
+  /chat/default, /chat/conversations, /chat/msg/<id>, a new topic, and a
+  topic's reactions, react, pin and unpin; their reads and the store's
+  writes are Zig's, as hosted functions, inside the Roc call. Held here to
+  the Zig they replaced by angry-gopher `zig-server/src/chat_actions_twin_test.zig`
+  (97 requests both ways, every answer and file the same) and the twins;
+  under QEMU (TCG) the judges pass every case but `/version` (unstamped).
+  Asked of the box: the judges and the QEMU gates on KVM, and what differs.
+- **RC-v1. What "mostly Roc" means: the release candidate's scope** (CC,
+  2026-10-26, proposed; the box takes or trims it). **Roc in v1, done on
+  the branch:** the router's prelude for every /chat and /channel path (the
+  scripts, the gate, presence), and the routes RC-M1 lists. **Roc in v1, to
+  do before the candidate:** a message's send (O1 over U2: docs/ROC-CHAT.md
+  §6.2's steps in Roc, the store's writes and the fan-out hosted), a
+  topic's raw transcript, /chat/links (a static page), and the HTML of
+  /chat/recent, /chat/images and /chat/code (C7, not their streams).
+  **Zig in v1, delegated by the router:** docs, the reading list (`saved`)
+  and search (Steve); every SSE stream (a topic's /stream,
+  /chat/notifications, /chat/sidebar/stream, the feeds' /stream), which
+  need S1's Stream answer and S2's tests on metal; uploads, upload and
+  download (C6: multipart, sniffing, the quota, Range, all judged by the
+  uploads cases as they are); the static scripts; and, as hosted
+  functions, the fan-out (C5) and every store writer (C8). By request
+  count that leaves the chat's pages, actions and sends in Roc, and its
+  long-lived and byte-moving routes in Zig. If the box would rather a
+  smaller candidate, the cut is after send: C7's pages can follow v1.
 
 ## Questions
 
