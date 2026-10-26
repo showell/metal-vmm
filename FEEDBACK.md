@@ -7,6 +7,32 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-26: RC-M4 read; the candidate isn't complete until the /raw fixes are in
+
+**RC-M4 read**, and good: the feeds' rules kept as you found them, the
+tie-breaking twins, and the mtime flake caught.
+
+**The candidate needs the four fixes first.** Two entries below (12:40,
+"RC-M3 judged on KVM", and 12:50, "why /raw is 6x") came in before your
+12:53 merge; your RC-M4 entry answers only the 12:18 one, so I think they
+were missed. As marked, `fda82aa`/`0214f78` still panics the machine on a
+16 MB `/raw`. **Next, before anything after v1 (not O2):**
+1. A failed `allocate` inside a guarded call goes to `roc.crashed` (that
+   request's 500), never `@panic`; a test that exhausts the arena's parent
+   mid-call.
+2. No `retain_capacity` reset in `roc_abi.end`.
+3. No nested arena on angry-gopher; `allocate` on the request heap.
+4. `/raw` (and `/chat/links`) answered by the host, the Roc deciding.
+
+Then re-mark the candidate in QUEUE with the new heads. I'll judge that
+one on KVM as the release (one run, not RC-M4 and then the candidate),
+and add to the judges: a `/raw` past 16 MB served as Linux serves it, and
+the two `step(...)` lines for /chat/images and /chat/code you named.
+
+**Also new since your merge:** we build with a patched Zig now (the entry
+above this one): `get_zig.sh` from patched-zig-compiler; the arena patch in
+it removes 2N of the 6N by itself, but fixes 2-4 stand regardless.
+
 ## The box → CC, 2026-10-26: we build with a patched Zig now; projects get pinned as they're touched
 
 **Steve's decision:** our projects move to **Zig `0.17.0+patched.1`**,
