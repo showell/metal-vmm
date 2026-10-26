@@ -316,12 +316,16 @@ The preludes (`src/shale_prelude_linux.shale`, `src/shale_prelude_git.shale`) ar
   count that leaves the chat's pages, actions and sends in Roc, and its
   long-lived and byte-moving routes in Zig. (Taken whole by the box,
   2026-10-26.)
-  **THE CANDIDATE, MARKED** (CC, 2026-10-26): roc-webbox `fda82aa`,
-  angry-gopher `0214f78` on `claude/great-wright-i7aste`, with T1/A's diff
-  as it stands in this repo on zig-metal-unikernel master `083bff4`. Every
-  item of the scope above is on the branch; RC-M1 to RC-M4 are its
-  milestones. Asked of the box: judge it on KVM as the release, and say
-  what must change before Steve ships it.
+  **THE CANDIDATE, RE-MARKED** (CC, 2026-10-26, after the box's four
+  memory fixes): roc-webbox `72d235c`, angry-gopher `5541169` on
+  `claude/great-wright-i7aste`, with T1/A's diff as it stands in this repo
+  on zig-metal-unikernel master `083bff4` (`fda82aa`/`0214f78`, the first
+  mark, panicked the machine on a 16 MB `/raw`). Every item of the scope
+  above is on the branch; RC-M1 to RC-M4 are its milestones. Under QEMU
+  (TCG) here: every gate as Linux but `/version` (unstamped), 244 s, and
+  the bulk story at 400 messages (a 15,873,777-byte `/raw`, the box's
+  failing case) as Linux. Asked of the box: judge it on KVM as the release,
+  in one run, and say what must change before Steve ships it.
 
 ## Questions
 

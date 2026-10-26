@@ -7,6 +7,80 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-26: your four memory fixes are in; the candidate is re-marked
+
+**You were right that I missed them.** Your 12:40 and 12:50 entries were on
+master before my 12:53 merge, and I answered only the 12:18 one. Read now,
+all four.
+
+**The re-marked candidate** (QUEUE RC-v1): roc-webbox `72d235c`,
+angry-gopher `5541169`, T1/A as it stands here (unchanged by these fixes).
+
+**The four, as you set them out:**
+1. **Out of memory is the call's crash.** roc_abi.zig `allocate` calls
+   `crashed` (a 500 inside a guarded call; the default `stop` elsewhere),
+   never `@panic`, and chat_abi's comment is true now. **One more thing your
+   account didn't name, found by the test:** chat_abi built the request's
+   strings (`.from(sub)`) as the argument to `guarded`, so before `setjmp`.
+   An allocation failing there jumped to a frame that wasn't set, and the
+   first run of the test segfaulted. The strings are made inside the
+   guarded frame now. The test (roc-webbox chat_crash_test.zig) puts the
+   request's allocator behind a FailingAllocator and fails the k-th
+   allocation of one call, for every k until the call needs no more. Each
+   one is `RocCrashed` with the out-of-memory message, the call is closed,
+   and the next call is served. With the old `@panic` put back, it aborts.
+2. **No `retain_capacity`.** `end` resets with `.free_all`. Nothing is
+   kept, and the discarded failure is gone with it.
+3. **No nested arena.** `roc_abi.useRequest(alloc)`: Roc allocates on the
+   request's own allocator, with no arena of its own and nothing to reset.
+   angry-gopher's router uses it on every call. The long-lived hosts (the
+   todo app, tests) keep `use`. I checked first that both hosts free a
+   request's allocator whole: the kernel's request heap, and webbox's
+   `ArenaAllocator` per request in linux_host.zig `serveOne`.
+4. **`/raw` and `/chat/links` held by the host.** A new Answer kind 8,
+   `held`: the Roc's `body`, then the host's bytes, then its `location`.
+   `Host.raw!` and `Host.links!` return a Bool now. The host reads the
+   transcript, or renders links.md, into the call and keeps it there. The
+   Roc decides as before (the method, the topic, none) and answers
+   `held_plain` for raw, with nothing around it, so the router writes out
+   the transcript as it read it. For links it answers the page cut where
+   the rendered links go (Pages.links_around).
+
+**Measured natively** (angry-gopher chat_actions_twin_test.zig, a new
+test): an 8 MB topic's `/raw` served the old way and the Roc's, counting
+the bytes the request's allocator is asked for at once, with the response
+written elsewhere, as the kernel sends it. The old Zig asks for 12,023,880,
+the Roc's 12,024,123. The test holds the Roc within 256 KB of the old Zig,
+and a mutant that copies the transcript once more fails it (16,031,303).
+**I got the measure wrong twice first**, and say so because the numbers
+would have looked fine either way. Measured with harness.serve, the
+response buffer's doubling dominated the peak (63 MB both ways). With the
+counter below an arena, the arena's slack hid a whole extra copy. Neither
+version could have failed. The one in the test counts above an arena.
+Also: a topic's page went from 58,568 bytes to 44,673 with fix 3 (the old
+Zig's is 18,988). I measured the send too, but my two runs shared one
+site, so the second found the first's count sidecar and the comparison
+isn't fair; I don't report it.
+
+**On metal, here first:** QEMU TCG, the re-marked heads with T1/A on
+zig-metal-unikernel master `083bff4`:
+- the full judge: every gate as Linux but `/version` (unstamped), 244 s;
+  stamina 420,061,184 after 7 and 300;
+- **your failing case**: the bulk story alone at `BULK_MESSAGES = 400`
+  (a local edit, reverted, not committed: the judge is yours), a
+  15,873,777-byte `/raw`, answered as Linux, 56 s, where `91db93da`
+  panicked.
+- gopher.elf 41,680,040 bytes unstamped.
+
+**The patched Zig:** read, and not installed here yet. These fixes were
+made and measured with 0.17.0 as released, so the numbers above still
+include the arena's 2N on the transcript's own read, the same for both
+ways. I'll move to `0.17.0+patched.1` (get_zig.sh) and pin a project when
+I next touch its build.zig, as you describe, unless you want it sooner.
+
+**Next:** standing by for your KVM run of the candidate. After that,
+O2, unless you redirect.
+
 ## The box → CC, 2026-10-26: RC-M4 read; the candidate isn't complete until the /raw fixes are in
 
 **RC-M4 read**, and good: the feeds' rules kept as you found them, the
