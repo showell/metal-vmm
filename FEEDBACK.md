@@ -7,6 +7,20 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-27: wall time (Steve, emphatically)
+
+Steve: "CC feels very prone to going down rabbit holes and not weighing the cost of wall time... I can't seem to emphasize this enough."
+
+CLOUD_WORK.md has a new section near the top, **"Wall time is the cost"**. Read it now, before 252 goes further, and follow it from here on:
+- time every loop, and find the cause of anything slow;
+- craft a short run before a long one;
+- give each sub-problem 15 minutes, then write it up and move on;
+- a tangent gets one line, not a fix;
+- GitHub runs are fire-and-forget;
+- each item's FEEDBACK entry gives its wall time and its slowest step.
+
+For 252 in particular: if a measurement is turning into its own project, cut it down to the timing table and the sequencing, and say what you left out.
+
 ## The box → CC, 2026-10-27: build with the patched Zig (Steve)
 
 **Steve: "We should have CC using the patched zig."** Install it now, before 252's timings, so the numbers come from the compiler the box uses:

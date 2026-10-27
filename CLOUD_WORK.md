@@ -1,7 +1,8 @@
 # Working on metal-vmm from a cloud session
 
 For Claude Code running in the cloud ("CC"). Read this at the start of every
-session, then read `QUEUE.md`. This is the same arrangement zig-metal-unikernel ran
+session, then read `QUEUE.md`. **Read "Wall time is the cost" below first, and
+reread it whenever something is slow.** This is the same arrangement zig-metal-unikernel ran
 on until 2026-10-04 (its retired guide is in zig-metal-unikernel's
 `git show c28a6ec~1:CLOUD.md`), cut down to this repo.
 
@@ -22,6 +23,73 @@ names in zig-metal-unikernel build.zig's `Plant` enum) runs on every change
 to it. The whole-machine snapshot (`docs/SNAPSHOT.md`) is
 parked. Essays: `notes/the-plan-after-the-postmortem.md`,
 `notes/our-lexicon.md` (the shared vocabulary).
+
+## Wall time is the cost
+
+**Steve, 2026-10-27: "Claude has to stop tolerating long wall times! I
+can't stress this enough. It's a mindset problem more than a tooling
+issue."** And: "Anything that's not sub-second in our world is highly
+fishy." And: "any run longer than a coffee break should be discussed."
+Steve would rather have an item finished fast and a little rough than
+finished slowly and complete. An item that finishes early is a good
+problem to have. The bad problem is a rabbit hole that eats an hour
+nobody asked for.
+
+**A slow loop is a bug to find, not a wait to sit through.**
+- **Time every loop**: the build, the test, the gate, a GitHub run. Say the
+  number in FEEDBACK.
+- **A build and a run are two numbers**, each naming the program that spent
+  it. "zig build test took 4 minutes" says nothing until it is split into
+  compile and run.
+- **Anything over about a minute that should take seconds** gets its cause
+  found before you go on.
+- **Check the defaults first.** Is it in release mode when Debug would do?
+  Is the build rebuilding what didn't change? Is it running every test when
+  one file would answer the question?
+
+These are real costs from 2026-10-27:
+- `roc build` defaulted to an LLVM release build: 5 min 21 s, against 0.9 s
+  with `--opt=dev`.
+- A gate slept 20 minutes waiting on someone else's tree.
+- A mutant run printed megabytes.
+- Steps that took 45 minutes took 2-12 once those were found.
+
+**Before any run longer than about 30 seconds, ask what it tells you that a
+short, crafted one wouldn't.** Two runs that cover the same ground are the
+same evidence at different prices. Never answer a slow run with a longer
+one. These choices have been worth minutes each:
+- one test file (`zig build test -Dtest-file=<file>`) instead of the whole
+  suite;
+- a filter instead of every case;
+- a few seeds instead of a sweep;
+- Debug instead of a release build.
+
+A run you expect to pass 10 minutes goes in FEEDBACK first, as a question,
+unless the item already asks for it.
+
+**Time-box every sub-problem, and watch for rabbit holes.**
+- **Fifteen minutes without progress on one question:** stop. Write what you
+  know (what you tried, what it showed, the shortest reproduction) under
+  Questions, and take the next piece of the item.
+- **A tangent that isn't the item:** a bug in a tool, a nicer abstraction, a
+  second thing you noticed. Give it one line in FEEDBACK, "Found on the
+  way", and keep going. Never fix it inline unless it blocks the item.
+- **Before a step, estimate what it will cost.** If it comes in at more than
+  twice that, stop and say why before spending more.
+- **Polish is the last thing**, after the deliverable is green and pushed.
+
+**Never sit waiting on something slow.**
+- A GitHub Actions run (`cookbook/gh_build.shale`) is fire-and-forget: start
+  it, carry on with other work, and read its result later. Never poll in a
+  loop. Never let a 20-minute CI run be the thing your session waits for.
+- If the next step really does need the result, push and report what is
+  pending: the run's URL, and what red or green would mean. The box reads it
+  when it lands.
+
+**Report time like a result.** Each FEEDBACK entry for an item says:
+- the wall time it took;
+- the slowest single step, and why it was slow;
+- anything you cut, or parked, to keep it moving.
 
 ## Who does what
 
