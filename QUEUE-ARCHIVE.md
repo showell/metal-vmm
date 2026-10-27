@@ -9,6 +9,12 @@ full text of everything below is in git: `git show 3697b1c:QUEUE.md` (items
 
 ## Archived 2026-10-19 to 2026-10-27
 
+- **262.** pop(l): a list's last item, removed: DONE: pop(l); for loops end at a shortened list's end (shale 8791ccf); commits named: none.
+- **261.** zig_rename renames a container's member, and module.name callers tree-wide: DONE: zig_rename {container, via}; rename_member.shale (shale fe29c63); commits named: none.
+- **260.** A sixth name check for effects named as nouns, and a charged same(a, b): DONE: noun_effect, Roc only (shale 46d2acc); same(a, b) (shale e69d697); commits named: none.
+- **259.** Regex: empty loops handled RE2's way, so the machine agrees with a backtracker: DONE: a loop's empty turn ends it, as a backtracker's; still linear (shale a0a9528); commits named: none.
+- **258.** queue_merge: QUEUE.md merged by its items, 254's cut half: DONE: queue_merge and lines_merge; merge_master.shale over the four queue files (metal-vmm 89e9237); commits named: none.
+- **257.** The five renames from 256's name hunt: DONE: the five renames (angry-gopher e550e1d, zig-webbox cf5bbc7); a bool named as a state is a question (shale fda2c58); commits named: none.
 - **256.** Hunts for awkward names (held_*, vague verbs, a type the name contradicts): DONE: name hunts for Zig and Roc, five checks (shale bc3b337); the renames are 257; commits named: none.
 - **255.** job_wait: one last look on a done record; the flaky large-log test names its case: DONE: job_wait's last look, the large-log test names its case (shale 386c741); root cause not found; commits named: 40554443677.
 - **254.** FEEDBACK/QUEUE merges by Shale: no resurrected entries, no glued headings: DONE: feedback_merge and merge_master.shale (metal-vmm c4f5387); QUEUE's half is 258; commits named: 5b5d98d.

@@ -38,47 +38,6 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
-**262. pop(l): a list's last item, removed: CC'S** (Steve, 2026-10-27, from CC's 254 report.) After 261; small.
-
-CC wrote `take(l, #l - 1)` for want of it. **The change:** `pop(l)` removes and returns the last item; on an empty list it stops, naming the call (never nil). Charged as `push`. Document it beside `push` in SHALE.md; one test each for the value, the shortened list, and the empty stop. Wall time: about 10 minutes.
-
-**261. zig_rename renames a container's member, and module.name callers tree-wide: CC'S** (Steve, 2026-10-27, from CC's 257 report.) First of 261-262.
-
-In 257, `zig_rename` couldn't rename `marked` (a member of `UidSite`) or the `search_index.ready(` callers: it never touches a name after a `.`, and it treats a container's member as a field. Those were literal `edit`s.
-
-**The change:** `zig_rename(p, from, to, {container = "UidSite"})` renames the member's declaration and every `.from` use that resolves to that container in the file; and a tree-wide form (a recipe or option, your call) that renames `module.from` callers across a tree for a module imported by name or path. Refuse, naming the site, any `.from` it can't attribute to the container rather than guess.
-
-**Tests:** 257's two cases as fixtures (a member with calls through `UidSite.`, and `search_index.ready(` callers in other files), plus a same-named member on a different container left alone. Wall time: about 30 minutes.
-
-**260. A sixth name check for effects named as nouns, and a charged same(a, b): CC'S** (Steve, 2026-10-27, both from CC's 256 and 253 reports.) After 259; two small commits.
-
-**Part (1), the check:** `noun_effect` in both name hunts: an effect (Roc's `!`; Zig, as `state_effect` reads one) whose name is a plain noun (`links!`, `feed!`, `page!`, `entries!`). Heuristic and planted like the other five; report its counts on the four trees and say whether it's quiet enough to keep. Rename nothing.
-
-**Part (2), `same(a, b)`:** deep equality as a builtin, as you proposed: charged a step per item visited; lists compared in order, maps by key regardless of order; `==` stays identity. Document it next to `==` in SHALE.md, with a line on why `==` isn't it.
-
-**259. Regex: empty loops handled RE2's way, so the machine agrees with a backtracker: CC'S** (Steve, 2026-10-27, from CC's 253 report.) After 258.
-
-253's property found that `(?:\w*(?:|.))*` on `ab.` gives `ab` where a backtracker gives `ab.`: a loop's new turn reaches a split an earlier turn already stamped. **The change:** handle empty iterations as RE2 does (or an equivalent you can explain), still linear. Un-pin 253's test so it expects `ab.`, and give the property back the repeated groups that hold groups. If the fix costs more than about 60 minutes, stop and write up the plan in FEEDBACK instead. Run the regex properties (`zig build fuzz -Dtest-filter="property: re_"`) once at the end, not in the loop.
-
-**258. queue_merge: QUEUE.md merged by its items, 254's cut half: CC'S** (Steve, 2026-10-27.) After 257.
-
-254 gave `feedback_merge` and `.shale/merge_master.shale`, and cut QUEUE's half for time. **The change:** `queue_merge`, beside `feedback_merge`, merging QUEUE.md three ways by item (its number) and the archive by line, and `merge_master.shale` using it. The rules, as FEEDBACK's: an item archived on either side stays archived; an item edited on both sides stops the merge, naming it; two new items with one number stop it too (renumbering is a person's call). Tests with planted conflicts, one per rule. Wall time: about 30 minutes.
-
-**257. The five renames from 256's name hunt: CC'S** (Steve, 2026-10-27, approved from 256's report.) First of 257-260, in number order.
-
-**The renames**, exactly 256's five:
-- angry-gopher `src/router.zig:230` `routed` → `dispatch`
-- angry-gopher `src/router_harness.zig:111` `marked` → `isSigned`
-- angry-gopher `src/search_index.zig:485` `ready` → `indexOrBuild`
-- zig-webbox `src/linux_writes.zig:181` `doneWrite` → `endedInTime`
-- angry-gopher `src/login.zig:201` `gatedCheck` → `checkPasswordThrottled`
-
-Use Shale's rename tooling (`zig_renames`), word-bounded, every caller included. Fresh branches from each repo's master, one commit per repo. If a better name occurs to you, use it and say why in FEEDBACK.
-
-**And in the hunt:** fold "a bool named as a state" (`marked`) into `question`, with a plant, so the next run catches its kind.
-
-**Checks:** each repo's own tests that run in your container, plus its formatter; name any gate you couldn't run, and the box runs the full gates on merge. Wall time: about 30 minutes.
-
 ## Parked
 
 - **216's output ring and SSE stream** (Steve, 2026-10-16): revisit when a script needs to report as it runs; today `GET /admin/script` shows output after the run.
