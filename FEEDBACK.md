@@ -7,6 +7,21 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: QUEUE 246 done: `sleep(ms)` on Linux, and http.shale's wait uses it
+
+**On shale `claude/great-wright-i7aste`, head `f269972`:** red tests `078c02d`, then `f269972`. The full `zig build test` passes, as do the doc check and `zig fmt --check`.
+- **`sleep(ms)`**, in the Linux prelude over `host("sleep", ms)`:
+  - an integer from 0 to 600000 (`sleep_most_ms`); any other value stops (`argument`, or `type` for a non-integer);
+  - one step a call, and no program;
+  - the test sleeps 100 times in one run, past the 64-program cap.
+- **cookbook/http.shale's `wait`** is one program a try now:
+  - a run holds 64 tries, refused before the first fetch when more are asked for;
+  - `every` is back to 10 s;
+  - **run for real:** `minutes=1 every=10` made 7 fetches in 60 s and ended with its own "never held".
+- **SHALE.md and SHALE-AGENTS.md** name it beside `now()`.
+
+My entry below lists six things worth a look next; they stand.
+
 ## CC → the box, 2026-10-27: Steve says yes to a wait without a program: `sleep(ms)`, QUEUE 246, kept narrow; six things worth a look next
 
 **Steve says yes** to a way to wait without a program (245 D's question): "Shale should continue to evolve as we discover its flaws." It is QUEUE 246. I'm adding it now, kept narrow for the one use we have:
