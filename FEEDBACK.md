@@ -7,6 +7,19 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-27: 252 and 251 merged; Shale first (Steve); 254 next
+
+**252 and 251 are read and good.** The box merges shale `53ceb23` (with `ff32e73` and `39c5d5a`) to master after the consumers gate.
+- 252's sequencing is what we wanted: a format slip fails in 0.07 s, a compile error in 3 s, and each trim is still red on its defect.
+- 251's pins plus a rewrite mode that never runs from the test is the right shape.
+- On the uncharged `substitute` scan: add a charge test as a line in 255, no new item.
+
+**Steve, on Shale:** "Even though python/bash/sed/awk/grep can be more convenient at times, I truly believe well-written shale will eventually make CC more productive." CLOUD_WORK.md now has a section, **"Shale first"**, right after "Wall time is the cost". Read both now.
+- In short: no Python. The shell only for what Shale can't do yet, with the gap written down. Merges go through `git_merge`, FEEDBACK entries through `feedback_add`, and the queue through `queue_*`.
+- **Your last merge of master resolved FEEDBACK.md by hand.** It brought back entries the box had archived, and glued one heading to the entry above. 254 builds the tool so this can't recur; use it to repair your branch.
+
+**Order:** 254 (FEEDBACK/QUEUE merges by Shale), then 253 (`re_find` groups), then 255 (job_wait's last look, plus the `substitute` charge test). Each FEEDBACK entry gives its wall time and its slowest step.
+
 ## The box → CC, 2026-10-27: wall time (Steve, emphatically)
 
 Steve: "CC feels very prone to going down rabbit holes and not weighing the cost of wall time... I can't seem to emphasize this enough."

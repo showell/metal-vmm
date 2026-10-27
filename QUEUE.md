@@ -38,6 +38,39 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**255. job_wait: one last look on a done record; the flaky large-log test names its case: CC'S** (CC's own finding, in FEEDBACK 2026-10-27, approved). `shale_jobs_test.zig:148`, the large-log `job_wait(..., {contains = "log 300000"})`, answered `exited` once on GitHub (run 40554443677).
+
+**The change**, exactly CC's two small steps:
+1. The test prints `code` and `signal` beside `ended`, so the next red names its case.
+2. On a done record, `job_wait` looks at the log once more before answering `exited`. The log is whole by then, so `found` wins whenever the file holds the text.
+
+Give it 15 minutes; don't chase the root cause further unless the next red names it.
+
+**254. FEEDBACK/QUEUE merges by Shale: no resurrected entries, no glued headings: CC'S** (Steve, 2026-10-27: "we should use shale for merges and auto-detect conflicts. Our mechanism to update FEEDBACK should try to avoid common pitfalls too."). Do this before 253.
+
+**The pitfall, seen today:** your merge of master into `claude/great-wright-i7aste` (5b5d98d) resolved FEEDBACK.md by hand. Two things went wrong:
+- entries the box had archived on master came back (your "procs review" and "QUEUE 250 finished" entries, among others);
+- one heading lost its blank line, so it is glued to the entry above.
+
+`git_merge` already undoes a conflicted merge and names the files. What's missing is resolving FEEDBACK and QUEUE themselves.
+
+**The change** (metal-vmm `.shale/prelude.shale`, beside `feedback_add`/`feedback_archive`):
+- **`feedback_merge`:** resolves a FEEDBACK.md conflict from its two sides:
+  - entries are taken as a union, matched by heading;
+  - newest first, with a stable order within a day;
+  - an entry whose heading is in FEEDBACK-ARCHIVE.md stays archived;
+  - an entry changed on both sides stops the merge and names it.
+- **`feedback_check`:** refuses an out-of-order date, a heading without a blank line before it, a heading that appears twice, and an entry that is also in the archive. Run it from `queue_check`, so the existing tests cover it.
+- **The same for QUEUE.md if it fits cheaply:** an item number on both sides with different text stops; an archived number never returns.
+- **One command for the whole merge:** git_merge, then on a FEEDBACK/QUEUE conflict, resolve with the above, commit, and stop on anything else. For example `shale .shale/merge_master.shale`.
+
+**Deliverable:**
+- red tests in `queue_test.shale` (a resurrected entry, a glued heading, a both-sides edit);
+- your branch's FEEDBACK repaired with the new tool;
+- CLOUD_WORK.md's "Shale first" naming the command.
+
+Wall time: about 30 minutes. Cut QUEUE's half if it runs long, and say so.
+
 **253. Shale's `re_find`: several capture groups: CC'S** (CC, in FEEDBACK 2026-10-27: "Shale's `re_find` allows one capture group. That cost me a workaround twice today."). After 251.
 
 **The change:** `re_find` returns every group, still in linear time. Keep the one-group form working: say how it reads, and don't break a caller. Mirror it in `re_replace` (`\2`, ...) if it doesn't already take several.

@@ -91,6 +91,42 @@ unless the item already asks for it.
 - the slowest single step, and why it was slow;
 - anything you cut, or parked, to keep it moving.
 
+## Shale first
+
+**Steve, 2026-10-27:** "Even though python/bash/sed/awk/grep can be more
+convenient at times, I truly believe well-written shale will eventually make
+CC more productive." This rule holds even when the shell would be quicker
+this once:
+- **No Python.**
+- **Bash, sed, awk and grep are for what Shale can't do yet.** When you reach
+  for one, write the gap as a line in FEEDBACK ("Shale wants: ..."), or fix
+  it in Shale if it's small. We maintain Shale: a gap is fixed in Shale, not
+  routed around.
+
+Every routine operation already has a Shale form. Use it:
+- **Merges: `git_merge(repo, ref)`** (the git prelude). It merges, and
+  **on a conflict it undoes the merge** (`merge --abort`) and stops, naming
+  the conflicted files. A checkout is never left half-merged. Never resolve
+  a conflict in `FEEDBACK.md` or `QUEUE.md` by hand-editing markers. That is
+  how archived entries come back from the dead, and how entries end up out
+  of order or glued to the line above.
+- **FEEDBACK: `feedback_add(from, to, title, body)`** (metal-vmm's
+  `.shale/prelude.shale`, loaded when you run `shale` from this repo's
+  root). It writes the heading in the house form, dates it, puts it at the
+  top, and refuses an out-of-order date. Never hand-edit a new entry in.
+- **QUEUE:** `queue_add`, `queue_done`, `queue_archive`, `queue_next`,
+  `queue_check`. `queue_add` refuses a body line that would read as an item
+  or a section.
+- **Git otherwise:** `git_log`, `git_diff`, `git_show`, `git_status`,
+  `git_commit(repo, msg, {add})`, `git_push`, `git_worktree_add`.
+- **Finding and reading:** `shale cookbook:look.shale find=... in=...` and
+  `at=file:a-b`.
+- **Programs:** `run` (or `cookbook:run.shale`) instead of `cmd | tail | grep`.
+- **GitHub:** `cookbook/gh_build.shale`.
+
+The full list is in shale's `docs/SHALE-AGENTS.md`, under "Before you reach
+for the shell". Read it once per session.
+
 ## Who does what
 
 - **Steve** decides. He relays between the two Claudes only when he wants to;
