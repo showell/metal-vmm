@@ -1,0 +1,71 @@
+-- **MASTER MERGED, FEEDBACK.md BY ITS ENTRIES** (QUEUE 254): `git_merge`,
+-- and on a conflict in FEEDBACK.md alone, the merge again with that file
+-- written by `feedback_merge`: three ways, by heading, from the merge
+-- base, HEAD's and `ref`'s. An entry `ref` let go stays gone: one its
+-- archive holds, and one its last `history` changes to FEEDBACK.md took
+-- out and never put back (the box lets some go without an archive line).
+-- A conflict in any other file, an entry changed on both sides, or a
+-- FEEDBACK that breaks its grammar after (`queue_check`) undoes the merge
+-- and stops, naming it. From this checkout's root:
+--
+--     shale .shale/merge_master.shale
+--     shale .shale/merge_master.shale ref=origin/master fetch=no history=30
+
+const REF = arg("ref", "origin/master")
+const HISTORY = arg("history", "30")
+
+if arg("fetch", "yes") == "yes" then git_fetch(".") end
+
+function merge_plain(ref)
+  return git_merge(".", ref)
+end
+
+-- The grammar's first break, as a stop, undoing a merge underway.
+function refuse_unless_clean(undo)
+  local bad = queue_check()
+  if #bad == 0 then return nil end
+  if undo then git_call(".", {"merge", "--abort"}, nil, false, nil) end
+  fail("merge_master: after the merge, the queue's files break their grammar (" .. #bad .. " in all): " .. bad[1])
+end
+
+local r = attempt(merge_plain, REF)
+if r.ok then
+  refuse_unless_clean(false)
+  print("merge_master: " .. REF .. " merged, no conflict: " .. r.value)
+  return nil
+end
+local at = find(r.error, ": conflicts in ")
+if at == nil then fail(r.error) end
+local named = sub(r.error, at + 15)
+named = sub(named, 1, find(named, "; the merge is undone") - 1)
+for p in split(named, ", ") do
+  if p ~= "FEEDBACK.md" then fail("merge_master: " .. p .. " conflicts (" .. named .. "): merge it yourself; this tool merges FEEDBACK.md alone") end
+end
+
+-- What `ref` let go: the headings its recent changes took out, less the
+-- ones it holds now, as archive lines, beside the archive's own.
+local theirs = git_show(".", REF .. ":FEEDBACK.md")
+local now = {}
+for e in feedback_split(theirs).entries do now[e.heading] = true end
+local let_go = {}
+local log = git_call(".", {"log", "-n", HISTORY, "-p", "-U0", "--format=", REF, "--", "FEEDBACK.md"}, nil, true, nil).out
+for l in lines(log) do
+  if starts_with(l, "-## ") and not has_key(now, sub(l, 5)) then push(let_go, "- " .. sub(l, 5)) end
+end
+local archive = git_show(".", REF .. ":FEEDBACK-ARCHIVE.md") .. "\n" .. join(let_go, "\n") .. "\n"
+
+local base = trim(git_call(".", {"merge-base", "HEAD", REF}, nil, true, nil).out)
+local merged = feedback_merge(git_show(".", base .. ":FEEDBACK.md"), git_show(".", "HEAD:FEEDBACK.md"), theirs, archive)
+
+-- The merge again, this time left open for FEEDBACK.md's text.
+local m = run({"git", "-C", real(""), "-c", "color.ui=never", "merge", "-q", "--no-edit", "--no-commit", REF}, {timeout_ms = 60000, env = {GIT_TERMINAL_PROMPT = "0"}, head = 10, tail = 10})
+local open = trim(git_call(".", {"diff", "--name-only", "--diff-filter=U"}, nil, true, nil).out)
+if open ~= "FEEDBACK.md" then
+  git_call(".", {"merge", "--abort"}, nil, false, nil)
+  fail("merge_master: the second merge left `" .. open .. "` open, not FEEDBACK.md alone; undone")
+end
+replace("FEEDBACK.md", merged)
+refuse_unless_clean(true)
+git_call(".", {"add", "FEEDBACK.md"}, nil, false, nil)
+git_call(".", {"commit", "-q", "--no-edit"}, nil, false, nil)
+print("merge_master: " .. REF .. " merged, FEEDBACK.md by its entries (" .. #feedback_split(merged).entries .. "; " .. #let_go .. " headings " .. REF .. " let go): " .. git_head("."))

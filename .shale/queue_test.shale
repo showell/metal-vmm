@@ -152,5 +152,60 @@ d = fresh("small")
 replace(d .. "/FEEDBACK.md", "# F\n\n## CC → the box, 2026-10-14: older first\n\nx\n\n## The box → CC, 2026-10-15: then newer\n\ny\n")
 expect(contains(said(attempt(feedback_out_of_order)), "2026-10-15 after 2026-10-14"), "a FEEDBACK out of order refuses an entry")
 
+
+-- ── FEEDBACK merged (QUEUE 254) ─────────────────────────────────────────
+
+-- A FEEDBACK.md of `entries`, each `{who, date, title, body}`.
+function feedback_of(entries)
+  local parts = {"# F\n\nThe channel."}
+  for e in entries do push(parts, "## " .. e[1] .. ", " .. e[2] .. ": " .. e[3] .. "\n\n" .. e[4]) end
+  push(parts, "## Older entries: FEEDBACK-ARCHIVE.md\n\nOne line each.")
+  return join(parts, "\n\n") .. "\n"
+end
+function headings(text)
+  local got = {}
+  for e in feedback_split(text).entries do push(got, e.heading) end
+  return join(got, " | ")
+end
+const A = {"The box → CC", "2026-10-27", "a", "A's text."}
+const B = {"CC → the box", "2026-10-26", "b", "B's text."}
+const C = {"CC → the box", "2026-10-27", "c", "C's text."}
+const D = {"The box → CC", "2026-10-27", "d", "D's text."}
+const OLD = {"CC → the box", "2026-10-25", "old", "Old text."}
+
+-- Theirs archived OLD; ours, from before, still has it, and adds C above A.
+local base = feedback_of({A, B, OLD})
+local ours = feedback_of({C, A, B, OLD})
+local theirs = feedback_of({D, A, B})
+local m = feedback_merge(base, ours, theirs, "- CC → the box, 2026-10-25: old\n")
+expect(not contains(m, "Old text."), "an entry theirs archived stays archived, though ours has it unchanged")
+expect(headings(m) == "The box → CC, 2026-10-27: d | CC → the box, 2026-10-27: c | The box → CC, 2026-10-27: a | CC → the box, 2026-10-26: b", "ours' new entry goes just above the entry after it in ours, newest first")
+expect(contains(m, "One line each.\n") and starts_with(m, "# F\n\nThe channel.\n\n## "), "the text above the entries and the archive's pointer kept")
+-- Removed without an archive line: gone too, by the merge base.
+expect(not contains(feedback_merge(base, ours, theirs, ""), "Old text."), "an entry theirs removed, ours left alone, stays gone without the archive")
+-- In the archive, whatever the sides say: never back.
+expect(not contains(feedback_merge(feedback_of({A}), feedback_of({A, OLD}), feedback_of({A, OLD}), "- CC → the box, 2026-10-25: old\n"), "Old text."), "an entry the archive holds never comes back")
+
+-- A heading glued to the line above: merged with its blank line, and named.
+local glued = "# F\n\n## The box → CC, 2026-10-27: a\n\nA's text.\n## CC → the box, 2026-10-26: b\n\nB's text.\n"
+local g = feedback_merge(glued, glued, feedback_of({A, B}), "")
+expect(contains(g, "A's text.\n\n## CC → the box, 2026-10-26: b"), "a glued heading comes out of a merge with its blank line")
+d = fresh("small")
+replace(d .. "/FEEDBACK.md", glued)
+expect(contains(join(queue_check(d), "\n"), "FEEDBACK.md:6: `## CC → the box, 2026-10-26: b` is glued to the line above"), "queue_check names a glued heading, at its line")
+replace(d .. "/FEEDBACK.md", feedback_of({A, A}))
+expect(contains(join(queue_check(d), "\n"), "a` twice (also line 5)"), "queue_check names a heading twice")
+replace(d .. "/FEEDBACK.md", feedback_of({A, OLD}))
+append(d .. "/FEEDBACK-ARCHIVE.md", "\n- CC → the box, 2026-10-25: old\n")
+expect(contains(join(queue_check(d), "\n"), "old` is archived too"), "queue_check names an entry the archive holds")
+
+-- Changed on both sides, differently: stopped, named.
+function both_changed()
+  return feedback_merge(feedback_of({A, B}), feedback_of({A, {B[1], B[2], B[3], "B, ours."}}), feedback_of({A, {B[1], B[2], B[3], "B, theirs."}}), "")
+end
+expect(contains(said(attempt(both_changed)), "`## CC → the box, 2026-10-26: b` changed on both sides"), "an entry changed on both sides stops the merge, named")
+-- Changed on one side: that side's.
+expect(contains(feedback_merge(feedback_of({A, B}), feedback_of({A, B}), feedback_of({A, {B[1], B[2], B[3], "B, theirs."}}), ""), "B, theirs."), "an entry changed on one side is that side's")
+
 remove_tree(SCRATCH)
 print("all queue tests passed")

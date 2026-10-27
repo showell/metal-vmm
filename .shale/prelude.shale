@@ -93,7 +93,8 @@ end
 -- twice (in QUEUE.md, in the archive, or one in both), a lettered id
 -- (`B14`) archived twice, QUEUE.md's items
 -- not newest first within a section, a FEEDBACK heading that is not an
--- entry's, entries not newest first. Empty when all is well.
+-- entry's, entries not newest first, a heading glued to the line above, twice,
+-- or also in FEEDBACK-ARCHIVE.md. Empty when all is well.
 function queue_check(dir?)
   local qp = queue_path(dir, "QUEUE.md")
   local ap = queue_path(dir, "QUEUE-ARCHIVE.md")
@@ -136,6 +137,18 @@ function queue_check(dir?)
       local a = f.entries[i - 1]
       local b = f.entries[i]
       if b.date > a.date then push(got, fp .. ":" .. b.line .. ": " .. b.date .. " after " .. a.date .. ": entries are newest first") end
+    end
+    -- A heading glued to the line above, one twice, one the archive holds.
+    local fls = lines(read(fp))
+    local archived = {}
+    for l in lines(read_or(queue_path(dir, "FEEDBACK-ARCHIVE.md"), "")) do
+      if starts_with(l, "- ") then archived[sub(l, 3)] = true end
+    end
+    local heads = {}
+    for e in f.entries do
+      if e.line > 1 and trim(fls[e.line - 1]) ~= "" then push(got, fp .. ":" .. e.line .. ": `## " .. e.heading .. "` is glued to the line above: a blank line before each heading") end
+      if has_key(heads, e.heading) then push(got, fp .. ":" .. e.line .. ": `## " .. e.heading .. "` twice (also line " .. heads[e.heading] .. ")") else heads[e.heading] = e.line end
+      if has_key(archived, e.heading) then push(got, fp .. ":" .. e.line .. ": `## " .. e.heading .. "` is archived too: an archived entry never comes back") end
     end
   end
   return got
@@ -508,4 +521,128 @@ function feedback_archive(opts, dir?)
   local anchor = alines[first] .. "\n"
   edits_all({{fp, f_edits}, {ap, {{old = anchor, new = section .. anchor}}}})
   return #gone
+end
+
+-- ── merging ─────────────────────────────────────────────────────────────
+
+-- `ls` without the blank lines at its end, keeping at least `keep`.
+function feedback_trim_end(ls, keep)
+  local n = #ls
+  while n > keep and trim(ls[n]) == "" do n = n - 1 end
+  return take(ls, n)
+end
+
+-- FEEDBACK.md in parts: the lines before the first entry (`head`), each
+-- entry (`heading`, its `date`, and its `text`: the heading line and what
+-- follows to the next `## `, blank lines at its end dropped) in order, and
+-- the part from `## Older entries` on (`tail`). A heading glued to the
+-- line above is still a heading here: the parts are joined with a blank
+-- line between each.
+function feedback_split(text)
+  local head = {}
+  local entries = {}
+  local tail = {}
+  local cur = nil
+  local where = "head"
+  for l in lines(text) do
+    if where ~= "tail" and starts_with(l, "## Older entries") then where = "tail" end
+    if where == "tail" then
+      push(tail, l)
+    elseif starts_with(l, "## ") then
+      cur = {heading = sub(l, 4), ls = {l}}
+      push(entries, cur)
+      where = "entries"
+    elseif where == "head" then
+      push(head, l)
+    else
+      push(cur.ls, l)
+    end
+  end
+  for e in entries do
+    e.text = join(feedback_trim_end(e.ls, 1), "\n")
+    local m = re_find(e.heading, ", ([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9])")
+    if m == nil then e.date = "" else e.date = m.group end
+  end
+  return {head = join(feedback_trim_end(head, 0), "\n"), entries = entries, tail = join(tail, "\n")}
+end
+
+-- Each entry's text by its heading; a heading twice stops, naming `side`.
+function feedback_by_heading(parts, side)
+  local by = {}
+  for e in parts.entries do
+    if has_key(by, e.heading) then fail("`feedback_merge`: " .. side .. "'s FEEDBACK.md has `## " .. e.heading .. "` twice") end
+    by[e.heading] = e.text
+  end
+  return by
+end
+
+-- One part of a three-way merge: what both sides agree on, else the side
+-- that changed it from `base` (nil when that side removed it: archived,
+-- or let go). Changed on both sides, differently, it stops, naming `what`.
+function feedback_pick(what, base, ours, theirs)
+  if ours == theirs then return ours end
+  if ours == base then return theirs end
+  if theirs == base then return ours end
+  fail("`feedback_merge`: " .. what .. " changed on both sides; merge it by hand, then `queue_check()`")
+end
+
+-- **FEEDBACK.md MERGED** from the merge base's text, ours and theirs, and
+-- the archive's (FEEDBACK-ARCHIVE.md, `- <heading>` a line): each entry
+-- by its heading, three ways, so an entry one side archived or removed
+-- and the other left alone stays gone, and one changed on both sides
+-- stops. An entry in the archive never comes back. Theirs keep their
+-- order; each of ours that theirs lacks goes just above the entry that
+-- follows it in ours. Then newest first by date, in that order within a
+-- day, a blank line between each.
+function feedback_merge(base, ours, theirs, archive)
+  local b = feedback_split(base)
+  local o = feedback_split(ours)
+  local t = feedback_split(theirs)
+  local bb = feedback_by_heading(b, "the merge base")
+  local ob = feedback_by_heading(o, "ours")
+  local tb = feedback_by_heading(t, "theirs")
+  local archived = {}
+  for l in lines(archive) do
+    if starts_with(l, "- ") then archived[sub(l, 3)] = true end
+  end
+  local order = {}
+  local pending = {}
+  local placed = {}
+  for e in t.entries do placed[e.heading] = true end
+  local before = {}
+  for e in o.entries do
+    if has_key(tb, e.heading) then
+      before[e.heading] = pending
+      pending = {}
+    else
+      push(pending, e.heading)
+    end
+  end
+  for e in t.entries do
+    if has_key(before, e.heading) then
+      for h in before[e.heading] do push(order, h) end
+    end
+    push(order, e.heading)
+  end
+  for h in pending do push(order, h) end
+  local dates = {}
+  local by_date = {}
+  for h in order do
+    local text = feedback_pick("`## " .. h .. "`", get(bb, h), get(ob, h), get(tb, h))
+    if text ~= nil and not has_key(archived, h) then
+      local d = feedback_split(text).entries[1].date
+      if not has_key(by_date, d) then
+        by_date[d] = {}
+        push(dates, d)
+      end
+      push(by_date[d], text)
+    end
+  end
+  local parts = {feedback_pick("the text above the first entry", b.head, o.head, t.head)}
+  for d in sort(dates, "desc") do
+    for text in by_date[d] do push(parts, text) end
+  end
+  local tail = feedback_pick("the `## Older entries` part", b.tail, o.tail, t.tail)
+  if tail ~= "" then push(parts, tail) end
+  return join(parts, "\n\n") .. "\n"
 end
