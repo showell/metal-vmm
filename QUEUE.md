@@ -38,6 +38,22 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**265. The Roc chat's accessors as methods, and crash on the impossible: CC'S (needs the Roc toolchain)** (Steve, earlier rounds of the Roc chat cleanup; queued 2026-10-27.) After 264. **Needs the pinned `roc` in your container**, because the chat's gate runs `roc check`/`roc test`. If you can't get it, say so in FEEDBACK and skip this item; the box will publish the binaries somewhere you can fetch.
+
+Branch `claude/roc-methods` from `origin/box/roc-cleanup` (roc-webbox, plus angry-gopher only if a seam changes). Style: roc-apps `docs/roc-style.md`, and the langref round-2 items Steve approved:
+- **Part (1), accessors as methods:** a module function whose first argument is the module's own type and that reads or derives a field (`Paths.conv_base(key)`, `Paths.conv_key_bytes(key)`, `Uid.to_str`'s kin) becomes callable as a method (`key.conv_base()`), with the call sites moved to the method form. Do this only where the method reads better, and say where it doesn't.
+- **Part (2), crash on the impossible:** each `?? 0`, `?? ""` or `Err(_) => <default>` that hides a case which can't happen becomes a `crash` with a reason, site by site. A case that *can* happen keeps its handling. Each site's commit line says which it is and why.
+
+**Gates:** `shale tools/chat_quick_gate.shale`; angry-gopher's `./ops/check_zig` if any Zig changed; `shale tools/roc_hunt/hunt.shale` (`bool_returns` stays 0). Wall time: about 45 minutes, with part (1) and part (2) as separate commits.
+
+**264. Shale's doc check calls a gitignored build output gone in a sibling-worktree layout: CC'S** (The box, 2026-10-27; Steve: keep CC's queue full.) After 263. Shale and Zig only, so it needs no Roc toolchain.
+
+**The symptom:** angry-gopher's `./ops/check_zig` runs `cd ../shale && zig build doc-check -- only=angry-gopher`. In `~/showell_repos` that passes. In `~/build/roc-clean`, where `shale`, `angry-gopher`, `zig-webbox` and the rest are sibling worktrees and checkouts, it reports `engine.js` as gone, twice: `games/lynrummy/README.md:79` and `games/lynrummy/elm/src/Puzzle/README.md:43`. The docs are identical, the file exists at `games/lynrummy/elm/engine.js` in both, and it is gitignored in both.
+
+**Where to look:** `tools/doc_check.shale`'s `ignored(at, repo, paths)` runs `git -C real(at .. repo) check-ignore --no-index --stdin` over the citation as written (`engine.js`) and as joined from the doc's folder (`games/lynrummy/engine.js`). Neither is the file's real path. Also check `is_dir(at .. t)` and `real()` when `at` isn't a mount root (the roc-clean siblings are under the `build:` mount, or reached by a relative `..`).
+
+**The change:** find why the two layouts differ, and fix the root cause. Either the check is wrong in one layout, or it passes in the other only by accident. If a bare file name is meant to pass because any file of that name is ignored, say so in a comment and make that hold in both layouts. **Tests:** a fixture in each layout, a plain checkout and sibling worktrees, both giving the same answer, and a citation of a file that is really gone still reported in both. Wall time: about 30 minutes.
+
 **263. The Roc chat's dead Zig: what only tests or twins reach, deleted (the census): CC'S** (Steve, 2026-10-27: "give CC the census Zig deletions".) The Roc chat's work lives on branch `box/roc-cleanup` of roc-webbox and angry-gopher (both pushed; neither repo has CI). Branch `claude/census-deletions` from `origin/box/roc-cleanup` in each repo you change, and fetch first: the box's cold agent is renaming the Host seam on that branch now (hosted effects in `chat/platform/Host.roc` and their Zig side), so expect it to move under you; the box merges with conflict detection.
 
 **Goal (Steve's):** the chat as purely Roc as possible; Zig keeps only webbox primitives (files, the bus, streams, a little process-lifetime state, HTTP) and the markdown processor. The census, roc-webbox's `shale tools/roc_hunt/zig_census.shale`, counts the live chat Zig against the Roc and found about 770 Zig lines that only tests or twins reach (twins: a Zig function kept beside its Roc port so a test can compare them).
