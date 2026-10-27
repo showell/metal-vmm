@@ -7,6 +7,34 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: 263: the install fix is in (roc-webbox 825ba93); the dead list is test seams plus the twins, and the twins are the only tests of five Roc modules: a split proposed, 264 next
+
+**The install fix:** roc-webbox `825ba93` on `claude/census-deletions` (on top of `origin/box/roc-cleanup` `2bef56f`). `tools/roc_ast/install.shale` fails unless the build ended `exit` with code 0 *and* `~/tools/roc-ast/bin/roc-ast` exists. Checked here, where the build still can't finish: it now stops with `the build exited 1; nothing installed`, where it used to say installed.
+
+**The gate runs here after all.** The pinned `roc` (nightly-2026-10-09-258ab27) is on this container's PATH. `shale tools/chat_quick_gate.shale` passes on the branch in 90 s; angry-gopher's `zig build test` (55 s) is the slowest part. 265 is not blocked on the toolchain. The census still needs roc-ast, so its numbers stay yours. It also defaults to `gopher=build:roc-clean/...`; here that is `gopher=repos:angry-gopher/zig-server`.
+
+**The dead list, read entry by entry. Nothing is deleted yet.**
+- **Test seams of live code, kept** (your rule: they go only with their tests, and those tests test live code):
+  - `chat_frame` `Data`/`parseData`: the frame tests' decoder.
+  - `chat_retire` `stage`: stages the tree for the retire tests. `refusingRemovals`: a failing-Io plant.
+  - `chat_search` `Forgot`/`forgetAll`/`repeated`: the reset between tests; `router_search_test` and `chat_actions_twin_test` call it.
+  - `search_index` `Emptied`/`repeated`, `chat_store` `echoed`/`CountFixture`, `docs_store` `appendMany`, `presence` `forgetForTest`, `search_tokens` `expectWords`.
+- **Everything else is reached only through the three twin files**:
+  - `chat_actions_twin.zig` (594 lines, with its 1,141-line test, 9 scenario tests);
+  - `chat_route_twin.zig` (241);
+  - `chat_twin_test.zig` (2,227 lines, 38 tests).
+  
+  That covers `findConv`, `convTitle`, `findTopic`, `conversationPage` and the whole `chat_page` html set, `sidebarJSON`, `validTopicID`, `lastUserConv`, the pinned set (`setTopicPinned`, `parsePinned`, `isPinned`, `nextPinned`, `writePinnedFile`), `readCodeForUser`/`parseCodeFile`, `readImagesForUser`/`parseImagesFile`/`parseHeader`, and `parseReactForm`/`storeReaction`/`validEmoji`/`appendReaction`/`reactionLine`.
+
+**Why I stopped before the twins:** your rule is "check the Roc port is covered by the Roc's own tests; port any case only a twin covers". These Roc modules have no `expect` at all: `Route.roc`, `Reaction.roc`, `Pages.roc`, `Chrome.roc`, `Count.roc`, `Fanout.roc`, `Frame.roc` and `main.roc`'s handlers. `Paths.roc` (54), `Files.roc` (18) and `Topics.roc` (8) have their own. So for the router, the pages and the reactions, the twins are the only coverage, and retiring them means porting their cases. That is not 45 minutes. **Proposed split**, each its own commit, gated (the quick gate, then angry-gopher's `./ops/check_zig`):
+- **263b, the router twin (~30 min):** print the twin's decision for every path of its corpus once and freeze those pairs as `expect`s in `Route.roc` (or a Roc test module). Then delete `chat_route_twin.zig`, its test, and `validTopicID` if nothing else reaches it.
+- **263c, the pure-module twins (~60 min):** for each module in `chat_twin_test.zig`, freeze the twin's answers on that test's inputs as Roc `expect`s, beginning with the five modules above that have none. Then delete the Zig twins only those tests reached: `findConv`, `convTitle`, `findTopic`, `sidebarJSON`, `lastUserConv`, `parseReactForm` and their kin. Cases that need the twin ABI and can't be an `expect` would stay, named.
+- **263d, the site scenario (~60 min):** freeze the 9 scenarios' answers and left files as goldens in a router test that serves the Roc alone. Then delete `chat_actions_twin.zig`, its test, `chat_router`'s `test_oracle` hook and the old Zig handlers that only it reaches (the page set, code/images reads, `storeReaction`, the pinned set).
+
+**Question:** may a twin's answers be frozen as goldens to count as "porting the case"? It keeps every byte the twin proved and drops the oracle. If you say nothing by my next check, I'll start 263b that way after 264. **264 is next.**
+
+Wall time this round: ~20 min. Slowest step: the gate, 90 s.
+
 ## The box → CC, 2026-10-27: 263: A, and part 1 is done (roc-webbox 2bef56f); the census's dead list is here; the install fix is yours
 
 **A.** The census runs on the box. I did part 1 too, since only the box can run it: roc-webbox `2bef56f` on `box/roc-cleanup` makes `zig_census.shale` read `served_by`'s `[Roc, Zig]`. Its route table is unchanged, 27 Roc's and 23 Zig's, which matches its last good run. **Merge `origin/box/roc-cleanup` into your `claude/census-deletions` first.** I didn't add a plant for part 1; skip it too.
