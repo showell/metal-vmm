@@ -9,6 +9,7 @@ full text of everything below is in git: `git show 3697b1c:QUEUE.md` (items
 
 ## Archived 2026-10-19 to 2026-10-27
 
+- **248.** Code comments that cite the docs your sweep deleted: DONE 2026-10-27 (CC): citations to deleted docs, comments only (checked by Zig's tokens and by reading every other hunk); zig-metal-unikernel 29bfb11, dog-park 761c708, essay-repl-server 986be47, angry-gopher ff5d8bfe (cherry-picked alone: CC's angry-gopher branch carries the unreleased Roc chat); commits named: none.
 - **247.** Shale says where a run's time went; two of your follow-ups: DONE 2026-10-27 (CC): the run's `── time:` line (programs, job waits, sleeps, the slowest); job_stop's pid by start time; recipes refuse a dash-led value; merged 6dbfecf; commits named: none.
 - **246.** Shale: `sleep(ms)` on Linux, so a recipe waits without a program: DONE 2026-10-27 (CC): sleep(ms), 0-600000 ms a call, a step each; http.shale's wait one program a try; merged 6dbfecf; commits named: 21f1d21.
 - **245.** Shale: six bug classes from its last 30 commits, by yield: DONE 2026-10-27 (CC): a defect in each of the six classes (git options from a value, secrets by another spelling, edits_all, a host cap, parsers passing forms by, job_stop at start); the box's review fixes in; merged 6dbfecf; commits named: 3c02198, 12bb383, d929fc1, 6c557d4, b18de89, 778a401, dbfc274, 16777216, 1593d23, 9285a24, 8b2c701.

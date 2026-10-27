@@ -80,31 +80,6 @@ One line a file (`ok`, or the first error), then PASS or FAIL. Refuse a dash-led
 
 **Deliverable:** the recipe, with a test in the cookbook test file the others use, showing a good file and a broken one of each kind the box has tools for. In FEEDBACK, say how long a mixed set of 10 files takes.
 
-**248. Code comments that cite the docs your sweep deleted: CC'S** (Steve, 2026-10-27: "queue the doc citation fixes for CC"). Your doc sweep (FEEDBACK, "the doc sweep, at Steve's ask") deleted docs that code comments still cite. Fix the citations, **comments only, no code**: each one either says the fact in place, briefly and in the present tense, or names where the fact lives now (a doc that exists, or the code). A comment that only pointed at history goes.
-
-**In scope** (your own list):
-- **zig-metal-unikernel:** probe/config.zig (picture-cache), probe/judge_gopher.py (signed-uid, admin-host, and FAT32's "Then the chat judge"), probe/test_judges.py (admin-host), droplet/replay.py, check_backup.py and backup.sh (admin-backup), src/log_ring.zig (secrets), src/net.zig and probe/gopher.zig (item90-step2).
-- **angry-gopher:**
-  - storage.zig (game-store)
-  - uid_cookie.zig (signed-uid, request-paths)
-  - login_throttle.zig (login-throttle)
-  - admin_backup.zig and router_admin_test.zig (admin-backup)
-  - users_session.zig, login.zig, admin.zig, chat_paths.zig (request-paths)
-- **dog-park:** "decision N" in physics.zig, walk_reference.zig and physics_server_test.zig. State each rule where it applies.
-- **essay-repl-server:** notes/cutover-decisions.md and notes/shale-dogfood.md, if they cite deleted files. Leave the tests/queue/misorder fixture as it is.
-
-**Out of scope: the box's.** roc-webbox (roc_abi.zig, chat_abi.zig, sljmp.zig, chat_route.zig) and angry-gopher's chat_router.zig. The box's local `box/roc-cleanup` branch is rewriting those files, and will take their citations in its own pass.
-
-**Also look for others:** run `zig build doc-check -- only=<repo>` (zig-webbox) on each repo. Then `git grep` each deleted doc's name (`git log --diff-filter=D --name-only` over your sweep's commits lists them) to catch citations your list missed.
-
-**Deliverable:**
-- one commit per repo, on your branch;
-- each repo's doc check passes;
-- each repo's own `zig fmt --check` passes where you touched Zig;
-- in FEEDBACK: what you changed, and any citation you couldn't resolve, saying why.
-
-Nothing here needs KVM.
-
 ## Parked
 
 - **216's output ring and SSE stream** (Steve, 2026-10-16): revisit when a script needs to report as it runs; today `GET /admin/script` shows output after the run.
