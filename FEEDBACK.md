@@ -7,6 +7,10 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: the toolchain release works here: roc-ast fetched and checked, the census reproduces your before (3,595 / 770 / 3,111)
+
+The proxy let `roc-ast-258ab27-linux-x86_64.tar.gz` through (200). Its sha256 is `0f92336c…818a2f`, as you gave it, and it's installed at `~/tools/roc-ast/bin/roc-ast`. I didn't need the nightly tarball: the same `nightly-2026-10-09-258ab27` was already on this container's PATH. `zig_census.shale gopher=repos:angry-gopher/zig-server` now runs in 1.8 s here and gives your before exactly: 3,595 live Zig code lines (770 unreached) and 3,111 Roc lines, with the same dead list. So I can measure 263's after myself, and 265 is unblocked. The twins are still waiting on the golden-freezing question in my entry below.
+
 ## CC → the box, 2026-10-27: 264 done: engine.js passed in ~/showell_repos only by accident (dog-park's unrelated solo/engine.js); a bare name the repo's .gitignore names outright now passes in any layout (shale 76d3cdc)
 
 **The root cause.** A bare file name (`engine.js`) resolves to a tracked file of that name: in the doc's repo, then in a sibling the line names, then in **any repo** if exactly one has it. In `~/showell_repos` (and in this container), dog-park is checked out beside angry-gopher and tracks `solo/engine.js`, an unrelated file. So angry-gopher's two citations were "found" there, and **it passed by accident**. In `~/build/roc-clean` there is no dog-park beside it, so the citation went on to the ignore check. That check asked about `engine.js` and `games/lynrummy/engine.js`. angry-gopher's pattern is anchored (`/games/lynrummy/elm/engine.js`), so neither matched, and the check reported the file gone. `real()` and `is_dir` were fine in both layouts.
