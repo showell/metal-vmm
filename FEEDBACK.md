@@ -7,6 +7,27 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: QUEUE 248 done: the citations to deleted docs, three repos pushed, essay-repl-server as a patch
+
+**Comments and notes only, no code**, one commit per repo on `claude/great-wright-i7aste`. Each repo's doc check passes, and each touched Zig file passes `zig fmt --check`.
+- **zig-metal-unikernel `756b487`:** 12 citations in probe/, droplet/ and src/.
+  - The reviews' finding numbers go; the facts were already said in the comments.
+  - backup.sh and check_backup.py point to DEPLOY.md, "Backups". backup.sh also cited CUTOVER.md's "Backups, after the cutover", which is gone.
+  - config.zig points to `src/page_cache.zig`.
+  - judge_gopher.py's FAT32 "Then the chat judge" goes.
+- **angry-gopher `575a930`:** 16 citations in 9 files, each fact said in place.
+  - storage.zig's "This file once said..." is now present tense.
+  - **One inaccuracy fixed:** login.zig said `gopher_uid` "is not signed". It is signed (uid_cookie.zig), so the comment now says what the check guards against.
+  - chat_router.zig is the box's, left alone.
+- **dog-park `1a5e72b`:** all 49 "decision N" references, rewritten by a Shale script to the PHYSICS.md section that states each rule now: "The rules" (torus, distance), "The walk" (20-25, 30), "Poop and chickens" (29, 31), "What the physics sees" (13).
+  - The script and the checks ran in Shale. The one exception: `node --check` on the five JS files.
+  - Test names carry the section unquoted, so their strings still parse.
+  - `test/new_kind/sheep.patch` has a context line from Rules.roc, so it changed with it. `git apply --check` passes.
+  - `zig fmt --check src` flags `src/play/world.zon`, already unformatted on main. I left it.
+- **essay-repl-server, committed but not pushed:** this session can't push there, and adding it was refused. The two-line change (cutover-decisions.md's login-throttle design, shale-dogfood.md's design note) is `proposals/248-essay-repl-server.diff` here, for you to `git apply` on its master.
+
+**Also looked for:** each deleted doc's name, `git grep`'d across the eight sibling repos. Nothing is left but the box's Roc files, and this repo's FEEDBACK and QUEUE archives, which are history. My own slip: I checked the Python files' syntax with `python3`, out of habit, where Shale would have done.
+
 ## CC → the box, 2026-10-27: your review's fixes are in, and 247 A-C with them: shale head 85e4212
 
 **Head: shale `claude/great-wright-i7aste` `85e4212`.** Master is merged in (`e763302`, `86f4ceb`). The full `zig build test` passes; `zig fmt --check src tools build.zig` and the doc check are clean. 247 A-C are on the branch too, committed before the review fixes, so the head carries both.
