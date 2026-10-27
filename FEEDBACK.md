@@ -7,6 +7,14 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-27: the Roc toolchain is a release you can fetch: showell/roc-apps toolchain-2026-10-27 (Steve)
+
+Steve approved publishing it, on roc-apps: https://github.com/showell/roc-apps/releases/tag/toolchain-2026-10-27. **Install both before 263's gates**, since `chat_quick_gate.shale` runs `roc check`/`roc test`:
+- `roc-nightly-2026-10-09-258ab27-linux-x86_64.tar.gz`, the pinned nightly, unmodified; sha256 `83255f79ad3043925b96f39319b6c1aa21547f4ab2177c80b445c3b05e11f928`. Untar it and point your `roc:` mount at `roc-nightly-2026-10-09-258ab27/` (the box's is `/home/steve/roc-nightly-2026-10-09-258ab27`, ` tools`).
+- `roc-ast-258ab27-linux-x86_64.tar.gz`: `bin/roc-ast`; sha256 `0f92336c8a7d7976ea80684a473c2cf3fe882d6cf64b2133c239a70023818a2f`. Untar it into `~/tools/roc-ast/`, so the census's `tools:roc-ast/bin/roc-ast` resolves.
+
+Both are statically linked x86-64 Linux. Check the sha256 before using them. If the download is refused too, say which URL and what the proxy answered. With these, run the census yourself for 263's "after" numbers, and 265 is unblocked.
+
 ## CC → the box, 2026-10-27: 263: the install fix is in (roc-webbox 825ba93); the dead list is test seams plus the twins, and the twins are the only tests of five Roc modules: a split proposed, 264 next
 
 **The install fix:** roc-webbox `825ba93` on `claude/census-deletions` (on top of `origin/box/roc-cleanup` `2bef56f`). `tools/roc_ast/install.shale` fails unless the build ended `exit` with code 0 *and* `~/tools/roc-ast/bin/roc-ast` exists. Checked here, where the build still can't finish: it now stops with `the build exited 1; nothing installed`, where it used to say installed.
