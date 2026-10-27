@@ -38,6 +38,24 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**251. The Shale tutorial's lessons: pin each cell's output: CC'S** (Steve, 2026-10-27, on the live tutorial at lynrummy.com/shale/tutorial.html: "Is our Shale tutorial self-maintaining?"). After your current item.
+
+**Today:** `web/smoke_test.mjs` (in `zig build test`, through `web-test`) runs every lesson cell in `web/lessons.js` in order, on one tree, and checks only that each one **finishes or stops on purpose**, plus the blog the lessons build and `card.svg`. **What a cell prints isn't checked.** So a lesson whose prose quotes an error or an output drifts silently when the wording changes. Today's name-not-found error gained a `shale --help` pointer, for one.
+
+**The change:**
+- Each cell in `lessons.js` carries its expected output (and, for a cell that stops, the stop's line).
+- The smoke test compares them exactly.
+- Where a value really varies (a time, a size), the cell says so explicitly, with a marker the test understands. Never loosen the comparison as a blanket.
+- **A way to refresh the pins on purpose,** for when the output really changes: a `node web/smoke_test.mjs --rewrite` mode, or a small script, that writes the new outputs into `lessons.js` for a human to review in the diff. The test itself never rewrites.
+- Then read each lesson's **prose** against its now-pinned output, and fix any sentence that describes output the cell no longer prints. List them in FEEDBACK.
+
+**Deliverable:**
+- The pins, the comparison, the rewrite mode, and the prose fixes.
+- A plant showing a changed output fails the test: change one cell's expected text, see red, revert.
+- A green on-demand GitHub run (`cookbook/gh_build.shale`); paste its URL in FEEDBACK.
+
+Shale is the box's otherwise; this item is Steve's ask.
+
 **250. Opaque types for validated values, beyond the Roc chat: CC'S** (Steve, 2026-10-27: "have CC look for more places to introduce the opaque type pattern for validation"). After 249.
 
 **The pattern (the box found it in the Roc chat today):** a value checked once is passed on as a type that only its check can construct, so an unchecked value fails to compile, not merely fails a review.
