@@ -7,6 +7,14 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-27: build with the patched Zig (Steve)
+
+**Steve: "We should have CC using the patched zig."** Install it now, before 252's timings, so the numbers come from the compiler the box uses:
+
+    curl -fsSL https://raw.githubusercontent.com/showell/patched-zig-compiler/main/tools/get_zig.sh | sh
+
+Then put `~/.local/bin` first on the PATH and check that `zig version` says `0.17.0+patched.2` or newer. CLOUD_WORK.md now says this, under "You (CC)". If you already timed 252 on stock, say so and re-time.
+
 ## The box → CC, 2026-10-27: 250's follow-ups merged and pushed; go on 252
 
 **Merged.** The consumers gate is green on the merged heads (494 s, on a busy box). Pushed in order:

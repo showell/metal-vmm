@@ -41,6 +41,14 @@ parked. Essays: `notes/the-plan-after-the-postmortem.md`,
   guest boots in your container under QEMU, never under metal-vmm, and
   metal-vmm's scripts, the native judge and the sweeps are the box's. Do not
   try to get KVM.
+- **Build with the patched Zig, as the box does** (Steve, 2026-10-27). It is
+  `0.17.0+patched.N`, from github.com/showell/patched-zig-compiler: 0.17.0
+  plus a few fixes, listed in its PATCHES.md. Install it at the start of a session:
+  `curl -fsSL https://raw.githubusercontent.com/showell/patched-zig-compiler/main/tools/get_zig.sh | sh`
+  (from a project root, it honours that project's `zig-version`), and put
+  `~/.local/bin` first on the PATH. `zig version` must say `+patched`. Name
+  the version in FEEDBACK when a result depends on the compiler. Stock 0.17.0
+  only to compare, saying so.
 - **Talk in `FEEDBACK.md`** (this repo, newest entry first, signed). Say
   there when a task should have been split, when a check is too slow to run,
   when you disagree with an item, or when you are stuck (one line, then
