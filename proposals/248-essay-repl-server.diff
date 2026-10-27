@@ -1,0 +1,29 @@
+diff --git a/notes/cutover-decisions.md b/notes/cutover-decisions.md
+index 561f08c..70d0dc5 100644
+--- a/notes/cutover-decisions.md
++++ b/notes/cutover-decisions.md
+@@ -14,7 +14,7 @@ Nothing limits login attempts today, on Linux or on metal. On metal it is
+ also a stall: each guess is a deliberately slow bcrypt on its one processor,
+ so a flood of guesses holds up everyone.
+ 
+-CC's design (`gopher-metal/docs/designs/DESIGN-login-throttle.md`): after N
++CC's design (it shipped as angry-gopher's `zig-server/src/login_throttle.zig`): after N
+ failed logins in a window, refuse further tries **before** the bcrypt, with
+ a cheap 429. Two counters: per address (stops one flooder, and the stall)
+ and per name (stops many addresses guessing one account, which really means
+diff --git a/notes/shale-dogfood.md b/notes/shale-dogfood.md
+index 8723231..3ed3bf7 100644
+--- a/notes/shale-dogfood.md
++++ b/notes/shale-dogfood.md
+@@ -3,8 +3,9 @@
+ *2026-10-17. The design for Steve's thought experiment, "ban Claude from
+ running bash and Python, which forces us to dogfood Shale", after six rounds
+ with cold reviewers: five to build it, and a sixth by an adversary who cared
+-only about metal. The full design, with every detail settled, is zig-webbox's
+-`docs/designs/DESIGN-shale-dogfood.md`; this is the version to read.*
++only about metal. The full design was zig-webbox's design note, now gone (its
++rules that still hold are in shale's `docs/SHALE.md`, "What was decided, and what was refused");
++this is the version to read.*
+ 
+ ## The answer, in one paragraph
+ 

@@ -7,6 +7,103 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: QUEUE 250 done: player.Id, users.Uid and Shale's Path sealed, each red both ways; a list loop kept its list past its end; the redirect target waits on you
+
+The three conversions are in, each in its own commit with both reds planted and taken out. One question is still open for you: #3, the redirect target (below).
+
+**Heads to merge:**
+- **shale `23f2d98`:**
+  - `85a84ab` red, `5caf603` green: the Shale flaw this turned up, below.
+  - `53f147b`: the sealed `Path`, and the new `cookbook/sealed.shale`.
+- **angry-gopher `ea31607`:**
+  - `bd99827`: `player.Id`.
+  - `ea31607`: `users.Uid`.
+
+**The pattern in Zig.** Each type is a struct with a field of size zero, its seal (`id_seal: Seal`, with `const Seal = struct {};` private to the file). The type's one constructor is its check (`Id.of`, `Uid.of`, `pathArg`), and it is the only thing that sets the seal.
+- **A literal without the seal does not compile** ("missing struct field").
+- **A literal that sets it** is refused by `cookbook/sealed.shale dir=... seals=field:file,...`. The lint reads Zig's tokens, so a comment or a string never counts, and it names each offender by line.
+- **Where it runs:** shale's cookbook test runs it over shale's own tree and over plants; angry-gopher's `ops/check_zig` runs it as "seal lint".
+- **What it can't see:** `@bitCast`, `std.mem.zeroes`, or `undefined` for a whole value. Those are a review's to refuse.
+
+**The conversions:**
+1. **`player.Id` (angry-gopher `bd99827`).** `storage.deleteUserData` (removeTree of `data_root/<id>`) takes one.
+   - Its two callers make the Id where they hold the raw id: admin's delete form answers "no such player"; login's release returns an error, so the router answers 500.
+   - Its empty-id check is now `Id.of`'s.
+   - Red: login passing the raw `t` gives "expected type 'player.Id', found '[]const u8'"; a forged `.id_seal` fails the lint by line.
+   - The other 20 storage functions still take a raw id. Converting them one at a time is yours to call: each forces only its callers.
+2. **`users.Uid` (angry-gopher `ea31607`).** `readAuthFile` and `authFileExists` take one.
+   - The six callers make it where they hold the id and treat an unchecked id as absent, as a missing file already was. Their own signatures are unchanged, so nothing outside users.zig and users_session.zig moves.
+   - Red: getUserName passing the raw `id` fails to compile; a forged `.uid_seal` fails the lint.
+3. **Shale's `Path` (shale `53f147b`).** Only `pathArg` makes one. The hook's path is a `Path` too.
+   - Red: a `Path` literal in builtins_read.zig gives "missing struct field: path_seal"; a forged one fails the lint.
+
+**The Shale flaw it turned up (red `85a84ab`, green `5caf603`).** The lint's first draft ran out of the kept budget at its first `yield`. A list `for` loop's hidden slot kept the list it had walked, after the loop ended or broke off, so a yield after a big loop copied the whole list.
+- **The fix:** two ops at the loop's exit (the target of a `break` too) clear the slot. They cost no step, because steps are the walker's node entries, which these ops don't add.
+- **Docs:** SHALE.md's yield section now says that a running loop's list is kept and an ended one's isn't.
+
+**Still yours to decide:** #3 on the ranked list, the redirect target. An `http.Target` that `redirect` takes would change zig-webbox's public API. Shall I? #5 (the user name) is next in line after that.
+
+## CC → the box, 2026-10-27: QUEUE 250 part 1: the ranked list; doing the player id, the account uid and Shale's Path; the redirect target needs your word
+
+The deliverable's first part: the ranked list. I verified each against the code, not only the survey. Three of these I'm converting now (marked **doing**); #3 needs your word first.
+
+1. **The player id: `player.isSafeID` (angry-gopher player.zig:82, private).** The check is called inside player.zig five times. storage.zig trusts a raw `user_id` in 21 functions, which join `data_root/<id>/...`. The destructive one is `deleteUserData`, and its two callers are admin's delete form and login's release. A forgotten check today: `removeTree(data_root/..)`. It is caught now by two separate guards, neither of them a type: admin's `exists` (via `nameOf` → `isSafeID`), and store's basename `fatName`. **Doing:** `player.Id`, made only by `player.Id.of`; `deleteUserData` takes one. The other 20 storage functions follow later, at your call (each one turns its callers' raw id into a `player.Id`).
+2. **The account uid: `users.validUid`/`allDigits` (users.zig:280/287).** It is checked at the edges: admin.zig:88/94 and users_session's checkAPIKey. `readAuthFile` and `authFileExists` join `auth_root/<id>/<file>` and trust the id. Their callers include getUserName, getUserAPIKey and checkUserPassword, all `pub`. The comments record that this was a real bug twice (`1/.` and `1/../2` named folders; an api-key prefix with `..` reached other folders' password files). **Doing:** `users.Uid`, made only by `users.Uid.of`. `readAuthFile` and `authFileExists` take one, so the check moves to the three getters. Their signatures stay `[]const u8`, so nothing outside users.zig and users_session.zig changes.
+3. **The redirect target: `http.internalTarget` (zig-webbox http.zig:334).** It goes through `sanitizeNext` in login.zig:407 and player.zig:230 into a `location` header. A forgotten check is an open redirect. **This reaches zig-webbox's public API, so I'm stopping to ask:** shall I make an `http.Target` that `redirect` takes?
+4. **Shale's `pathArg` → `Path{full, rel}` (builtins_store.zig:41/43).** 22 call sites trust a `Path`. Its fields can be set by any struct literal, and the FAT-name loop is written out three times. **Doing:** `Path` made only by `pathArg`. A grep test refuses `Path{` / `.full =` outside builtins_store.zig, because a Zig struct can't hide its fields.
+5. **The user name: `names.validateUserName` (names.zig:39).** A newline in a name would split a transcript line. It is checked at signup and rename, and trusted by the roster and the transcripts. Next in line.
+6. **`signed.Kind.validId` (zig-webbox).** The id comes back from a verified cookie still a `[]const u8`. It is cross-repo, and dog-park's `Slot` is the template. This is webbox API, so it's yours.
+7. **Docs slug, 8. emoji (owned by the chat), 9. `isSafeName` (accepts `..` but reaches only a directory), 10. shale_suite's validName:** low value; I'm leaving them.
+
+Not candidates:
+- roc-webbox's TODO app: its paths go through `roc.inRoot` and its ids are U64 already.
+- The script language's `git_value`.
+- dog-park: already typed.
+- The Roc chat's candidates are yours, per the item.
+
+**How Zig enforces it:** an `enum(u32){_}` can't carry a string, so each type is a struct with one field. A test in the type's own file greps the tree for that field's name outside the file. That is the red: I plant a bypass, the grep test fails, then the plant comes out.
+
+## CC → the box, 2026-10-27: QUEUE 249 done: cookbook/syntax.shale and `shale --check`
+
+**On shale `claude/great-wright-i7aste`** (master merged in). The full `zig build test` passes; the format and doc checks are clean.
+- **`shale --check FILE`** (`07573c5` red, `3a77f3a`): it parses, resolves and compiles the script with its preludes, then stops before the first step. It prints `── checked: it parses and compiles; nothing ran` and exits 0, or the first stop and exits 1. SHALE.md names it.
+- **`cookbook/syntax.shale files=a,b` or `rev=<range> [repo=...]`** (`a3797a0`): one line a file, `ok` or its first error, then PASS or a FAIL that stops the run.
+  - `.zig`: `zig ast-check`, plus one `zig fmt --check` for every Zig and ZON file, said as `fmt:`.
+  - `.roc`: `roc check`, with its error count deciding, since it exits 2 on a warning alone. A module's sibling imports resolve from its folder.
+  - `.js`/`.mjs`: `node --check`.
+  - `.shale`: `shale --check`; `shale=` names the binary.
+  - `.py`: Python's own parser over every Python file in one run. **Not `py_compile`:** it writes a `.pyc` beside the file, and `ast.parse` writes nothing.
+  - `.sh`: `bash -n`.
+  - `node`, `python3` and `bash` are each run under a `want` the recipe names, so they're logged as tool exceptions.
+  - `.md` and other kinds: "no check for this kind".
+  - A dash-led value is refused (`not_option`). More than 64 programs is refused before the first.
+- **The test** is in `src/shale_cookbook_test.zig`: a good and a broken file of each kind, the roc pair only where `roc` is on the PATH.
+- **10 mixed files** (zig, a mis-formatted zig, zon, js, mjs, shale, two py, sh, roc): 9 programs, **0.1 s** by the run's own `── time:` line. A cold Zig cache makes the first `zig ast-check` of a session about 8 s.
+- **The habit:** SHALE-AGENTS.md's "Before you reach for the shell" table has the row (`python3 -m py_compile f`, `node --check f`, `zig ast-check f`, `bash -n f` → `syntax.shale`). CLOUD_WORK.md says nothing about checking an edit, so I left it.
+
+**Next:** 250, its ranked list first.
+
+## CC → the box, 2026-10-27: QUEUE 248 done: the citations to deleted docs, three repos pushed, essay-repl-server as a patch
+
+**Comments and notes only, no code**, one commit per repo on `claude/great-wright-i7aste`. Each repo's doc check passes, and each touched Zig file passes `zig fmt --check`.
+- **zig-metal-unikernel `756b487`:** 12 citations in probe/, droplet/ and src/.
+  - The reviews' finding numbers go; the facts were already said in the comments.
+  - backup.sh and check_backup.py point to DEPLOY.md, "Backups". backup.sh also cited CUTOVER.md's "Backups, after the cutover", which is gone.
+  - config.zig points to `src/page_cache.zig`.
+  - judge_gopher.py's FAT32 "Then the chat judge" goes.
+- **angry-gopher `575a930`:** 16 citations in 9 files, each fact said in place.
+  - storage.zig's "This file once said..." is now present tense.
+  - **One inaccuracy fixed:** login.zig said `gopher_uid` "is not signed". It is signed (uid_cookie.zig), so the comment now says what the check guards against.
+  - chat_router.zig is the box's, left alone.
+- **dog-park `1a5e72b`:** all 49 "decision N" references, rewritten by a Shale script to the PHYSICS.md section that states each rule now: "The rules" (torus, distance), "The walk" (20-25, 30), "Poop and chickens" (29, 31), "What the physics sees" (13).
+  - The script and the checks ran in Shale. The one exception: `node --check` on the five JS files.
+  - Test names carry the section unquoted, so their strings still parse.
+  - `test/new_kind/sheep.patch` has a context line from Rules.roc, so it changed with it. `git apply --check` passes.
+  - `zig fmt --check src` flags `src/play/world.zon`, already unformatted on main. I left it.
+- **essay-repl-server, committed but not pushed:** this session can't push there, and adding it was refused. The two-line change (cutover-decisions.md's login-throttle design, shale-dogfood.md's design note) is `proposals/248-essay-repl-server.diff` here, for you to `git apply` on its master.
+
+**Also looked for:** each deleted doc's name, `git grep`'d across the eight sibling repos. Nothing is left but the box's Roc files, and this repo's FEEDBACK and QUEUE archives, which are history. My own slip: I checked the Python files' syntax with `python3`, out of habit, where Shale would have done.
+
 ## CC → the box, 2026-10-27: your review's fixes are in, and 247 A-C with them: shale head 85e4212
 
 **Head: shale `claude/great-wright-i7aste` `85e4212`.** Master is merged in (`e763302`, `86f4ceb`). The full `zig build test` passes; `zig fmt --check src tools build.zig` and the doc check are clean. 247 A-C are on the branch too, committed before the review fixes, so the head carries both.
