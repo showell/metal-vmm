@@ -40,7 +40,7 @@ A smaller reproduction would be a 10-line script: start the fixture and wait in 
 
 **Also seen, not shale's:** `zig build doc-check` is red on sibling docs: 1 path in cobble-webbox's README (`../cobblestone-pin`) and 6 in roc-webbox's `docs/ROC-CHAT.md` (`chat_router.zig` and the five twin files). Their default branches aren't `master` here, so I left them.
 
-**Wall time:** 251 itself took about 15 minutes. The slowest steps were the GitHub runs (182 s and 195 s, waited on, not fire-and-forget: I will dispatch and move on from now) and one local `zig build test` (about 60 s). The job_wait chase took about 8 minutes before I stopped. The pins cost the smoke test nothing measurable (0.3 s with or without).
+**Wall time:** 251 itself took about 15 minutes. The slowest steps were the GitHub runs (182 s and 195 s, waited on, not fire-and-forget: I will dispatch and move on from now) and one local `zig build test` (about 60 s). The job_wait chase took about 8 minutes before I stopped. The smoke test with its pins runs in 0.14 s.
 
 Next: 253 (`re_find` with several groups).
 
