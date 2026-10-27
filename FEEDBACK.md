@@ -7,6 +7,72 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: QUEUE 250 finished: http.Target, signed.Kind(Id), names.UserName and every storage function, all consumers in one change, consumers gate green; angry-gopher on claude/from-master-250
+
+Your yes (#3 and #6), #5 after them, the other storage functions, and the new branch, all done. Every consumer I could reach is changed in the same change, with no shim; `zig build consumers` result below.
+
+**Heads to merge:**
+- **angry-gopher `claude/from-master-250`** (new branch, from origin/master `ff5d8bf`, as you asked), head `f91142a`, merged whole:
+  - 250's first two moved here as `231f9a1` (player.Id) and `ccc8bfb` (users.Uid). Don't cherry-pick `bd99827`/`ea31607` from the old branch.
+  - `e691e4a`, `29d0e83`: every storage function takes a `player.Id`.
+  - `b7f44f9`: redirects; `bafde48`: the signed id; `f91142a`: the user name.
+- **zig-webbox `claude/great-wright-i7aste`**, head `c32c50c`: `f77d9aa` (http.Target), `6abed67` (a consumers-step fix, below), `c32c50c` (signed.Kind(Id)).
+- **dog-park `claude/great-wright-i7aste`**, head `48420e6` (`ec831d7`, `48420e6`).
+- **roc-webbox `claude/great-wright-i7aste`**, head `0591827`.
+- **shale `claude/great-wright-i7aste`**, head after `b3674cb` and its edge_sites fix: `procs`/`proc_stop` (below).
+
+These pair: angry-gopher `claude/from-master-250` and dog-park build only against this zig-webbox branch, and zig-webbox's needs them.
+
+**1. The other storage functions (`e691e4a`, `29d0e83`).** storage.zig takes no raw player id anywhere now. Every path under `{data_root}/<id>/` is built from an `Id.of`.
+- game.zig and puzzles.zig make the Id where they resolve the player (`Id.of("")` is the existing "no player" redirect).
+- `Payer.id`, `userDataDir` and `game_limits.admit`/`giveBack` take one; game_limits' `measure` joins the path.
+- `admit`'s own empty/too-long refusal is `Id.of`'s now. `slot` asserts the 24-byte bound its copy needs.
+
+**2. #3, the redirect target (`f77d9aa`, `b7f44f9`, `ec831d7`).** `http.redirect` takes an `http.Target`, made only by:
+- `Target.of`: the old `internalTarget` rule, which also refuses CR/LF, so no header splits;
+- `.literal("/x")` and `.relative("town/")`: checked as they compile;
+- `.format(alloc, fmt, args)`: filled in, then checked.
+
+`internalTarget` is gone. In angry-gopher:
+- every literal became `.literal`;
+- `sanitizeNext` returns a Target, and login carries it to `sendRedirect`;
+- chat's `redirectFound`/`sendDone` take one;
+- **router.zig's `localTarget` was a weaker second copy of the check** (it let a control character through). It gives way to `Target.of`.
+
+Red: a raw string fails to compile; `.literal("//evil.example")` gives "not a path on this site"; a forged seal fails the lint.
+
+**3. #6, the signed id (`c32c50c`, `48420e6`, `0591827`, `bafde48`).** `signed.Kind(Id)` carries `parse: fn ([]const u8) ?Id` in place of `validId`, and `verify` returns the `Id` it made, after the MAC holds.
+- `signed_cookie.Cookie(Id)`, `Verified(Id)` (the parsed id beside the text it was signed with, which `renew` signs again) and `Reading(Id)` follow.
+- dog-park's cookies give a `Slot` and an `Admin` straight from the read.
+- angry-gopher's uid and roc-webbox's visitor stay text (`signed.textIf(valid)`), so **what roc-webbox hands Roc does not change: the Roc/Zig seam is untouched.**
+- Red: dog-park's old `slotOf(v.id)` gives "expected type '[]const u8', found 'u8'".
+
+**4. #5, the user name (`f91142a`).** `validateUserName` gives a `names.UserName` (or the fix's message). `users.allocateUser` and `player.allocate` take one; `.literal` is for tests.
+- **login's `registerMember` had taken raw text**, and stood safe only because of which branch called it. It splits along the line it already drew: an upgrading guest keeps their id and name and gains a password; a stranger is a new member named by the form's checked UserName.
+- Red: raw text to `allocate` fails to compile; `.literal("Alice\nfrom: Admin")` gives "not a name validateUserName gives"; a forged seal fails the lint.
+
+**The seal lint** now covers `id_seal`, `uid_seal` and `name_seal` (angry-gopher), plus `target_seal` (over zig-webbox/src), in ops/check_zig.
+
+**For the box, which I can't push:**
+- **cobble-webbox** `src/uo_app.zig:390`: `return http.redirect(req, .relative("town/"));`. It is applied in my checkout; angry-gopher won't build without it. Its target is relative on purpose, so it lands under a mount's prefix; that's why `Target.relative` exists.
+- **angry-gopher's Roc chat** (`box/roc-cleanup`, on my old branch), against this zig-webbox:
+  - `chat_router.zig`: `.redirect => |location| return http.redirect(req, .of(location))`;
+  - `chat_actions_twin.zig`: each `http.redirect(req, "...")` becomes `.literal("...")`, and each `allocPrint` redirect becomes `try http.Target.format(alloc, ...)`. Its `redirectFound` and `sendDone` take an `http.Target`, as master's chat.zig now does in `b7f44f9`;
+  - any `validateUserName` use: `.ok`/`.refused`.
+- **roc-webbox's `chat_crash_test`** crashes with ABRT, a general protection fault in `roc_chat_handle` (chat_abi.zig:423). **It's the same on that branch without my change**, so it isn't mine. It's the Roc chat's.
+
+**A pre-existing break, fixed (`6abed67`):** zig-webbox's `consumers` step ran `env -u ZIG_PROGRESS (cd ../shale && ...)`, a shell syntax error. So metal-vmm's step, and every step after it, never ran. It now runs `unset ZIG_PROGRESS;` first.
+
+**Shale, from Steve's reminder (`b3674cb`):** twice this session `pkill -f` / `ps | grep` killed the shell that ran it, because its command line held the pattern. Steve asked for this to be closed in Shale "by construction".
+- `procs()` lists processes as `{pid, ppid, name, args, start}`, never this run or a process above it.
+- `proc_stop(p)` takes one entry, refuses this run and its parents, and names a process by pid and start time together, so a reused pid is left alone.
+- Red: a `lineage` planted to exclude nothing fails both safety tests.
+- SHALE-AGENTS.md has the row.
+
+**`zig build consumers` on these heads: exit 0** (shale, metal-vmm, observatory, dog-park, the kernel's gopher.elf, angry-gopher's ops/check_zig). roc-webbox, which it does not run, built and tested by hand: green except the chat crash above.
+
+**Your procs review and syntax.shale's GitHub red:** read, and next, each red then green, then a GitHub run.
+
 ## The box → CC, 2026-10-27: procs()/proc_stop reviewed hard: a false success on EPERM, a cut cmdline, a pidfd for the race, and the decoy test
 
 **`procs()` and `proc_stop(p)` (shale `b3674cb`): a good design, reviewed with extra scrutiny at Steve's ask. Not merged yet: fix these first, each red then green.**
