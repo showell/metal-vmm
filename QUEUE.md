@@ -38,99 +38,34 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
-**256. Hunts for awkward names (held_*, vague verbs, a type the name contradicts): CC'S** (Steve, 2026-10-27, after the Roc chat's `held_raw!`/`held_rendered!` were renamed `serve_file!`/`serve_rendered!`: "Queue up something for CC to write more shale scripts for hunting awkward names. They can be heuristic in nature. I don't know if held_* generalizes to other types of code; it was certainly an odd naming choice.") After 255 and 254; **not before Steve is back.**
+**260. A sixth name check for effects named as nouns, and a charged same(a, b): CC'S** (Steve, 2026-10-27, both from CC's 256 and 253 reports.) After 259; two small commits.
 
-**The awkward name that started this:** `held_raw!` was a command with a side effect. It asked the host to load a file and serve it as the answer. But its name read like a state, a past participle, and nothing in it said what happened. The existing `bool_returns` hunt (roc-webbox `tools/roc_hunt/hunt.shale`) catches one kind already: a `Bool` return without a question's name.
+**Part (1), the check:** `noun_effect` in both name hunts: an effect (Roc's `!`; Zig, as `state_effect` reads one) whose name is a plain noun (`links!`, `feed!`, `page!`, `entries!`). Heuristic and planted like the other five; report its counts on the four trees and say whether it's quiet enough to keep. Rename nothing.
 
-**The change:** a few heuristic name hunts as Shale recipes, for Zig in `cookbook/zig/` and for Roc beside `bool_returns`. Each check prints `path:line: <check>: <why>`. A finding is a question for a reader, not a verdict. Some ideas; pick what pays:
-- **An effect named like a state:** a function with side effects (Roc's `!`, or a Zig fn taking `io`/a store) named as an adjective or past participle (`held_*`, `*_ed`, `done`, `ready`) rather than a verb.
-- **A question with no question in its name:** the inverse of `bool_returns`. An `is_*`/`has_*` that returns something other than a `Bool`, or that has effects.
-- **A vague verb:** `handle`, `process`, `do_*`, `manage`, `data`, `info`, `stuff`, `tmp`, `helper` and the like, as whole words in a function's name.
-- **A name and type that disagree:** `*_count` that isn't an integer, `*_path` that isn't a path type, `*_list` that isn't a list.
-- **Negatives:** `not_*`/`no_*` booleans, and double negatives at call sites (`!is_not_*`).
+**Part (2), `same(a, b)`:** deep equality as a builtin, as you proposed: charged a step per item visited; lists compared in order, maps by key regardless of order; `==` stays identity. Document it next to `==` in SHALE.md, with a line on why `==` isn't it.
 
-Run the hunts over angry-gopher, zig-webbox, shale and the Roc chat. Report the counts, plus the five findings that most deserve a rename, each with a proposed name. **Don't rename anything:** the box and Steve choose. Plant one example per check, as `cookbook/zig/align_hunt.shale` does (`self_test=1` and `plants/`).
+**259. Regex: empty loops handled RE2's way, so the machine agrees with a backtracker: CC'S** (Steve, 2026-10-27, from CC's 253 report.) After 258.
 
-Wall time: about 30 minutes. Fewer checks that are good beat many that are noisy.
+253's property found that `(?:\w*(?:|.))*` on `ab.` gives `ab` where a backtracker gives `ab.`: a loop's new turn reaches a split an earlier turn already stamped. **The change:** handle empty iterations as RE2 does (or an equivalent you can explain), still linear. Un-pin 253's test so it expects `ab.`, and give the property back the repeated groups that hold groups. If the fix costs more than about 60 minutes, stop and write up the plan in FEEDBACK instead. Run the regex properties (`zig build fuzz -Dtest-filter="property: re_"`) once at the end, not in the loop.
 
-**255. job_wait: one last look on a done record; the flaky large-log test names its case: CC'S** (CC's own finding, in FEEDBACK 2026-10-27, approved). `shale_jobs_test.zig:148`, the large-log `job_wait(..., {contains = "log 300000"})`, answered `exited` once on GitHub (run 40554443677).
+**258. queue_merge: QUEUE.md merged by its items, 254's cut half: CC'S** (Steve, 2026-10-27.) After 257.
 
-**The change**, exactly CC's two small steps:
-1. The test prints `code` and `signal` beside `ended`, so the next red names its case.
-2. On a done record, `job_wait` looks at the log once more before answering `exited`. The log is whole by then, so `found` wins whenever the file holds the text.
+254 gave `feedback_merge` and `.shale/merge_master.shale`, and cut QUEUE's half for time. **The change:** `queue_merge`, beside `feedback_merge`, merging QUEUE.md three ways by item (its number) and the archive by line, and `merge_master.shale` using it. The rules, as FEEDBACK's: an item archived on either side stays archived; an item edited on both sides stops the merge, naming it; two new items with one number stop it too (renumbering is a person's call). Tests with planted conflicts, one per rule. Wall time: about 30 minutes.
 
-Give it 15 minutes; don't chase the root cause further unless the next red names it.
+**257. The five renames from 256's name hunt: CC'S** (Steve, 2026-10-27, approved from 256's report.) First of 257-260, in number order.
 
-**254. FEEDBACK/QUEUE merges by Shale: no resurrected entries, no glued headings: CC'S** (Steve, 2026-10-27: "we should use shale for merges and auto-detect conflicts. Our mechanism to update FEEDBACK should try to avoid common pitfalls too."). Do this before 253.
+**The renames**, exactly 256's five:
+- angry-gopher `src/router.zig:230` `routed` → `dispatch`
+- angry-gopher `src/router_harness.zig:111` `marked` → `isSigned`
+- angry-gopher `src/search_index.zig:485` `ready` → `indexOrBuild`
+- zig-webbox `src/linux_writes.zig:181` `doneWrite` → `endedInTime`
+- angry-gopher `src/login.zig:201` `gatedCheck` → `checkPasswordThrottled`
 
-**The pitfall, seen today:** your merge of master into `claude/great-wright-i7aste` (5b5d98d) resolved FEEDBACK.md by hand. Two things went wrong:
-- entries the box had archived on master came back (your "procs review" and "QUEUE 250 finished" entries, among others);
-- one heading lost its blank line, so it is glued to the entry above.
+Use Shale's rename tooling (`zig_renames`), word-bounded, every caller included. Fresh branches from each repo's master, one commit per repo. If a better name occurs to you, use it and say why in FEEDBACK.
 
-`git_merge` already undoes a conflicted merge and names the files. What's missing is resolving FEEDBACK and QUEUE themselves.
+**And in the hunt:** fold "a bool named as a state" (`marked`) into `question`, with a plant, so the next run catches its kind.
 
-**The change** (metal-vmm `.shale/prelude.shale`, beside `feedback_add`/`feedback_archive`):
-- **`feedback_merge`:** resolves a FEEDBACK.md conflict from its two sides:
-  - entries are taken as a union, matched by heading;
-  - newest first, with a stable order within a day;
-  - an entry whose heading is in FEEDBACK-ARCHIVE.md stays archived;
-  - an entry changed on both sides stops the merge and names it.
-- **`feedback_check`:** refuses an out-of-order date, a heading without a blank line before it, a heading that appears twice, and an entry that is also in the archive. Run it from `queue_check`, so the existing tests cover it.
-- **The same for QUEUE.md if it fits cheaply:** an item number on both sides with different text stops; an archived number never returns.
-- **One command for the whole merge:** git_merge, then on a FEEDBACK/QUEUE conflict, resolve with the above, commit, and stop on anything else. For example `shale .shale/merge_master.shale`.
-
-**Deliverable:**
-- red tests in `queue_test.shale` (a resurrected entry, a glued heading, a both-sides edit);
-- your branch's FEEDBACK repaired with the new tool;
-- CLOUD_WORK.md's "Shale first" naming the command.
-
-Wall time: about 30 minutes. Cut QUEUE's half if it runs long, and say so.
-
-**253. Shale's `re_find`: several capture groups: CC'S** (CC, in FEEDBACK 2026-10-27: "Shale's `re_find` allows one capture group. That cost me a workaround twice today."). After 251.
-
-**The change:** `re_find` returns every group, still in linear time. Keep the one-group form working: say how it reads, and don't break a caller. Mirror it in `re_replace` (`\2`, ...) if it doesn't already take several.
-
-**Deliverable:**
-- Tests with two and three groups, an optional group that doesn't take part, and nested groups.
-- The two workarounds from today rewritten to use it.
-- SHALE.md and SHALE-AGENTS.md updated.
-- A green on-demand GitHub run.
-
-**252. Shale's own gates: every slow step load-bearing, and run after the cheap ones: CC'S** (Steve, 2026-10-27: "make sure that anything that's time-consuming in shale's own gates is load-bearing and sequenced after more inexpensive checks"). After the open review items.
-
-**Today:** `zig build test` is about 95 s on the box, and about 190 s on GitHub's runner. Steps run in parallel, so a format slip or a one-line compile error can wait behind the fuzzers before it's reported.
-
-**Measure (1):** `zig build test --summary all` gives each step's time. Find what the 95 s is: the script fuzzer (`-Dscript-fuzz`, 400 by default), the props tests, the cookbook tests, `web-test` (Node and the wasm build), the gate test, the doc check if it's in there. List each step with its time, cold and warm.
-
-**Load-bearing (2):** every step over about 5 s must catch something nothing cheaper catches. For each, either:
-- name a defect it alone has caught (a commit, or a QUEUE item), or
-- plant one it alone catches, then remove the plant.
-
-A step that can't show either is trimmed (fewer iterations, a smaller corpus) or moved to a slower tier. Say which, and why. Never loosen a check as a blanket.
-
-**Sequenced (3):** the cheap checks run first, and an expensive step starts only after they pass: `zig fmt --check`, compile errors, then the fast unit tests, then the rest. In `build.zig`, make the expensive steps `dependOn` a cheap gate step. A slip should be reported within seconds, not after the fuzzers.
-
-**Tiers, if they help (4):** `zig build test` stays the one full gate. A `zig build quick` (fmt, compile, unit tests) may be added if it is honestly under about 15 s. Say what it leaves out.
-
-**Deliverable:** the timing table, before and after, on the box and on GitHub (via `cookbook/gh_build.shale`); the load-bearing evidence per step; and the sequencing. Report how long a format slip now takes to fail.
-
-**251. The Shale tutorial's lessons: pin each cell's output: CC'S** (Steve, 2026-10-27, on the live tutorial at lynrummy.com/shale/tutorial.html: "Is our Shale tutorial self-maintaining?"). After your current item.
-
-**Today:** `web/smoke_test.mjs` (in `zig build test`, through `web-test`) runs every lesson cell in `web/lessons.js` in order, on one tree, and checks only that each one **finishes or stops on purpose**, plus the blog the lessons build and `card.svg`. **What a cell prints isn't checked.** So a lesson whose prose quotes an error or an output drifts silently when the wording changes. Today's name-not-found error gained a `shale --help` pointer, for one.
-
-**The change:**
-- Each cell in `lessons.js` carries its expected output (and, for a cell that stops, the stop's line).
-- The smoke test compares them exactly.
-- Where a value really varies (a time, a size), the cell says so explicitly, with a marker the test understands. Never loosen the comparison as a blanket.
-- **A way to refresh the pins on purpose,** for when the output really changes: a `node web/smoke_test.mjs --rewrite` mode, or a small script, that writes the new outputs into `lessons.js` for a human to review in the diff. The test itself never rewrites.
-- Then read each lesson's **prose** against its now-pinned output, and fix any sentence that describes output the cell no longer prints. List them in FEEDBACK.
-
-**Deliverable:**
-- The pins, the comparison, the rewrite mode, and the prose fixes.
-- A plant showing a changed output fails the test: change one cell's expected text, see red, revert.
-- A green on-demand GitHub run (`cookbook/gh_build.shale`); paste its URL in FEEDBACK.
-
-Shale is the box's otherwise; this item is Steve's ask.
+**Checks:** each repo's own tests that run in your container, plus its formatter; name any gate you couldn't run, and the box runs the full gates on merge. Wall time: about 30 minutes.
 
 ## Parked
 

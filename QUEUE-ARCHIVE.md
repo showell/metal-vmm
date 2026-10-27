@@ -9,6 +9,12 @@ full text of everything below is in git: `git show 3697b1c:QUEUE.md` (items
 
 ## Archived 2026-10-19 to 2026-10-27
 
+- **256.** Hunts for awkward names (held_*, vague verbs, a type the name contradicts): DONE: name hunts for Zig and Roc, five checks (shale bc3b337); the renames are 257; commits named: none.
+- **255.** job_wait: one last look on a done record; the flaky large-log test names its case: DONE: job_wait's last look, the large-log test names its case (shale 386c741); root cause not found; commits named: 40554443677.
+- **254.** FEEDBACK/QUEUE merges by Shale: no resurrected entries, no glued headings: DONE: feedback_merge and merge_master.shale (metal-vmm c4f5387); QUEUE's half is 258; commits named: 5b5d98d.
+- **253.** Shale's `re_find`: several capture groups: DONE: re_find with nine groups and (?:), re_replace \1-\9 (shale f99c949); the empty-loop disagreement is 259; commits named: none.
+- **252.** Shale's own gates: every slow step load-bearing, and run after the cheap ones: DONE: cheap checks first, Zig tools' tests a process of their own (shale ff32e73, 39c5d5a); the box taught angry-gopher's library lint the new test root (9fe63e6b); commits named: none.
+- **251.** The Shale tutorial's lessons: pin each cell's output: DONE: lessons pin each cell's output (shale 53ceb23); commits named: none.
 - **250.** Opaque types for validated values, beyond the Roc chat: DONE 2026-10-27 (CC): opaque/sealed types for validated values (player.Id, users.Uid, names.UserName, Shale's Path, http.Target for redirects, signed.Kind(Id)); cold-reviewed; merged with every consumer after the consumers gate passed (369 s): zig-webbox 53e4671, dog-park c4d48e3, angry-gopher ebd06297, cobble-webbox cfab3e5, shale b9eacde/547140f. Four review follow-ups open with CC (591cf71); commits named: none.
 - **249.** One syntax check for every file kind, so no habit reaches for python3: DONE 2026-10-27 (CC): cookbook/syntax.shale, one verdict a file by kind (zig ast-check/fmt, roc check, node --check, shale --check, python/bash as logged exceptions), tools as values and a missing tool said; merged to shale master b9eacde; commits named: none.
 - **248.** Code comments that cite the docs your sweep deleted: DONE 2026-10-27 (CC): citations to deleted docs, comments only (checked by Zig's tokens and by reading every other hunk); zig-metal-unikernel 29bfb11, dog-park 761c708, essay-repl-server 986be47, angry-gopher ff5d8bfe (cherry-picked alone: CC's angry-gopher branch carries the unreleased Roc chat); commits named: none.
