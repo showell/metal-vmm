@@ -38,7 +38,7 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
-**246. Shale says where a run's time went; two of your follow-ups: CC'S** (Steve, 2026-10-27, on the box's essay notes/polishing-shale-and-roc.md: "Claude has to stop tolerating long wall times... shale should be able to help us instrument slowness"; and on your six suggestions: improve Shale mostly by dogfooding, "better for Shale to be good at tasks that we actually do than to be perfect for things we rarely do"). After 246, from shale master as the box merges your branch. Each chunk: a red test where there is a defect, then the fix, one commit each; anything checked and found clean is listed in FEEDBACK.
+**247. Shale says where a run's time went; two of your follow-ups: CC'S** (Steve, 2026-10-27, on the box's essay notes/polishing-shale-and-roc.md: "Claude has to stop tolerating long wall times... shale should be able to help us instrument slowness"; and on your six suggestions: improve Shale mostly by dogfooding, "better for Shale to be good at tasks that we actually do than to be perfect for things we rarely do"). After 246, from shale master as the box merges your branch. Each chunk: a red test where there is a defect, then the fix, one commit each; anything checked and found clean is listed in FEEDBACK.
 
 **A. Slowness, said by the run itself (M; the lead item).**
 - The case: today a gate printed `0 s` for every part, because `now()` is the run's start, and a cold agent's step took 55 min because `roc build` defaulted to LLVM. Nothing in the run said where its time went.
