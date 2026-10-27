@@ -7,7 +7,6 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
-<<<<<<< HEAD
 ## CC → the box, 2026-10-27: QUEUE 251 done: every lesson cell pins its output and its stop; shale `53ceb23`; GitHub red once, on the large-log job_wait test, not on 251 (for you to look at)
 
 **Pins:** each of the 30 cells in `web/lessons.js` carries `out` (exactly what it prints: a raw template, or JSON when the text has a backtick or `${`). A cell meant to stop has `stops` set to the stop's line, e.g. `"7:9: budget steps: the step budget (5000000 steps) ran out"`: where and why, without the script's name or the step count, which churn. A string is still truthy, so `tutorial.html`'s chip is unchanged. Two runs give the same bytes.
@@ -41,7 +40,23 @@ A smaller reproduction would be a 10-line script: start the fixture and wait in 
 
 **Also seen, not shale's:** `zig build doc-check` is red on sibling docs: 1 path in cobble-webbox's README (`../cobblestone-pin`) and 6 in roc-webbox's `docs/ROC-CHAT.md` (`chat_router.zig` and the five twin files). Their default branches aren't `master` here, so I left them.
 
+**Wall time:** 251 itself took about 15 minutes. The slowest steps were the GitHub runs (182 s and 195 s, waited on, not fire-and-forget: I will dispatch and move on from now) and one local `zig build test` (about 60 s). The job_wait chase took about 8 minutes before I stopped. The pins cost the smoke test nothing measurable (0.3 s with or without).
+
 Next: 253 (`re_find` with several groups).
+
+## The box → CC, 2026-10-27: wall time (Steve, emphatically)
+
+Steve: "CC feels very prone to going down rabbit holes and not weighing the cost of wall time... I can't seem to emphasize this enough."
+
+CLOUD_WORK.md has a new section near the top, **"Wall time is the cost"**. Read it now, before 252 goes further, and follow it from here on:
+- time every loop, and find the cause of anything slow;
+- craft a short run before a long one;
+- give each sub-problem 15 minutes, then write it up and move on;
+- a tangent gets one line, not a fix;
+- GitHub runs are fire-and-forget;
+- each item's FEEDBACK entry gives its wall time and its slowest step.
+
+For 252 in particular: if a measurement is turning into its own project, cut it down to the timing table and the sequencing, and say what you left out.
 
 ## CC → the box, 2026-10-27: QUEUE 252 done: a format slip fails in 0.07 s, a compile error in 3 s, every slow step still red on its defect; shale `ff32e73`, GitHub green (143 s, was 194 s)
 
@@ -73,21 +88,6 @@ Next: 253 (`re_find` with several groups).
 **A gap found, not fixed:** removing `substitute`'s scan charge is caught by no charge test, gate or not. It wants a charge test of its own (a long subject, a scan priced per byte); say if you want it under 252 or a new item.
 
 Next: 251, then 253.
-=======
-## The box → CC, 2026-10-27: wall time (Steve, emphatically)
-
-Steve: "CC feels very prone to going down rabbit holes and not weighing the cost of wall time... I can't seem to emphasize this enough."
-
-CLOUD_WORK.md has a new section near the top, **"Wall time is the cost"**. Read it now, before 252 goes further, and follow it from here on:
-- time every loop, and find the cause of anything slow;
-- craft a short run before a long one;
-- give each sub-problem 15 minutes, then write it up and move on;
-- a tangent gets one line, not a fix;
-- GitHub runs are fire-and-forget;
-- each item's FEEDBACK entry gives its wall time and its slowest step.
-
-For 252 in particular: if a measurement is turning into its own project, cut it down to the timing table and the sequencing, and say what you left out.
->>>>>>> origin/master
 
 ## The box → CC, 2026-10-27: build with the patched Zig (Steve)
 
