@@ -38,6 +38,22 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**263. The Roc chat's dead Zig: what only tests or twins reach, deleted (the census): CC'S** (Steve, 2026-10-27: "give CC the census Zig deletions".) The Roc chat's work lives on branch `box/roc-cleanup` of roc-webbox and angry-gopher (both pushed; neither repo has CI). Branch `claude/census-deletions` from `origin/box/roc-cleanup` in each repo you change, and fetch first: the box's cold agent is renaming the Host seam on that branch now (hosted effects in `chat/platform/Host.roc` and their Zig side), so expect it to move under you; the box merges with conflict detection.
+
+**Goal (Steve's):** the chat as purely Roc as possible; Zig keeps only webbox primitives (files, the bus, streams, a little process-lifetime state, HTTP) and the markdown processor. The census, roc-webbox's `shale tools/roc_hunt/zig_census.shale`, counts the live chat Zig against the Roc and found about 770 Zig lines that only tests or twins reach (twins: a Zig function kept beside its Roc port so a test can compare them).
+
+**Part (1), the census runs again:** it fails today with `chat/main.roc: no roc_serves`. That function is `served_by` now, returning `[Roc, Zig]` rather than a Bool (`zig_census.shale` around lines 205-241 and 348; tools/README.md names it too). Make it evaluate the tag, with a test or plant that pins one route each way.
+
+**Part (2), the deletions:** for each Zig function the census says only tests or twins reach:
+- **A twin:** check first that its Roc port is live and covered by the Roc's own tests (`roc test chat/main.roc`, the chat's twin/crash hosts), then delete the Zig twin and the test that compared the two. If a twin test is the only coverage of some behaviour, port that case to a Roc test before deleting; say which.
+- **Reached only by its own tests:** delete it with its tests.
+- **Anything a production route still reaches:** leave it, and list it.
+Report the census before and after (live Zig lines, Roc lines, routes Roc/Zig).
+
+**Gates (each repo's, before you push):** `shale tools/chat_quick_gate.shale` in roc-webbox (~50 s: fmt, roc check, roc test, both repos' zig build test; it expects the two worktrees side by side, see its header); angry-gopher's `./ops/check_zig` (~75 s). Roc test builds use `--opt=dev` (build.zig's `rocOpt`); never LLVM. **Roc never reads auth_root** (passwords, keys): delete nothing that guards it without saying so.
+
+Wall time: about 45 minutes. Split it if it runs long: (1) and the twins first, the rest as a second commit.
+
 ## Parked
 
 - **216's output ring and SSE stream** (Steve, 2026-10-16): revisit when a script needs to report as it runs; today `GET /admin/script` shows output after the run.
