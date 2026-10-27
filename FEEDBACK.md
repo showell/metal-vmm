@@ -7,6 +7,36 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: 255 done (shale `386c741`), 254 done (metal-vmm `.shale/merge_master.shale`); the cause of the job_wait red not found
+
+**255 (shale `386c741`):**
+- **The last look:** when `job_wait` sees a record that says the job ended, it looks at the log once more before answering `exited`. The record is written after the reap, so the log is whole by then: `found` wins whenever the file holds the text. This covers both the done path and the reaper-gone path.
+- **The test names its case:** `shale_jobs_test.zig`'s large-log wait now prints `ended`, `code` and `signal`, expecting `found - -`. A red now says a scan miss (`exited 0 -`), an early end (`exited N -`), or a signal (`exited - N`).
+- **The cause is not found.** It never went red here. The record is a snapshot read before the look, so a done record should mean a whole log, and a scan miss on a whole log is the likelier case. The last look would cover a scan miss caused by reading too early, not a scan that misses for good. No test forces that window; the next red names it.
+- **`substitute`'s scan charge:** a new hard case in `charge_test.zig`, `substitute(s, "b", "c")` with no match, where the scan's own charge is all that grows. Red with `chargeBytes` removed ("2000 work for 5 steps"), green with it.
+- **GitHub:** dispatched, [run 40559126297](https://github.com/showell/shale/actions/runs/40559126297); not waited on.
+
+**254 (metal-vmm, this branch):**
+- **`feedback_merge(base, ours, theirs, archive)`** (`.shale/prelude.shale`) merges three ways, by heading:
+  - an entry one side removed and the other left alone stays gone;
+  - an archived heading never comes back;
+  - an entry changed on both sides stops the merge, named.
+- **Order:** theirs keep their order. Each of ours goes just above the entry that follows it in ours, then newest first by date, with one blank line before each heading.
+- **`queue_check`** now also names a heading glued to the line above, a heading twice, and an entry the archive holds.
+- **`shale .shale/merge_master.shale`** fetches, then runs `git_merge`. On a FEEDBACK.md conflict alone it runs the merge again and writes that file with `feedback_merge`. The headings master's last 30 FEEDBACK commits removed count as let go. It runs `queue_check` and then commits; anything else undoes the merge and stops.
+- **Tests:** 12 new tests in `queue_test.shale`. Three plants, each red: ignoring the merge base, forgetting the archive, dropping the glued check.
+- **Repaired:** this branch's merge of master went through the tool (1.3 s).
+- **One limit:** the three entries you said came back were never on master; `git log -S` finds none. The merge base doesn't hold them either, so no merge rule can tell you let them go. I dropped them by heading (`b14eafb`). For the tool to catch such cases itself, archive my entries as lines in FEEDBACK-ARCHIVE.md; `feedback_merge` honours those.
+- **QUEUE's half:** cut, for time.
+
+**Shale wants:** `pop(l)`. I used `take(l, #l - 1)`.
+
+**Also found:** a prelude that doesn't load stops every `shale` run from its root, the fixer included. I ran the fix from the parent folder.
+
+**Wall time:** 254 took about 35 minutes, the merge tool 1.3 s. 255 took about 10 minutes; its slowest step is the jobs tests, 11 s. The full local gate is running now.
+
+Next: 253.
+
 ## The box → CC, 2026-10-27: 255 first: the job_wait test is red on the box too, and it blocks pushing 252/251
 
 **The large-log `job_wait` test failed on the box too,** in the consumers gate on shale master with your 252/251 merged in (`f3deeef`). It answered `exited`, not `found`, at `shale_jobs_test.zig:148`. The box was under load at the time: two Roc compiler builds were running.
