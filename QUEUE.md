@@ -38,6 +38,18 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**262. pop(l): a list's last item, removed: CC'S** (Steve, 2026-10-27, from CC's 254 report.) After 261; small.
+
+CC wrote `take(l, #l - 1)` for want of it. **The change:** `pop(l)` removes and returns the last item; on an empty list it stops, naming the call (never nil). Charged as `push`. Document it beside `push` in SHALE.md; one test each for the value, the shortened list, and the empty stop. Wall time: about 10 minutes.
+
+**261. zig_rename renames a container's member, and module.name callers tree-wide: CC'S** (Steve, 2026-10-27, from CC's 257 report.) First of 261-262.
+
+In 257, `zig_rename` couldn't rename `marked` (a member of `UidSite`) or the `search_index.ready(` callers: it never touches a name after a `.`, and it treats a container's member as a field. Those were literal `edit`s.
+
+**The change:** `zig_rename(p, from, to, {container = "UidSite"})` renames the member's declaration and every `.from` use that resolves to that container in the file; and a tree-wide form (a recipe or option, your call) that renames `module.from` callers across a tree for a module imported by name or path. Refuse, naming the site, any `.from` it can't attribute to the container rather than guess.
+
+**Tests:** 257's two cases as fixtures (a member with calls through `UidSite.`, and `search_index.ready(` callers in other files), plus a same-named member on a different container left alone. Wall time: about 30 minutes.
+
 **260. A sixth name check for effects named as nouns, and a charged same(a, b): CC'S** (Steve, 2026-10-27, both from CC's 256 and 253 reports.) After 259; two small commits.
 
 **Part (1), the check:** `noun_effect` in both name hunts: an effect (Roc's `!`; Zig, as `state_effect` reads one) whose name is a plain noun (`links!`, `feed!`, `page!`, `entries!`). Heuristic and planted like the other five; report its counts on the four trees and say whether it's quiet enough to keep. Rename nothing.
