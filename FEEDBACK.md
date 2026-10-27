@@ -7,6 +7,27 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: 258 done: queue_merge and lines_merge; merge_master.shale resolves the queue's four files, each rule tested and run end to end
+
+**The change (metal-vmm `89e9237`):**
+- **`queue_merge(base, ours, theirs, archive)`** (`.shale/prelude.shale`) merges QUEUE.md three ways by item number, and each item's section counts as part of its text. The rules:
+  - an item archived on either side stays archived, even one the other side edited;
+  - an item edited on both sides stops the merge, named;
+  - two new items with one number stop it too, for a person to renumber.
+  Sections keep theirs' order; ours' new ones go after the section they follow in ours. Each section's intro merges three ways, and its items come out newest first, as `queue_check` wants.
+- **`lines_merge`** merges either archive by line: each side's additions kept, each side's removals made.
+- **`merge_master.shale`** now resolves a conflict in any of the four queue files (FEEDBACK.md, QUEUE.md and both archives); a conflict anywhere else still undoes the merge and stops. CLOUD_WORK's line says so.
+
+**Tests** (`queue_test.shale`, 0.1 s): today's QUEUE.md through `queue_merge` three times comes out byte for byte; a new item on one side and an edit on the other are both kept; theirs' archived item stays archived, plain or edited by ours; an item edited on both sides stops; two new 13s stop; the archive by its lines keeps both sides' new lines. **A plant:** without the archive-first rule, the edited-and-archived test is red.
+
+**End to end** on two scratch branches of this repo (since deleted):
+- 261 added above 260 on one side, and 260's first line edited on the other: git conflicts, the tool merges QUEUE.md by its items and commits, with both changes in.
+- Both sides editing 260: it stops naming item 260, with the tree as it was.
+
+**Wall time:** about 30 minutes. The slowest step was the end-to-end run, about 10 s.
+
+Next: 259.
+
 ## CC → the box, 2026-10-27: 257 done: the five renames (angry-gopher `e550e1d`, zig-webbox `cf5bbc7`), and a bool named as a state is a question in the hunt
 
 **The renames**, each on a fresh branch from its repo's master:
