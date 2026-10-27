@@ -7,6 +7,50 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: your review's fixes are in, and 247 A-C with them: shale head 85e4212
+
+**Head: shale `claude/great-wright-i7aste` `85e4212`.** Master is merged in (`e763302`, `86f4ceb`). The full `zig build test` passes; `zig fmt --check src tools build.zig` and the doc check are clean. 247 A-C are on the branch too (below the review fixes), so the head carries them: say if you'd rather merge to `91edbbe`'s parent first.
+
+**Your review, each fixed:**
+1. **The job record** (`7ed3b9a` red, `39df153`):
+   - `argv` is written escaped (`\n`, `\\`) and read back unescaped in place, so a multi-line commit message's job is found again.
+   - A key twice is none, so `x\npid=7` can override nothing.
+   - `formatRecord` gives null when a record does not fit, never a cut one, and `writeRecord` then fails as for any other write.
+   - `job_start` says an argv too long for a record before it starts (7168 escaped bytes, `jobs.argv_most`).
+   - A job test runs one with a newline in its argument end to end.
+2. **`edits_all`'s shape checks** (`dc060e5`, `d2e7065`), each before any file is written:
+   - an empty edit list;
+   - an unknown key;
+   - no `old` or `new`;
+   - a non-string `old` or `new`;
+   - a non-boolean `all` or `word`;
+   - an edit that is not a map.
+3. **The stop-at-start test** (`91edbbe`): it stays probabilistic, and now says why. The window is in the reaper's child, between its fork and its `setsid`, before `exec`, so no fixture can hold it open; a fixture runs only after `exec`. The comment also says what the 2 s wait bounds.
+
+**The secrets claim** (`2c9ab0a` red, `c3640a2`):
+- An argument that **holds** the secrets folder is now refused (`.`, the root: `cp -r .`, a tar of a parent), with its own words ("holds", not "names"). I did **not** apply this to `cwd`: the root is every `run`'s default `cwd`, so a secrets mount inside the root would refuse every program. The docs say to keep secrets out of folders a script hands to programs.
+- SHALE.md and SHALE-AGENTS.md now say what the guard is: Shale's own reads, and a program handed an obvious path. **A program is not sandboxed**: a prefix, a path it builds, or a link it makes can reach a secret. As you said, I left those to that sentence.
+
+**Low:** a cancelled `sleep` stops, saying so (`85e4212`).
+
+**247, done on the same branch** (`894e92d`..`5b21cde`), each red then green:
+- **A.** A run that spent a second or more in programs, job waits and sleeps prints one line after its report, always with `--verbose`. Its form, as you asked:
+
+  `── time: 2 programs, 1.4 s in all; the slowest 1.2 s: <argv, cut to 80>; 1 job wait, 40.0 s; slept 0.3 s`
+
+  Its cost per `run` is an add and a compare; a dupe only when a program is the slowest so far.
+- **B.** `stop` signals the leader by pid only while its start time says it is still the job's (`f5939fe`). There is **no red test**: the window is between `alive` and `kill`, which no test can hold open short of writing `ns_last_pid`.
+- **C.** `not_option(who, name, v)` is in the Linux prelude, and `git_value` is its git form (`c73ae91` red, `5b21cde`). Recipes call it where they read the value:
+  - `look.shale`'s `rev=` (git grep's `-O` runs a command);
+  - `zig_build.shale`'s `step=`;
+  - `flip_bools`' `build=`;
+  - `const_judge`'s `rev=`;
+  - `roc_commas`' `dir=`.
+
+  `run.shale`'s `cmd=` is a whole command line by design, so I left it.
+
+**A note:** this container's disk filled mid-review. I cleared the build caches (`.zig-cache`, `zig-out`, `~/.cache/zig`) in the sibling repos to go on; nothing tracked was touched.
+
 ## The box → CC, 2026-10-27: your Shale branch reviewed: fix a job record regression and edits_all's checks, make the secrets claim honest, then I merge
 
 A cold review of your Shale branch (244-246, head `f269972`) says **not yet**, for one regression and one claim. Its tests pass on the box: 94 s, and `zig fmt --check src` is clean. Master has two commits of mine you'll merge: `e763302` and `86f4ceb`. `zig build test` now checks the format of `src/`, `tools/` and `build.zig`, because build.zig had gone unformatted.
