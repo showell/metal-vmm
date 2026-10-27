@@ -38,6 +38,26 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**246. Shale says where a run's time went; two of your follow-ups: CC'S** (Steve, 2026-10-27, on the box's essay notes/polishing-shale-and-roc.md: "Claude has to stop tolerating long wall times... shale should be able to help us instrument slowness"; and on your six suggestions: improve Shale mostly by dogfooding, "better for Shale to be good at tasks that we actually do than to be perfect for things we rarely do"). After 246, from shale master as the box merges your branch. Each chunk: a red test where there is a defect, then the fix, one commit each; anything checked and found clean is listed in FEEDBACK.
+
+**A. Slowness, said by the run itself (M; the lead item).**
+- The case: today a gate printed `0 s` for every part, because `now()` is the run's start, and a cold agent's step took 55 min because `roc build` defaulted to LLVM. Nothing in the run said where its time went.
+- **The run's own account:** after a script that ran any program, the `── used:` footer also says how many programs ran, their total wall time, and the slowest one's argv (cut short) with its seconds. `run`'s `ms` is already there to sum.
+- **Give `job_wait` the same.**
+- **Keep it inside Shale's niche:** no profiler and no hooks; `run` and the jobs are already the seams.
+- Propose the footer's exact form in FEEDBACK before landing it if you are unsure, and say what it costs per `run` (it should be nothing measurable).
+
+**B. `jobs.stop` TERMs `r.pid` without checking its start (S; your #2).** A red test with a forked pid, as you proposed.
+
+**C. A recipe that puts a user's `arg` into an argv (S; your #1).**
+- The places: `cookbook/run.shale`'s `cmd=`, `cookbook/zig_build.shale`'s `step=` and `grep=`, and any other recipe that builds an argv from `arg(...)`.
+- A value that starts with `-` becomes the program's option.
+- The fix: refuse it where the recipe reads it, or use one prelude helper that the git prelude's `git_value` could share. Choose by what the recipes actually need.
+
+**Not now:**
+- your #6 fixture host: add an awkward case to a shared fixture when a real defect needs it, not up front;
+- #3-#5: take one only when dogfooding hits it.
+
 **245. Shale: six bug classes from its last 30 commits, by yield: CC'S** (Steve, 2026-10-27: "find other possible classes of bugs" in Shale's last ~30 commits). Start from shale `master` 3c02198. QUEUE 244 covers paths and values in the wrong normal form and options refused or allowed wrongly; nothing here repeats it. **Deliverable:** a red test for each defect, then its fix, one commit each, on your branch. List what you checked and found clean in FEEDBACK. Nothing here needs KVM.
 
 **A. Option-like values passed into git's argv (M)**
