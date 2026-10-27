@@ -7,6 +7,40 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: 253 done: re_find with nine groups and (?:...), re_replace \1 to \9; the property found one shape where the machine parts from a backtracker, documented and pinned
+
+**The change (shale `f99c949`):**
+- **Groups:** `regex.zig` takes up to nine capture groups, nested or not, numbered by their `(` from left to right. It also takes `(?:...)`, a group that captures nothing (your note from the alignment hunt). It's still a Pike VM, so still linear: each thread's captures are a fixed 19 slots. `(?=`, `(?<` and the other `(?` forms are refused by name, and so is a tenth group.
+- **`re_find`** now gives `groups`, each group's text in order (`""` where the match didn't pass through it), plus `group`, the first's. A one-group caller reads exactly as before.
+- **`re_replace`** takes `\1` to `\9`. A `\N` past the pattern's groups stops: it was literal text before, and is almost always a typo. One existing test pinned the literal `\2`; it now expects the stop.
+
+**Tests:**
+- Two and three groups; an optional group that doesn't take part (`(a)(b)?(c)` on `ac` is `a||c`); nested groups (`x=((\d)\d*);` gives `12|1`); a repeated group keeps its last turn; `(?:...)` captures nothing; nine groups pass and a tenth is refused; `re_replace` swaps `\2=\1`.
+- The errors corpus is updated: its three old refusals are legal now, replaced by lookaround, a tenth group and a named group.
+- **The reference property** (`zig build fuzz`, 20,000 rounds) now generates several groups, nested and non-capturing, and compares every group's span, not just the first.
+
+**What the property found: one place the machine and a backtracker disagree.**
+- **The case:** a repeated group holding a group whose first alternative is empty. Minimal: `(?:\w*(?:|.))*` on `ab.` gives `ab`; a backtracker gives `ab.`.
+- **Why:** a new turn of the loop reaches `\w*`'s split at a position an earlier turn already stamped, so that turn is dropped. The empty alternative's sibling (`.`) is still waiting on the stack, and ends up ranked below the match exit.
+- **Before 253** the shape couldn't be written: it needs a nested group.
+- **What I did:** documented it in regex.zig's header and SHALE-AGENTS.md, pinned it in a test (so a fix shows), and made the property leave out repeated groups that hold groups.
+- **Fixing it** needs RE2-style handling of empty loops, which is more than this item. Say if you want it as its own item.
+
+**The two workarounds:** the originals were in scratch scripts and are gone. I rewrote the committed ones:
+- SHALE-AGENTS.md's `props.always` recipe now takes an escaped quote, with `((?:\\.|[^"\\])*)`.
+- Its doc-reference recipe reads the name and number as `groups[1]` and `groups[2]`.
+- The Roc name hunt (256) takes name, `!`, `:`/`=` and type from one match, with the same results.
+
+**Docs:** SHALE.md's subset, builtin rows and table; SHALE-AGENTS.md's subset line and "worse, said plainly". **The `yield()` paragraph** went into the cookbook's opening in SHALE-AGENTS.md: a tree-wide recipe keeps each file's work in a function with `yield()` after it, as `sealed.shale` and the name hunts do.
+
+**Map `==`:** I'd say no to `==` itself. Today it's identity, cheap and constant time, as in Lua. A deep compare is O(size) and has to be charged, and on maps it raises whether key order counts. A builtin `same(a, b)` would be clearer, charged a step per item, with order counted for lists and not for maps. I haven't built it.
+
+**Also seen:** `zig build doc-check` now names two paths in QUEUE.md's 256 text that aren't anywhere here: `cookbook/zig/align_hunt.shale` (unpushed on your side) and roc-webbox's `tools/roc_hunt/hunt.shale`.
+
+**Checks:** `zig build test` 416/416 in 56 s; the expensive regex properties pass (3 m 50 s, `zig build fuzz -Dtest-filter="property: re_"`). GitHub is dispatched, [run 40564785607](https://github.com/showell/shale/actions/runs/40564785607), not waited on.
+
+**Wall time:** about 45 minutes. The slowest steps were the two fuzz runs, about 3.5 minutes each.
+
 ## CC → the box, 2026-10-27: 256 done: name hunts for Zig and Roc, five checks, each planted; 12 findings in angry-gopher and zig-webbox, the Roc chat clean; five renames proposed, none made
 
 **Recipes (shale `bc3b337`):** `cookbook/zig/name_hunt.shale`, on Zig's tokens, and `cookbook/roc/name_hunt.shale`, on Roc's top-level annotations and definitions. Both have the same five checks. Each check has one plant in `plants/name_hunt/`, and `self_test=1` requires each check to fire on its own plant and on no other (both pass):
