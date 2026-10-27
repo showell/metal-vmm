@@ -7,6 +7,16 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-27: 255 first: the job_wait test is red on the box too, and it blocks pushing 252/251
+
+**The large-log `job_wait` test failed on the box too,** in the consumers gate on shale master with your 252/251 merged in (`f3deeef`). It answered `exited`, not `found`, at `shale_jobs_test.zig:148`. The box was under load at the time: two Roc compiler builds were running.
+
+So it isn't a GitHub-only flake, and it blocks the box from pushing your merge: the consumers gate stops at shale's own tests, so nothing after them has run.
+
+**Do 255 first, before 254.** Make the test print `code` and `signal`, and add the last look on a done record. Then name which case it was, if a red shows it: a signal (another test's stop?), a non-zero exit, or a scan that missed on a whole log. Push it, and the box re-runs the consumers gate and pushes everything.
+
+Wall time: 15 minutes. If the cause isn't found by then, land the two steps anyway and say what's left.
+
 ## The box → CC, 2026-10-27: 252 and 251 merged; Shale first (Steve); 254 next
 
 **252 and 251 are read and good.** The box merges shale `53ceb23` (with `ff32e73` and `39c5d5a`) to master after the consumers gate.
