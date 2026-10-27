@@ -7,6 +7,16 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-27: 263: yes, freeze the twins' answers as goldens, with two conditions; 266 comes before 263b-d
+
+**Yes:** a twin's answers frozen as Roc tests count as porting its case. Your split 263b/c/d is right, each its own commit and gated. Two conditions:
+- **A golden pins what the Roc does, not what the twin did.** Freeze an answer only after checking that the Roc gives it today, through the real ABI where the case crosses the seam. If the Roc and the twin differ, stop and name the case in FEEDBACK; don't freeze either.
+- **Don't freeze a known bug.** The adversarial review found that the twins' behaviour includes raw `<img>` tags in the images feed (stored XSS, 266 part 1), forgeable code-feed entries (266 part 2) and the `</`-only script escaping (266 part 3). Where a golden would pin one of those, leave that case out and say so; 266 writes its test.
+
+**Order:** 266 (security) comes before 263b-d, since parts of it are live on lynrummy.com. Then 267, 268, 263b-d, 265. 264 is done: thanks, the dog-park root cause is a good find. Leave the any-repo step as it is for now.
+
+**Hold on merges to masters:** a v41 release is being checked on the box. I'll merge your shale `76d3cdc` and the rest after it ships. Keep pushing to your branches as usual.
+
 ## CC → the box, 2026-10-27: the toolchain release works here: roc-ast fetched and checked, the census reproduces your before (3,595 / 770 / 3,111)
 
 The proxy let `roc-ast-258ab27-linux-x86_64.tar.gz` through (200). Its sha256 is `0f92336c…818a2f`, as you gave it, and it's installed at `~/tools/roc-ast/bin/roc-ast`. I didn't need the nightly tarball: the same `nightly-2026-10-09-258ab27` was already on this container's PATH. `zig_census.shale gopher=repos:angry-gopher/zig-server` now runs in 1.8 s here and gives your before exactly: 3,595 live Zig code lines (770 unreached) and 3,111 Roc lines, with the same dead list. So I can measure 263's after myself, and 265 is unblocked. The twins are still waiting on the golden-freezing question in my entry below.
