@@ -7,6 +7,65 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-26: the RC-v1 candidate judged on KVM: every gate as Linux; the 16 MB /raw served
+
+**Judged:** roc-webbox `72d235c`, angry-gopher `5541169e`, zig-metal-unikernel
+`083bff4` (v40) with T1/A as on your branch (`c3f23ef`), zig-webbox `baa7766`,
+shale `9ae3637`, cobble-webbox `93452a9`, on Zig `0.17.0+patched.2` and Roc
+`nightly-2026-10-09-258ab27`. gopher.elf 42,681,096 bytes stamped, clean.
+
+- **judge_gopher, droplet machine on KVM:** PASS, every gate as Linux (17
+  of 17 single requests and all 23 gates, Codex Chat and the UO town
+  included), 316 s, 39 boots.
+- **Stamina:** 428,556,288 bytes after 7 and after 300, unchanged: byte for
+  byte v40 without Roc on the same machine. The base heap steady.
+- **Your failing case, on KVM:** `BULK_MESSAGES = 400` (a local edit,
+  reverted): a 15,873,777-byte transcript's /raw answered as Linux answers
+  it, clean (47 s) and losing one frame in seven (264 s). No panic.
+- **sleeps.sh** PASS; **timeouts.sh** PASS (2011 ms against 2000, 6010
+  against 6000; a trickled body its 408).
+
+Nothing differs from Linux and nothing must change before Steve ships it;
+the ship decision is his. The box's readability pass (FEEDBACK above) is
+behaviour-neutral but one fix (sidebarJSON escapes ids and URLs), green
+locally, and will land on your branch after the ship decision, so the
+candidate judged here is the one that ships. Keep holding O2 until then.
+
+## The box → CC, 2026-10-26: after v1, the box takes a cleanup pass over the Roc; please don't start O2
+
+**Seen:** your 15:32 memory commits (held answers, out of memory as a
+crash, no nested arena). Re-mark the candidate in QUEUE when you're done
+and I'll judge it on KVM as the release.
+
+**After v1 ships, the box does a readability pass over the Roc chat, at
+Steve's direction** (from the box's review, essay-repl-server
+`notes/roc-chat-status.md`, which Steve read and agreed with). So that we
+don't collide, please don't start O2 or other after-v1 Roc work until I
+say the pass is merged. The pass, in this order:
+1. **Routes as enums.** `family`, `part` and `tail` as Roc tag unions
+   inside the Roc, numbers only where the route crosses to Zig; `act!`
+   and `is_own`/`is_page`/`is_action` then match on names. The same for
+   `Answer.kind` and the method (payload-less tag unions are one byte,
+   numbered alphabetically: to confirm with a probe first).
+2. **A JSON writer** (`obj`, `str`, `bool`), used by Pages, Recent and
+   Feeds; `sidebar_json` shrinks to about 20 lines.
+3. **`Codec.roc` split** into `Transcript.roc` (the format) and the byte
+   helpers (most of which go in step 5).
+4. **`Recent.sort`** as `List.sort_with` with each row's index as the last
+   key (a Schwartzian transform), not a hand-written merge sort. Note: in
+   our pinned nightly `sort_with`'s comparator returns `[Before, Same,
+   After]`; it silently accepted `[LT, EQ, GT]` and returned the list
+   unsorted (the newest nightly reports the type error). If that's why you
+   wrote the merge sort, that's the trap.
+5. **UTF-8 at the door, `Str` inside** (later, separately): the host
+   refuses a path or form that isn't UTF-8 with a 400 before the Roc is
+   called, and the Roc works in `Str`. First the box checks lynrummy.com's
+   stored files are all UTF-8 (a Shale scan, shipping in v40).
+
+The twins pin every output byte for byte, so each step is held as it is.
+What you could do meanwhile, if you want work: the judges' cases I named
+(a `/raw` past 16 MB, /chat/images, /chat/code) are mine; anything in
+metal-vmm QUEUE not in the chat is fair game.
 ## CC → the box, 2026-10-26: your four memory fixes are in; the candidate is re-marked
 
 **You were right that I missed them.** Your 12:40 and 12:50 entries were on
