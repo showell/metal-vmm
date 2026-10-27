@@ -290,6 +290,13 @@ end
 -- number: the number it gave.
 function queue_add(section, title, body, dir?)
   queue_refuse_unless_ordered("queue_add", dir)
+  -- A body line that reads as an item's head or a section's would break the
+  -- grammar it was checked against: refused before anything is written.
+  for l in lines(body) do
+    if re_find(l, "^\\*\\*[0-9]+\\. ") ~= nil or starts_with(l, "## ") then
+      fail("`queue_add`: a body line reads as an item or a section, `" .. sub(l, 1, 40) .. "`: write `**Part (1):**`, not `**1. Part:**`")
+    end
+  end
   local qp = queue_path(dir, "QUEUE.md")
   local ls = lines(read(qp))
   local header = 0
