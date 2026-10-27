@@ -39,6 +39,18 @@ the box instead of guessing. Findings arrive as red tests where they can.
 
 **CC stays idle until Steve wakes it (2026-10-20); 241 is its next item then.** Every repo is on Zig 0.17.0 now (FEEDBACK, 2026-10-20): move your environment first.
 
+**242. Shale's path and value normal forms: hunt the class of real(".") keeping its dot: CC'S** (Steve, 2026-10-27: "have CC look for similar defects in shale"). Start from shale `master` 9b4eb2e. **The defect:** `real(".")` returned `<cwd>/.`, with the dot left in. `absolute()` in `src/shale_host_linux.zig` joined the path onto the cwd without resolving it, so a script that took the folder above `real(".")` got the cwd itself. The Roc chat's quick gate went looking for angry-gopher inside roc-webbox. The fix (9b4eb2e) resolves the path with `std.fs.path.resolve` and adds a test. **Hunt the class:** a path, or any other value, that Shale hands back or compares in a form different from what it means. Look at every builtin and host call that takes or returns a path: `real`, `run`'s `cwd` and `log`, `pathArg` with mounts (`runs:`, `home:`), `exists`, `is_dir`, `read`, `replace`, `edit`, `list`, and the git prelude's `git_real` and `git_call`. Things to look for:
+- `.` and `..` segments;
+- trailing slashes, which `osPath` trims but other paths may not;
+- doubled `//`;
+- `""` as the root;
+- a mount name with nothing after it;
+- symlinks, if Shale promises anything about them;
+- two spellings of one file that compare unequal (the change tracker, `may_change` and `edits_all` all key on a path);
+- a relative path resolved against the wrong base (the data root vs. the cwd vs. a `cd DIR &&`).
+
+The same class reaches past paths. Look for a builtin whose result needs a second normalising step its docs don't mention. Also look for an option that is wrongly refused or wrongly allowed: `git_commit` refuses `all`, and `run`'s `whole` is an integer where a reader expects a Boolean. Report any such case where the error doesn't name the right option. **Deliverable:** a red test for each defect, then the fix, one commit each, on your branch. List what you checked and found clean in FEEDBACK. Nothing here needs KVM. Shale's work is the box's otherwise; this item is the exception Steve asked for.
+
 **241. Shale's internals: every key line run by a unit test, a fuzzer that reaches deep, and the hot paths measured: CC'S** (the box, 2026-10-20, at Steve's ask: "probe for bugs and speedup opportunities"; line coverage toward 100% from unit tests on the key modules; the coverage SDK with a fuzzing strategy; **Shale itself for most of the work**). Start from shale `master` 84473cb (Zig 0.17.0). Each chunk is a branch the box merges; no review is needed between chunks unless a stop below says so. Nothing here needs KVM or QEMU.
 
 **Read first:** shale `docs/SHALE-AGENTS.md` ("Before you reach for the shell" and the cookbook), `cookbook/look.shale`, `cookbook/zig_build.shale`, `cookbook/zig/README.md` and `cookbook/zig/dead.shale`; shale `build.zig` (the `test`, `fuzz`, `script-bench`, `shale-scale` steps); `src/script/gate_test.zig` (every `script.run` in a test is the VM's, held to the tree-walker's, also sliced and as a background run: the fuzzers get that differential for free); zig-metal-unikernel the kernel's Python linecov (gone since 243) and its `build.zig` steps `tcp-coverage`, `fat-coverage`, `store-model-coverage` (~473-564); zig-coverage-sdk `README.md`, `src/coverage.zig`, `src/explore.zig`.
