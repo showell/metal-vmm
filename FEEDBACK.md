@@ -7,6 +7,26 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: QUEUE 250 part 1: the ranked list; doing the player id, the account uid and Shale's Path; the redirect target needs your word
+
+The deliverable's first part: the ranked list. I verified each against the code, not only the survey. Three of these I'm converting now (marked **doing**); #3 needs your word first.
+
+1. **The player id: `player.isSafeID` (angry-gopher player.zig:82, private).** The check is called inside player.zig five times. storage.zig trusts a raw `user_id` in 21 functions, which join `data_root/<id>/...`. The destructive one is `deleteUserData`, and its two callers are admin's delete form and login's release. A forgotten check today: `removeTree(data_root/..)`. It is caught now by two separate guards, neither of them a type: admin's `exists` (via `nameOf` → `isSafeID`), and store's basename `fatName`. **Doing:** `player.Id`, made only by `player.Id.of`; `deleteUserData` takes one. The other 20 storage functions follow later, at your call (each one turns its callers' raw id into a `player.Id`).
+2. **The account uid: `users.validUid`/`allDigits` (users.zig:280/287).** It is checked at the edges: admin.zig:88/94 and users_session's checkAPIKey. `readAuthFile` and `authFileExists` join `auth_root/<id>/<file>` and trust the id. Their callers include getUserName, getUserAPIKey and checkUserPassword, all `pub`. The comments record that this was a real bug twice (`1/.` and `1/../2` named folders; an api-key prefix with `..` reached other folders' password files). **Doing:** `users.Uid`, made only by `users.Uid.of`. `readAuthFile` and `authFileExists` take one, so the check moves to the three getters. Their signatures stay `[]const u8`, so nothing outside users.zig and users_session.zig changes.
+3. **The redirect target: `http.internalTarget` (zig-webbox http.zig:334).** It goes through `sanitizeNext` in login.zig:407 and player.zig:230 into a `location` header. A forgotten check is an open redirect. **This reaches zig-webbox's public API, so I'm stopping to ask:** shall I make an `http.Target` that `redirect` takes?
+4. **Shale's `pathArg` → `Path{full, rel}` (builtins_store.zig:41/43).** 22 call sites trust a `Path`. Its fields can be set by any struct literal, and the FAT-name loop is written out three times. **Doing:** `Path` made only by `pathArg`. A grep test refuses `Path{` / `.full =` outside builtins_store.zig, because a Zig struct can't hide its fields.
+5. **The user name: `names.validateUserName` (names.zig:39).** A newline in a name would split a transcript line. It is checked at signup and rename, and trusted by the roster and the transcripts. Next in line.
+6. **`signed.Kind.validId` (zig-webbox).** The id comes back from a verified cookie still a `[]const u8`. It is cross-repo, and dog-park's `Slot` is the template. This is webbox API, so it's yours.
+7. **Docs slug, 8. emoji (owned by the chat), 9. `isSafeName` (accepts `..` but reaches only a directory), 10. shale_suite's validName:** low value; I'm leaving them.
+
+Not candidates:
+- roc-webbox's TODO app: its paths go through `roc.inRoot` and its ids are U64 already.
+- The script language's `git_value`.
+- dog-park: already typed.
+- The Roc chat's candidates are yours, per the item.
+
+**How Zig enforces it:** an `enum(u32){_}` can't carry a string, so each type is a struct with one field. A test in the type's own file greps the tree for that field's name outside the file. That is the red: I plant a bypass, the grep test fails, then the plant comes out.
+
 ## CC → the box, 2026-10-27: QUEUE 249 done: cookbook/syntax.shale and `shale --check`
 
 **On shale `claude/great-wright-i7aste`** (master merged in). The full `zig build test` passes; the format and doc checks are clean.
