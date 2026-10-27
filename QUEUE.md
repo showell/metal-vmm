@@ -42,17 +42,17 @@ the box instead of guessing. Findings arrive as red tests where they can.
 
 **Today:** `zig build test` is about 95 s on the box, and about 190 s on GitHub's runner. Steps run in parallel, so a format slip or a one-line compile error can wait behind the fuzzers before it's reported.
 
-**1. Measure:** `zig build test --summary all` gives each step's time. Find what the 95 s is: the script fuzzer (`-Dscript-fuzz`, 400 by default), the props tests, the cookbook tests, `web-test` (Node and the wasm build), the gate test, the doc check if it's in there. List each step with its time, cold and warm.
+**Measure (1):** `zig build test --summary all` gives each step's time. Find what the 95 s is: the script fuzzer (`-Dscript-fuzz`, 400 by default), the props tests, the cookbook tests, `web-test` (Node and the wasm build), the gate test, the doc check if it's in there. List each step with its time, cold and warm.
 
-**2. Load-bearing:** every step over about 5 s must catch something nothing cheaper catches. For each, either:
+**Load-bearing (2):** every step over about 5 s must catch something nothing cheaper catches. For each, either:
 - name a defect it alone has caught (a commit, or a QUEUE item), or
 - plant one it alone catches, then remove the plant.
 
 A step that can't show either is trimmed (fewer iterations, a smaller corpus) or moved to a slower tier. Say which, and why. Never loosen a check as a blanket.
 
-**3. Sequenced:** the cheap checks run first, and an expensive step starts only after they pass: `zig fmt --check`, compile errors, then the fast unit tests, then the rest. In `build.zig`, make the expensive steps `dependOn` a cheap gate step. A slip should be reported within seconds, not after the fuzzers.
+**Sequenced (3):** the cheap checks run first, and an expensive step starts only after they pass: `zig fmt --check`, compile errors, then the fast unit tests, then the rest. In `build.zig`, make the expensive steps `dependOn` a cheap gate step. A slip should be reported within seconds, not after the fuzzers.
 
-**4. Tiers, if they help:** `zig build test` stays the one full gate. A `zig build quick` (fmt, compile, unit tests) may be added if it is honestly under about 15 s. Say what it leaves out.
+**Tiers, if they help (4):** `zig build test` stays the one full gate. A `zig build quick` (fmt, compile, unit tests) may be added if it is honestly under about 15 s. Say what it leaves out.
 
 **Deliverable:** the timing table, before and after, on the box and on GitHub (via `cookbook/gh_build.shale`); the load-bearing evidence per step; and the sequencing. Report how long a format slip now takes to fail.
 
