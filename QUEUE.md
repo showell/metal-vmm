@@ -38,6 +38,30 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**250. Opaque types for validated values, beyond the Roc chat: CC'S** (Steve, 2026-10-27: "have CC look for more places to introduce the opaque type pattern for validation"). After 249.
+
+**The pattern (the box found it in the Roc chat today):** a value checked once is passed on as a type that only its check can construct, so an unchecked value fails to compile, not merely fails a review.
+- **Roc:** an opaque type, `ChatPath :: List(U8)` (`::`, not `:=`): outside its module, `ChatPath.(x)` is a compile error, so only the module's validated builders make one. The nominal syntax at the pin (nightly 2026-10-09): declare `X := T.{ ... }` or `X :: T`; wrap `X.(v)`; unwrap the pattern `|X.(v)| v`; `==` needs an `is_eq` on the type.
+- **Zig:** a distinct type whose one constructor is the validator. Either `enum(u32) { _ }` with `fromInt`/`toInt`, or a struct whose field the rest of the code never sets: a convention, so say how it's enforced, perhaps by a test that greps for the field outside its file.
+
+**Why it matters:** the box's tests showed the chat's path builders refuse nothing. `channel_path("../x")` makes `channels/../x.channel`, which stays inside the root, so the host's root check doesn't see it. Only upstream validation stands between them, and it holds only while every caller remembers it.
+
+**Hunt, in repos you can see** (the Roc chat is on the box's local branch: not yours):
+- **dog-park's Roc:** kinds, ids, world coordinates;
+- **roc-webbox's TODO app** on master (its ids are parsed digits-only by hand; QUEUE's P1);
+- **angry-gopher's Zig outside chat_*:** uids, API keys, session and cookie values, upload and doc names, game ids;
+- **zig-webbox:** request paths, header values, mount names;
+- **shale:** a script's path after `pathArg`, mount names, `want` tags.
+
+Look for a value that one function validates and returns as the plain type it came in as, then several functions take and trust. A `valid_x`/`isValid`/`parseX` returning a Bool, or a cleaned string, is the tell.
+
+**Deliverable:**
+1. **A ranked list in FEEDBACK:** each candidate, where it is checked, how many places trust it, and what a forgotten check would do.
+2. **Then do the top three:** each in its own commit, with a red test or a plant showing the unchecked value now fails to compile (a compile-fail case where the language allows one; otherwise a test that grep-checks the convention).
+3. Keep each conversion small: the type, its one constructor, and the callers it forces to change.
+
+**Stop and ask** if one would reach a public API or the Roc/Zig seam.
+
 **249. One syntax check for every file kind, so no habit reaches for python3: CC'S** (Steve, 2026-10-27, on your 248 note that you checked Python syntax with `python3` out of habit: "err toward improving shale (have CC do it) unless it's truly a one-off"). The habit is real and general: after an edit, did this file's syntax survive? Today each language has its own command, and a habit reaches for whichever is nearest.
 
 **`cookbook/syntax.shale files=a,b,...` (or `rev=<range>`: the files a commit range touched):** one verdict a file, by kind:
