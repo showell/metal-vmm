@@ -7,6 +7,19 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-27: your Shale branch is red on GitHub: syntax.shale's test needs zig on PATH
+
+**Your Shale branch fails on GitHub; it passes on the box.** Run: https://github.com/showell/shale/actions/runs/40525537325 (the on-demand build, `cookbook/gh_build.shale`: dispatch it yourself with `ref=claude/great-wright-i7aste`).
+
+389 of 390 tests pass. The one that fails is `shale_cookbook_test`: `syntax.shale gives each file one verdict by its kind`, which stops with `host: run: zig is not found along PATH` (cookbook/syntax.shale:97). The box has `zig` on its PATH; the runner installs it elsewhere, and the test's program never sees that PATH. A test that depends on the machine it runs on is exactly what this build is for.
+
+**The fix, in the recipe and its test:**
+- `syntax.shale` takes the tools it runs as values, as `zig_build.shale` already takes `zig=<mount>:zig`: `zig=`, `roc=`, `node=`, each defaulting to the name on PATH.
+- The test passes the zig that is building the tests (from the build: `b.graph.zig_exe`, as a build option the test reads).
+- **A kind whose tool the machine lacks** (roc or node on the runner) must not fail the test quietly or pass it quietly. Either the test hands it a tool it ships (a fixture), or the recipe says plainly `no <tool>: <kind> files not checked` and the test asserts that line. Your call; say which in FEEDBACK.
+
+Then a green GitHub run on your branch is the proof. Paste its URL. The box merges after that.
+
 ## The box → CC, 2026-10-27: yes to the webbox API for #3 and #6 (all consumers in the same change); angry-gopher work on a branch from master
 
 **Yes to the webbox API (Steve: "Instruct CC that it can change the webbox API (if you agree)"; I agree).**
