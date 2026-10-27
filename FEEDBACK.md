@@ -7,6 +7,64 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: QUEUE 245 done: a defect in each of the six classes, each red then green; git took `--output=` from a caller's value, and a secret reached a program by a relative path
+
+**On shale `claude/great-wright-i7aste`, head `4fce2ab`** (master `21f1d21` merged in). Each defect has a red commit, then its fix. The full `zig build test` passes in 55 s, as do `zig fmt --check src` and the doc check.
+
+**A. Option-like values in git's argv** (`5cebce8` red, `2797e8d`): `git_show("", "--output=x.txt")` wrote x.txt, past every mount and `may_change`. Now one `git_value(call, name, v)` refuses a value that starts with `-` everywhere git reads options:
+- `git_show`'s `what`;
+- `git_log`'s `range` and `ref`;
+- `git_diff`'s `range`;
+- `git_merge` and `git_merge_ff`'s `ref`;
+- `git_tag`'s `name` and `rev`;
+- `git_push`'s `remote` and `branch`;
+- `git_worktree_add`'s `branch` and `rev`;
+- `git_branch_delete`'s `name`.
+
+**Clean:**
+- `git_restore` (`--source=` attached, then `--`), `git_mv` (`--`), and a worktree's `dir` (always a real, absolute path).
+- `curl_http`. `-X` and `-H` each consume the next argv whatever it starts with, and the URL must start with http(s).
+
+**B. Secrets reached by another spelling** (`400c055`, `500de7f`): `refuseSecretArgs` looked only for the folder's absolute text. A program could still be handed the secrets mount's file by:
+- a relative path: `keys/tok`, `./keys/../keys/tok`;
+- the text after an option's `=`: `--file=keys/tok`;
+- a link to the folder;
+- an `env` value;
+- `job_start`, as well as `run`.
+
+Each argument, and its text after an `=`, is now resolved against the program's `cwd`, and also realpath'd. Each `env` value is checked the same way.
+
+**Clean:**
+- A `cwd` inside the folder by another mount (`all:keys`) was already refused.
+- `underWritableWithin`: mounts nested read-only, writable, read-only, and a writable mount inside a `secrets` one. `refuseSecretsUnder` refuses that one first.
+- The mounts' realpath step covers `m.dir`. The root is resolved the same way since 244's `63584dd`.
+- A string on `stdin` is no path, so I left it.
+
+**C. `edits_all` checked less than it then did** (`14f3c1b`, `2deb6c2`): the first file was written, then the second stopped. That happened with more than 64 edits on the second file (edit's cap), or with the `changes` budget spent. An empty `old` stopped inside `split`. All three are now checked before anything is written; the `change_bytes` budget is checked too. A file named twice was 244's (`eaf1b0f`). **Clean:** an overlapping `old` (`aa` in `aaa`) counts as `edit` counts it.
+
+**D. A size that a host cap breaks** (`2775dd8`, `2883139`): cookbook/http.shale's wait is a fetch and a `sleep` a try, and a run holds 64 programs. The defaults (10 minutes, every 10 s) needed 121 programs, so every long wait ended on the runs budget halfway. The recipe now says so before its first fetch. `every` defaults to 20 s, so the defaults' 31 fetches fit, and the header's example now uses `minutes=10`.
+
+**Not done the way your test said:** your red test expected the recipe to make all 61 fetches. That needs a wait without a program, and Shale has none (`now()` is the run's start). **Steve's call:** a host `sleep`, or `run` taking a delay, would let a long wait work. I'd ask before adding either.
+
+**Clean:**
+- `whole = 16777216`, which is a cap, not an allocation (runs under a 1 MB arena);
+- `tail_lines`' 64 KB part, which doubles only while short of `n` and stops only at an arena too small for any read.
+
+**E. Parsers that pass forms by:**
+- `git_status` (`99ce845`, `5af4f5e`): a work-tree rename (` R`, an intent-to-add file; git 2.43 prints it) gave two entries. The old path is now read for an R or C in either letter.
+- `parseRecord` (`55db6a5`, `a2beea5`): a record with no `start` read `start = ""`, so `alive` said false while the job ran. It also passed by unknown keys and lines with no `=`. A record now reads only whole: every key `formatRecord` writes is present, none is unknown, and every line is a `key=value`.
+- `curl_http` (`c9439a9`, `a7b8ad6`): a folded header's continued line was dropped. It is now joined to its header, and any other line with no `:` stops.
+
+**Clean:** `git_upstream`. Its `tonumber` is strict and stops on a bad `# branch.ab`, and an upstream with no counts is nil, as documented.
+
+**F. The job lifecycle** (`535f459`, `9795a36`): your 20 rounds were red, 1 of 20 alive after `job_stop`. `stop` waited on the group alone, so before the leader had made it, it said "stopped" at once and never sent KILL. It now waits on `alive`: the leader by its start time, then the group. It also KILLs the leader. Three reruns were green.
+
+**Clean:** `job_wait` before the log exists reads "not yet", and a gone leader with a live reaper is still ending. `shale-fixture` already has `ignore-term`.
+
+**For you:**
+- **Option-like values elsewhere:** `run`'s own argv is the script's, so nothing guards it. A recipe that passes a user's `arg` into an argv is open the same way. Only the preludes were in scope here.
+- **The `sleep` question** under D.
+
 ## CC → the box, 2026-10-27: QUEUE 244 done: eight path and value defects in Shale, each red then green; a read-only mount was writable through a root spelled with `..`
 
 **On shale `claude/great-wright-i7aste`, head `78a58ea`** (master `3c02198` merged in). Each defect has a red commit, then the fix. The full `zig build test` passes in 52 s, as does `zig fmt --check src` and the doc check. **The commits say "QUEUE 242"**, written before you renumbered the item to 244: they are this item.
