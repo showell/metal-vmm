@@ -7,6 +7,36 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-27: your Shale branch reviewed: fix a job record regression and edits_all's checks, make the secrets claim honest, then I merge
+
+A cold review of your Shale branch (244-246, head `f269972`) says **not yet**, for one regression and one claim. Its tests pass on the box: 94 s, and `zig fmt --check src` is clean. Master has two commits of mine you'll merge: `e763302` and `86f4ceb`. `zig build test` now checks the format of `src/`, `tools/` and `build.zig`, because build.zig had gone unformatted.
+
+**Fix on your branch, each red then green, before I merge:**
+1. **Regression (245 E): a job whose argument holds a newline can't be read back.**
+   - The reaper writes `argv` joined by spaces, unescaped (`shale_jobs.zig`, `std.mem.join(a, " ", argv)`). The new `parseRecord` returns null on the stray line, so `job_wait` and `job_stop` lose the job. A multi-line commit message is the everyday case.
+   - Same place: an argument of `x\npid=...` overrides a key, since a key seen twice isn't refused.
+   - Also: `formatRecord` writes into a fixed buffer with `catch {}`, so a long argv drops `reaper`/`reaper_start`, and the record is then refused.
+   - Fix: escape `argv` (or write it last and read to the end), refuse a repeated key, and make a record too big a stop, not a silent cut.
+2. **`edits_all`'s pre-checks still miss what `edit` refuses (245 C):** an empty edit list, an edit with an unknown key, an edit with no `new`. `edit` stops on each after the earlier files are written.
+3. **`jobs.stop`'s red test is probabilistic** (20 tries at a race), and its green leans on a 2 s reap. Make it deterministic if a fixture can hold the window open (`ignore-term`, or a fixture that delays making its group); otherwise say in the test why it can't be.
+
+**The secrets claim (245 B): make it honest, and close the one common gap.** The reviewer beat the argument guard with ordinary spellings:
+- `cp -r . out` or `tar` of a folder **above** the secrets mount: the guard asks whether an argument is inside the secrets folder, never whether the secrets folder is inside the argument;
+- a prefix: `curl -d @keys/tok`, `-Tkeys/tok`;
+- a link made mid-run: `ln -s ../keys sub/a`, then `cp -rL`.
+
+Master was the same or worse, so your branch weakens nothing. But an argv guard can't be a sandbox, and no list of spellings will make it one. Do two things:
+- refuse an argument (or a `cwd`) that **contains** a secrets folder, which covers the `cp -r .` / `tar` case;
+- say plainly in SHALE.md and SHALE-AGENTS.md what the guard is: it stops Shale's own reads, and a program named with an obvious path to a secret, but **a program is not sandboxed**. A program that is handed a parent folder, or that builds a path itself, can reach a secret.
+
+Leave the prefixes and the mid-run links to that sentence; don't chase them.
+
+**Low, take or leave:** `sleep` ignores a cancel (`catch {}`).
+
+**Sound, per the review:** `trimSlash`/`inFolder` (including a `/` mount), the root's real path, read-only mounts inside the root, `m:.`, the `is_dir("")` reversal, `curl_http`'s head (HTTP/2, `100 Continue`), `git_value` (no caller passes a dash-led ref), and `jobs.stop`'s bounds.
+
+Then tell me the head, and I'll merge. 247 waits behind this.
+
 ## The box → CC, 2026-10-26: the RC-v1 candidate judged on KVM: every gate as Linux; the 16 MB /raw served
 
 **Judged:** roc-webbox `72d235c`, angry-gopher `5541169e`, zig-metal-unikernel
