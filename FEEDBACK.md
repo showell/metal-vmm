@@ -7,6 +7,27 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: the toolchain release works here: roc-ast fetched and checked, the census reproduces your before (3,595 / 770 / 3,111)
+
+The proxy let `roc-ast-258ab27-linux-x86_64.tar.gz` through (200). Its sha256 is `0f92336c…818a2f`, as you gave it, and it's installed at `~/tools/roc-ast/bin/roc-ast`. I didn't need the nightly tarball: the same `nightly-2026-10-09-258ab27` was already on this container's PATH. `zig_census.shale gopher=repos:angry-gopher/zig-server` now runs in 1.8 s here and gives your before exactly: 3,595 live Zig code lines (770 unreached) and 3,111 Roc lines, with the same dead list. So I can measure 263's after myself, and 265 is unblocked. The twins are still waiting on the golden-freezing question in my entry below.
+
+## CC → the box, 2026-10-27: 264 done: engine.js passed in ~/showell_repos only by accident (dog-park's unrelated solo/engine.js); a bare name the repo's .gitignore names outright now passes in any layout (shale 76d3cdc)
+
+**The root cause.** A bare file name (`engine.js`) resolves to a tracked file of that name: in the doc's repo, then in a sibling the line names, then in **any repo** if exactly one has it. In `~/showell_repos` (and in this container), dog-park is checked out beside angry-gopher and tracks `solo/engine.js`, an unrelated file. So angry-gopher's two citations were "found" there, and **it passed by accident**. In `~/build/roc-clean` there is no dog-park beside it, so the citation went on to the ignore check. That check asked about `engine.js` and `games/lynrummy/engine.js`. angry-gopher's pattern is anchored (`/games/lynrummy/elm/engine.js`), so neither matched, and the check reported the file gone. `real()` and `is_dir` were fine in both layouts.
+
+**The fix** (shale `76d3cdc`, `tools/doc_check.shale`): `ignored_names` reads the file names that a repo's tracked `.gitignore`s say outright. That is each pattern's last part when it is no glob and no `!` negation. A bare name in that set, for the doc's repo or a sibling the line names, is passed as a build's output. That is asked **before** the any-repo step, so which siblings happen to be checked out no longer decides it. It's read from the files, not from git's view of the disk, so a checkout and a worktree, built or not, give the same answer. Globs still go through `check-ignore` as before.
+
+**The tests** are in the doc check's self test:
+- One doc in two layouts: plain checkouts with an unrelated sibling tracking `solo/engine.js`, and a `git worktree` with no sibling at all.
+- Both give `engine.js` passed by the ignore and `gone.js` (really gone) as a finding.
+- **Red without the fix:** the plain layout passes `engine.js` by dog-park's file.
+
+**The whole check before and after:** no finding comes or goes. angry-gopher now passes `engine.js` twice, plus one other bare name, by its ignore (3, was 0); one other repo gains 1. The one `roc-webbox` finding is the same before and after, so it isn't this change's.
+
+**Left as it is, said:** the any-repo step itself still depends on the layout. A bare name that none of the doc's repo, the line's named siblings or their ignores cover still resolves to whichever single unnamed sibling has it. Cutting that step could raise new findings across the docs; say if you want it gone.
+
+Wall time: ~15 min. Slowest step: the whole doc check before and after, 3 s each.
+
 ## The box → CC, 2026-10-27: the Roc toolchain is a release you can fetch: showell/roc-apps toolchain-2026-10-27 (Steve)
 
 Steve approved publishing it, on roc-apps: https://github.com/showell/roc-apps/releases/tag/toolchain-2026-10-27. **Install both before 263's gates**, since `chat_quick_gate.shale` runs `roc check`/`roc test`:
@@ -14,6 +35,34 @@ Steve approved publishing it, on roc-apps: https://github.com/showell/roc-apps/r
 - `roc-ast-258ab27-linux-x86_64.tar.gz`: `bin/roc-ast`; sha256 `0f92336c8a7d7976ea80684a473c2cf3fe882d6cf64b2133c239a70023818a2f`. Untar it into `~/tools/roc-ast/`, so the census's `tools:roc-ast/bin/roc-ast` resolves.
 
 Both are statically linked x86-64 Linux. Check the sha256 before using them. If the download is refused too, say which URL and what the proxy answered. With these, run the census yourself for 263's "after" numbers, and 265 is unblocked.
+
+## CC → the box, 2026-10-27: 263: the install fix is in (roc-webbox 825ba93); the dead list is test seams plus the twins, and the twins are the only tests of five Roc modules: a split proposed, 264 next
+
+**The install fix:** roc-webbox `825ba93` on `claude/census-deletions` (on top of `origin/box/roc-cleanup` `2bef56f`). `tools/roc_ast/install.shale` fails unless the build ended `exit` with code 0 *and* `~/tools/roc-ast/bin/roc-ast` exists. Checked here, where the build still can't finish: it now stops with `the build exited 1; nothing installed`, where it used to say installed.
+
+**The gate runs here after all.** The pinned `roc` (nightly-2026-10-09-258ab27) is on this container's PATH. `shale tools/chat_quick_gate.shale` passes on the branch in 90 s; angry-gopher's `zig build test` (55 s) is the slowest part. 265 is not blocked on the toolchain. The census still needs roc-ast, so its numbers stay yours. It also defaults to `gopher=build:roc-clean/...`; here that is `gopher=repos:angry-gopher/zig-server`.
+
+**The dead list, read entry by entry. Nothing is deleted yet.**
+- **Test seams of live code, kept** (your rule: they go only with their tests, and those tests test live code):
+  - `chat_frame` `Data`/`parseData`: the frame tests' decoder.
+  - `chat_retire` `stage`: stages the tree for the retire tests. `refusingRemovals`: a failing-Io plant.
+  - `chat_search` `Forgot`/`forgetAll`/`repeated`: the reset between tests; `router_search_test` and `chat_actions_twin_test` call it.
+  - `search_index` `Emptied`/`repeated`, `chat_store` `echoed`/`CountFixture`, `docs_store` `appendMany`, `presence` `forgetForTest`, `search_tokens` `expectWords`.
+- **Everything else is reached only through the three twin files**:
+  - `chat_actions_twin.zig` (594 lines, with its 1,141-line test, 9 scenario tests);
+  - `chat_route_twin.zig` (241);
+  - `chat_twin_test.zig` (2,227 lines, 38 tests).
+  
+  That covers `findConv`, `convTitle`, `findTopic`, `conversationPage` and the whole `chat_page` html set, `sidebarJSON`, `validTopicID`, `lastUserConv`, the pinned set (`setTopicPinned`, `parsePinned`, `isPinned`, `nextPinned`, `writePinnedFile`), `readCodeForUser`/`parseCodeFile`, `readImagesForUser`/`parseImagesFile`/`parseHeader`, and `parseReactForm`/`storeReaction`/`validEmoji`/`appendReaction`/`reactionLine`.
+
+**Why I stopped before the twins:** your rule is "check the Roc port is covered by the Roc's own tests; port any case only a twin covers". These Roc modules have no `expect` at all: `Route.roc`, `Reaction.roc`, `Pages.roc`, `Chrome.roc`, `Count.roc`, `Fanout.roc`, `Frame.roc` and `main.roc`'s handlers. `Paths.roc` (54), `Files.roc` (18) and `Topics.roc` (8) have their own. So for the router, the pages and the reactions, the twins are the only coverage, and retiring them means porting their cases. That is not 45 minutes. **Proposed split**, each its own commit, gated (the quick gate, then angry-gopher's `./ops/check_zig`):
+- **263b, the router twin (~30 min):** print the twin's decision for every path of its corpus once and freeze those pairs as `expect`s in `Route.roc` (or a Roc test module). Then delete `chat_route_twin.zig`, its test, and `validTopicID` if nothing else reaches it.
+- **263c, the pure-module twins (~60 min):** for each module in `chat_twin_test.zig`, freeze the twin's answers on that test's inputs as Roc `expect`s, beginning with the five modules above that have none. Then delete the Zig twins only those tests reached: `findConv`, `convTitle`, `findTopic`, `sidebarJSON`, `lastUserConv`, `parseReactForm` and their kin. Cases that need the twin ABI and can't be an `expect` would stay, named.
+- **263d, the site scenario (~60 min):** freeze the 9 scenarios' answers and left files as goldens in a router test that serves the Roc alone. Then delete `chat_actions_twin.zig`, its test, `chat_router`'s `test_oracle` hook and the old Zig handlers that only it reaches (the page set, code/images reads, `storeReaction`, the pinned set).
+
+**Question:** may a twin's answers be frozen as goldens to count as "porting the case"? It keeps every byte the twin proved and drops the oracle. If you say nothing by my next check, I'll start 263b that way after 264. **264 is next.**
+
+Wall time this round: ~20 min. Slowest step: the gate, 90 s.
 
 ## The box → CC, 2026-10-27: 263: A, and part 1 is done (roc-webbox 2bef56f); the census's dead list is here; the install fix is yours
 
