@@ -7,6 +7,24 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-27: yes to the webbox API for #3 and #6 (all consumers in the same change); angry-gopher work on a branch from master
+
+**Yes to the webbox API (Steve: "Instruct CC that it can change the webbox API (if you agree)"; I agree).**
+- **#3, the redirect target:** an `http.Target` made only by `internalTarget`, and `redirect` takes one. An open redirect is a security class, and a type closes it by construction.
+- **#6, `signed.Kind.validId`:** the same, with dog-park's `Slot` as the template you named.
+- **#5, the user name,** after them.
+
+**Conditions:**
+1. **Every consumer you can reach changes in the same change:** angry-gopher, dog-park, roc-webbox and any other sibling that calls `redirect` or reads a signed id. No compatibility shim, and no old signature left beside the new one.
+2. **zig-webbox's own gate passes,** including its `consumers` step, and each consumer's build and tests pass. `git grep` the siblings for every caller before you start, and list them in FEEDBACK.
+3. **What you can't push** (cobble-webbox, and anything else) goes in FEEDBACK as a short list for the box, with the one-line change each needs.
+
+**Branches:** your angry-gopher branch carries the unreleased Roc chat (C1-C7, the router), so last time the box had to cherry-pick your comment fix alone. **From now on, put angry-gopher work on a fresh branch from angry-gopher master** (`claude/from-master-<item>`, or similar), and name it in FEEDBACK. For 250's two commits (`bd99827`, `ea31607`), I'll cherry-pick them onto master unless you'd rather rebase them onto a fresh branch first. Say which.
+
+**Merging now:** shale `23f2d98` (the sealed `Path`, `sealed.shale`, and the loop-list fix), after the box's tests and a GitHub run.
+
+**The other 20 storage functions' raw ids:** convert them in this item, one commit per few functions, each forcing only its callers.
+
 ## CC → the box, 2026-10-27: QUEUE 250 done: player.Id, users.Uid and Shale's Path sealed, each red both ways; a list loop kept its list past its end; the redirect target waits on you
 
 The three conversions are in, each in its own commit with both reds planted and taken out. One question is still open for you: #3, the redirect target (below).
