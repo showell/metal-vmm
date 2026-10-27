@@ -38,30 +38,47 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
-**248. Code comments that cite the docs your sweep deleted: CC'S** (Steve, 2026-10-27: "queue the doc citation fixes for CC"). Your doc sweep (FEEDBACK, "the doc sweep, at Steve's ask") deleted docs that code comments still cite. Fix the citations, **comments only, no code**: each one either says the fact in place, briefly and in the present tense, or names where the fact lives now (a doc that exists, or the code). A comment that only pointed at history goes.
+**250. Opaque types for validated values, beyond the Roc chat: CC'S** (Steve, 2026-10-27: "have CC look for more places to introduce the opaque type pattern for validation"). After 249.
 
-**In scope** (your own list):
-- **zig-metal-unikernel:** probe/config.zig (picture-cache), probe/judge_gopher.py (signed-uid, admin-host, and FAT32's "Then the chat judge"), probe/test_judges.py (admin-host), droplet/replay.py, check_backup.py and backup.sh (admin-backup), src/log_ring.zig (secrets), src/net.zig and probe/gopher.zig (item90-step2).
-- **angry-gopher:**
-  - storage.zig (game-store)
-  - uid_cookie.zig (signed-uid, request-paths)
-  - login_throttle.zig (login-throttle)
-  - admin_backup.zig and router_admin_test.zig (admin-backup)
-  - users_session.zig, login.zig, admin.zig, chat_paths.zig (request-paths)
-- **dog-park:** "decision N" in physics.zig, walk_reference.zig and physics_server_test.zig. State each rule where it applies.
-- **essay-repl-server:** notes/cutover-decisions.md and notes/shale-dogfood.md, if they cite deleted files. Leave the tests/queue/misorder fixture as it is.
+**The pattern (the box found it in the Roc chat today):** a value checked once is passed on as a type that only its check can construct, so an unchecked value fails to compile, not merely fails a review.
+- **Roc:** an opaque type, `ChatPath :: List(U8)` (`::`, not `:=`): outside its module, `ChatPath.(x)` is a compile error, so only the module's validated builders make one. The nominal syntax at the pin (nightly 2026-10-09): declare `X := T.{ ... }` or `X :: T`; wrap `X.(v)`; unwrap the pattern `|X.(v)| v`; `==` needs an `is_eq` on the type.
+- **Zig:** a distinct type whose one constructor is the validator. Either `enum(u32) { _ }` with `fromInt`/`toInt`, or a struct whose field the rest of the code never sets: a convention, so say how it's enforced, perhaps by a test that greps for the field outside its file.
 
-**Out of scope: the box's.** roc-webbox (roc_abi.zig, chat_abi.zig, sljmp.zig, chat_route.zig) and angry-gopher's chat_router.zig. The box's local `box/roc-cleanup` branch is rewriting those files, and will take their citations in its own pass.
+**Why it matters:** the box's tests showed the chat's path builders refuse nothing. `channel_path("../x")` makes `channels/../x.channel`, which stays inside the root, so the host's root check doesn't see it. Only upstream validation stands between them, and it holds only while every caller remembers it.
 
-**Also look for others:** run `zig build doc-check -- only=<repo>` (zig-webbox) on each repo. Then `git grep` each deleted doc's name (`git log --diff-filter=D --name-only` over your sweep's commits lists them) to catch citations your list missed.
+**Hunt:** the Roc chat is visible now, on branch `box/roc-cleanup` in roc-webbox (`chat/`) and angry-gopher. **Rank its candidates with the rest, but the box converts the chat's** (its agents are editing those files: `ChannelName`, `TopicId` and the DM key first). Also:
+- **dog-park's Roc:** kinds, ids, world coordinates;
+- **roc-webbox's TODO app** on master (its ids are parsed digits-only by hand; QUEUE's P1);
+- **angry-gopher's Zig outside chat_*:** uids, API keys, session and cookie values, upload and doc names, game ids;
+- **zig-webbox:** request paths, header values, mount names;
+- **shale:** a script's path after `pathArg`, mount names, `want` tags.
+
+Look for a value that one function validates and returns as the plain type it came in as, then several functions take and trust. A `valid_x`/`isValid`/`parseX` returning a Bool, or a cleaned string, is the tell.
 
 **Deliverable:**
-- one commit per repo, on your branch;
-- each repo's doc check passes;
-- each repo's own `zig fmt --check` passes where you touched Zig;
-- in FEEDBACK: what you changed, and any citation you couldn't resolve, saying why.
+1. **A ranked list in FEEDBACK:** each candidate, where it is checked, how many places trust it, and what a forgotten check would do.
+2. **Then do the top three:** each in its own commit, with a red test or a plant showing the unchecked value now fails to compile (a compile-fail case where the language allows one; otherwise a test that grep-checks the convention).
+3. Keep each conversion small: the type, its one constructor, and the callers it forces to change.
 
-Nothing here needs KVM.
+**Stop and ask** if one would reach a public API or the Roc/Zig seam.
+
+**249. One syntax check for every file kind, so no habit reaches for python3: CC'S** (Steve, 2026-10-27, on your 248 note that you checked Python syntax with `python3` out of habit: "err toward improving shale (have CC do it) unless it's truly a one-off"). The habit is real and general: after an edit, did this file's syntax survive? Today each language has its own command, and a habit reaches for whichever is nearest.
+
+**`cookbook/syntax.shale files=a,b,...` (or `rev=<range>`: the files a commit range touched):** one verdict a file, by kind:
+- `.zig`: `zig ast-check` (and `zig fmt --check`, said apart);
+- `.zon`: `zig fmt --check`;
+- `.roc`: `roc check` (an app or a module: say how a module is checked);
+- `.js`/`.mjs`: `node --check`;
+- `.shale`: Shale's own parse, with no run (read the CLI for one; if none exists, a `--check` that parses and stops is in scope);
+- `.py`: `python3 -m py_compile`, passed through `run`'s `want` with the tag the recipe names, so the use is logged as the tool exception it is, never chosen by hand;
+- `.sh`: `bash -n`, the same way;
+- `.md`: nothing, said once.
+
+One line a file (`ok`, or the first error), then PASS or FAIL. Refuse a dash-led value (`not_option`). Keep it fast: one program a file, and run the files of one kind together where the tool takes many.
+
+**Then point the habit at it:** a line in SHALE-AGENTS.md's "Before you reach for the shell" table (`python3 -m py_compile f`, `node --check f`, `zig ast-check f` → `shale cookbook:syntax.shale files=f`), and in CLOUD_WORK.md if your environment notes say how you check an edit.
+
+**Deliverable:** the recipe, with a test in the cookbook test file the others use, showing a good file and a broken one of each kind the box has tools for. In FEEDBACK, say how long a mixed set of 10 files takes.
 
 ## Parked
 
