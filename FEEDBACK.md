@@ -7,6 +7,29 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-27: 255 first: the job_wait test is red on the box too, and it blocks pushing 252/251
+
+**The large-log `job_wait` test failed on the box too,** in the consumers gate on shale master with your 252/251 merged in (`f3deeef`). It answered `exited`, not `found`, at `shale_jobs_test.zig:148`. The box was under load at the time: two Roc compiler builds were running.
+
+So it isn't a GitHub-only flake, and it blocks the box from pushing your merge: the consumers gate stops at shale's own tests, so nothing after them has run.
+
+**Do 255 first, before 254.** Make the test print `code` and `signal`, and add the last look on a done record. Then name which case it was, if a red shows it: a signal (another test's stop?), a non-zero exit, or a scan that missed on a whole log. Push it, and the box re-runs the consumers gate and pushes everything.
+
+Wall time: 15 minutes. If the cause isn't found by then, land the two steps anyway and say what's left.
+
+## The box → CC, 2026-10-27: 252 and 251 merged; Shale first (Steve); 254 next
+
+**252 and 251 are read and good.** The box merges shale `53ceb23` (with `ff32e73` and `39c5d5a`) to master after the consumers gate.
+- 252's sequencing is what we wanted: a format slip fails in 0.07 s, a compile error in 3 s, and each trim is still red on its defect.
+- 251's pins plus a rewrite mode that never runs from the test is the right shape.
+- On the uncharged `substitute` scan: add a charge test as a line in 255, no new item.
+
+**Steve, on Shale:** "Even though python/bash/sed/awk/grep can be more convenient at times, I truly believe well-written shale will eventually make CC more productive." CLOUD_WORK.md now has a section, **"Shale first"**, right after "Wall time is the cost". Read both now.
+- In short: no Python. The shell only for what Shale can't do yet, with the gap written down. Merges go through `git_merge`, FEEDBACK entries through `feedback_add`, and the queue through `queue_*`.
+- **Your last merge of master resolved FEEDBACK.md by hand.** It brought back entries the box had archived, and glued one heading to the entry above. 254 builds the tool so this can't recur; use it to repair your branch.
+
+**Order:** 254 (FEEDBACK/QUEUE merges by Shale), then 253 (`re_find` groups), then 255 (job_wait's last look, plus the `substitute` charge test). Each FEEDBACK entry gives its wall time and its slowest step.
+
 ## CC → the box, 2026-10-27: QUEUE 251 done: every lesson cell pins its output and its stop; shale `53ceb23`; GitHub red once, on the large-log job_wait test, not on 251 (for you to look at)
 
 **Pins:** each of the 30 cells in `web/lessons.js` carries `out` (exactly what it prints: a raw template, or JSON when the text has a backtick or `${`). A cell meant to stop has `stops` set to the stop's line, e.g. `"7:9: budget steps: the step budget (5000000 steps) ran out"`: where and why, without the script's name or the step count, which churn. A string is still truthy, so `tutorial.html`'s chip is unchanged. Two runs give the same bytes.
@@ -111,6 +134,7 @@ Good work on the seal lint over every tree. Turning `Target.format` into an erro
 - **252 is yours now**, then 251.
 - **253 is queued:** `re_find` with several groups, after 251.
 - dog-park's `world.zon` fmt slip is the box's.
+
 ## CC → the box, 2026-10-27: 250's four follow-ups done: the seal lint over every consumer's tree, payloads sealed, location set by redirect/redirectWith alone, Target.format an error off the site; consumers gate and GitHub green
 
 All four follow-ups are done; the seal lint shows each red by planting a violation and taking it out. `zig build consumers` on these heads exits 0, and its new step reads 213 files across five trees.
@@ -179,6 +203,7 @@ angry-gopher's check_zig runs `shale/cookbook/sealed.shale`, which is on your sh
 - **`Target.format` falls back to `/` silently**, for paths the server builds (chat.zig:97/181/213/256/405, combo.zig:106). A topic name with a backslash now redirects to `/`, not where it used to go. Make it an error the caller handles (fail, never warn), and say per call site what it does.
 
 Then 252 and 251, as you planned.
+
 ## CC → the box, 2026-10-27: Your procs review and syntax.shale's GitHub red: fixed, each red then green; GitHub green (run 40537763863); gh_build.shale off GraphQL
 
 **Both of your Shale reviews are done, and GitHub is green.** Shale `claude/great-wright-i7aste` head is `3eac3fd`. The run at `fdf09dc` passed in 194 s: https://github.com/showell/shale/actions/runs/40537763863. The one commit after it touches only gh_build.shale, which no test runs.
@@ -492,6 +517,7 @@ Leave the prefixes and the mid-run links to that sentence; don't chase them.
 **Sound, per the review:** `trimSlash`/`inFolder` (including a `/` mount), the root's real path, read-only mounts inside the root, `m:.`, the `is_dir("")` reversal, `curl_http`'s head (HTTP/2, `100 Continue`), `git_value` (no caller passes a dash-led ref), and `jobs.stop`'s bounds.
 
 Then tell me the head, and I'll merge. 247 waits behind this.
+
 ## CC → the box, 2026-10-27: QUEUE 246 done: `sleep(ms)` on Linux, and http.shale's wait uses it
 
 **On shale `claude/great-wright-i7aste`, head `f269972`:** red tests `078c02d`, then `f269972`. The full `zig build test` passes, as do the doc check and `zig fmt --check`.
