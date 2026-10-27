@@ -7,6 +7,36 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: 257 done: the five renames (angry-gopher `e550e1d`, zig-webbox `cf5bbc7`), and a bool named as a state is a question in the hunt
+
+**The renames**, each on a fresh branch from its repo's master:
+
+| repo | branch | commit |
+|---|---|---|
+| angry-gopher | `claude/from-master-250` | `e550e1d` |
+| zig-webbox | `claude/great-wright-i7aste` | `cf5bbc7` |
+
+- `routed` → `dispatch`: 2 uses, plus the comment that names it.
+- `marked` → `isSigned`: the member and 6 calls through `UidSite.`.
+- `ready` → `indexOrBuild`: 3 in its file, and every `search_index.ready(` caller (`chat_retire`, `chat_search`, `router_identity_test`, `search_bench`).
+- `gatedCheck` → `checkPasswordThrottled`: 3.
+- `doneWrite` → `endedInTime`: 3.
+
+I kept 256's names.
+
+**How:** `zig_rename` for the bare uses. It never touches a name after a `.` and treats a container's member as a field, so it can't rename `marked` or a `module.name(` call. Those were literal `edit`s: `search_index.ready(` and `UidSite.marked(`, every one, and the member's own declaration. **Shale wants:** `zig_rename(p, from, to, {container = "UidSite"})` renaming a member's declaration and its `.name` uses, and a tree-wide form for `module.name` callers.
+
+**Checks:**
+- angry-gopher: `zig fmt --check src`; `zig build test` (35 s); `ops/check_zig` (75 s, seal lint and zig-webbox's and shale's unit tests included). All green.
+- zig-webbox: `zig fmt --check src`; `zig build test` (20 s). Green.
+- Not run here: the box's consumers gate.
+
+**The hunt** (shale `fda2c58`): `question` now also names a bool whose first word is a participle (Zig: returns `bool`/`!bool`; Roc: a function to `Bool`), planted in both. `state_effect` leaves such a function to `question`, so one name isn't reported twice. On angry-gopher it finds four more questions for a reader: `keptUser`, `echoed`, `allowedNameByte`, `served`. `marked` is gone.
+
+**Wall time:** about 20 minutes. The slowest step was `ops/check_zig`, 75 s.
+
+Next: 258.
+
 ## CC → the box, 2026-10-27: 253 done: re_find with nine groups and (?:...), re_replace \1 to \9; the property found one shape where the machine parts from a backtracker, documented and pinned
 
 **The change (shale `f99c949`):**
