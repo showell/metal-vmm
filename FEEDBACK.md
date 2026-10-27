@@ -7,6 +7,37 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: Your procs review and syntax.shale's GitHub red: fixed, each red then green; GitHub green (run 40537763863); gh_build.shale off GraphQL
+
+**Both of your Shale reviews are done, and GitHub is green.** Shale `claude/great-wright-i7aste` head is `2f3a0d7`. The run at `fdf09dc` passed in 194 s: https://github.com/showell/shale/actions/runs/40537763863. The one commit after it touches only gh_build.shale, which no test runs.
+
+**procs()/proc_stop (`c7ce3af`), each red on `b3674cb`'s shale_host_procs.zig:**
+1. **A refused signal is a stop.** Each `pidfd_send_signal` answer is checked. ESRCH means gone, which is done. Anything else stops the run, named: "pid N refused TERM: PERM". So does a process still there 2 s after KILL.
+   - Red, two real routes, no carried skip:
+     - as root (here), a fixture of root's, stopped by a shale run through `setpriv --reuid=65534`;
+     - off root (GitHub's runner), any process of root's, from `procs()`'s new `uid`.
+   - The old code returned true for both.
+2. **The command line is read to its end,** up to `args_most` (1 MiB). Past that, the entry says `args_cut = true`.
+   - Red: a 6,000-byte argv was cut at 4096.
+   - Past 1 MiB: a fixture spawned by the test itself, since a job's record holds 7168 bytes of argv.
+3. **The pidfd:** `pidfd_open`, then the start time checked, then the signal, then a `poll` on the fd for the end (a zombie counts as gone). Whatever happens to the number, the fd names that process.
+4. **The decoys:**
+   - one whose argv holds the target's whole command line;
+   - a shale job, whose name `shale` is a prefix of `shale-fixture`, as `zig` is of `zig-server`.
+
+   Both survive the target's stop, matched exactly (`p.args ==`, `p.name ==`). With the filter planted as `pkill -f` matches (a substring of args), the decoy dies and the test goes red. SHALE-AGENTS.md now says to match exactly.
+
+**syntax.shale (`fdf09dc`):** it takes `zig=`, `roc=` and `node=`, each its name on PATH by default.
+- **A tool the machine lacks is said, never quietly passed or failed** (your second option). Its files are `skip f: no roc` lines, then `no roc: .roc files not checked`, and the summary reads `PASS: n files, m not checked`.
+- The test hands it the building zig (`b.graph.zig_exe` through shale_test_options). Where roc or node is absent, it asserts the skip lines and the summary line.
+- Checked here with `PATH=/usr/bin:/bin` (no zig, no roc): green. GitHub's runner has no roc: green.
+
+**A Shale fix the GitHub run needed (`2f3a0d7`):** `cookbook/gh_build.shale` couldn't dispatch from a Claude Code session. `gh workflow run` and `gh run list/view --json` ask GraphQL, which is refused here with HTTP 403. It now goes through `gh api` on the REST paths: dispatches, runs, a run.
+
+Also on the branch: `16bfa43`, the two number parses in procs.zig in `edge_sites`, which angry-gopher's request-edge check refused unnamed.
+
+**Next: 252, then 251.**
+
 ## CC → the box, 2026-10-27: QUEUE 250 finished: http.Target, signed.Kind(Id), names.UserName and every storage function, all consumers in one change, consumers gate green; angry-gopher on claude/from-master-250
 
 Your yes (#3 and #6), #5 after them, the other storage functions, and the new branch, all done. Every consumer I could reach is changed in the same change, with no shim; `zig build consumers` result below.
