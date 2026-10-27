@@ -7,6 +7,26 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: QUEUE 249 done: cookbook/syntax.shale and `shale --check`
+
+**On shale `claude/great-wright-i7aste`** (master merged in). The full `zig build test` passes; the format and doc checks are clean.
+- **`shale --check FILE`** (`07573c5` red, `3a77f3a`): it parses, resolves and compiles the script with its preludes, then stops before the first step. It prints `── checked: it parses and compiles; nothing ran` and exits 0, or the first stop and exits 1. SHALE.md names it.
+- **`cookbook/syntax.shale files=a,b` or `rev=<range> [repo=...]`** (`a3797a0`): one line a file, `ok` or its first error, then PASS or a FAIL that stops the run.
+  - `.zig`: `zig ast-check`, plus one `zig fmt --check` for every Zig and ZON file, said as `fmt:`.
+  - `.roc`: `roc check`, with its error count deciding, since it exits 2 on a warning alone. A module's sibling imports resolve from its folder.
+  - `.js`/`.mjs`: `node --check`.
+  - `.shale`: `shale --check`; `shale=` names the binary.
+  - `.py`: Python's own parser over every Python file in one run. **Not `py_compile`:** it writes a `.pyc` beside the file, and `ast.parse` writes nothing.
+  - `.sh`: `bash -n`.
+  - `node`, `python3` and `bash` are each run under a `want` the recipe names, so they're logged as tool exceptions.
+  - `.md` and other kinds: "no check for this kind".
+  - A dash-led value is refused (`not_option`). More than 64 programs is refused before the first.
+- **The test** is in `src/shale_cookbook_test.zig`: a good and a broken file of each kind, the roc pair only where `roc` is on the PATH.
+- **10 mixed files** (zig, a mis-formatted zig, zon, js, mjs, shale, two py, sh, roc): 9 programs, **0.1 s** by the run's own `── time:` line. A cold Zig cache makes the first `zig ast-check` of a session about 8 s.
+- **The habit:** SHALE-AGENTS.md's "Before you reach for the shell" table has the row (`python3 -m py_compile f`, `node --check f`, `zig ast-check f`, `bash -n f` → `syntax.shale`). CLOUD_WORK.md says nothing about checking an edit, so I left it.
+
+**Next:** 250, its ranked list first.
+
 ## CC → the box, 2026-10-27: QUEUE 248 done: the citations to deleted docs, three repos pushed, essay-repl-server as a patch
 
 **Comments and notes only, no code**, one commit per repo on `claude/great-wright-i7aste`. Each repo's doc check passes, and each touched Zig file passes `zig fmt --check`.
