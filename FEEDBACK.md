@@ -7,6 +7,36 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: 259 and 260 done: regex empty loops as a backtracker's, still linear; noun_effect in the Roc hunt (8, the ones 256 named; too noisy for Zig); same(a, b)
+
+**259, regex empty loops (shale `a0a9528`), inside its 60 minutes:**
+- **The rule:** a loop whose turn can take nothing (its body is nullable: `(\w*(|.))*`, `(a*)*`, `(a|)+`) ends at a turn that took nothing, as a backtracker's does.
+- **How:** each thread carries a bit per such loop, "this turn took a byte".
+  - Taking a byte sets every bit, and a turn's start (`turn`) clears its own.
+  - At a turn's end, `again` drops a turn that took nothing. A `+`'s first empty turn goes on past the loop (`first`), as the reference's does; so a nullable `x+` compiles as a first turn, then `x*`.
+  - States are an instruction plus the bits of the nullable loops around it. So a new turn begun where an earlier one stood is a different state, and the earlier turn's visit no longer drops it, which was 253's bug.
+- **Still linear:** at most 4 such loops nested, 16 in a pattern (each past that refused by name), so at most 16 states an instruction. Searches are charged their states a place; a pattern without such a loop has states equal to its instructions and costs what it did.
+- **Equivalent to RE2's?** It isn't their code. RE2 and Go compile a nullable `x*` as `(x+)?`, and I traced that it doesn't fix this case. This is the reference's own rule ("an empty turn ends the loop") made into state, which I can explain line by line.
+- **Results:** `(?:\w*(?:|.))*` on `ab.` is now `ab.` (the test is un-pinned). The property has its repeated groups holding groups back.
+- **Checks:** `zig build fuzz` passes every regex property (one run, at the end). One bound moved: `(a*)*b` on a run of `a` costs about three times `a*b`, not under twice, since the outer loop's bit doubles its body's states; still linear, and that property's 4× check passes. `zig build test` passes 417/417 in 56 s.
+
+**260 (1), `noun_effect`, Roc only (shale `46d2acc`):** an effect whose first word is no verb on a list of about 140.
+- **Roc chat:** 8 hits, exactly 256's: `conversations!`, `entries!`, `landing!`, `links!`, `msg!`, `new_topic!`, `page!`, `recent!`. Quiet: keep it.
+- **Zig: not kept.** On all effects it was 134 in angry-gopher, 64 in zig-webbox and 14 in shale: getters through `io` named for their value, and verbs the list lacks. Limited to effects returning `void`/`!void`, it was still 45 and 16, mostly HTTP handlers named for their page (`conversationPage`, `notFoundPage`). Too noisy, so dropped.
+- Planted and self-tested like the others.
+
+**260 (2), `same(a, b)` (shale `e69d697`):**
+- Lists item by item in order; maps key by key whatever their order; `{}` is the same as any empty table.
+- A step per item visited, a string's bytes at the bulk price; in charge_test's growing table.
+- Nesting past 200 stops: two tables that each hold themselves are an error, not a hang. A table compared with itself is true at once.
+- SHALE.md has it beside `==`, with why `==` isn't it: `==` stays the constant-time question, and an error on two tables.
+
+**GitHub:** dispatched, [run 40584755772](https://github.com/showell/shale/actions/runs/40584755772), not waited on.
+
+**Wall time:** 259 about 40 minutes, its slowest step the fuzz run (4.5 minutes, twice); 260 about 20 minutes.
+
+That empties my queue (257-260).
+
 ## CC → the box, 2026-10-27: 258 done: queue_merge and lines_merge; merge_master.shale resolves the queue's four files, each rule tested and run end to end
 
 **The change (metal-vmm `89e9237`):**
