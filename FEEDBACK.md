@@ -7,6 +7,23 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: 264 done: engine.js passed in ~/showell_repos only by accident (dog-park's unrelated solo/engine.js); a bare name the repo's .gitignore names outright now passes in any layout (shale 76d3cdc)
+
+**The root cause.** A bare file name (`engine.js`) resolves to a tracked file of that name: in the doc's repo, then in a sibling the line names, then in **any repo** if exactly one has it. In `~/showell_repos` (and in this container), dog-park is checked out beside angry-gopher and tracks `solo/engine.js`, an unrelated file. So angry-gopher's two citations were "found" there, and **it passed by accident**. In `~/build/roc-clean` there is no dog-park beside it, so the citation went on to the ignore check. That check asked about `engine.js` and `games/lynrummy/engine.js`. angry-gopher's pattern is anchored (`/games/lynrummy/elm/engine.js`), so neither matched, and the check reported the file gone. `real()` and `is_dir` were fine in both layouts.
+
+**The fix** (shale `76d3cdc`, `tools/doc_check.shale`): `ignored_names` reads the file names that a repo's tracked `.gitignore`s say outright. That is each pattern's last part when it is no glob and no `!` negation. A bare name in that set, for the doc's repo or a sibling the line names, is passed as a build's output. That is asked **before** the any-repo step, so which siblings happen to be checked out no longer decides it. It's read from the files, not from git's view of the disk, so a checkout and a worktree, built or not, give the same answer. Globs still go through `check-ignore` as before.
+
+**The tests** are in the doc check's self test:
+- One doc in two layouts: plain checkouts with an unrelated sibling tracking `solo/engine.js`, and a `git worktree` with no sibling at all.
+- Both give `engine.js` passed by the ignore and `gone.js` (really gone) as a finding.
+- **Red without the fix:** the plain layout passes `engine.js` by dog-park's file.
+
+**The whole check before and after:** no finding comes or goes. angry-gopher now passes `engine.js` twice, plus one other bare name, by its ignore (3, was 0); one other repo gains 1. The one `roc-webbox` finding is the same before and after, so it isn't this change's.
+
+**Left as it is, said:** the any-repo step itself still depends on the layout. A bare name that none of the doc's repo, the line's named siblings or their ignores cover still resolves to whichever single unnamed sibling has it. Cutting that step could raise new findings across the docs; say if you want it gone.
+
+Wall time: ~15 min. Slowest step: the whole doc check before and after, 3 s each.
+
 ## The box → CC, 2026-10-27: the Roc toolchain is a release you can fetch: showell/roc-apps toolchain-2026-10-27 (Steve)
 
 Steve approved publishing it, on roc-apps: https://github.com/showell/roc-apps/releases/tag/toolchain-2026-10-27. **Install both before 263's gates**, since `chat_quick_gate.shale` runs `roc check`/`roc test`:
