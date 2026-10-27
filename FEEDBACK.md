@@ -7,6 +7,42 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: QUEUE 250 done: player.Id, users.Uid and Shale's Path sealed, each red both ways; a list loop kept its list past its end; the redirect target waits on you
+
+The three conversions are in, each in its own commit with both reds planted and taken out. One question is still open for you: #3, the redirect target (below).
+
+**Heads to merge:**
+- **shale `23f2d98`:**
+  - `85a84ab` red, `5caf603` green: the Shale flaw this turned up, below.
+  - `53f147b`: the sealed `Path`, and the new `cookbook/sealed.shale`.
+- **angry-gopher `ea31607`:**
+  - `bd99827`: `player.Id`.
+  - `ea31607`: `users.Uid`.
+
+**The pattern in Zig.** Each type is a struct with a field of size zero, its seal (`id_seal: Seal`, with `const Seal = struct {};` private to the file). The type's one constructor is its check (`Id.of`, `Uid.of`, `pathArg`), and it is the only thing that sets the seal.
+- **A literal without the seal does not compile** ("missing struct field").
+- **A literal that sets it** is refused by `cookbook/sealed.shale dir=... seals=field:file,...`. The lint reads Zig's tokens, so a comment or a string never counts, and it names each offender by line.
+- **Where it runs:** shale's cookbook test runs it over shale's own tree and over plants; angry-gopher's `ops/check_zig` runs it as "seal lint".
+- **What it can't see:** `@bitCast`, `std.mem.zeroes`, or `undefined` for a whole value. Those are a review's to refuse.
+
+**The conversions:**
+1. **`player.Id` (angry-gopher `bd99827`).** `storage.deleteUserData` (removeTree of `data_root/<id>`) takes one.
+   - Its two callers make the Id where they hold the raw id: admin's delete form answers "no such player"; login's release returns an error, so the router answers 500.
+   - Its empty-id check is now `Id.of`'s.
+   - Red: login passing the raw `t` gives "expected type 'player.Id', found '[]const u8'"; a forged `.id_seal` fails the lint by line.
+   - The other 20 storage functions still take a raw id. Converting them one at a time is yours to call: each forces only its callers.
+2. **`users.Uid` (angry-gopher `ea31607`).** `readAuthFile` and `authFileExists` take one.
+   - The six callers make it where they hold the id and treat an unchecked id as absent, as a missing file already was. Their own signatures are unchanged, so nothing outside users.zig and users_session.zig moves.
+   - Red: getUserName passing the raw `id` fails to compile; a forged `.uid_seal` fails the lint.
+3. **Shale's `Path` (shale `53f147b`).** Only `pathArg` makes one. The hook's path is a `Path` too.
+   - Red: a `Path` literal in builtins_read.zig gives "missing struct field: path_seal"; a forged one fails the lint.
+
+**The Shale flaw it turned up (red `85a84ab`, green `5caf603`).** The lint's first draft ran out of the kept budget at its first `yield`. A list `for` loop's hidden slot kept the list it had walked, after the loop ended or broke off, so a yield after a big loop copied the whole list.
+- **The fix:** two ops at the loop's exit (the target of a `break` too) clear the slot. They cost no step, because steps are the walker's node entries, which these ops don't add.
+- **Docs:** SHALE.md's yield section now says that a running loop's list is kept and an ended one's isn't.
+
+**Still yours to decide:** #3 on the ranked list, the redirect target. An `http.Target` that `redirect` takes would change zig-webbox's public API. Shall I? #5 (the user name) is next in line after that.
+
 ## CC → the box, 2026-10-27: QUEUE 250 part 1: the ranked list; doing the player id, the account uid and Shale's Path; the redirect target needs your word
 
 The deliverable's first part: the ranked list. I verified each against the code, not only the survey. Three of these I'm converting now (marked **doing**); #3 needs your word first.
