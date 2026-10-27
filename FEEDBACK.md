@@ -7,6 +7,36 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: QUEUE 244 done: eight path and value defects in Shale, each red then green; a read-only mount was writable through a root spelled with `..`
+
+**On shale `claude/great-wright-i7aste`, head `78a58ea`** (master `3c02198` merged in). Each defect has a red commit, then the fix. The full `zig build test` passes in 52 s, as does `zig fmt --check src` and the doc check. **The commits say "QUEUE 242"**, written before you renumbered the item to 244: they are this item.
+
+**Found and fixed, worst first:**
+1. **A root spelled `<dir>/.`, `<dir>/sub/..` or through a link** (`f18a6cc` red, `63584dd`): a script could write into a read-only mount inside the root, and read a secrets mount. The mounts' folders are realpath'd at load and the root was not, so the folder checks compared two spellings of one folder. 9b4eb2e covered only a relative root. The runner now takes the root's real path, as it takes the mounts'. `real(".")` lost its `/.` for an absolute root too.
+2. **`edits_all` with one file named twice** (`be52a4a`, `eaf1b0f`), by any spelling (`a.txt` and `here:a.txt`), checked each set against the file on disk. Then it wrote the first set and stopped on the second: not "nothing written unless all hold". A file's later sets are now checked against its earlier sets' result, keyed by `real`.
+3. **`--root /`** (`eaf9349`, `0bde0e9`): `real("")` gave the cwd, and every change was refused as `BadName`. `pathArg` built `//tmp/x`, which the store reads as an empty part. **`top = /` as a mount** (`86a3228`) was trimmed to `""` ("the mount `top` is , which is not a folder"). Now one `trimSlash` keeps `/`, and one `setup.inFolder` makes the eight "this folder or below" checks, which each failed for `/`.
+4. **`newest("m:")`** (`9141330`, `06c4d5d`) statted each name in the root (`stat("a")`), not in the mount. Now there is one `path_under(dir, name)` in the Linux prelude (`96343e1`, `ad46c72`), the second user being cookbook/run.shale's `under`. Both use it, and the copy in run.shale is gone. The new function is in SHALE.md and SHALE-AGENTS.md.
+5. **`glob`** (`07511a9`, `4a7a7fc`): a mount whose name has a `-` (`my-runs:`), which the mounts file allows, was taken as a path part and globbed nothing. `./*.md` also globbed nothing; a `.` or `..` part is now refused, as every store call refuses one.
+6. **`m:.`** (`b5e04b1`, `38c5a38`, then `a1a46c0`, `62f7946`): a mount's `.` was refused, though `.` is the root. After my first fix, `walk("m:.")` gave `m:./x`, a spelling every other call refuses. `pathArg` now takes `m:.` as `m:`.
+7. **`is_dir("")` and `is_dir(".")`** (`e98818e`, `8e42e35`) were refused as acting on the whole root, while `exists`, `ls` and `is_dir("m:")` answer. **This reverses a line of the escapes test** (`print(is_dir(""))` was listed as refused). `is_dir` only looks, so I took that test line to be wrong. Say if it was meant.
+8. **Errors that named the wrong thing:** `run`'s `cwd` or `log` of another type (`7e4f0cb`, `b1d1d28`) now names `run`'s option. A git call's `repo` that is not a string (`cc2d033`, `cb9e09c`) stopped as "`==` on a list or a map". `git_commit`'s `{all = true}` now points to `add = "all"`.
+
+**Checked and clean:**
+- a relative root (`../r`) since 9b4eb2e;
+- trailing slashes and `//` in a path (each is refused);
+- `real`, `exists`, `ls`, `stat` and `walk` on `""`, `.`, `m:`, a folder and a mount inside another mount;
+- `lines` and `split` at their ends, and CRLF;
+- `words`, `date(0)`, `human`;
+- `run`'s `cwd = "."`;
+- the change journal, which keys on the real path.
+
+**Left, not fixed:**
+- A bad path given to `real`, or to `run`'s `cwd`/`log`, is reported as "`host`: ...". `pathArg` names the builtin, and these go through `host`. Naming them would need a label passed through `osPath`.
+- `run`'s `cwd` to a missing folder does not print the path.
+- `parse_int(" 3")` is 3 but `tonumber` is strict. That is lenient as documented, so I left it.
+
+**Next:** 245, from shale master `3c02198`, merged into my branch.
+
 ## CC → the box, 2026-10-27: the doc sweep, at Steve's ask: what was wrong, what went, and the citations left in code
 
 **Steve asked for a doc sweep** of webbox and the related repos, angry-gopher
