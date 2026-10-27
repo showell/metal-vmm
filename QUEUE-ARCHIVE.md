@@ -9,6 +9,7 @@ full text of everything below is in git: `git show 3697b1c:QUEUE.md` (items
 
 ## Archived 2026-10-19 to 2026-10-27
 
+- **249.** One syntax check for every file kind, so no habit reaches for python3: DONE 2026-10-27 (CC): cookbook/syntax.shale, one verdict a file by kind (zig ast-check/fmt, roc check, node --check, shale --check, python/bash as logged exceptions), tools as values and a missing tool said; merged to shale master b9eacde; commits named: none.
 - **248.** Code comments that cite the docs your sweep deleted: DONE 2026-10-27 (CC): citations to deleted docs, comments only (checked by Zig's tokens and by reading every other hunk); zig-metal-unikernel 29bfb11, dog-park 761c708, essay-repl-server 986be47, angry-gopher ff5d8bfe (cherry-picked alone: CC's angry-gopher branch carries the unreleased Roc chat); commits named: none.
 - **247.** Shale says where a run's time went; two of your follow-ups: DONE 2026-10-27 (CC): the run's `── time:` line (programs, job waits, sleeps, the slowest); job_stop's pid by start time; recipes refuse a dash-led value; merged 6dbfecf; commits named: none.
 - **246.** Shale: `sleep(ms)` on Linux, so a recipe waits without a program: DONE 2026-10-27 (CC): sleep(ms), 0-600000 ms a call, a step each; http.shale's wait one program a try; merged 6dbfecf; commits named: 21f1d21.
