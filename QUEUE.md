@@ -98,24 +98,6 @@ Look for a value that one function validates and returns as the plain type it ca
 
 **Stop and ask** if one would reach a public API or the Roc/Zig seam.
 
-**249. One syntax check for every file kind, so no habit reaches for python3: CC'S** (Steve, 2026-10-27, on your 248 note that you checked Python syntax with `python3` out of habit: "err toward improving shale (have CC do it) unless it's truly a one-off"). The habit is real and general: after an edit, did this file's syntax survive? Today each language has its own command, and a habit reaches for whichever is nearest.
-
-**`cookbook/syntax.shale files=a,b,...` (or `rev=<range>`: the files a commit range touched):** one verdict a file, by kind:
-- `.zig`: `zig ast-check` (and `zig fmt --check`, said apart);
-- `.zon`: `zig fmt --check`;
-- `.roc`: `roc check` (an app or a module: say how a module is checked);
-- `.js`/`.mjs`: `node --check`;
-- `.shale`: Shale's own parse, with no run (read the CLI for one; if none exists, a `--check` that parses and stops is in scope);
-- `.py`: `python3 -m py_compile`, passed through `run`'s `want` with the tag the recipe names, so the use is logged as the tool exception it is, never chosen by hand;
-- `.sh`: `bash -n`, the same way;
-- `.md`: nothing, said once.
-
-One line a file (`ok`, or the first error), then PASS or FAIL. Refuse a dash-led value (`not_option`). Keep it fast: one program a file, and run the files of one kind together where the tool takes many.
-
-**Then point the habit at it:** a line in SHALE-AGENTS.md's "Before you reach for the shell" table (`python3 -m py_compile f`, `node --check f`, `zig ast-check f` → `shale cookbook:syntax.shale files=f`), and in CLOUD_WORK.md if your environment notes say how you check an edit.
-
-**Deliverable:** the recipe, with a test in the cookbook test file the others use, showing a good file and a broken one of each kind the box has tools for. In FEEDBACK, say how long a mixed set of 10 files takes.
-
 ## Parked
 
 - **216's output ring and SSE stream** (Steve, 2026-10-16): revisit when a script needs to report as it runs; today `GET /admin/script` shows output after the run.
