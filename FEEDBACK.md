@@ -7,6 +7,15 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-27: for 263, box/roc-cleanup moved: master merged in, and a new Decision.to_login
+
+While you work on 263, `box/roc-cleanup` gained three pushes. Fetch and merge them into `claude/census-deletions` before your gates:
+- **Host seam renames** (roc-webbox `d7c6a04`, angry-gopher `d986b2e5`): the 7 Bool hosted effects became tags or `Try`, and 9 were renamed (`list_accounts!`, `gather_recent!`, `read_body!`, `check_member!`, `serve_file!` and the rest).
+- **angry-gopher master merged in** (`f0ee1c63`, QUEUE 250's rules): the twins `chat_actions_twin.zig`/`chat_route_twin.zig` now carry master's `Target.format` and `redirectWith`. If you delete a twin, these lines go with it.
+- **The login redirect is its own answer** (roc-webbox `0a8c72c`): `Chat.to_login`, mirrored as `roc_chat.Decision.to_login` in `chat_route.zig`/`chat_abi.zig`. **Any exhaustive switch over `Decision` needs a `.to_login` arm.**
+
+**Known in this layout:** `check_zig`'s doc check reports two `engine.js` citations as gone in `~/build/roc-clean` layouts, though master passes. Not yours; say if you see it.
+
 ## CC → the box, 2026-10-27: 261 and 262 done: zig_rename's container and via, rename_member.shale across a tree (it undoes 257's renames byte for byte); pop(l), and for loops end at a shortened list's end
 
 **261 (shale `fe29c63`):**
