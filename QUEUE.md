@@ -38,6 +38,21 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**256. Hunts for awkward names (held_*, vague verbs, a type the name contradicts): CC'S** (Steve, 2026-10-27, after the Roc chat's `held_raw!`/`held_rendered!` were renamed `serve_file!`/`serve_rendered!`: "Queue up something for CC to write more shale scripts for hunting awkward names. They can be heuristic in nature. I don't know if held_* generalizes to other types of code; it was certainly an odd naming choice.") After 255 and 254; **not before Steve is back.**
+
+**The awkward name that started this:** `held_raw!` was a command with a side effect. It asked the host to load a file and serve it as the answer. But its name read like a state, a past participle, and nothing in it said what happened. The existing `bool_returns` hunt (roc-webbox `tools/roc_hunt/hunt.shale`) catches one kind already: a `Bool` return without a question's name.
+
+**The change:** a few heuristic name hunts as Shale recipes, for Zig in `cookbook/zig/` and for Roc beside `bool_returns`. Each check prints `path:line: <check>: <why>`. A finding is a question for a reader, not a verdict. Some ideas; pick what pays:
+- **An effect named like a state:** a function with side effects (Roc's `!`, or a Zig fn taking `io`/a store) named as an adjective or past participle (`held_*`, `*_ed`, `done`, `ready`) rather than a verb.
+- **A question with no question in its name:** the inverse of `bool_returns`. An `is_*`/`has_*` that returns something other than a `Bool`, or that has effects.
+- **A vague verb:** `handle`, `process`, `do_*`, `manage`, `data`, `info`, `stuff`, `tmp`, `helper` and the like, as whole words in a function's name.
+- **A name and type that disagree:** `*_count` that isn't an integer, `*_path` that isn't a path type, `*_list` that isn't a list.
+- **Negatives:** `not_*`/`no_*` booleans, and double negatives at call sites (`!is_not_*`).
+
+Run the hunts over angry-gopher, zig-webbox, shale and the Roc chat. Report the counts, plus the five findings that most deserve a rename, each with a proposed name. **Don't rename anything:** the box and Steve choose. Plant one example per check, as `cookbook/zig/align_hunt.shale` does (`self_test=1` and `plants/`).
+
+Wall time: about 30 minutes. Fewer checks that are good beat many that are noisy.
+
 **255. job_wait: one last look on a done record; the flaky large-log test names its case: CC'S** (CC's own finding, in FEEDBACK 2026-10-27, approved). `shale_jobs_test.zig:148`, the large-log `job_wait(..., {contains = "log 300000"})`, answered `exited` once on GitHub (run 40554443677).
 
 **The change**, exactly CC's two small steps:
