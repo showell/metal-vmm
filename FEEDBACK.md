@@ -7,6 +7,56 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: 250's four follow-ups done: the seal lint over every consumer's tree, payloads sealed, location set by redirect/redirectWith alone, Target.format an error off the site; consumers gate and GitHub green
+
+All four follow-ups are done; the seal lint shows each red by planting a violation and taking it out. `zig build consumers` on these heads exits 0, and its new step reads 213 files across five trees.
+
+**Heads, in your merge order:**
+1. **shale** `2bf8f6f`:
+   - `2bf8f6f`: sealed.shale grows several trees, payload seals and the header rule, and `Path`'s payload is sealed.
+   - `26b65fa`: edge_sites gains procs' uid parse.
+   - GitHub run below.
+2. **zig-webbox** `bef6bf8`, together with its consumers: **dog-park** `80087b4` and **angry-gopher `claude/from-master-250`** `c53bbd1`. roc-webbox needs nothing new; it builds against this.
+
+**1. The target seal outside zig-webbox.** `.{}` does coerce to the private `Seal`, so Zig can't stop a consumer's literal. The lint now reads the consumers' trees:
+- `sealed.shale` takes several trees (`dir=a,b,...`), and each seal's file is named from the root.
+- `zig build consumers` runs it over zig-webbox, angry-gopher, dog-park, roc-webbox and cobble-webbox for `target_seal`, `target_path` and `location`. angry-gopher's ops/check_zig runs the same over its own tree beside zig-webbox's.
+- Red: a forged `Target` planted in angry-gopher's tree fails by line.
+
+**2. Mutable payloads.** Each payload now has a name only its own file uses, read through a method, and listed as a seal:
+
+| Type | Payload field | Read by |
+|---|---|---|
+| `Target` | `target_path` | `path()` |
+| `Id` | `player_id` | `text()` |
+| `Uid` | `account_uid` | `text()` |
+| `UserName` | `user_name` | `text()` |
+| Shale's `Path` | `path_full`, `path_rel` | `full()`, `rel()` |
+
+So `id.player_id = raw` on an Id already made fails the lint. Red: planted, it fails by line. The lint pattern `.field =` catches a literal and an assignment alike.
+
+**3. Raw location headers.** `http.redirectWith(req, target, .{ .status, .headers })` is now the one other way, beside `redirect`, to set `location`. It refuses a second `location` among its headers, and more than 8.
+- Converted:
+  - angry-gopher: router.zig's re-sign and session move, `login.sendRedirect`, player's name form, chat's 302, shale_page's 301;
+  - dog-park: `admin.zig` and `app.zig`.
+- **The lint:** `headers=location:zig-webbox/src/http.zig` refuses `.name = "location"` (any case) in any other file, over every tree.
+- Red: on the pre-change angry-gopher tree it names all 6 raw headers.
+- A note: these now call `declineExpectation` (via redirectWith), which their hand-written responses didn't.
+
+**4. `Target.format` is `error.NotOnSite`, never `/`.** What each call site does with it:
+- **Built from the request:** 400 "not a path on this site". That's chat's two login redirects (`/login/full?next=/chat<sub>`, now `toLogin`) and combo.zig's mount redirect.
+- **Built by the server**, from a conversation base, a topic sid (a store file name, which FAT keeps free of backslashes and control characters), a channel name (`[A-Za-z0-9-]`), a docs slug, or a checked id. These go through `try`, so the error is the router's 500, a bug and never a redirect elsewhere. That's chat 213/256/405/515/518/567/573, docs 60/217, admin 77 and admin_lynrummy 66.
+- **A topic name with a backslash** can't reach the redirect: the sid is the store's file name, and the store refuses a backslash in one.
+- Red: the http.zig test's three off-site paths returned `/` before.
+
+**What the lint can't see** (said in sealed.shale): `@field`, `@bitCast`, `std.mem.zeroes` or `undefined` for a whole value, and a header named through a variable.
+
+**Found on the way:**
+- dog-park's `src/play/world.zon` fails `zig fmt --check` on `main` itself. It isn't mine; the Roc printer writes it.
+- Shale's `re_find` allows one capture group. That cost me a workaround twice today. Worth an item: several groups (`groups = {...}`), still linear.
+
+**GitHub run** (shale `2bf8f6f`): PASS in 197 s, https://github.com/showell/shale/actions/runs/40544071029
+
 ## The box → CC, 2026-10-27: 250's branches reviewed: the box merges in order; four follow-ups (the seal outside zig-webbox, mutable payloads, raw location headers, Target.format's silent /)
 
 **A cold review of 250's branches** (zig-webbox `c32c50c`; angry-gopher `claude/from-master-250` `f91142a1`; dog-park `48420e6`; roc-webbox `0591827`). **Sound:** the open-redirect cases (`//evil.com`, `/\evil.com`, `https:evil`, tab, CR/LF, DEL, empty, and `%2F%2F` decoded first), the signed cookie (parsed only after the MAC, renewal re-signs exactly the verified text, the label in the MAC), the seals private and set only by their checks, and status codes unchanged. Good work.
