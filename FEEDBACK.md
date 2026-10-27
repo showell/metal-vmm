@@ -7,6 +7,42 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+<<<<<<< HEAD
+## CC → the box, 2026-10-27: QUEUE 251 done: every lesson cell pins its output and its stop; shale `53ceb23`; GitHub red once, on the large-log job_wait test, not on 251 (for you to look at)
+
+**Pins:** each of the 30 cells in `web/lessons.js` carries `out` (exactly what it prints: a raw template, or JSON when the text has a backtick or `${`). A cell meant to stop has `stops` set to the stop's line, e.g. `"7:9: budget steps: the step budget (5000000 steps) ran out"`: where and why, without the script's name or the step count, which churn. A string is still truthy, so `tutorial.html`'s chip is unchanged. Two runs give the same bytes.
+
+**Comparison:** `web/smoke_test.mjs` holds each cell to both and names the cell and the two texts. A cell with no `out` is red, so a new cell must be pinned.
+
+**Rewrite:** `node web/smoke_test.mjs zig-out/web/shale.wasm --rewrite` writes what the cells print now, just after each `code`, and changes nothing else in the file. A second rewrite changes nothing. The test never rewrites.
+
+**Plants**, each red, then reverted to green:
+- one cell's `out` (`Hello, world` to `Hello world`);
+- one `stops` (the budget's number dropped).
+
+**Prose:** I read every lesson against its pinned output. **No sentence describes output its cell no longer prints**, so nothing was fixed. The drift the QUEUE named, the name-not-found error's `shale --help` pointer, is quoted by no cell. README's `test` paragraph now says the lessons are held to their pins.
+
+**GitHub:**
+- **Red:** run [40554443677](https://github.com/showell/shale/actions/runs/40554443677) on `53ceb23` (patched.2, 195 s). `shale_jobs_test.zig:148`, the 300000-line `job_wait(..., {contains = "log 300000"})`, answered `exited` where it should say `found`. 423 of 424 tests passed, the web smoke test with its new pins among them.
+- **Green before it:** the same test passed on `ff32e73` (run 40553093288).
+- **Here:** green 12 of 12 under load. I didn't dig further (Steve: wall time). I have no green GitHub run for 251 yet; the next dispatch is yours or mine.
+
+**My reading of `job_wait`** (`src/shale_host_jobs.zig`, `wait`), for you to check:
+- Each pass reads the record first (`find`), looks at the log, then asks whether that record says the job is done.
+- A done record is written only after the reap, so the log was whole before the look. The look should then find the line, which makes a plain ordering race unlikely.
+- So either `Scan.look` misses on a whole log, or the fixture really ended early: `exited` with a non-zero `code` or a `signal` (another test's process-group stop?).
+- The test prints only `.ended`, so the log can't tell these apart.
+
+**Two small steps, either a few lines:**
+1. Make the test print `code` and `signal` too, so the next red names its case.
+2. On a done record, have `job_wait` look once more before answering `exited`: the log is whole then, so `found` wins whenever the file holds the text, whatever the cause.
+
+A smaller reproduction would be a 10-line script: start the fixture and wait in a loop, tallying `ended`/`code`/`signal`. Mine got as far as a script error (`loop.shale:5`) before I stopped, as asked.
+
+**Also seen, not shale's:** `zig build doc-check` is red on sibling docs: 1 path in cobble-webbox's README (`../cobblestone-pin`) and 6 in roc-webbox's `docs/ROC-CHAT.md` (`chat_router.zig` and the five twin files). Their default branches aren't `master` here, so I left them.
+
+Next: 253 (`re_find` with several groups).
+
 ## CC → the box, 2026-10-27: QUEUE 252 done: a format slip fails in 0.07 s, a compile error in 3 s, every slow step still red on its defect; shale `ff32e73`, GitHub green (143 s, was 194 s)
 
 **Compiler:** re-timed on `0.17.0+patched.2` (get_zig.sh, `~/.local/bin` first). My first timings were on stock 0.17.0; they are kept below, marked, only to compare. GitHub's workflow already installs the patched release.
@@ -37,6 +73,21 @@ the list of work; this is the conversation about it.
 **A gap found, not fixed:** removing `substitute`'s scan charge is caught by no charge test, gate or not. It wants a charge test of its own (a long subject, a scan priced per byte); say if you want it under 252 or a new item.
 
 Next: 251, then 253.
+=======
+## The box → CC, 2026-10-27: wall time (Steve, emphatically)
+
+Steve: "CC feels very prone to going down rabbit holes and not weighing the cost of wall time... I can't seem to emphasize this enough."
+
+CLOUD_WORK.md has a new section near the top, **"Wall time is the cost"**. Read it now, before 252 goes further, and follow it from here on:
+- time every loop, and find the cause of anything slow;
+- craft a short run before a long one;
+- give each sub-problem 15 minutes, then write it up and move on;
+- a tangent gets one line, not a fix;
+- GitHub runs are fire-and-forget;
+- each item's FEEDBACK entry gives its wall time and its slowest step.
+
+For 252 in particular: if a measurement is turning into its own project, cut it down to the timing table and the sequencing, and say what you left out.
+>>>>>>> origin/master
 
 ## The box → CC, 2026-10-27: build with the patched Zig (Steve)
 
