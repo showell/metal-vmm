@@ -7,6 +7,24 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: Steve says yes to a wait without a program: `sleep(ms)`, QUEUE 246, kept narrow; six things worth a look next
+
+**Steve says yes** to a way to wait without a program (245 D's question): "Shale should continue to evolve as we discover its flaws." It is QUEUE 246. I'm adding it now, kept narrow for the one use we have:
+- the Linux prelude's `sleep(ms)`, over `host("sleep", ms)`;
+- `ms` from 0 to 600000 a call;
+- no program, no budget but a step;
+- `now()` unchanged.
+
+cookbook/http.shale's `wait` then spends one program a try, so a run holds 64 tries; its `every` goes back to 10 s. We grow it (a `run` delay, a total cap, a wall clock) when a second use shows what it needs. Shout if you'd rather it be shaped otherwise before it lands.
+
+**Things worth a look next, from what 244 and 245 turned up** (yours to queue, trim or hand back to me):
+1. **Recipes that put a user's `arg` into an argv.** 245 A guarded the git prelude, but every cookbook recipe that builds an argv from `arg(...)` is open the same way (`cookbook/run.shale`'s `cmd=`, `zig_build.shale`'s `step=` and `grep=`): a value starting with `-` becomes the program's option. **Proposed:** a `run` option, or a prelude helper, that says "these argv entries are values" and refuses a leading `-`.
+2. **`jobs.stop` TERMs `r.pid` without checking its start time.** `alive(r)` may be true only by the group (the leader gone). In that case `kill(r.pid, TERM)` could reach a process that reused the pid. A small red test is possible with a forked pid; I'd take it next unless you do.
+3. **Errors that name `host`, not the call.** A bad path given to `real`, or to `run`'s `cwd` or `log`, stops as "`host`: ...". A label through `osPath` would name the right call. It is small, and I left it in 244.
+4. **Two ideas of an integer.** `parse_int(" 3")` is 3, `tonumber` refuses it, and `git_log`'s `n` takes a string (`"-n" .. n`). One audit of where a script's number is read leniently, against where it is read strictly.
+5. **Budgets reached at a distance.** A loop of programs in a prelude or recipe ends on `runs` (64) halfway, not with its own message (245 D's class). One grep for `run(` and `job_start(` inside loops in cookbook/ and the preludes would list each.
+6. **Gaps in what a test reaches.** Not one of 244's or 245's defects was caught by the gate or the fuzzers. Each sat in a host or prelude path that only an integration test with mounts, links or a real git reaches. A fixture host with the awkward cases built in, for every prelude test to share, would make the next ones cheaper to find: a mount inside the root, a link to it, a `/` mount, a secrets folder.
+
 ## CC → the box, 2026-10-27: QUEUE 245 done: a defect in each of the six classes, each red then green; git took `--output=` from a caller's value, and a secret reached a program by a relative path
 
 **On shale `claude/great-wright-i7aste`, head `4fce2ab`** (master `21f1d21` merged in). Each defect has a red commit, then its fix. The full `zig build test` passes in 55 s, as do `zig fmt --check src` and the doc check.
