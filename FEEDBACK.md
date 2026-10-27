@@ -7,6 +7,37 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: QUEUE 252 done: a format slip fails in 0.07 s, a compile error in 3 s, every slow step still red on its defect; shale `ff32e73`, GitHub green (143 s, was 194 s)
+
+**Compiler:** re-timed on `0.17.0+patched.2` (get_zig.sh, `~/.local/bin` first). My first timings were on stock 0.17.0; they are kept below, marked, only to compare. GitHub's workflow already installs the patched release.
+
+**Timings** (`zig build test --summary all`, this container's 4 cores; wall time here swings by 2x between identical warm runs, CPU time does not: 50 to 64 s of user+sys every run):
+
+| | before (stock) | after (stock) | after (patched.2) |
+|---|---|---|---|
+| warm | 97 s (script tests 40 s, Linux tests 57 s, one after the other) | 58 s | 28, 34, 38, 41, 57, 58, 64 s (three processes, each 20-34 s, side by side) |
+| cold | 187 s | 179 s | 190 s (the compile; nothing here changes it) |
+| format slip fails | at the end, after every test (53 s with the trims) | 0.05 s | 0.07 s |
+| one-line compile error fails | after the other runs | about 10 s | 3.4 s |
+| `zig build quick`, warm | none | 0.07 s | 0.08 s |
+| GitHub (gh_build.shale) | 194 s, run 40537763863 | | 143 s, run [40553093288](https://github.com/showell/shale/actions/runs/40553093288) (patched.2) |
+
+**Sequenced (3):** `fmt --check` first; every compile (`dependOn`) waits on it. `quick` is the format, every test binary compiled, the hunt compiled, and shale-gate's and the signer's tests run. Every unit run and the browser smoke test wait on `quick`. So a slip is reported before any test starts.
+
+**Tiers (4):** `zig build quick` is under a second warm (a compile it has to redo is seconds). It leaves out every unit test run and the web smoke test (Node over the wasm build); `zig build test` stays the one full gate and runs them after `quick` passes.
+
+**Load-bearing (2), every step over about 5 s:**
+- **The Zig tools' tests** (zig_rename, zig_move's read-identifiers, 14.8 s): kept whole. They found three faults (zig-webbox `a136bcd`). Moved to a process of their own (`src/shale_zig_tools_test.zig`), so they run beside the Linux host's instead of after them.
+- **The large-log jobs test:** kept. Its 4 s of growth is what tells an incremental read from a whole one; a plant of `s.done = 0` (read from the start every time) is red.
+- **The gate's arena sweep:** trimmed, 40 rounds to 32 KiB → 20 to 16 KiB (10.1 s → 1.7 s). Still red: 584b42c's `firstChanges` undone fails 7 sizes.
+- **The cookbook walk in parts:** trimmed, 300 topics under 500 reads → 130 under 200 (10.1 s → 1.0 s). Still past `call_entries`' 256, and a walk resumed one entry late (132 for 131) is still red.
+- **The charge tests:** run on the VM alone, the engine they measure (11 s → 1.6 s); the gate already holds both engines' steps equal everywhere else. A trim without its charge is still red.
+- **Jobs' polling:** `job_wait` backs off 20 ms doubling to 1 s, not a fixed short nap: the jobs tests 19 s → 11.5 s.
+
+**A gap found, not fixed:** removing `substitute`'s scan charge is caught by no charge test, gate or not. It wants a charge test of its own (a long subject, a scan priced per byte); say if you want it under 252 or a new item.
+
+Next: 251, then 253.
+
 ## The box → CC, 2026-10-27: build with the patched Zig (Steve)
 
 **Steve: "We should have CC using the patched zig."** Install it now, before 252's timings, so the numbers come from the compiler the box uses:
