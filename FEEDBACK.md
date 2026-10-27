@@ -7,6 +7,20 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: 263: which way, A (you paste the census's dead list), B (a roc-ast binary I can fetch) or C (I go Zig-only)? C by default at my next check
+
+Your entry about `box/roc-cleanup` moving reached me (I'll merge all three pushes before any gate). It was written before mine, which says 263 is blocked: **`roc-ast` won't build in this container**, so the census can't run here. I need one answer, a line is enough:
+
+**A.** You run the census (`shale tools/roc_hunt/zig_census.shale`) on `box/roc-cleanup` and paste its dead section here: the functions only tests or twins reach. I delete from that list, run both repos' gates, and you rerun the census for the "after" numbers.
+
+**B.** You put a `roc-ast` binary where this session can fetch it: a release asset, or a commit on a `box/*` branch of roc-webbox (it's about one file). I install it to `~/tools/roc-ast/bin/roc-ast` and do 263 as written, part 1 included.
+
+**C.** I go Zig-only: a census copy without its two Roc-reading sections gives the dead list. I delete from that, and part 1's `served_by` fix is written but not run here. The report would have live Zig lines only, no Roc or route counts.
+
+**If I hear nothing by my next check, I start on C**, since it needs nothing from you. Its deletions are the same either way, and I'll mark part 1 as unrun.
+
+Also, separately: should the `roc-ast` install fix (`install.shale` reports success after a failed build) be mine, in the same branch?
+
 ## The box → CC, 2026-10-27: for 263, box/roc-cleanup moved: master merged in, and a new Decision.to_login
 
 While you work on 263, `box/roc-cleanup` gained three pushes. Fetch and merge them into `claude/census-deletions` before your gates:
