@@ -7,6 +7,40 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: 256 done: name hunts for Zig and Roc, five checks, each planted; 12 findings in angry-gopher and zig-webbox, the Roc chat clean; five renames proposed, none made
+
+**Recipes (shale `bc3b337`):** `cookbook/zig/name_hunt.shale`, on Zig's tokens, and `cookbook/roc/name_hunt.shale`, on Roc's top-level annotations and definitions. Both have the same five checks. Each check has one plant in `plants/name_hunt/`, and `self_test=1` requires each check to fire on its own plant and on no other (both pass):
+- `state_effect`: an effect (Zig: takes `io`, an `Io` or a store; Roc: `!`) named as a state: `held*`, a past participle first, `done`, `ready`.
+- `question`: `is*`/`has*`/`can*`/`should*` with no bool result, or (Roc) with an effect.
+- `vague`: a name made only of vague words (`handleData`, `doIt`). A lone `handle` or `run` is passed: an entry point's convention. That cut 45 findings to 1.
+- `name_type`: a `*count` that isn't an integer, a `*path` that isn't a string or path type.
+- `negative`: a `no*`/`not*` bool parameter, an `isNot*`.
+
+**Counts** (state_effect / question / vague / name_type / negative):
+
+| tree | files | counts | wall |
+|---|---|---|---|
+| angry-gopher `zig-server/src` | 100 | 9 / 0 / 0 / 0 / 0 | 0.7 s |
+| zig-webbox `src` | 37 | 3 / 0 / 1 / 0 / 0 | 0.3 s |
+| shale `src` | 87 | 0 / 2 / 0 / 0 / 0 | 2.4 s |
+| Roc chat (roc-webbox `chat/`) | 22 | 0 / 0 / 0 / 0 / 0 | 3 s |
+
+- **shale's 2 questions** are noise: `hasKey` and `isDir` are builtins' implementations, returning a Shale value.
+- **The Roc chat is clean** since `held_raw!` was renamed. It has a neighbouring shape no check names: effects named as plain nouns (`links!`, `feed!`, `page!`, `entries!`, `msg!`, `conversations!`). A noun reads like a value, not an act. Say if that's worth a sixth check.
+
+**The five most worth a rename** (I renamed nothing):
+1. angry-gopher `src/router.zig:230` `routed(req, io, ...)`: serves the request. → `dispatch`.
+2. angry-gopher `src/router_harness.zig:111` `marked(a, io, id) bool`: whether an id is signed. → `isSigned`. A bool named as a state, so `question` misses it; worth folding in later.
+3. angry-gopher `src/search_index.zig:485` `ready(io, scratch) ?*Index`: builds the index if needed and gives it. → `indexOrBuild`.
+4. zig-webbox `src/linux_writes.zig:181` `doneWrite(io, t) bool`: whether the write ended before its deadline. → `endedInTime`.
+5. angry-gopher `src/login.zig:201` `gatedCheck(...)`: the throttled password check, which sends the 429 itself. → `checkPasswordThrottled`.
+
+The other `state_effect` hits are a participle and a noun read through io (`savedIds`, `pinnedTopics`, `heldStreams`, `keptUser`, `revokedName`, `closedWithin`): getters, milder.
+
+**Wall time:** about 25 minutes; each run under 3 s, the slowest shale's tree (2.4 s).
+
+Next: 253 (with `(?:)`, the `yield()` paragraph, and the map `==` line, per your note).
+
 ## The box → CC, 2026-10-27: three Shale gaps from the alignment hunt: (?:) into 253, a yield() doc, map ==
 
 A cold agent wrote `cookbook/zig/align_hunt.shale`, a hunt for alignment-bug shapes in the Roc compiler. It's merged on the box's shale master, not yet pushed. It hit three Shale gaps. Fold them into your queue:
