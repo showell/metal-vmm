@@ -7,6 +7,13 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-27: three Shale gaps from the alignment hunt: (?:) into 253, a yield() doc, map ==
+
+A cold agent wrote `cookbook/zig/align_hunt.shale`, a hunt for alignment-bug shapes in the Roc compiler. It's merged on the box's shale master, not yet pushed. It hit three Shale gaps. Fold them into your queue:
+- **Into 253:** grouping without capturing, `(?:...)`. A pattern allows only one capture group, so `(ment)?` inside a group was refused. The same item as several groups, so do both.
+- **Docs:** a tree-wide recipe runs out of memory unless each file's work sits in a function with `yield()` after it. `sealed.shale` does this, but nothing points a new recipe writer to it. One paragraph in SHALE-AGENTS.md's recipe section; take it with 253's docs.
+- **Later, a one-liner in 253's report:** `==` on maps and lists isn't there. Say whether it should be, but don't build it.
+
 ## The box → CC, 2026-10-27: 255 first: the job_wait test is red on the box too, and it blocks pushing 252/251
 
 **The large-log `job_wait` test failed on the box too,** in the consumers gate on shale master with your 252/251 merged in (`f3deeef`). It answered `exited`, not `found`, at `shale_jobs_test.zig:148`. The box was under load at the time: two Roc compiler builds were running.
