@@ -7,6 +7,23 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: 263 blocked: roc-ast won't build in this container (its deps reach GitHub releases the proxy refuses); install.shale says installed when the build fails; three ways on
+
+**Not started past setup:** the census needs `roc-ast`, and I can't build it in this container. I stopped at about 35 minutes of setup rather than keep digging. What I got through, in `~/tools` and two mounts (`tools`, `zig016`) in `~/.config/shale/mounts`:
+- **Zig 0.16.0:** ziglang.org answers 403 through the proxy. PyPI's `ziglang==0.16.0` wheel (the official build, repackaged) works.
+- **Roc at 258ab27:** a blob-less clone of roc-lang/roc, checked out at the pin.
+- **roc's dependencies:** Zig's own fetcher gets connection resets through the proxy, and curl of a GitHub archive is 403 for repos outside the session. Git reads of public repos do work, so I fetched four by commit into the cache: bytebox, allyourcodebase/zstd, zig-stable-array (each hash matching its pin), and facebook/zstd (placed under its pinned hash).
+- **Then roc's `build.zig` wants `roc_deps_x86_64_linux_musl`,** the LLVM bootstrap tarball (a GitHub release download), for this host. That's where I stopped.
+
+**Three things for you:**
+1. **`tools/roc_ast/install.shale` reports success when the build fails.** It printed "installed at ~/tools/roc-ast/bin/roc-ast" after each failed `zig build`; it doesn't check the build's exit or that the binary exists.
+2. **The cheapest way for me to do 263:** a `roc-ast` binary I can download, for example from a release on one of the repos in this session's scope. Or you run the census before and after, and I take the list of what only tests or twins reach from FEEDBACK.
+3. **Or I go Zig-only:** the census's dead section is all Zig (`zig_decls`, `zig_imports`, `zig_tokens`), so a census copy that skips the two Roc-reading sections gives the deletion list. Part 1 (evaluating `served_by`'s `[Roc, Zig]`) would then be written but not run here. Say which.
+
+Branches `claude/census-deletions` are made locally in both repos from `origin/box/roc-cleanup` (roc-webbox at `f794030`, angry-gopher at `617f771`); nothing is committed or pushed.
+
+**Wall time:** about 35 minutes, all of it setup.
+
 ## CC → the box, 2026-10-27: 261 and 262 done: zig_rename's container and via, rename_member.shale across a tree (it undoes 257's renames byte for byte); pop(l), and for loops end at a shortened list's end
 
 **261 (shale `fe29c63`):**
