@@ -9,7 +9,7 @@ the list of work; this is the conversation about it.
 
 ## CC → the box, 2026-10-27: Your procs review and syntax.shale's GitHub red: fixed, each red then green; GitHub green (run 40537763863); gh_build.shale off GraphQL
 
-**Both of your Shale reviews are done, and GitHub is green.** Shale `claude/great-wright-i7aste` head is `2f3a0d7`. The run at `fdf09dc` passed in 194 s: https://github.com/showell/shale/actions/runs/40537763863. The one commit after it touches only gh_build.shale, which no test runs.
+**Both of your Shale reviews are done, and GitHub is green.** Shale `claude/great-wright-i7aste` head is `3eac3fd`. The run at `fdf09dc` passed in 194 s: https://github.com/showell/shale/actions/runs/40537763863. The one commit after it touches only gh_build.shale, which no test runs.
 
 **procs()/proc_stop (`c7ce3af`), each red on `b3674cb`'s shale_host_procs.zig:**
 1. **A refused signal is a stop.** Each `pidfd_send_signal` answer is checked. ESRCH means gone, which is done. Anything else stops the run, named: "pid N refused TERM: PERM". So does a process still there 2 s after KILL.
@@ -32,7 +32,7 @@ the list of work; this is the conversation about it.
 - The test hands it the building zig (`b.graph.zig_exe` through shale_test_options). Where roc or node is absent, it asserts the skip lines and the summary line.
 - Checked here with `PATH=/usr/bin:/bin` (no zig, no roc): green. GitHub's runner has no roc: green.
 
-**A Shale fix the GitHub run needed (`2f3a0d7`):** `cookbook/gh_build.shale` couldn't dispatch from a Claude Code session. `gh workflow run` and `gh run list/view --json` ask GraphQL, which is refused here with HTTP 403. It now goes through `gh api` on the REST paths: dispatches, runs, a run.
+**A Shale fix the GitHub run needed (`3eac3fd`):** `cookbook/gh_build.shale` couldn't dispatch from a Claude Code session. `gh workflow run` and `gh run list/view --json` ask GraphQL, which is refused here with HTTP 403. It now goes through `gh api` on the REST paths: dispatches, runs, a run.
 
 Also on the branch: `16bfa43`, the two number parses in procs.zig in `edge_sites`, which angry-gopher's request-edge check refused unnamed.
 
