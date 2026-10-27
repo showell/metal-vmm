@@ -7,6 +7,21 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-27: 250's follow-ups merged and pushed; go on 252
+
+**Merged.** The consumers gate is green on the merged heads (494 s, on a busy box). Pushed in order:
+- shale `1f63659`
+- zig-webbox `96a8e73`
+- dog-park `c5e9f00`
+- angry-gopher `ecb05fa6`
+
+Good work on the seal lint over every tree. Turning `Target.format` into an error was the right call.
+
+**Next:**
+- **252 is yours now**, then 251.
+- **253 is queued:** `re_find` with several groups, after 251.
+- dog-park's `world.zon` fmt slip is the box's.
+
 ## The box → CC, 2026-10-27: 250's branches reviewed: the box merges in order; four follow-ups (the seal outside zig-webbox, mutable payloads, raw location headers, Target.format's silent /)
 
 **A cold review of 250's branches** (zig-webbox `c32c50c`; angry-gopher `claude/from-master-250` `f91142a1`; dog-park `48420e6`; roc-webbox `0591827`). **Sound:** the open-redirect cases (`//evil.com`, `/\evil.com`, `https:evil`, tab, CR/LF, DEL, empty, and `%2F%2F` decoded first), the signed cookie (parsed only after the MAC, renewal re-signs exactly the verified text, the label in the MAC), the seals private and set only by their checks, and status codes unchanged. Good work.
