@@ -24,21 +24,96 @@ The snapshot (`docs/SNAPSHOT.md`) is parked.
 - **What serves lynrummy.com:** zig-metal-unikernel's newest tag
   (`git -C ../zig-metal-unikernel tag -l 'v*' --sort=-v:refname | head -1`);
   its message names the commits. Dog Park serves dogpark.lynrummy.com.
-- **Built, not deployed (Steve's):** the Observatory's droplet (228).
-- **CC:** the Roc chat (RC-v1, under Proposed), holding O2 until the box's
-  readability pass is merged. Shale's work is the box's. Builds use the
-  patched Zig (FEEDBACK, "we build with a patched Zig now").
+- **Built, not deployed (Steve's):** the Observatory's droplet (228). Dog
+  Park's release with `/version` serves (its `/version` names the commit).
+- **CC:** Shale's work is the box's (Steve, 2026-10-22), but for 244. The
+  box builds with a patched Zig 0.17.0 (FEEDBACK, 2026-10-26).
 
 ## CC: open
 
-**Your role (Steve's): build what needs no emulator, and anything
+**Your role (Steve, 2026-10-08): build what needs no emulator, and anything
 adversarial.** Every item here runs on the host: `zig build test
 -Dtest-file=<file>` runs one zig-metal-unikernel test file in seconds (the whole step
 takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
-**242. Shale's path and value normal forms: hunt the class of real(".") keeping its dot: CC'S** (Steve, 2026-10-27: "have CC look for similar defects in shale"). Start from shale `master` 9b4eb2e. **The defect:** `real(".")` returned `<cwd>/.`, with the dot left in. `absolute()` in `src/shale_host_linux.zig` joined the path onto the cwd without resolving it, so a script that took the folder above `real(".")` got the cwd itself. The Roc chat's quick gate went looking for angry-gopher inside roc-webbox. The fix (9b4eb2e) resolves the path with `std.fs.path.resolve` and adds a test. **Hunt the class:** a path, or any other value, that Shale hands back or compares in a form different from what it means. Look at every builtin and host call that takes or returns a path: `real`, `run`'s `cwd` and `log`, `pathArg` with mounts (`runs:`, `home:`), `exists`, `is_dir`, `read`, `replace`, `edit`, `list`, and the git prelude's `git_real` and `git_call`. Things to look for:
+**245. Shale: six bug classes from its last 30 commits, by yield: CC'S** (Steve, 2026-10-27: "find other possible classes of bugs" in Shale's last ~30 commits). Start from shale `master` 3c02198. QUEUE 244 covers paths and values in the wrong normal form and options refused or allowed wrongly; nothing here repeats it. **Deliverable:** a red test for each defect, then its fix, one commit each, on your branch. List what you checked and found clean in FEEDBACK. Nothing here needs KVM.
+
+**A. Option-like values passed into git's argv (M)**
+- Seeds:
+  - 12bb383 (`git_restore` puts `--source=` and `--` in front of the caller's values: the safe form);
+  - d929fc1 (the git calls: many put a caller's value before any `--`);
+  - 6c557d4 (the host checks a program's arguments only by substring).
+- Class: a value that starts with `-` becomes a git option. One such option, `--output`, writes files that read-only mounts, `may_change` and `--undo-on-stop` never see.
+- Where to look, in `src/shale_prelude_git.shale`:
+  - `git_show`: `what`, with nothing before it;
+  - `git_log`: `range` and `ref`;
+  - `git_diff`: `range`;
+  - `git_merge` and `git_merge_ff`: `ref`;
+  - `git_tag`: `name` and `rev`;
+  - `git_push`: `remote`, `branch` and `tag`;
+  - `git_worktree_add`: `branch` and `rev`.
+  - Also `src/shale_prelude_linux.shale`'s `curl_http`: `method` after `-X`, and the `headers` values.
+- Red test, in `src/shale_prelude_git_test.zig`: `git_show("", "--output=x.txt")` and `git_diff("", {range = "--output=x.txt"})`, then `exists("x.txt")`. The test expects a stop that names the value; today git writes the file. A sharper variant points `--output=` into a read-only mount.
+
+**B. A guard that checks only one spelling of a path (M)**
+- **This item shares paths with 244: do it right after 244, on the same branch.**
+- Seeds:
+  - 6c557d4 (a secret reached "by another way, the root or another mount");
+  - b18de89 (a writable mount inside a read-only one: the first mount that matched decided, not the nearest).
+- Class: a refusal that compares strings looks at how a path is spelled, not at the file it reaches. A relative, `./`, `..` or symlinked spelling of a forbidden file gets through.
+- Where to look, in `src/shale_host_linux.zig`:
+  - `refuseSecretArgs`: it searches each argument for the mount's absolute folder. A relative `keys/tok` contains no such folder and passes. It checks no `env` values and no `stdin`, and nothing that `job_start` does beyond its argv.
+  - `refuseSecretsUnder` and `runDirOf`: a mount folder named through a symlink. Check whether `src/shale_host_setup.zig`'s realpath step covers `m.dir`.
+  - `underWritableWithin`: mounts nested three deep (read-only, then writable, then read-only), and a writable mount inside a `secrets` one.
+- Red test, in `src/shale_ro_links_test.zig`, set up as its secrets test is: `run({"shale-fixture", "lines", "1", "keys/tok"}, {timeout_ms = 10000, tail = 5})` with no `cwd`. The test expects `refused ... holds secrets`; today the program prints the token.
+
+**C. `edits_all` checks less than it then does (S)**
+- Seed: metal-vmm's prelude `feedback_archive` made one `edit` per entry, past `edit`'s cap of 64 edits a call.
+- Class: a prelude call promises "checked first, nothing written unless all hold". Its check is weaker than the step it guards, so the call stops halfway with files already written.
+- Where to look: `src/shale_prelude_linux.shale`'s `edits_all`.
+  - Its check never applies the cap of 64 (`edits_most` in `src/script/builtins_change.zig`).
+  - A file listed twice is checked against its original text both times, though the writes apply in order.
+  - Its count, `#split(text, old) - 1`, may differ from `edit`'s own count: an empty `old`, or one that overlaps itself ("aa" in "aaa").
+  - It does not check the `changes` and `change_bytes` budgets.
+- Red test, in `src/shale_prelude_linux_test.zig`:
+  - The first file takes one edit and the second 65. The test expects a stop with the first file unchanged; today the first file is written before the second is refused.
+  - A second test lists the same file twice, the later edit holding only after the earlier one.
+
+**D. Hard-coded sizes that a host cap breaks (S)**
+- Seeds:
+  - 778a401 and dbfc274 (`count_all` and `find_next` scanned a fixed megabyte, which a smaller `call_bytes` cap stops);
+  - C's case of 64 edits a call, seen from the caller's side.
+- Class: a recipe or prelude loop sizes its work by a constant or by its input, not by the host's cap. It ends on a budget stop, never with its own message.
+- Where to look:
+  - `cookbook/http.shale`, the `wait` loop. Each try is two programs run (curl, then `sleep`), and `runs_most` in `src/shale_host_linux.zig` caps a run at 64 programs. The defaults need 61 tries, and the example in the recipe's own header (`minutes=20`) can never finish.
+  - `src/shale_prelude_git.shale`'s `git_call` and `curl_http`: `whole = 16777216` against a smaller arena budget.
+  - `src/shale_prelude_linux.shale`'s `tail_lines`: `part = 65536`.
+- Red test, in `src/shale_cookbook_test.zig`: `http.shale url=http://127.0.0.1:1/ wait=x minutes=1 every=1`. The test expects the recipe's own "never held" stop after 61 fetches; today the run stops on the runs budget.
+
+**E. Parsers that skip what they don't recognise (S-M)**
+- Seeds:
+  - 1593d23 (a `cwd=` that no `arg` read was taken silently);
+  - 9285a24 (the doc reader);
+  - metal-vmm's archive (lines in a form `queue_next` did not read let it reuse a number).
+- Class: a reader of structured text, usually another program's output, skips or misreads a form it doesn't expect. The caller gets a quiet wrong answer instead of a stop.
+- Where to look:
+  - `src/shale_prelude_git.shale`'s `git_status`: it reads a rename's second NUL field only when the first status letter is R or C. A worktree rename (`" R"`) would leave its `from` path parsed as an entry of its own.
+  - `src/shale_jobs.zig`'s `parseRecord`: it skips keys it doesn't know, and a record with no `start` reads as `start = ""`.
+  - `curl_http`'s header loop: it skips any head line that has no `:`.
+  - `git_upstream`: a `# branch.ab` line it can't read gives silent nils.
+- Red test, in a repo: `mv a.txt b.txt`, then `git add -N b.txt`. The test expects `git_status` to give one entry, `{code = " R", path = "b.txt", from = "a.txt"}`. **Unverified until red:** first confirm that this git prints `" R"` for an intent-to-add file.
+
+**F. Job lifecycle windows (S)**
+- Seed: 8b2c701 (`alive` asked about the process group before the job had made it).
+- Class: a job call decides by state that the child sets up only after `job_start` returns.
+- Where to look:
+  - `src/shale_jobs.zig`'s `stop`: it still waits on the group alone (`signalGroup(pgid, 0)`). With no group made yet it returns "stopped" at once and never sends KILL, though the leader may run on. It should wait on `alive(r)`.
+  - `src/shale_host_jobs.zig`: `job_wait` and the wait for a log line, before the log file exists.
+- Red test, in `src/shale_jobs_test.zig`: 20 rounds of `job_start`, `job_stop`, then `job_alive` at once. The test expects false every time. **Unverified until red:** the test is sharper with a leader that ignores TERM; add such a mode to shale-fixture if it has none.
+
+**244. Shale's path and value normal forms: hunt the class of real(".") keeping its dot: CC'S** (Steve, 2026-10-27: "have CC look for similar defects in shale"). Start from shale `master` 9b4eb2e. **The defect:** `real(".")` returned `<cwd>/.`, with the dot left in. `absolute()` in `src/shale_host_linux.zig` joined the path onto the cwd without resolving it, so a script that took the folder above `real(".")` got the cwd itself. The Roc chat's quick gate went looking for angry-gopher inside roc-webbox. The fix (9b4eb2e) resolves the path with `std.fs.path.resolve` and adds a test. **Hunt the class:** a path, or any other value, that Shale hands back or compares in a form different from what it means. Look at every builtin and host call that takes or returns a path: `real`, `run`'s `cwd` and `log`, `pathArg` with mounts (`runs:`, `home:`), `exists`, `is_dir`, `read`, `replace`, `edit`, `list`, and the git prelude's `git_real` and `git_call`. Things to look for:
 - `.` and `..` segments;
 - trailing slashes, which `osPath` trims but other paths may not;
 - doubled `//`;
@@ -106,30 +181,6 @@ The same class reaches past paths. Look for a builtin whose result needs a secon
   arrives while the processor is not resting (it takes interrupts only in
   `rest`, so none today) would need the stub to count. Only if interrupts
   are ever taken outside `rest`.
-- **T1/A. Roc in gopher.elf: the chat's router** (the box's:
-  zig-metal-unikernel build.zig). `zig build gopher` needs roc-webbox's
-  `roc_chat` supplied to angry-gopher's router.zig:
-  `proposals/T1-zmu-roc-chat.diff` (the module by path, as cobble-webbox's
-  are; its Roc built for x64v1elf by `roc` on the PATH, `-Droc`,
-  `-Droc-webbox-root`; its Roc inputs every module chat/main.roc imports, so
-  a change to one never links a stale router). Every gate that builds
-  gopher.elf then needs the pinned Roc (`nightly-2026-10-09-258ab27`,
-  roc-webbox `tools/get_roc.sh`). It lands with RC-v1.
-- **RC-v1. The Roc chat's first release** (CC's; the box judges, Steve
-  ships). **Roc:** the router's prelude for every /chat and /channel path
-  (the scripts, the gate, presence), and the chat's pages, actions and
-  sends: a conversation's landing, a topic's page, /chat and /chat/default,
-  /chat/conversations, /chat/msg/<id>, a new topic, reactions, pin and
-  unpin, the send, a topic's `/raw`, /chat/links, and the HTML of
-  /chat/recent, /chat/images and /chat/code. **Zig, delegated by the
-  router:** docs, the reading list and search; every SSE stream; uploads
-  and downloads; the static scripts; and, as hosted functions, the fan-out
-  and every store writer. **The candidate:** roc-webbox `72d235c`,
-  angry-gopher `5541169` on `claude/great-wright-i7aste`, with T1/A on
-  zig-metal-unikernel `083bff4`. **Judged on KVM** (FEEDBACK, the box's
-  "the RC-v1 candidate judged on KVM"): every gate as Linux, stamina
-  unchanged, a 16 MB `/raw` served. Waiting on Steve's ship decision; then
-  the box's readability pass over the Roc, and O2 only after it is merged.
 
 ## Questions
 

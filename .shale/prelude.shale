@@ -463,7 +463,9 @@ function feedback_archive(opts, dir?)
   local ap = queue_path(dir, "FEEDBACK-ARCHIVE.md")
   local ls = lines(read(fp))
   local f = feedback_parse(read(fp))
-  local f_edits = {}
+  -- Each run of neighbouring entries is one edit: the old entries are
+  -- usually the whole tail, more than `edit`'s 64 a call.
+  local runs = {}
   local gone = {}
   for i = 1, #f.entries do
     local e = f.entries[i]
@@ -472,13 +474,21 @@ function feedback_archive(opts, dir?)
       for k = e.line + 1, #ls do
         if to == #ls and starts_with(ls[k], "## ") then to = k - 1 end
       end
-      local text = {}
-      for k = e.line, to do push(text, ls[k]) end
-      push(f_edits, {old = join(text, "\n") .. "\n", new = ""})
+      if #runs > 0 and runs[#runs].to + 1 == e.line then
+        runs[#runs].to = to
+      else
+        push(runs, {from = e.line, to = to})
+      end
       push(gone, "- " .. e.heading)
     end
   end
   if #gone == 0 then return 0 end
+  local f_edits = {}
+  for r in runs do
+    local text = {}
+    for k = r.from, r.to do push(text, ls[k]) end
+    push(f_edits, {old = join(text, "\n") .. "\n", new = ""})
+  end
   local alines = lines(read(ap))
   local first = 0
   for i = 1, #alines do

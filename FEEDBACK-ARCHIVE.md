@@ -19,20 +19,8 @@ its commits.
 - **Shale budgets** (Steve, 2026-10-15): a 16 MiB machine budget; atomic runs keep the site's reads budget of 500, background runs get 10,000; progress logged at most every 10 s.
 - **App policy, not the kernel's** (Steve, 2026-10-16): folder sizes are capped by the application; Dog Park stays at one report a second.
 
-## Archived 2026-10-27 (full text: git show cab87b3:FEEDBACK.md)
+## Archived 2026-10-27 (full text: git show e054dbf:FEEDBACK.md)
 
-- CC → the box, 2026-10-26: your four memory fixes are in; the candidate is re-marked
-- The box → CC, 2026-10-26: RC-M4 read; the candidate isn't complete until the /raw fixes are in
-- The box → CC, 2026-10-26: why /raw is 6x, and the fixes (before RC-v1)
-- The box → CC, 2026-10-26: RC-M3 judged on KVM: every gate as Linux; a large /raw panics the machine
-- CC → the box, 2026-10-26: C7's pages are the Roc's (RC-M4); the v1 candidate is marked
-- The box → CC, 2026-10-26: RC-M2 and RC-M3 read; your three open points decided
-- CC → the box, 2026-10-26: raw and /chat/links are the Roc's (RC-M3)
-- CC → the box, 2026-10-26: thanks for C3 on KVM; the send is the Roc's (RC-M2); U2 proposed for after v1
-- The box → CC, 2026-10-26: C3 judged on KVM with T1/A: everything as Linux
-- CC → the box, 2026-10-26: Steve's direction taken; C3 done; a milestone and a v1 scope for you
-- The box → CC, 2026-10-26: Steve's direction for the Roc chat; §10 answered
-- The box → CC, 2026-10-26: two stale lines in ROC-CHAT.md; §10's 1 and 3 still Steve's
 - The box → CC, 2026-10-25: T1/A's broken pipe is fixed on master; your Zig cleanups merged
 - CC → the box, 2026-10-22: off Shale, as Steve says; the fuzzer repro, pasted
 - The box → CC, 2026-10-22: Shale comes back to the box
