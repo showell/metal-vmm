@@ -583,7 +583,7 @@ function feedback_pick(what, base, ours, theirs)
   if ours == theirs then return ours end
   if ours == base then return theirs end
   if theirs == base then return ours end
-  fail("`feedback_merge`: " .. what .. " changed on both sides; merge it by hand, then `queue_check()`")
+  fail("the merge: " .. what .. " changed on both sides; merge it by hand, then `queue_check()`")
 end
 
 -- **FEEDBACK.md MERGED** from the merge base's text, ours and theirs, and
@@ -644,5 +644,180 @@ function feedback_merge(base, ours, theirs, archive)
   end
   local tail = feedback_pick("the `## Older entries` part", b.tail, o.tail, t.tail)
   if tail ~= "" then push(parts, tail) end
+  return join(parts, "\n\n") .. "\n"
+end
+
+-- A file's lines merged three ways, for the archives: each side's own
+-- additions kept, each side's own removals made, theirs' order. A line ours
+-- added goes after the line it follows in ours (or first, if none of those
+-- is in theirs).
+function lines_merge(base, ours, theirs)
+  if ours == base then return theirs end
+  if theirs == base then return ours end
+  local in_base = {}
+  for l in lines(base) do in_base[l] = true end
+  local in_ours = {}
+  for l in lines(ours) do in_ours[l] = true end
+  local in_theirs = {}
+  for l in lines(theirs) do in_theirs[l] = true end
+  -- What ours added, by the line it follows there.
+  local after = {}
+  local first = {}
+  local prev = nil
+  for l in lines(ours) do
+    if not has_key(in_base, l) and not has_key(in_theirs, l) then
+      if prev == nil then push(first, l) else
+        if not has_key(after, prev) then after[prev] = {} end
+        push(after[prev], l)
+      end
+    else
+      prev = l
+    end
+  end
+  local out = {}
+  for l in first do push(out, l) end
+  for l in lines(theirs) do
+    -- Ours removed it, theirs kept it as it was: gone.
+    if not (has_key(in_base, l) and not has_key(in_ours, l)) then push(out, l) end
+    if has_key(after, l) then
+      for a in after[l] do push(out, a) end
+    end
+  end
+  return queue_text(out)
+end
+
+-- QUEUE.md in parts: the lines above the first section (`head`), and each
+-- section (`name`, `intro`: its text before its first item) with its items,
+-- each `{n, text}` (its `**N. ` line to the next item or section, blank lines
+-- at its end dropped).
+function queue_split(text)
+  local head = {}
+  local sections = {}
+  local cur = nil
+  local item = nil
+  for l in lines(text) do
+    if starts_with(l, "## ") then
+      cur = {name = sub(l, 4), intro = {}, items = {}}
+      push(sections, cur)
+      item = nil
+    else
+      local m = re_find(l, "^\\*\\*([0-9]+)\\. ")
+      if m ~= nil and cur ~= nil then
+        item = {n = parse_int(m.group), ls = {l}}
+        push(cur.items, item)
+      elseif item ~= nil then
+        push(item.ls, l)
+      elseif cur ~= nil then
+        push(cur.intro, l)
+      else
+        push(head, l)
+      end
+    end
+  end
+  for s in sections do
+    local lead = 1
+    while lead <= #s.intro and trim(s.intro[lead]) == "" do lead = lead + 1 end
+    s.intro = join(feedback_trim_end(last(s.intro, #s.intro - lead + 1), 0), "\n")
+    for it in s.items do it.text = join(feedback_trim_end(it.ls, 1), "\n") end
+  end
+  return {head = join(feedback_trim_end(head, 0), "\n"), sections = sections}
+end
+
+-- Each item as `<section>\n<text>` by its number (moving it between
+-- sections is a change), and each section's intro by its name.
+function queue_by_number(parts, side)
+  local items = {}
+  local intros = {}
+  for s in parts.sections do
+    intros[s.name] = s.intro
+    for it in s.items do
+      local k = tostring(it.n)
+      if has_key(items, k) then fail("`queue_merge`: " .. side .. "'s QUEUE.md has item " .. it.n .. " twice") end
+      items[k] = s.name .. "\n" .. it.text
+    end
+  end
+  return {items = items, intros = intros}
+end
+
+-- **QUEUE.md MERGED** from the merge base's text, ours and theirs, and the
+-- merged QUEUE-ARCHIVE.md: each item by its number, three ways, so an item
+-- one side archived (or let go) and the other left alone stays gone; an
+-- item the archive holds never comes back; an item edited on both sides
+-- stops, named; two new items with one number stop too (renumbering is a
+-- person's call). Sections in theirs' order (ours' new ones after the
+-- section they follow in ours), each one's intro three ways, its items
+-- newest first.
+function queue_merge(base, ours, theirs, archive)
+  local b = queue_split(base)
+  local o = queue_split(ours)
+  local t = queue_split(theirs)
+  local bb = queue_by_number(b, "the merge base")
+  local ob = queue_by_number(o, "ours")
+  local tb = queue_by_number(t, "theirs")
+  local archived = {}
+  for a in queue_archived(archive) do archived[tostring(a.n)] = true end
+  -- The sections: theirs, then ours' new ones after their neighbour.
+  local names = {}
+  local known = {}
+  for s in t.sections do
+    push(names, s.name)
+    known[s.name] = true
+  end
+  local prev = nil
+  for s in o.sections do
+    if not has_key(known, s.name) then
+      local at = #names + 1
+      for i = 1, #names do
+        if names[i] == prev then at = i + 1 end
+      end
+      local moved = take(names, at - 1)
+      push(moved, s.name)
+      for i = at, #names do push(moved, names[i]) end
+      names = moved
+      known[s.name] = true
+    end
+    prev = s.name
+  end
+  -- Every number either side or the base has.
+  local numbers = {}
+  local seen = {}
+  for side in {bb.items, ob.items, tb.items} do
+    for k in keys(side) do
+      if not has_key(seen, k) then
+        seen[k] = true
+        push(numbers, parse_int(k))
+      end
+    end
+  end
+  local by_section = {}
+  for n in sort(numbers, "desc") do
+    local k = tostring(n)
+    local bt = get(bb.items, k)
+    local ot = get(ob.items, k)
+    local tt = get(tb.items, k)
+    -- Archived on either side: archived, whatever the other side did to it.
+    if has_key(archived, k) then
+      ot = nil
+      tt = nil
+      bt = nil
+    end
+    if bt == nil and ot ~= nil and tt ~= nil and ot ~= tt then fail("`queue_merge`: item " .. n .. " is new on both sides, with different text: renumber one by hand, then `queue_check()`") end
+    local text = feedback_pick("item " .. n, bt, ot, tt)
+    if text ~= nil then
+      local nl = find(text, "\n")
+      local section = sub(text, 1, nl - 1)
+      if not has_key(by_section, section) then by_section[section] = {} end
+      push(by_section[section], sub(text, nl + 1))
+    end
+  end
+  local parts = {feedback_pick("the text above the first section", b.head, o.head, t.head)}
+  for name in names do
+    local block = {"## " .. name}
+    local intro = feedback_pick("section `" .. name .. "`'s text", get(bb.intros, name), get(ob.intros, name), get(tb.intros, name))
+    if intro ~= nil and intro ~= "" then push(block, intro) end
+    for it in get(by_section, name, {}) do push(block, it) end
+    -- A section both sides dropped, or one dropped and the other left as it was, stays dropped.
+    if intro ~= nil or has_key(by_section, name) then push(parts, join(block, "\n\n")) end
+  end
   return join(parts, "\n\n") .. "\n"
 end

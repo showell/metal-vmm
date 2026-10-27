@@ -111,8 +111,9 @@ Every routine operation already has a Shale form. Use it:
   how archived entries come back from the dead, and how entries end up out
   of order or glued to the line above. **Merging master into your
   metal-vmm branch: `shale .shale/merge_master.shale`**: `git_merge`, and a
-  FEEDBACK.md conflict alone resolved by `feedback_merge` (three ways, by
-  heading), checked by `queue_check`, then committed.
+  conflict in the queue's four files alone resolved three ways: FEEDBACK.md
+  by its entries (`feedback_merge`), QUEUE.md by its items (`queue_merge`),
+  the archives by their lines; checked by `queue_check`, then committed.
 - **FEEDBACK: `feedback_add(from, to, title, body)`** (metal-vmm's
   `.shale/prelude.shale`, loaded when you run `shale` from this repo's
   root). It writes the heading in the house form, dates it, puts it at the

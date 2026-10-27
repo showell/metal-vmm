@@ -207,5 +207,56 @@ expect(contains(said(attempt(both_changed)), "`## CC → the box, 2026-10-26: b`
 -- Changed on one side: that side's.
 expect(contains(feedback_merge(feedback_of({A, B}), feedback_of({A, B}), feedback_of({A, {B[1], B[2], B[3], "B, theirs."}}), ""), "B, theirs."), "an entry changed on one side is that side's")
 
+-- ── QUEUE merged (QUEUE 258) ────────────────────────────────────────────
+
+const QBASE = read("tests/queue/small/QUEUE.md")
+const QARCH = read("tests/queue/small/QUEUE-ARCHIVE.md")
+const ITEM13 = "**13. A new thing: CC'S** (ours) New.\n\n"
+-- QBASE with `old` replaced by `new`, once.
+function q_with(old, new)
+  local at = find(QBASE, old)
+  if at == nil then fail("queue test: no `" .. old .. "` in the fixture") end
+  return sub(QBASE, 1, at - 1) .. new .. sub(QBASE, at + #old)
+end
+function q_arch_with(old, new)
+  local at = find(QARCH, old)
+  return sub(QARCH, 1, at - 1) .. new .. sub(QARCH, at + #old)
+end
+function q_numbers(text)
+  local got = {}
+  for s in queue_split(text).sections do
+    for it in s.items do push(got, tostring(it.n)) end
+  end
+  return join(got, ",")
+end
+
+expect(queue_merge(QBASE, QBASE, QBASE, QARCH) == QBASE, "queue_merge of one queue three times is that queue, byte for byte")
+-- Ours adds 13; theirs edits 12: both kept, newest first.
+local q_ours = q_with("**12. ", ITEM13 .. "**12. ")
+local q_theirs = q_with("1. A step of it.", "1. A step of it, edited.")
+local qm = queue_merge(QBASE, q_ours, q_theirs, QARCH)
+expect(q_numbers(qm) == "13,12,11,10" and contains(qm, "A step of it, edited.") and contains(qm, "(ours) New."), "a new item on one side and an edit on the other are both kept, newest first")
+-- Theirs archived 11; ours, from before, still has it, even edited: archived.
+local theirs_archived = q_with("**11. An older thing: DONE** (the box) Its commit is metal-vmm `0123abcd`.\n\n", "")
+local arch11 = QARCH .. "- **11.** An older thing: DONE; commits named: metal-vmm 0123abcd.\n"
+expect(not contains(queue_merge(QBASE, q_ours, theirs_archived, arch11), "**11. "), "an item theirs archived stays archived, though ours has it")
+local ours_edited_11 = q_with("Its commit is metal-vmm", "Its commit (edited) is metal-vmm")
+expect(not contains(queue_merge(QBASE, ours_edited_11, theirs_archived, arch11), "**11. "), "an item archived on one side stays archived, though the other edited it")
+-- Edited on both sides: stopped, named.
+function q_both_edited()
+  return queue_merge(QBASE, q_with("1. A step of it.", "1. Ours."), q_with("1. A step of it.", "1. Theirs."), QARCH)
+end
+expect(contains(said(attempt(q_both_edited)), "item 12 changed on both sides"), "an item edited on both sides stops the merge, named")
+-- Two new items with one number: stopped, a person renumbers.
+function q_two_thirteens()
+  return queue_merge(QBASE, q_with("**12. ", ITEM13 .. "**12. "), q_with("**12. ", "**13. Another new thing: THE BOX'S** (theirs) New.\n\n**12. "), QARCH)
+end
+expect(contains(said(attempt(q_two_thirteens)), "item 13 is new on both sides"), "two new items with one number stop the merge, for a person to renumber")
+-- The archive by its lines: each side's new line kept.
+local a_ours = q_arch_with("- **9.**", "- **7.** Ours.\n- **9.**")
+local a_theirs = q_arch_with("- **9.**", "- **6.** Theirs.\n- **9.**")
+local am = lines_merge(QARCH, a_ours, a_theirs)
+expect(contains(am, "- **7.** Ours.") and contains(am, "- **6.** Theirs.") and contains(am, "- **9.** The ninth"), "an archive merged by its lines keeps each side's new line")
+
 remove_tree(SCRATCH)
 print("all queue tests passed")
