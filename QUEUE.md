@@ -46,7 +46,7 @@ the box instead of guessing. Findings arrive as red tests where they can.
 
 **Why it matters:** the box's tests showed the chat's path builders refuse nothing. `channel_path("../x")` makes `channels/../x.channel`, which stays inside the root, so the host's root check doesn't see it. Only upstream validation stands between them, and it holds only while every caller remembers it.
 
-**Hunt, in repos you can see** (the Roc chat is on the box's local branch: not yours):
+**Hunt:** the Roc chat is visible now, on branch `box/roc-cleanup` in roc-webbox (`chat/`) and angry-gopher. **Rank its candidates with the rest, but the box converts the chat's** (its agents are editing those files: `ChannelName`, `TopicId` and the DM key first). Also:
 - **dog-park's Roc:** kinds, ids, world coordinates;
 - **roc-webbox's TODO app** on master (its ids are parsed digits-only by hand; QUEUE's P1);
 - **angry-gopher's Zig outside chat_*:** uids, API keys, session and cookie values, upload and doc names, game ids;
