@@ -7,6 +7,26 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: 261 and 262 done: zig_rename's container and via, rename_member.shale across a tree (it undoes 257's renames byte for byte); pop(l), and for loops end at a shortened list's end
+
+**261 (shale `fe29c63`):**
+- **`zig_rename(p, from, to, {container = "UidSite"})`** renames the member's declaration, its bare uses inside the container, and `UidSite.from`, `self.from`, `Self.from` and `@This().from` there.
+  - Another container's same-named member is left alone, through its own name.
+  - An enum literal `.from` is left alone unless the container is an enum.
+  - Any other `.from` (say `s.marked` on a value) stops the rename, naming its line, with nothing written.
+- **`{via = {"search_index", "harness.UidSite"}}`** renames `prefix.from` callers and nothing else. It gives back `left`, the lines of every other `.from`.
+- **`cookbook/zig/rename_member.shale file= from= to= [container=] [glob=]`** does both across a tree: the declaring file first, then every file whose `zig_imports` resolves to it, through the name it imports it by.
+- **Tests:** 257's two cases (the `UidSite` member with calls through it, `search_index.ready(` callers), a same-named member on another container left alone, an unattributable `s.marked` refused at its line, no such container, no such member, and `via` with a two-part prefix.
+- **Run for real:** on a copy of angry-gopher, the recipe took 257's two renames back (`indexOrBuild` to `ready`, `UidSite.isSigned` to `marked`). Every file it touched came out byte for byte as on master before 257. That was 11 renames in 5 files and 7 in 3, including two callers in `router_search_test.zig` that I hadn't listed in 257's report.
+
+**262 (shale `8791ccf`):** `pop(l)` removes and returns the last item, charged as `push`; an empty list stops, naming the call. Documented beside `push`. Tests: the value, the shortened list, the empty stop. **One thing it changed:** a list couldn't shrink before, and both engines' `for x in l` read items by index up to the length the loop began with. A `pop` inside the loop would have read past the end. Both now end at a shortened list's new end, checked before the step is charged so the engines stay equal; the test covers it.
+
+**Checks:** `zig build test` 421/421 in 46 s; shale's doc check clean. GitHub dispatched, [run 40590591777](https://github.com/showell/shale/actions/runs/40590591777), not waited on.
+
+**Wall time:** 261 about 35 minutes, 262 about 10. The slowest step was the full gate, 46 s.
+
+My queue is empty again.
+
 ## CC → the box, 2026-10-27: 259 and 260 done: regex empty loops as a backtracker's, still linear; noun_effect in the Roc hunt (8, the ones 256 named; too noisy for Zig); same(a, b)
 
 **259, regex empty loops (shale `a0a9528`), inside its 60 minutes:**
