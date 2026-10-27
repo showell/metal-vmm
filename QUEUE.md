@@ -38,6 +38,24 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**252. Shale's own gates: every slow step load-bearing, and run after the cheap ones: CC'S** (Steve, 2026-10-27: "make sure that anything that's time-consuming in shale's own gates is load-bearing and sequenced after more inexpensive checks"). After the open review items.
+
+**Today:** `zig build test` is about 95 s on the box, and about 190 s on GitHub's runner. Steps run in parallel, so a format slip or a one-line compile error can wait behind the fuzzers before it's reported.
+
+**1. Measure:** `zig build test --summary all` gives each step's time. Find what the 95 s is: the script fuzzer (`-Dscript-fuzz`, 400 by default), the props tests, the cookbook tests, `web-test` (Node and the wasm build), the gate test, the doc check if it's in there. List each step with its time, cold and warm.
+
+**2. Load-bearing:** every step over about 5 s must catch something nothing cheaper catches. For each, either:
+- name a defect it alone has caught (a commit, or a QUEUE item), or
+- plant one it alone catches, then remove the plant.
+
+A step that can't show either is trimmed (fewer iterations, a smaller corpus) or moved to a slower tier. Say which, and why. Never loosen a check as a blanket.
+
+**3. Sequenced:** the cheap checks run first, and an expensive step starts only after they pass: `zig fmt --check`, compile errors, then the fast unit tests, then the rest. In `build.zig`, make the expensive steps `dependOn` a cheap gate step. A slip should be reported within seconds, not after the fuzzers.
+
+**4. Tiers, if they help:** `zig build test` stays the one full gate. A `zig build quick` (fmt, compile, unit tests) may be added if it is honestly under about 15 s. Say what it leaves out.
+
+**Deliverable:** the timing table, before and after, on the box and on GitHub (via `cookbook/gh_build.shale`); the load-bearing evidence per step; and the sequencing. Report how long a format slip now takes to fail.
+
 **251. The Shale tutorial's lessons: pin each cell's output: CC'S** (Steve, 2026-10-27, on the live tutorial at lynrummy.com/shale/tutorial.html: "Is our Shale tutorial self-maintaining?"). After your current item.
 
 **Today:** `web/smoke_test.mjs` (in `zig build test`, through `web-test`) runs every lesson cell in `web/lessons.js` in order, on one tree, and checks only that each one **finishes or stops on purpose**, plus the blog the lessons build and `card.svg`. **What a cell prints isn't checked.** So a lesson whose prose quotes an error or an output drifts silently when the wording changes. Today's name-not-found error gained a `shale --help` pointer, for one.

@@ -7,6 +7,21 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-27: procs()/proc_stop reviewed hard: a false success on EPERM, a cut cmdline, a pidfd for the race, and the decoy test
+
+**`procs()` and `proc_stop(p)` (shale `b3674cb`): a good design, reviewed with extra scrutiny at Steve's ask. Not merged yet: fix these first, each red then green.**
+
+**Right:** the caller and its whole lineage are excluded from `procs()` and refused by `proc_stop`, as is pid 1; a process is its pid **and** its start time; and both safety reds were planted.
+
+1. **A false success (fail, never warn).** Both `linux.kill` results are ignored (`_ = linux.kill(...)`). A process the run may not signal (another user's, a kernel thread) answers EPERM to TERM. The loop waits 2 s, sends KILL (EPERM again), records `process N stopped`, and **returns true** with the process still there. Check each signal's errno and fail on any but ESRCH (the process is gone, which counts as done). After KILL, confirm it is gone (a short wait on `same`) before returning true; a zombie counts as gone. Red: `proc_stop` of a process the test can't signal. If the runner can't produce one, say so, and use pid 1's child or a setuid fixture, whichever works.
+2. **A cut command line, said nowhere.** `cmdline` is one `read` into 4096 bytes, so `args` past that is lost, and a filter on it quietly misses. Read to the end (loop the read; grow the buffer), or carry `args_cut = true`. A long-argv fixture is the red.
+3. **Close the race with a pidfd.** Between `same(pid, start)` and `kill` the pid can be reused. `pidfd_open(pid)`, then verify the start time, then `pidfd_send_signal`: the fd names that process and no other, whatever happens to the number. (Linux 5.3+; the box and GitHub's runners have it.) Wait on the pidfd (`poll`) instead of polling `/proc`.
+4. **The hazard itself, tested:** a decoy whose own argv holds the text being searched for (for example `shale-fixture` with an argument naming the target), beside the target. Filter `procs()` by that text, stop the target, and assert **the decoy survives**. Add a second decoy whose name is a prefix of the target's (`zig` and `zig-server`).
+
+Then a green GitHub run (`cookbook/gh_build.shale ref=claude/great-wright-i7aste`), URL in FEEDBACK. The box will plant its own decoy on the box before merging.
+
+**Also still open on that branch:** `syntax.shale`'s test assumes `zig` on PATH (red on GitHub: see my earlier entry).
+
 ## The box → CC, 2026-10-27: your Shale branch is red on GitHub: syntax.shale's test needs zig on PATH
 
 **Your Shale branch fails on GitHub; it passes on the box.** Run: https://github.com/showell/shale/actions/runs/40525537325 (the on-demand build, `cookbook/gh_build.shale`: dispatch it yourself with `ref=claude/great-wright-i7aste`).
