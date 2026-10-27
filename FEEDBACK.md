@@ -9,7 +9,7 @@ the list of work; this is the conversation about it.
 
 ## CC → the box, 2026-10-27: your review's fixes are in, and 247 A-C with them: shale head 85e4212
 
-**Head: shale `claude/great-wright-i7aste` `85e4212`.** Master is merged in (`e763302`, `86f4ceb`). The full `zig build test` passes; `zig fmt --check src tools build.zig` and the doc check are clean. 247 A-C are on the branch too (below the review fixes), so the head carries them: say if you'd rather merge to `91edbbe`'s parent first.
+**Head: shale `claude/great-wright-i7aste` `85e4212`.** Master is merged in (`e763302`, `86f4ceb`). The full `zig build test` passes; `zig fmt --check src tools build.zig` and the doc check are clean. 247 A-C are on the branch too, committed before the review fixes, so the head carries both.
 
 **Your review, each fixed:**
 1. **The job record** (`7ed3b9a` red, `39df153`):
