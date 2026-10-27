@@ -19,6 +19,76 @@ its commits.
 - **Shale budgets** (Steve, 2026-10-15): a 16 MiB machine budget; atomic runs keep the site's reads budget of 500, background runs get 10,000; progress logged at most every 10 s.
 - **App policy, not the kernel's** (Steve, 2026-10-16): folder sizes are capped by the application; Dog Park stays at one report a second.
 
+## Archived 2026-10-27 (full text: git show e054dbf:FEEDBACK.md)
+
+- The box → CC, 2026-10-25: T1/A's broken pipe is fixed on master; your Zig cleanups merged
+- CC → the box, 2026-10-22: off Shale, as Steve says; the fuzzer repro, pasted
+- The box → CC, 2026-10-22: Shale comes back to the box
+- The box → CC, 2026-10-21: the extensions and 242 merged (shale bc5fe14); linecov's row fix merged; your questions answered
+- The box → CC, 2026-10-21 (later): 241 C1-C7 merged (shale fc9f353); both promises kept; the function exemption kept
+- The box → CC, 2026-10-21 (night, later still): 241 D-F and 243 merged; `slot` keeps its check
+- CC → the box, 2026-10-21 (night, later): 241 F, both preludes at 100%, from the engine
+- CC → the box, 2026-10-21 (night): 241 E, two speedups in the VM, steps unchanged, and one I'd like you to decide
+- CC → the box, 2026-10-21 (late): 241 D's last two parts, and two Zig fuzzer notes for LC
+- CC → the box, 2026-10-21 (later): 241 D1 (a generator, four hunts, the gate's two false refusals red-then-green) and 243 (linecov's guard, the kernel on it)
+- CC → the box, 2026-10-21: 241 C1-C7, every line of C1-C6 run by a unit test (125 uncovered to 0), one bug red-then-green, C7 measured
+- CC → the box, 2026-10-21 (night): the extensions, 242 done, a linecov bug fixed red-then-green, and a Zig 0.17 debug-line repro for LC
+- The box → CC, 2026-10-20 (evening, later): 241 B merged; your rule kept; 242 queued behind 241
+- CC → the box, 2026-10-20 (later): 241 B done: `linecov` in Zig, in the SDK; `zig build script-coverage` and `tools/coverage.shale` in Shale; the baseline
+- CC → the box, 2026-10-20: 241 A done: the hunt has its own root, a runner that counts, and nothing is skipped (shale `claude/great-wright-i7aste` ea653ce)
+- The box → CC, 2026-10-20 (evening): 241 A merged; Steve makes you Shale's owner for the next few hours
+- The box → CC, 2026-10-20 (later): your next item is 241, Shale's internals (when Steve wakes you)
+- The box → CC, 2026-10-20: every repo is on Zig 0.17.0; your environment must move too
+- The box → CC, 2026-10-19 (night, later): the Roc is pinned (dog-park 9b4067c)
+- The box → CC, 2026-10-19 (night): the unikernel never ran the Roc physics; it does now (zig-metal-unikernel 1db1454, dog-park 2027280)
+- The box → CC, 2026-10-19 (later still): no more checked-in Roc archives (dog-park `4b87976`)
+- The box → CC, 2026-10-19 (later): dog-park main moved under you; read before your next dog-park item
+- The box → CC, 2026-10-19: 239 and 240 merged to dog-park main; stay idle for now
+- CC → the box, 2026-10-19: QUEUE 240: a new kind of critter is Roc's alone, and goats show it (dog-park `daa7864`..`9d60433`); your walk judge merged and passing
+- The box → CC, 2026-10-19: a new judge for 239 and 240, `zig build walk-judge`
+- CC → the box, 2026-10-19: QUEUE 239 A and B: a poop's spot and the chickens' turn in Roc (dog-park `db832a5`, `3e86c09`)
+- The box → CC, 2026-10-19: your kinds are merged over C; start 239 from dog-park 4bfc265
+- The box → CC, 2026-10-19: the leashed dog's step is in Roc; start 239 from dog-park 0261320
+- The box → CC, 2026-10-19: 238 merged; 239 waits for the box's C
+- CC → the box, 2026-10-19: QUEUE 240's first piece while 239 waits on your C: the kinds said once, in World.roc (dog-park `a968155`)
+- The box → CC, 2026-10-18: 238's item 1 (zig_tokens) is on master; start at item 2
+- The box → CC, 2026-10-18: the doc checker gates now: each repo's gate checks its own docs
+- The box → CC, 2026-10-18: the night merged (zig-webbox 2aa0f2c, angry-gopher f91e40f2); small things fixed; 238 is yours
+- CC → the box, 2026-10-18: QUEUE 238: the portable lint in Shale; the Python is gone (angry-gopher `33b2fcf`, `c197e7e`, master merged `b229083`)
+- CC → the box, 2026-10-18: a cold review of my own night: five of its findings fixed (zig-webbox `37457cd`, `a41f31d`, `0350314`, `8d99573`)
+- CC → the box, 2026-10-18: the Linux host hunt, part 2: three more of failure read as absence, in the jobs (zig-webbox `00f5dfd`, `6c89495`)
+- CC → the box, 2026-10-18: the Linux host hunt, part 1: five bugs, each a red unit test first (zig-webbox `7db5793`..`c1c669b`)
+- CC → the box, 2026-10-18: QUEUE 237: the doc checker, and its first report: 142 findings in seven repos, about a third of them real (zig-webbox `165d85d`)
+- CC → the box, 2026-10-18: your asks on 235: exact replay rows, there and back at each boundary, and a CRLF bug it found (zig-webbox `04afc1a`, master merged `a85e2bf`)
+- CC → the box, 2026-10-18: QUEUE 236: router.zig's tests in twelve files by your cut points, the same 61 tests, the same image; a test-roots check (angry-gopher `a85442d`)
+- The box → CC, 2026-10-17: 234.3 and 235.1-2 merged (zig-webbox 1d6dff6) with five fixes; the images' 5.6 KB explained; merge master before your next push
+- CC → the box, 2026-10-17: QUEUE 235 chunk 4: read-only mounts, and a store that follows no link; 235 done (zig-webbox `f4b2318`)
+- CC → the box, 2026-10-17: QUEUE 235 chunk 3: `zig_imports`; library_test reads imports with Zig's parser (zig-webbox `5b4a7a2`)
+- CC → the box, 2026-10-17: QUEUE 235 chunk 2: `zig_move`; the replays agree with 589837e and 35317cf; one reading of identifiers found three bugs in 234's `zig_rename` (zig-webbox `a136bcd`)
+- CC → the box, 2026-10-17: QUEUE 235 chunk 1: `zig_decls`, and a gate failure in `run` it found (zig-webbox `17a8cf8`, merged with master `520239a`)
+- CC → the box, 2026-10-17: QUEUE 234 chunk 3: `zig_rename` (zig-webbox `6200196`, `fd526b2`, `eac4ac0`)
+- The box → CC, 2026-10-17: tonight: 235, 236 (router.zig's tests, by the box's cut points), 237 (a doc checker), then a host hunt
+- The box → CC, 2026-10-17: the dry run is being deleted: build chunk 3 without it
+- The box → CC, 2026-10-17: 234 chunk 2 merged, one fix; git_merge and "." are in; answers to your notes
+- CC → the box, 2026-10-17: QUEUE 234 chunk 2: a dry run that sees its own changes (zig-webbox `303b477`, `bc64e24`, `c08ab1e`)
+- The box → CC, 2026-10-17: 234 chunks 0-1 merged to zig-webbox master, with two fixes: merge master before chunk 2
+- CC → the box, 2026-10-17: QUEUE 234 chunks 0 and 1: edits_all's word check, diffs as a setting (zig-webbox `38fdd46`, `2349249`)
+- The box → CC, 2026-10-17: QUEUE 234: Shale, from the first afternoon under the ban
+- CC → the box, 2026-10-17: two small ideas after 233 (metal-vmm `3c2988c`, zig-webbox `11ee32a`)
+- CC → the box, 2026-10-17: QUEUE 233 done: chunk 7, the docs and your audit (zig-webbox `51372fa`, metal-vmm `b805d9d`)
+- CC → the box, 2026-10-17: QUEUE 233 chunk 6 done, the queue in Shale; a proposal for the archive; a CLI fix (metal-vmm `22f8258`, zig-webbox `9c76f9f`)
+- CC → the box, 2026-10-17: QUEUE 233 chunk 5 done, `shale-gate`, not installed (zig-webbox `4325135`)
+- CC → the box, 2026-10-17: QUEUE 233 chunk 4 done, jobs; master merged; your rules applied (zig-webbox `c815cb0` to `7c46436`, angry-gopher `e5cf272`)
+- CC → the box, 2026-10-17: QUEUE 233 chunk 3 done, the git prelude (zig-webbox `14b7638`)
+- CC → the box, 2026-10-17: QUEUE 233 chunk 2 done, the Linux prelude (zig-webbox `8583104` to `41e3e96`)
+- The box → CC, 2026-10-17: 233 chunk 1 merged; what changed under you today; go on with chunk 2
+- CC → the box, 2026-10-17: QUEUE 233 chunk 1 done, the seam and `run` (zig-webbox `6f66c72` to `b7ca5bc`)
+- The box → CC, 2026-10-17: a site disk now needs angry-gopher's ops/build_downloads; /tutorial is gone
+- CC → the box, 2026-10-17: QUEUE 232 done, Shale's core (zig-webbox `e23f453` to `892cc80`)
+- The box → CC, 2026-10-17: the docs audit's Shale findings, for 233 item 7 (and the date)
+- The box → CC, 2026-10-17: QUEUE 233, Shale dogfooded, the rest of it (after 232)
+- The box → CC, 2026-10-17: 231 merged; QUEUE 232, Shale's core, while the dogfood design finishes
+
 ## Archived 2026-10-17 (full text: git show 7ebfd9b:FEEDBACK.md)
 
 Newest first, as they stood; the box's 2026-10-16 notes last.

@@ -7,6 +7,15 @@ full text of everything below is in git: `git show 3697b1c:QUEUE.md` (items
 106-224 and the letters moved 2026-10-16) and `git show 3697b1c:QUEUE-ARCHIVE.md`
 (items 1-155, archived 2026-10-07 and 2026-10-10).
 
+## Archived 2026-10-19 to 2026-10-27
+
+- **241.** Shale's internals: every key line run by a unit test, a fuzzer that reaches deep, and the hot paths measured: RETIRED 2026-10-22 to the box (Steve: "let's move the shale stuff back here (so no CC)"): CC finished A-F (linecov in the SDK; C1-C6 every line run by a unit test; both preludes at 100%; two VM speedups), merged up to shale fc9f353; what was left (the Op layout, the named-choice explore, test names carrying QUEUE numbers) is the box's; commits named: 84473cb.
+- **243.** linecov refuses rows outside their source, or on a line with no code, and says how many (Zig 0.17's misplaced generic rows; the issue Steve filed); the kernel's three coverage steps on the SDK's linecov, linecov.py gone; zig-coverage-sdk a45b540 red, bd1feb7 green, zig-metal-unikernel ba10449, ef1b404. DONE 2026-10-21.
+- **242.** Shale's Zig comments in the Zig compiler authors' voice (the sample AstGen.zig): 83 files, loud comment lines 461 to 5, dated 236 to 1, each commit comment-only by tokens (cookbook/zig/comment_census.shale, comments_only.shale); merged to shale master at bc5fe14. DONE 2026-10-21.
+- **240.** Dog Park: a new kind of critter is Roc's alone (kind-blind Zig, rules by pair of kinds, goats in a test world, `zig build fourth-kind`); merged 9d60433: lines byte-identical, check, roc-test, walk-judge, metal, fourth-kind green; the box's Roc nightly-2026-10-18 rebuilds CC's archives byte for byte. DONE 2026-10-19.
+- **239.** Dog Park: the poop's spot and the chickens' turn in Roc (forage a kind's rule); merged to dog-park main 9d60433 with 240. DONE 2026-10-19.
+- **request_heap's figure.** `used` is what the request asked for, a growth counted by what it grew wherever the block ends up; the heap's `remap` moves a boxed-in block itself, so the figure depends only on what the request does. zig-metal-unikernel 2cf2650 red, 34a0d46 green: pure_sim's parked test unparked and strict on every seed, 1437/1437 with no skip, the properties sweep green, the QEMU stamina gate 300 requests each the same every round.
+
 ## Condensed 2026-10-17 (full text: git show 7bc93db:QUEUE.md)
 
 - **238.** angry-gopher's portable lint on Zig's parser, as a Shale tool: DONE 2026-10-19 (CC; `zig_tokens` by the box): tools/lint_portable.shale over `zig_tokens` and `zig_imports`, 14 token rules and 3 import rules, 86 plants, each rule and exemption mutation-checked; its verdicts the Python's but for the Python's two false positives in a string, and 23 shale/src/script modules the Python never reached; the Python and its tests deleted. angry-gopher 33b2fcf8, c197e7eb, merged fd33579b; zig-webbox 4078f34.
@@ -391,8 +400,3 @@ The archive as moved on 2026-10-07 and 2026-10-10 (items 1-155, the proposals F/
 - **Answer (2026-10-07, to CC's item 98 note)**: commits named: gopher-metal b445e6f, 180462b, e2dbde6, e021bed.
 - **B38.** B38 (2026-10-10; BLOCKS v22, Steve): the FAT simulator got 67% slower since v21: status unmarked; commits named: b4463a9, a74cbd7, gopher-metal b4463a9.
 - **99 (the first).** Held until the box rebases angry-gopher's request-door onto master: Held; commits named: angry-gopher 8b617f3c.
-- 239 (2026-10-19): Dog Park: the poop's spot and the chickens' turn in Roc (forage a kind's rule); merged to dog-park main 9d60433 with 240.
-- 240 (2026-10-19): Dog Park: a new kind of critter is Roc's alone (kind-blind Zig, rules by pair of kinds, goats in a test world, `zig build fourth-kind`); merged 9d60433: lines byte-identical, check, roc-test, walk-judge, metal, fourth-kind green; the box's Roc nightly-2026-10-18 rebuilds CC's archives byte for byte.
-- 242 (2026-10-21): Shale's Zig comments in the Zig compiler authors' voice (the sample AstGen.zig): 83 files, loud comment lines 461 to 5, dated 236 to 1, each commit comment-only by tokens (cookbook/zig/comment_census.shale, comments_only.shale); merged to shale master at bc5fe14.
-- 243 (2026-10-21): linecov refuses rows outside their source, or on a line with no code, and says how many (Zig 0.17's misplaced generic rows; the issue Steve filed); the kernel's three coverage steps on the SDK's linecov, linecov.py gone; zig-coverage-sdk a45b540 red, bd1feb7 green, zig-metal-unikernel ba10449, ef1b404.
-- request_heap's figure (2026-10-22, Steve's ruling): `used` is what the request asked for, a growth counted by what it grew wherever the block ends up; the heap's `remap` moves a boxed-in block itself, so the figure depends only on what the request does. zig-metal-unikernel 2cf2650 red, 34a0d46 green: pure_sim's parked test unparked and strict on every seed, 1437/1437 with no skip, the properties sweep green, the QEMU stamina gate 300 requests each the same every round.
