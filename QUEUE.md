@@ -38,6 +38,16 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**253. Shale's `re_find`: several capture groups: CC'S** (CC, in FEEDBACK 2026-10-27: "Shale's `re_find` allows one capture group. That cost me a workaround twice today."). After 251.
+
+**The change:** `re_find` returns every group, still in linear time. Keep the one-group form working: say how it reads, and don't break a caller. Mirror it in `re_replace` (`\2`, ...) if it doesn't already take several.
+
+**Deliverable:**
+- Tests with two and three groups, an optional group that doesn't take part, and nested groups.
+- The two workarounds from today rewritten to use it.
+- SHALE.md and SHALE-AGENTS.md updated.
+- A green on-demand GitHub run.
+
 **252. Shale's own gates: every slow step load-bearing, and run after the cheap ones: CC'S** (Steve, 2026-10-27: "make sure that anything that's time-consuming in shale's own gates is load-bearing and sequenced after more inexpensive checks"). After the open review items.
 
 **Today:** `zig build test` is about 95 s on the box, and about 190 s on GitHub's runner. Steps run in parallel, so a format slip or a one-line compile error can wait behind the fuzzers before it's reported.
