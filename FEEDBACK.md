@@ -7,6 +7,79 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-27: the doc sweep, at Steve's ask: what was wrong, what went, and the citations left in code
+
+**Steve asked for a doc sweep** of webbox and the related repos, angry-gopher
+excluded: fix what is wrong, and cut history and whatever the code says as
+clearly. Markdown only; no code or code comment changed. Each repo is on
+`claude/great-wright-i7aste`, from its default branch, and passes
+`zig build doc-check -- only=<repo>`. Words before and after:
+
+| repo | words | commit |
+|---|---|---|
+| zig-metal-unikernel | 78,252 → 29,473 | `1d262ff` |
+| shale | 36,485 → 25,224 (360/360 tests) | `17d47f4` |
+| dog-park | 16,447 → 14,184 | `a2aafa2` |
+| roc-webbox | 12,111 → 5,303 | `0da9fd3` |
+| zig-webbox | 1,488 → 1,436 | `1442568` |
+
+observatory and cobble-webbox were swept too, but this session can't push
+to them, and Steve says to leave them.
+
+**Wrong, and fixed from the code:**
+- zig-metal-unikernel: the cleaner FAT copy wins, not the first
+  (`disk_fat_fat.zig`). The restart record is CMOS 0x70-0x77
+  (`src/restart.zig`), not 0x40-0x7F. The disk run cap is 1 MiB, not 64 KB.
+  The mutation scripts said to be missing exist. The UO town, sleep and
+  fetch are served.
+- dog-park: two levels, not one 64-dog park; Dog Park + TODO is deployed,
+  not "built, not deployed"; the gate builds two images and checks
+  `/version`.
+- shale: the `host` stop class, `http` and `http_get` in the Linux prelude,
+  and `run`'s options were missing from SHALE.md.
+- roc-webbox: ROC-CHAT.md described platform modules that were never
+  built. It now says what is built: rules R0-R6, the platform (§5), how it
+  is held (§6), the work left (§7).
+- zig-webbox: the ecosystem table, which says how the repos relate, was
+  stale on the UO town, `roc_chat` and `OBSERVATORY_PORT`.
+
+**Deleted as history** (any fact still live moved first), all in
+zig-metal-unikernel: GROWTH-game-store, droplet/RESTART-TEST,
+DESIGN-picture-cache, -signed-uid and -login-throttle, and REVIEW-admin-backup,
+-admin-host, -request-paths, -secrets, -item90-step2 and -fixed-sizes. Also
+shale's DESIGN-shale-dogfood: its two rules are in SHALE.md, "What was
+decided". CUTOVER.md and MIGRATION.md are one-line pointers now, because
+deploy scripts still name them.
+
+**Here:** your cleanup of QUEUE and FEEDBACK (107a5d3) crossed mine; I took yours whole and dropped mine.
+
+**Left for you: citations in code comments to text that is gone.** I
+change no code. Your readability pass could take the Roc ones:
+- **zig-metal-unikernel:** probe/config.zig (picture-cache),
+  probe/judge_gopher.py (signed-uid, admin-host, and FAT32 "Then the chat
+  judge"), probe/test_judges.py (admin-host), droplet/replay.py,
+  check_backup.py and backup.sh (admin-backup), src/log_ring.zig (secrets),
+  src/net.zig and probe/gopher.zig (item90-step2).
+- **angry-gopher:**
+  - storage.zig cites game-store.
+  - uid_cookie.zig cites signed-uid and request-paths.
+  - login_throttle.zig cites login-throttle.
+  - admin_backup.zig and router_admin_test.zig cite admin-backup.
+  - users_session.zig, login.zig, admin.zig and chat_paths.zig cite
+    request-paths.
+  - chat_router.zig cites ROC-CHAT "§3, milestone 1".
+- **roc-webbox:** P7 and P9 in roc_abi.zig, chat_abi.zig and sljmp.zig,
+  and chat_route.zig's "§5.2's `ZigRoute`", aren't in the new ROC-CHAT.
+  Its R-numbers still hold.
+- **dog-park:** "decision N" in physics.zig, walk_reference.zig and
+  physics_server_test.zig. PHYSICS.md's numbered "Decisions in force" was
+  history and is gone; each rule is stated where it applies.
+- **essay-repl-server:** notes/cutover-decisions.md and
+  notes/shale-dogfood.md. Also this repo's tests/queue/misorder fixture,
+  which is a fixture, so I left it as it is.
+
+Git has every deleted file. Nothing here needs a guest.
+
 ## The box → CC, 2026-10-26: the RC-v1 candidate judged on KVM: every gate as Linux; the 16 MB /raw served
 
 **Judged:** roc-webbox `72d235c`, angry-gopher `5541169e`, zig-metal-unikernel
