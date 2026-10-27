@@ -38,6 +38,16 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**253. Shale's `re_find`: several capture groups: CC'S** (CC, in FEEDBACK 2026-10-27: "Shale's `re_find` allows one capture group. That cost me a workaround twice today."). After 251.
+
+**The change:** `re_find` returns every group, still in linear time. Keep the one-group form working: say how it reads, and don't break a caller. Mirror it in `re_replace` (`\2`, ...) if it doesn't already take several.
+
+**Deliverable:**
+- Tests with two and three groups, an optional group that doesn't take part, and nested groups.
+- The two workarounds from today rewritten to use it.
+- SHALE.md and SHALE-AGENTS.md updated.
+- A green on-demand GitHub run.
+
 **252. Shale's own gates: every slow step load-bearing, and run after the cheap ones: CC'S** (Steve, 2026-10-27: "make sure that anything that's time-consuming in shale's own gates is load-bearing and sequenced after more inexpensive checks"). After the open review items.
 
 **Today:** `zig build test` is about 95 s on the box, and about 190 s on GitHub's runner. Steps run in parallel, so a format slip or a one-line compile error can wait behind the fuzzers before it's reported.
@@ -73,30 +83,6 @@ A step that can't show either is trimmed (fewer iterations, a smaller corpus) or
 - A green on-demand GitHub run (`cookbook/gh_build.shale`); paste its URL in FEEDBACK.
 
 Shale is the box's otherwise; this item is Steve's ask.
-
-**250. Opaque types for validated values, beyond the Roc chat: CC'S** (Steve, 2026-10-27: "have CC look for more places to introduce the opaque type pattern for validation"). After 249.
-
-**The pattern (the box found it in the Roc chat today):** a value checked once is passed on as a type that only its check can construct, so an unchecked value fails to compile, not merely fails a review.
-- **Roc:** an opaque type, `ChatPath :: List(U8)` (`::`, not `:=`): outside its module, `ChatPath.(x)` is a compile error, so only the module's validated builders make one. The nominal syntax at the pin (nightly 2026-10-09): declare `X := T.{ ... }` or `X :: T`; wrap `X.(v)`; unwrap the pattern `|X.(v)| v`; `==` needs an `is_eq` on the type.
-- **Zig:** a distinct type whose one constructor is the validator. Either `enum(u32) { _ }` with `fromInt`/`toInt`, or a struct whose field the rest of the code never sets: a convention, so say how it's enforced, perhaps by a test that greps for the field outside its file.
-
-**Why it matters:** the box's tests showed the chat's path builders refuse nothing. `channel_path("../x")` makes `channels/../x.channel`, which stays inside the root, so the host's root check doesn't see it. Only upstream validation stands between them, and it holds only while every caller remembers it.
-
-**Hunt:** the Roc chat is visible now, on branch `box/roc-cleanup` in roc-webbox (`chat/`) and angry-gopher. **Rank its candidates with the rest, but the box converts the chat's** (its agents are editing those files: `ChannelName`, `TopicId` and the DM key first). Also:
-- **dog-park's Roc:** kinds, ids, world coordinates;
-- **roc-webbox's TODO app** on master (its ids are parsed digits-only by hand; QUEUE's P1);
-- **angry-gopher's Zig outside chat_*:** uids, API keys, session and cookie values, upload and doc names, game ids;
-- **zig-webbox:** request paths, header values, mount names;
-- **shale:** a script's path after `pathArg`, mount names, `want` tags.
-
-Look for a value that one function validates and returns as the plain type it came in as, then several functions take and trust. A `valid_x`/`isValid`/`parseX` returning a Bool, or a cleaned string, is the tell.
-
-**Deliverable:**
-1. **A ranked list in FEEDBACK:** each candidate, where it is checked, how many places trust it, and what a forgotten check would do.
-2. **Then do the top three:** each in its own commit, with a red test or a plant showing the unchecked value now fails to compile (a compile-fail case where the language allows one; otherwise a test that grep-checks the convention).
-3. Keep each conversion small: the type, its one constructor, and the callers it forces to change.
-
-**Stop and ask** if one would reach a public API or the Roc/Zig seam.
 
 ## Parked
 
