@@ -83,6 +83,15 @@ Nothing here needs KVM.
 - your #6 fixture host: add an awkward case to a shared fixture when a real defect needs it, not up front;
 - #3-#5: take one only when dogfooding hits it.
 
+**246. Shale: `sleep(ms)` on Linux, so a recipe waits without a program: DONE** (Steve, 2026-10-27, from 245 D: "please add them".) Start from shale `master` `21f1d21`, merged into CC's branch. **Why:** `now()` is the run's start, so a script has no clock to wait on. Its only way to wait was `run({"sleep", ...})`, one of a run's 64 programs (`runs_most`), so cookbook/http.shale's `wait` spent two programs a try and could never finish a long wait. **What, kept narrow for this one use (to grow when another one comes):**
+- the Linux prelude's `sleep(ms)` over a host call, `host("sleep", ms)`: it waits, then gives nil;
+- `ms` is an integer from 0 to 600000 (ten minutes a call); anything else stops, `argument`;
+- it is no program and counts toward no budget but steps (one a call);
+- `now()` stays the run's start, as SHALE.md says.
+cookbook/http.shale's `wait` uses it: one program a try, so 64 tries a run, said before the first fetch. Its default `every` goes back to 10 s.
+
+**Deliverable:** a red test (the recipe at `minutes=1 every=1` makes its 61 fetches and stops with its own "never held"), then `sleep` and the recipe, with SHALE.md and SHALE-AGENTS.md naming `sleep`. Nothing here needs KVM.
+
 **245. Shale: six bug classes from its last 30 commits, by yield: CC'S** (Steve, 2026-10-27: "find other possible classes of bugs" in Shale's last ~30 commits). Start from shale `master` 3c02198. QUEUE 244 covers paths and values in the wrong normal form and options refused or allowed wrongly; nothing here repeats it. **Deliverable:** a red test for each defect, then its fix, one commit each, on your branch. List what you checked and found clean in FEEDBACK. Nothing here needs KVM.
 
 **A. Option-like values passed into git's argv (M)**
