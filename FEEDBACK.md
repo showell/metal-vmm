@@ -7,6 +7,34 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 291 done: an upload and a download are decided by the Roc
+
+**291 done: an upload and a topic's download are decided by the Roc; the Zig keeps the bytes.** angry-gopher `8de84ff` (the freeze), roc-webbox `c2a2698` (the seam) and `1959196`, angry-gopher `57db441`, roc-apps `e49de49`; all on `claude/roc-chat`.
+
+- **Freeze first:** `downloadsRun` (hash `88d2a760…`) has 33 asks:
+  - The bundle by GET, HEAD and POST, a topic with nothing beside its transcript, a topic not there, and one not the viewer's.
+  - An upload whole, a 5 MiB one streamed past the whole-read size, and every shape of range: start and end, open, suffix, a suffix longer than the file, a list, spaced, past the end, reversed, `-0`, not bytes, an empty header, and an empty file.
+  - Names no upload has (`a.png`, a wrong extension, a missing file, a folder), and HEAD and POST.
+  - The hash is unchanged after the port, so headers and gzip bytes are identical.
+- **The seam, its own commit (`c2a2698`):**
+  - `serve_upload!` takes one new record, `UploadRec { first, last, size : U64, content_type, path : List(U8), part : [Range, Unsatisfiable, Whole] }`. Its offsets and size are asserted, and a crash probe drives every field for each part through the real ABI.
+  - `bundle_add!(name, path)` and `serve_bundle!(name)` carry bytes only. The host keeps the tar a file at a time, so no list of records crosses the seam.
+- **Moved to the Roc:**
+  - A new `chat/Upload.roc` holds `content_type` (32 hex digits, a dot and an accepted extension, which is also the path check on the file segment) and `range` (`bytes=`, the first of a list, spaces trimmed, a suffix, cut to the 8 MiB window), with `ZigText.parse_u64` for the numbers.
+  - In main.roc, `serve_upload!` checks the method (GET or HEAD, else 405), the name and the file's stat (404s), reads the `Range` header and passes the part.
+  - `serve_download!` checks the method, stats the transcript (404 if missing), then chooses the bundle's files: the transcript, the reactions when anyone reacted, and every upload in the folder's order, with folders skipped. It names each entry `<sid>/…` and serves it all as `<sid>.tar.gz`.
+  - New `Paths.uploads_folder` and `upload_path`; new `Files.bundle_add!`.
+  - The deleted parseRange Zig tests (RFC 9110 edges, the window) are now Roc `expect`s.
+- **What stays Zig, and why:** reading and streaming the file (`chat_upload.serveStored`: a whole read up to 4 MiB, chunked past it, one window read positionally for a range), and the tar and gzip (`chat_download.Bundle`). Both have to touch every byte.
+- **Deleted:** chat_upload's `serveUpload`, `parseRange`, `Range`, `uploadContentType`, `range_window` and the parseRange tests; chat_download's `serveBundle`; chat.zig's `.uploads` and `.download` arms (they now panic like the others), `isRead`, and its `download` import. I also removed the `parseRange` row from router_edges_test's edge-site table.
+- **Small differences, said plainly:**
+  - (a) An upload whose stored name isn't UTF-8 is now left out of a bundle (Files.list!'s text-at-the-door rule); the Zig included it. The upload path only ever writes hex names.
+  - (b) A reactions *path* that is under a file now counts as "no reactions" (stat's NotDir is Missing). The Zig's `read` failed the download with NotDir.
+- **Style (per 285's new rule):** two rules in roc-style.md under "The host boundary": "A list the host would mirror goes a call at a time" and "An effect that answers the request is for bytes only the host should touch". No new Shale check.
+- **Gates:** quick gate PASS; check_zig passed in 77 s. The hunt is at `bool_returns` 0 and `== stack` 56.
+- **Census:** Zig on live paths went from 29,309 to 28,698 tokens; the Roc from 34,007 to 35,608 parse nodes.
+- **Shale:** for the second time a cramped disk (0 MB free) hit mid-run. Shale's `edit` reported success while the shell around it failed, so I re-checked each file. Clearing `.zig-cache/o` freed 15 GB. No Shale gap here; the cache just grows.
+
 ## CC → the box, 2026-10-28: 290 done: the docs writes are the Roc's; docs.zig is gone
 
 **290 done: the docs' writes and the live preview are the Roc's; docs.zig is gone.** angry-gopher `10b422f` (the freeze), then roc-webbox `26ede3e` and angry-gopher `381a328`; all on `claude/roc-chat`.
