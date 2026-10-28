@@ -7,6 +7,42 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 290 done: the docs writes are the Roc's; docs.zig is gone
+
+**290 done: the docs' writes and the live preview are the Roc's; docs.zig is gone.** angry-gopher `10b422f` (the freeze), then roc-webbox `26ede3e` and angry-gopher `381a328`; all on `claude/roc-chat`.
+
+- **Freeze first:** `docsWriteRun` (hash `1eb961a4…`) has 37 asks, and hashes the files they leave and the recent feed's frames. It covers:
+  - A new doc: suffixed past one that's there, a reserved name stepped over (`list` becomes `list-2`), a title of no letters (`untitled`), a non-ASCII title, an 80-character cut, and no title or a blank one (303).
+  - A save: a trimmed slug, an emptied doc, no body (400), a name that is no slug (400), a doc not there (404), a body that fits under 1 MiB, and a form over it (413).
+  - The preview, with hostile markdown counted.
+  - The reading list: a DM's entry, a channel's, a fence longer than the body's, one-line fields, the default note, a missing field (400), and a full list (413).
+  - Wrong methods (405 and 303), bad escapes and a field sent twice (400), another member's doc (404), and a docs folder that is a file (500, NotDir).
+  - The hash is unchanged after the port. The hostile count is in it, so the counter's delta is pinned too.
+- **The Roc:**
+  - Docs.roc gains the pure parts: `slug_of_title` (slugifyTitle), `reading_entry` (composeEntry, with its quote fence and one-line fields) and `recent_frame` (publishDocRecent's frame, built with JsonOut).
+  - main.roc gains `docs!` (one dispatch for every docs route), `new_doc!`/`create_doc!`/`unused_slug!` (uniqueDocSlug, checking with `stat!`), `save_doc!`, `preview_doc!`, `save_to_reading_list!`/`saved_message!` and `doc_touched!`.
+  - The reading list's cap is a new constant, `Limits.reading_list_bytes`.
+  - I ported reading_list's composeEntry tests and slugifyTitle's cases to Roc `expect`s.
+- **One new hosted effect:** `render_preview!` returns `render!`'s answer, and the host also counts hostile markdown (`edge.count(.malformed_markdown)`), as docsRender did. It reuses RenderRec, so there is no new seam record.
+- **Deleted:**
+  - `docs.zig`, the whole file.
+  - From `docs_store`: slugifyTitle, uniqueDocSlug, docFileExists, isReservedSlug, titleFromSlug, writeUserDoc, createUserDoc, appendToUserDoc, and their tests.
+  - From `reading_list`: jumpURL, composeEntry, save, oneLine, quoteFence, max_reading_list_bytes, and their tests.
+  - The docs arm in `chat.serve`, which now panics like the other Roc families, and `chat.serve`'s unused `bus` and `now` parameters.
+- **What still reaches docs_store and reading_list (the "say which"):** tests only.
+  - `docs_store`'s `userDocsDir`, `docPath`, `validDocSlug` and `readUserDoc` are used by router_failures_test, router_chat_test and chat_actions_twin_test, plus its own unreadable-doc test.
+  - `reading_list`'s `parseRefs` and `reading_list_slug` are used by chat_twin_test (the twin against the Roc's Saved.roc) and router_chat_test.
+  - No admin page or other production code reaches either. The census counts these as unreached (3,669 tokens), so they're candidates for 294.
+- **Small differences, said plainly:**
+  - (a) Form values are text at the door (Form.roc's rule), so a doc saved with bytes that aren't UTF-8 is now a 400. The Zig stored any bytes.
+  - (b) An 80-character slug suffixed past 80 (`…-2`) was the Zig's InvalidDocSlug error, a 500. It is now a 500 that says so in its body.
+  - (c) A *folder* named `<slug>.md` made the Zig count that slug as taken (`has()` sees it) and step to `-2`. The Roc's `stat!` answers Failed for a folder, so the request is a 500.
+  - (d) The route golden's three GET rows for `/docs/new`, `/save` and `/save_to_reading_list` are now the Roc's 303 and 405s, the same answers the old Zig gave.
+- **Gates:** quick gate PASS; check_zig passed in 69 s. The hunt is at `bool_returns` 0 and `== stack` 56. Docs.roc's five long CSS lines are unchanged from 289.
+- **Census:** Zig on live paths went from 32,156 to 29,309 tokens; the Roc from 32,340 to 34,007 parse nodes.
+- **Style:** no new rule. `docs!`'s chain of five `if`s shows in the hunt's chain list; a `match` on string literals would read better if this Roc pin takes it. I'll check that when I do 295/297.
+- **Shale:** every edit went through Shale, including `remove(p)` for docs.zig. For the files I trimmed I reused the `cut(p, from, to)` helper from 289. A builtin for it would still help (said under 289).
+
 ## CC → the box, 2026-10-28: 288, 289: the style rules they made
 
 Per 285's new rule (the style guide moves with the code), these rules are in roc-apps' `docs/roc-style.md`, commit `3d69ce5` on `claude/roc-chat` (master merged in first):
