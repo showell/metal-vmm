@@ -7,6 +7,48 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 285 done short: unreached chat Zig 799 to 258, the rest test seams
+
+**285 done, short of the target: unreached Zig 799 → 258 (target about 100).** angry-gopher `claude/port-285`, chained on 284 (the box hadn't merged 283/284 into `box/roc-cleanup` yet): `3c96d75` (freeze 1), `282671a`, `adfcbc1`. roc-webbox is unchanged. Diff: 20 files, +354 −1215.
+
+- **Freeze first:** every twin that held the Roc to unreached Zig got a `Frozen` hash of the Roc's answers while the Zig still agreed, as in 263b-d, before any Zig went. The two Conversation twins were frozen inside `282671a`, from a run that still held them to the Zig.
+
+  | Frozen hash | Zig it replaces | Answers |
+  |---|---|---|
+  | `firstOf` | `chat_paths.firstOf` | 6 |
+  | `recentExcerpt` | `recent_feed.recentExcerpt` | 3,000 |
+  | `chooseResumeTopic` | `chat_state` | 4,000 |
+  | `lastViewedTopic` | `chat_state` | 3,000 |
+  | `setLastViewedTopic` | `chat_state` | 3,000 |
+  | the fan-out's notify, topic-added, Recent row, images and code entries | `chat_fanout`, `recent_feed`, `images_store`, `code_store` | 18,000 |
+  | `recentWhere` | `chat_fanout.recentWhere` | 3,200 |
+  | `dmOther` | `chat.dmOther` | 26,712 |
+  | the titles, the bases and `hasTopic` | `chat.zig`'s titles and bases, `chat.hasTopic` | 4,411 |
+
+  No case had to be ported to a Roc test: every unreached unit's behaviour that the Roc owns was already held by a twin, now frozen. The router's pin test read its pins through `chat_state.pinnedTopics`; it now reads the pins file itself.
+- **Gone:**
+  - whole files: `chat_state.zig`, `code_store.zig`, `images_store.zig`;
+  - `recent_feed`'s excerpt and its six helpers, and `ChatEvent`;
+  - `chat_fanout`'s `notifyText`, `notifyEvent`, `topicAddedEvent` and `recentWhere`;
+  - `chat.zig`'s `hasTopic`, `dmOther`, `partnerOf`, the three titles and two bases;
+  - `chat_paths`' `firstTopic` and `firstOf`. The census listed `firstOf` as dead but not `firstTopic`, which is under its 5-line cut-off; both were dead;
+  - one `chat_count` test of `setLastViewedTopic`;
+  - about 40 imports nothing used.
+- **Moved, not deleted: `chat_fixtures_test.zig`.** These are writers that tests of live code still build their files with: `chatStoredForm` (with `encodeChatBlock` and `escapeBodyLine`), the old `messageCount`, `storeForTest`, `CountFixture`, and the old feeds' entry writers. The census never counts test files, and nothing in the image imports this one. `echoed` was dead and went.
+- **What's left in the 258:** test helpers of live code, which the item says stay, and imports only tests use:
+  - `chat_retire`'s `stage`, `refusingRemovals` and `tx` (about 45 lines; 293 reworks retire);
+  - `search_index`'s `emptyForTest`, `Emptied` and `repeated`, and `search_tokens`' `expectWords` and `key`;
+  - `chat_frame`'s `Data` and `parseData`, and `docs_store`'s `appendMany`;
+  - `chat_search`'s `forgetAll` and `presence`'s `forgetForTest`, the reset hooks other tests call;
+  - `chat_count`'s three fixture helpers, and `chat_upload`'s `accept`, `extOf` and the size caps the twins read;
+  - about 100 one-line imports used only inside test blocks.
+
+  To get under 100, either move each file's tests and their helpers into a sibling `*_test.zig`, which is mechanical but touches about 15 files, or have the census count a declaration reached only from a test as a test seam rather than unreached. I'd propose the census change; it's the box's tool.
+- **Census:** the chat's Zig on live paths is unchanged at 2,907 lines: nothing live moved. Unreached went from 799 to 258; the Roc stays at 4,139.
+- **Gates:** green. The quick gate passed in 50 s; `check_zig` 0; the hunt's `bool_returns` 0.
+- **Wall time and slowest step:** about 95 min, against M (60; 1.5x is 90). The slowest step was the two freeze rounds, each a full `zig build test` to read the hashes.
+- **For the box: the silent "failed command" again, three times this item.** Each time one test binary under `zig build test` failed with no test or error named. The same binary run on its own passed three times out of three, and every `zig build` re-run passed. So it's an interaction between test binaries running at once, perhaps a shared fixed path. I haven't chased it.
+
 ## CC → the box, 2026-10-28: 284 done: a cache read that fails is a miss (Files.read_cache!)
 
 **284 done: a cache read that fails is a miss.** Branches `claude/port-284`, on 283: roc-webbox `1797f30`, angry-gopher `01d96df`.
