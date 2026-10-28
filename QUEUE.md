@@ -38,6 +38,14 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**296. Shale stacks anything with three or more parts, one per line, in Roc and in Zig: CC'S** (Steve, 2026-10-28, on a long Pages.roc line: "We should make our shale aggressive about vertically stacking things. Almost anything with 3+ whatevers will read nice if it's stacked imho.") Do this first in the run, before 285: the ports after it then write stacked code.
+
+**The tool,** in Shale's cookbook as recipes for any repo, not only the chat (cookbook/roc/ and cookbook/zig/):
+- **A check:** any list, record, tuple, call's arguments, tag payload, or (Zig) struct literal or argument list with three or more elements on one line is a finding, path:line plus what to stack. A line over about 100 columns is a finding too. Plant one example of each.
+- **A rewrite:** it stacks a finding one element per line, with a trailing comma. Roc's and Zig's formatters keep a trailing-comma collection stacked, so roc fmt and zig fmt hold the result. The rewrite is idempotent: a second run changes nothing. Comments and strings are never touched (read tokens, as the name hunts do).
+
+**Then apply it** to roc-webbox's chat/ (its Roc and src/chat_*.zig) and to angry-gopher's chat Zig (zig-server/src/chat*.zig). That's one commit per repo, with the formatters and the usual gates green, and byte-identical behaviour held by the goldens. Add the check to roc-webbox's hunt, so a long line coming back is a finding. Pages.roc's sidebar_json `room` and `topic` lambdas are the example Steve read. M.
+
 **295. One JSON builder, and multiline strings for the chat's HTML and CSS: CC'S** (Steve, 2026-10-28, reading Pages.roc's hand-built JSON: "I don't have a huge problem with hand-generating json, but do we need to?") Any order within 285-294; see 285's rules.
 - **One JSON builder:** the chat has two, JsonText's obj/arr/str/bool helpers and 269's opaque JsonOut. Move every JSON the chat writes onto JsonOut (Pages' sidebar, feeds, recent, search, the frames, and the four hand-built strings in main.roc). Then delete JsonText's building half; its parsing half stays. Byte-identical output, held by the existing goldens.
 - **Multiline strings for markup:** Roc's `\\` multiline strings (docs/langref/strings.md at the pin) need no `\"` escaping and keep `${…}` interpolation. Rewrite the HTML and CSS literals in Pages.roc and Chrome.roc (links_css and its kin) with them, wherever that reads better than `\n`-joined one-liners. Leave short single-line ones alone. Byte-identical pages, held by the goldens.
@@ -95,7 +103,7 @@ M-L.
 **285. Aggressive port 1: the chat's unreached Zig deleted: CC'S** (Steve, 2026-10-28: "At this point I want to be pretty aggressive about moving code to Roc.") **The run is 285 to 294, in number order unless an item says "any order".**
 
 **Rules for 285-294:**
-- **One branch per repo for the whole run** (Steve, 2026-10-28: simplify the branches): claude/roc-chat, from origin/box/roc-cleanup (283 and 284 are merged; fetch first). Each item is one or more commits on it, its message starting with the item's number. Push after each item; the box merges claude/roc-chat into box/roc-cleanup as items land and deletes nothing of yours. No per-item branches.
+- **One branch per repo for the whole run** (Steve, 2026-10-28: simplify the branches): claude/roc-chat, from roc-webbox's origin/main (its default now; Steve, 2026-10-28) and angry-gopher's origin/box/roc-cleanup (283 and 284 are merged; fetch first). Each item is one or more commits on it, its message starting with the item's number. Push after each item; the box merges claude/roc-chat into box/roc-cleanup as items land and deletes nothing of yours. No per-item branches.
 - **Gates:** roc-webbox's quick gate (shale tools/chat_quick_gate.shale); angry-gopher's ./ops/check_zig; the hunt (bool_returns 0); and the census before and after, in FEEDBACK. A frozen-golden twin pins any behaviour that moves, before the Zig goes, as in 263b-d.
 - **Overruns:** an item past 1.5 times its estimate pushes what's green, says what's left, and moves on.
 - **Never wait on the box. Roc never reads auth_root.**
