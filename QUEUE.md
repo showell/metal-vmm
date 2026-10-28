@@ -38,6 +38,26 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**284. A cache read that fails falls back, as a miss: CC'S** (Steve, 2026-10-28, on 275's and 277's open differences: "fall back on cache reads".) After 283; any order with it.
+
+**The rule:** a read of a cache (the .count sidecar, the last-message window) that fails is a cache miss. The Roc recounts or reads the whole transcript, as the Zig did, and never fails the request. A read of the truth (the transcript itself) that fails still fails it.
+
+**One home for it:** a single way to read a cache that answers Failed without failing the request, either a variant of read_at! or a mode. Both 275's count and 277's window use it. Every other read keeps failing the request on error. Don't add a fallback at each call site.
+
+**Tests:** for both the count and the window, a sidecar or window read that errors (the folder-in-place-of-the-file plant) gives the same answer as a miss; a transcript that errors still fails the request. The usual gates. S.
+
+**283. The welcome DM for new members only: CC'S** (Steve, 2026-10-28, on 279's first point: "new members only".) Branch claude/port-283 from origin/box/roc-cleanup, which the box is merging your overnight chain into now: fetch first.
+
+**The rule:** a member who signs up from now on gets the welcome on their first /chat. An existing member never does, whether or not they have a DM with the host.
+
+**The design is yours. Constraints:**
+- Login stays out of the chat's files (Steve chose the first-/chat seeding for that reason).
+- Nothing is inferred from the absence of a DM.
+- The decision is made from a fact written when the account is made: for example, a "welcome pending" marker in the member's own users folder that signup writes and the Roc consumes, or the account's creation time against a cutover stamp.
+- Say which you chose and why. Existing accounts must need no migration step to be "old".
+
+**Tests:** a member made after the change is welcomed exactly once; one made before isn't, with or without a DM with the host; a crash between the welcome and the marker's removal doesn't welcome twice (or say why it can't happen). The usual gates. S-M.
+
 **282. Overnight port 14 (stretch): search /messages in Roc: CC'S** (Steve, 2026-10-28.) Needs 281. See 269's rules.
 - **The port:** hits cross the seam as flat byte strings, and excerptOf moves to the Roc. chat_search.handle goes.
 
