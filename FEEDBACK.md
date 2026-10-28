@@ -7,6 +7,46 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 281 done: search's words are the Roc's, frozen on the old Zig and the same after; the index and the rate limit stay host primitives, and this item makes I4's case for keeping them Zig
+
+**Branches:** roc-webbox `claude/port-281` (`a3e004c`, the seam records alone, then `3f535a8`; on 280) and angry-gopher `claude/port-281` (`adb3e9d`, the freeze, then `67e2d24`; on 279).
+
+**The port:** `served_by` sends `/chat/search/words` alone to the Roc; `/messages` stays Zig (282). `search_words!` does this, in the Zig's order:
+- the method (405 GET);
+- the rate limit (`Host.admit!`, the host's `chat_search.admit`, giving the same 429 JSON);
+- the `prefix` field as written (`Host.read_query!`, a new hosted call), decoded by `Form.value` (a bad escape is the site's 400, as before);
+- the key made (`Search.key`: search_tokens' whitespace and edge-punctuation trim, the curly quotes and dashes included, ASCII fold, empty past 256 bytes);
+- the index asked (`Host.search_words!(key, most)`, where most is 0 for an empty key);
+- the JSON written (`Search.words_json`).
+
+`JsonOut.lossy` writes a byte that begins no whole UTF-8 sequence as U+FFFD, one per byte, exactly as `chat_search.str` did. Words read from a transcript can hold such bytes, and so can a `%FF` prefix.
+
+**The seam:**
+- `WordRec { count: u64, word }` and `WordsRec { unreadable: u64, words, status }`, laid out by hand in Roc's order. They are their own commit, with every offset and size asserted.
+- Two new tag unions, `Admission` and `WordsStatus`, in the order check.
+- Three hosted calls, `admit!`, `read_query!` and `search_words!`. The host's `searchWords` computes the reach (`visibleConvs`, every request), then `wordsFor` and `unreadableFor`; it answers null when there's no index, and the Roc gives a 503.
+
+**Test:** `wordsRun`, frozen on the old Zig (`adb3e9d`), asks /words of one built index, as three members who see different conversations:
+- prefixes cased, spaced and quoted, empty, missing, `%FF`, `la%FF`, `caf%C3%A9`, a curly-quoted one, `%ZZ`, one past 256 bytes, and two at once;
+- a word nobody can see, and words only a DM the asker isn't in holds;
+- POST and HEAD, `/words/`, `/wordsX`, a stranger;
+- the sixth search in one second.
+
+After the port the Roc's run hashes the same. The route golden's `/search/words` line is now the Roc's answer, with presence counted by the Roc.
+
+**The I4 question** (the index and rate limit staying Zig): **this item makes the case for keeping them Zig.**
+- The index is process-lifetime memory, built from the disk once and fed by every store. That is state a per-request Roc can't hold.
+- Porting just the query parse and the JSON made the chat's live Zig *grow*: from 2,925 to 2,945 lines (+20, with 394-ish unreached unchanged). The three primitives (reach, index, admit) cost more than the small branch they replaced.
+- The Roc's part is small and pure, about 100 lines with `Search.roc`, so the split is honest. But if the goal is less Zig, /words was a poor trade; /messages (282) moves more, with the excerpt.
+
+**Gates:**
+- The quick gate passes in 60 s; `check_zig` passes; the hunt's `bool_returns` is 0.
+- One fix along the way: the gate lists tracked `.roc` files, so `Search.roc` had to be `git add`ed before the format check saw it.
+
+**Census:** the chat's live Zig went from 2,925 lines to 2,945; the Roc from 3,922 to 4,025.
+
+**Wall time:** about 70 min against 60. The slowest step was the seam's three calls and their two test hosts. The twins I'd have liked for `Search.key` and `JsonOut.lossy` alone, over generated input, aren't done: the frozen run covers their cases on real requests, but a generated twin would be stronger.
+
 ## CC → the box, 2026-10-28: 280 done: roc glue agrees with the listing's entry, field by field, held at compile time; good as a check, not as the seam's source (hash names, its own ownership model)
 
 **Branch:** roc-webbox `claude/port-280` (`f092b5d`, on 279). No angry-gopher change. Nothing replaced.
