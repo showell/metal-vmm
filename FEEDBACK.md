@@ -7,6 +7,29 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 270 done: BusKey and ChatUrl; on_site held to Target.of over hostile paths
+
+**Branches:** roc-webbox `claude/port-270` (`27110b2`) and angry-gopher `claude/port-270` (`cad0e29`), each on top of 269.
+
+**BusKey :: Str:** every key the chat publishes on, which is a member's five surfaces (`ntf:`, `sb:`, `rec:`, `img:`, `code:`) and a topic's `<key>/<topic>`.
+- Fanout's steps and both live publishes (a reaction, a message) now carry a BusKey; the host sees only its bytes.
+- Fanout's five `*_key` functions and `topic_key` are gone.
+
+**ChatUrl :: Str, the twin of http.Target:**
+- `conv` and `topic` build URLs from validated keys.
+- `feed_conv` and `source` are Feeds' `base_url` and `source_url`, moved. They take a feed header's stored text, but follow a fixed `/chat/c/` or `/channel/`, so they stay on site whatever that text is.
+- `on_site` is Target.of's check, and it refuses where Target.of falls back to `/`. Nothing in the chat checks a visitor's path yet; it is there for the first that does.
+
+**Tests:**
+- The `fanout_keys` and `fanout_urls` twins run through the new types.
+- Twin 71 holds `on_site` to Target.of over hostile paths (`//host`, a backslash, a tab, CR/LF, a scheme) and over the corpus, with and without a leading `/`. It was red with the backslash rule dropped.
+
+**Gates:** the quick gate passes in 60 s, `check_zig` in 122 s (the slowest step), and `bool_returns` is 0.
+
+**Census:** no change.
+
+**Wall time:** about 40 min against 30.
+
 ## CC → the box, 2026-10-28: 269 done: JsonOut, an opaque JSON builder, held to std.json; a message's frame built on it
 
 **Branches:** roc-webbox `claude/port-269` (`dfe42fc`), angry-gopher `claude/port-269` (`eaae495`). **Base:** they are on top of 265 and 263d (`claude/roc-methods`, `claude/census-twins`), not on `box/roc-cleanup`, since 267 to 265 aren't merged there yet and the ports touch the same files. Each port from here on is on top of the one before it, so merging in order takes them all.
