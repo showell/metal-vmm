@@ -9,6 +9,24 @@ full text of everything below is in git: `git show 3697b1c:QUEUE.md` (items
 
 ## Archived 2026-10-19 to 2026-10-27
 
+- **282.** Overnight port 14 (stretch): search /messages in Roc: DONE: search /messages in Roc; commits named: none.
+- **281.** Overnight port 13: search /words in Roc: DONE: search /words in Roc; commits named: none.
+- **280.** Overnight port 12: a roc glue test drive on one seam record: DONE: roc glue agrees with the listing's entry; a check, not the seam's source; commits named: none.
+- **279.** Overnight port 11: the welcome DM seeded on a member's first /chat visit: DONE: the welcome DM in Roc on first /chat; the old Zig store gone (new members only is 283); commits named: none.
+- **278.** Overnight port 10: docs' post to chat in Roc: DONE: docs' post to chat in Roc; commits named: none.
+- **277.** Overnight port 9: gather_recent in Roc: DONE: /chat/recent rows in Roc; gather_recent!, RecentRec, gatherRows gone (failed window reads are 284); commits named: none.
+- **276.** Overnight port 8: a topic's last message in Roc: DONE: a topic's last message in Roc; commits named: none.
+- **275.** Overnight port 7: message_count! in Roc (read-only): DONE: message counts in Roc, read-only (the unreadable-sidecar case is 284); commits named: none.
+- **274.** Overnight port 6: stat! and read_at!, two file primitives: DONE: stat!, read_at!; commits named: none.
+- **273.** Overnight port 5: saved in Roc, without the mtime cache: DONE: saved in Roc, no cache (7 ms per 1,000 entries); commits named: none.
+- **272.** Overnight port 4: limits! as Roc constants: DONE: limits as Roc constants; commits named: none.
+- **271.** Overnight port 3: the Roc answers every chat 404 and authorizes every DM and channel route: DONE: every 404 and DM/channel authorization in Roc, a Zig floor; chat_page.zig gone; commits named: none.
+- **270.** Overnight port 2: BusKey and ChatUrl in the Roc chat: DONE: BusKey, ChatUrl; commits named: none.
+- **269.** Overnight port 1: an opaque JSON builder in the Roc chat: DONE: JsonOut; commits named: none.
+- **268.** The Roc chat's adversarial review, hardening the seam's trust: DONE: the seam checks what Roc hands it; an answered request is dead; the message scans linear (were quadratic); commits named: none.
+- **267.** The Roc chat's adversarial review, availability: one bad byte is not a lasting 500: DONE: one bad byte is not a lasting 500; count_dropped! and aside!; commits named: none.
+- **265.** The Roc chat's accessors as methods, and crash on the impossible: DONE: accessors as methods (ConvKey nominal); four impossible defaults crash or go; commits named: none.
+- **263.** The Roc chat's dead Zig: what only tests or twins reach, deleted (the census): DONE: install fix; the twins frozen as goldens and deleted (263b-d), unreached Zig 768 to 383; commits named: none.
 - **266.** The Roc chat's adversarial review, security: feeds and page JSON (Roc and the live Zig): DONE: SafeImg.roc ports safeImgAt at the one encoder; code bodies escaped against the separator; every < of a page's JSON as \u003c (zig-webbox ac6bb97, angry-gopher afdd32b5 on master; box/roc-cleanup c46359d/13f3bd3f); commits named: angry-gopher fc0b3ee2.
 - **264.** Shale's doc check calls a gitignored build output gone in a sibling-worktree layout: DONE: a bare name the repo's .gitignore names outright passes in any layout; engine.js passed in ~/showell_repos only by dog-park's unrelated file (shale 76d3cdc); commits named: none.
 - **262.** pop(l): a list's last item, removed: DONE: pop(l); for loops end at a shortened list's end (shale 8791ccf); commits named: none.
