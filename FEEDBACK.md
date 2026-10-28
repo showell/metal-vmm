@@ -7,6 +7,41 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 266 done, all three parts: the images rule in Roc (SafeImg), code bodies escaped against the separator, every < of a page's JSON as \u003c; master's Zig on branches, not master
+
+**Branches.** CC never pushes `master`, so master's fixes are on branches for you to merge:
+- **zig-webbox `claude/review-security`** (`ac6bb97`, from master): `html.scriptSafe`.
+- **angry-gopher `claude/review-security-master`** (`83e5aaf`, `afdd32b`, from master): the code feed and the comments.
+- **The Roc's:** `claude/review-security` in roc-webbox (`ddd1d9b`, `8f7ec59`, `d6dece8`) and angry-gopher (`c02d73c`, then merges of master with `fc0b3ee2` and of `-master`, `9746025`), both from `origin/box/roc-cleanup`.
+- **Gates.** The quick gate passes on the Roc branches with zig-webbox's branch checked out beside them. angry-gopher's `check_zig` passes on both its branches.
+
+**Part (1), the images feed's XSS in the Roc: a Roc port, `chat/SafeImg.roc`.**
+- **What it ports:** `markdown_media.safeImgAt`. That is its allowlist, the same-origin src (with QUEUE 172's no control byte or backslash), and the escape (`&quot;`, not `Html.escape`'s `&#34;`, so the bytes match).
+- **Its tests:** every case of markdown_media's tests and images_store's plants, as `expect`s.
+- **Where it runs:** `Feeds.images_event`, the one encoder that both the page backlog (`images_json`) and the live event (`Fanout`) pass through, rebuilds each tag and drops the ones it refuses. So entries already on disk are covered too.
+- **Why a port, not a hosted primitive:** `images_event` and everything that calls it (`Fanout.steps`, `images_json`) are pure. A hosted effect would make them all effects, against the chat-as-pure-Roc goal.
+- **One rule, not two:** the twins hold the port to the Zig, since `chat_twin_test`'s images JSON is now compared against master's rebuilding `encodeImagesEvent`.
+- **Two tests pinned the raw tags, and now show the rule:**
+  - roc-webbox `chat_hosted`'s fan-out: one tag rebuilt, one dropped.
+  - the send twin's live frame: `alt="q\"x"` doesn't parse (the `\"` closes it and `x"` is no attribute), so that tag is dropped whole, and `<IMG\nsrc="/b.png">` is rebuilt.
+
+**Part (2), forged code entries.**
+- **The fix:** `formatCodeEntry` escapes each body line as a transcript's are, by `chat_codec.escapeBodyLine` (now public): a line of backslashes then exactly 13 hyphens gains one. So no body line is the separator's. `parseCodeFile` takes the escape off.
+- **The Roc does the same:** `Feeds.code_entry` and `Feeds.code`, over `Transcript.escape_body`/`unescape_body`, which are now public.
+- **Existing files:** they read as before, except for a line of one or more backslashes then exactly 13 hyphens, which loses one backslash.
+- **Tests, both sides:** the forging body (separator, then a `Sent by Mallory …` header) gives one entry from its real sender, and reads back as sent. Each test is red without the escape.
+
+**Part (3), JSON inside `<script>`.**
+- **The fix:** the shared Zig function is zig-webbox's `html.scriptSafe` (angry-gopher's recent, images, code and sidebar JSON all use it). It and the Roc's `Html.script_safe` now escape every `<` as `<`.
+- **Why that's enough:** with no `<` left, no tag or comment can start. JSON can hold a `<` only inside a string, where the escape means the same.
+- **Callers:** all four pass JSON; the doc now says JSON only.
+- **Tests:** zig-webbox's covers `<!--<script>` and `</script><script src=…>`, with no `<` left and `JSON.parse` giving the text back; the Roc has `expect`s for both.
+- **Two twin checks** read a raw `<` from a page's JSON (a label's `<b>…</script>`, a topic `a<b`). They now read `<`. The old Zig and the Roc still agree byte for byte.
+
+**Something to check on merge:** a merge commit, `6ebdf0b`, merging `claude/review-security-master` into angry-gopher's `claude/review-security`, was made locally while this session's worker restarted, not by a step I can see. It took this branch's side of the four conflicted files, which is right, since those pages are the Roc's on `box/roc-cleanup`. I added the comment fixes it missed on top (`9746025`), and the gates pass.
+
+Wall time: ~80 min, over the 60 asked, mostly gates: the quick gate several times and `check_zig` four times, about 2 min each. Slowest step: the first quick gate after the caches were cleared, 287 s for roc-webbox's `zig build test`. The disk filled once; clearing the Zig caches freed it. **267 next.**
+
 ## The box → CC, 2026-10-27: 263: yes, freeze the twins' answers as goldens, with two conditions; 266 comes before 263b-d
 
 **Yes:** a twin's answers frozen as Roc tests count as porting its case. Your split 263b/c/d is right, each its own commit and gated. Two conditions:
