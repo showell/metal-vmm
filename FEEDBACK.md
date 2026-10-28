@@ -7,6 +7,47 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 279 done: the welcome DM is the Roc's, on the first /chat, frozen on login's and the same after; appendMessage and fanoutCrossPage go; two behaviour points for you
+
+**Branches:** roc-webbox `claude/port-279` (`93e047d`, on 278) and angry-gopher `claude/port-279` (`7ffd1b2`, the freeze, then `ee0f116`, the port; on 278).
+
+**The port:** login writes no chat. `welcome!` in main.roc is `sendHostWelcome`, moved to the member's /chat (the Default route).
+- While their DM with the host (member 1) has no topic, the host's automated hello goes in, with the same text, in `general`, under the host's name and uid.
+- Then the member's bookmark is set to it (both files, as `setLastViewedTopic` wrote them), so /chat lands on `/chat/c/1_<n>/general`.
+- None for the host itself, and none when there's no host account.
+- It runs in an aside, before presence is counted, because login seeded it before the member was ever online, and the frames' order shows it. It is best-effort, as login's was: a failure means no welcome this time, never a failed /chat.
+- The accounts it read serve the rest of the request, so /chat still asks for them once.
+- `append_message_by!` takes the author's uid (the welcome's is the host's), and `append_message!` is that for the request's member.
+
+**Test:**
+- **`welcomeRun`, frozen on login's welcome** (its own commit, `7ffd1b2`). Ann signs up by the login form, then opens /chat twice; Debbie (who has a DM with the host) and the host himself open it too. Every answer, file and frame is pinned, with RFC 3339 stamps read as `<at>` because the old welcome was stamped by the clock. After the port the Roc's run hashes the same: once, from the host, by name, in general, the bookmark set, with no change for Debbie or the host.
+- **A route test in `router_chat_test`:**
+  - with no host, no welcome;
+  - once the host exists, the welcome appears on the next visit and stays at one message;
+  - a DM whose topics won't list gets no welcome, /chat is still 200, and the welcome comes once it's mended.
+
+**Two behaviour points for you:**
+1. **Older members.** A member who existed before the host, or before signup seeded welcomes, and has no DM with the host now gets the welcome on their next /chat. Login only ever welcomed at signup. That follows from "when a member opens /chat and has no DM with the host account yet", but it reaches existing accounts, so say if it should be new members only. That would need a marker on disk.
+2. **The cost.** Every /chat now lists the accounts inside the aside and, for a non-host member, lists the DM's topics: one extra listing.
+
+**Then (the old store):** with 278 done, `appendMessage` had no live caller, so it's deleted, along with `fanoutCrossPage` and its `Fan`, and login's `sendHostWelcome` and `host_uid`.
+- The tests of `appendMessage`'s own fan-out, frame and stamp went with it; that behaviour is the Roc's, held by the frozen send runs.
+- The count, search and backfill tests now store through `storeForTest`, over `storeMessage`, which is what the Roc's host uses.
+
+**What's left (twins and tests only), for a freeze-and-delete like 263d:**
+- `chat_state`'s 60 lines: `lastViewedTopic`, `setLastViewedTopic`, `writeIfChanged`, `parsePinned`, `chooseResumeTopic`;
+- `chat_fanout`'s encoders: `notifyText`, `notifyEvent`, `topicAddedEvent`, `recentWhere`.
+
+I didn't freeze them tonight: the item ran to about 80 minutes.
+
+**Gates:**
+- The quick gate passes in 57 s; `check_zig` passes; the hunt's `bool_returns` is 0.
+- The container's disk filled once mid-item: angry-gopher's `.zig-cache` had grown to 15 GB. I deleted it and the other build caches, and nothing of the work was lost.
+
+**Census:** the chat's live Zig went from 3,414 lines to 2,925 (−489). Unreached went from 406 to 796, the twin- and test-only code above. The Roc went from 3,887 to 3,922.
+
+**Wall time:** about 80 min against 60, inside 1.5x. The slowest steps were the welcome twin (normalising the clock's stamps, and an id counter that collided with the harness's accounts) and the disk.
+
 ## CC → the box, 2026-10-28: 278 done: a doc posted to chat is the Roc's, frozen on the old Zig and the same after; docsPost goes; the welcome DM is the old store's last caller
 
 **Branches:** roc-webbox `claude/port-278` (`3f60275`, on 277) and angry-gopher `claude/port-278` (`3248a74`, the freeze, then `049c97d`, the port; on 277).
