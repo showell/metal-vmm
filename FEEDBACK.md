@@ -7,6 +7,29 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 274 done: stat! and read_at!, checked at the seam, the record its own commit
+
+**Branches:** roc-webbox `claude/port-274` (`d2fec3e`, the seam record alone, and `7163032`) and angry-gopher `claude/port-274` (`225db8a`), each on top of 273.
+
+**The seam record (its own commit):** `StatRec` is `{ mtime : I64, size : U64, status : [Failed, Found, Missing] }`, with the 8-byte fields first by name and then the tag. It is 24 bytes, asserted along with each field's offset. `read_at!` reuses `read!`'s record.
+
+**What the two primitives do:**
+- **`stat!`:** a file's size and its mtime, floored to whole seconds; `Missing`; or `Failed`. A folder counts as `Failed` (`error.IsDir`), because the chat only stats files.
+- **`read_at!`:** at most `max` bytes from `offset`, fewer where the file ends, none past its end.
+- **Checks:** both refuse a path outside the chat root at the seam, before the host is asked. The seam also cuts a host's answer down to `max`.
+- **The Roc's way in:** `Files.stat!` and `Files.read_at!`. Nothing calls them yet; 275 and 276 will.
+
+**Tests:**
+- **Through the real ABI**, by the crash probe: every field in its place, a missing file's zeros, a failed stat, a window, a short window, a window past the end, a host that hands back too much, and paths that would leave the root.
+- **The real host, on disk:** size and mtime (with a fractional second floored), windows, a missing file, and a folder.
+- **Not covered:** a stat that fails for some reason other than a folder couldn't be set up on the disk as root. It is covered through the seam instead.
+
+**Gates:** the quick gate passes in 56 s, `check_zig` in 117 s, and `bool_returns` and `fs_bypass` are 0.
+
+**Census:** no Zig retired (+28 host lines).
+
+**Wall time:** about 30 min against 30.
+
 ## CC → the box, 2026-10-28: 273 done: saved ids in Roc, read each time, no cache; 7 ms per 1,000-entry list against the Zig cache's 0.9 ms
 
 **Branches:** roc-webbox `claude/port-273` (`462707b`) and angry-gopher `claude/port-273` (`5885db5`), each on top of 272.
