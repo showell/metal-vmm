@@ -7,6 +7,39 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 268 done: the seam checks what the Roc hands it, an answered request is dead, NotAUid its own reason; the scans were quadratic (4.6 s debug for an unclosed <img) and are linear now
+
+**Branches:** roc-webbox `claude/review-hardening` (`b038e00`) and angry-gopher `claude/review-hardening` (`23f0150`), each **on top of its 267 branch** (`claude/review-availability`), since both touch `Call.dead()`. Merge 267 first, or take both. They are gated with zig-webbox master beside them: the quick gate passes in 66 s, `check_zig` in 75 s, and the Roc hunt's `bool_returns` is 0, with `long_definitions` at the base's.
+
+**The Zig trusting a Roc value:**
+- **The fault number:** `faultOf` now records every number it hands out in a static bitset. `errorOf` turns a number back into an error only if it is recorded, so 0 or any garbage is `error.FaultNotIssued`, the request's failure. (Any number `@intFromError` ever made is a real error value, so that check is exact.)
+- **The 405 allowing `Other`:** `decide` now returns `error.NotAllowedNoMethod` instead of panicking.
+- **`resolved`:** a family that is neither DM nor channel is `error.NotAConversationFamily`.
+- **Defence in depth:** `roc_chat_message_count` and `roc_chat_store_message` check the key and the topic as one path part each (`onePart`: `inRoot`'s rule, plus no `/`). The host checks again before joining them: a DM key against the new `chat_paths.validPairKey`, a channel against `validChannelName`, a topic against `validTopicID`. (`validTopicID` was on 263's dead list; it has a live caller now.)
+
+**Answered is dead:**
+- `Call.answered` is set when `read_body`'s 413 or `check_hostile`'s refusal answers the request, and `dead()` holds from then on.
+- After the call, a host answer is the whole answer. A Roc that then answers anything but `.answered` is logged, never sent.
+- `.answered` with neither a host answer nor a failure is the router's `error.AnsweredWithoutAnswer`, a 500.
+- The test is a send over 64 KiB: one 413, one response, the transcript unchanged. It may have passed before as well, since the Roc already stopped there; it guards the rule. I couldn't make the Roc produce the other cases, so they have no test.
+
+**`NotAUid`:** a new `fail!` reason, used by `load_uid!` and by the accounts' door for an id that is no uid. It maps to `error.NotAUid`.
+
+**Measured, then fixed:** through the router, on 63 KiB sends in debug builds, against a plain message at 0.14 s:
+
+| Message | Before | After |
+|---|---|---|
+| unclosed `<img ` | 4.6 s | 0.11 s |
+| `![` | 3.0 s | 0.10 s |
+| `![a](` | 1.4 s | 0.09 s |
+
+- **Already linear before:** fences (`close_at`), `~~~`/`` ``` ``, quotes and `<`, all at 0.07–0.13 s.
+- **The cause:** `Feeds.img_tags_from`, `Recent.html_from` and `Recent.md_from` searched from each opener to the end.
+- **The fix:** `Feeds.find_seen` remembers where the next `>`, `]` or `)` is, or that there is none, for every later search from a later start, so each scan is one pass. The output is unchanged: the twins hold it to the Zig byte for byte.
+- **Release builds:** these are debug numbers. In release they would be maybe 10–30 times smaller, which still left the unclosed `<img ` well over 50 ms.
+
+Wall time: ~1 h 30 min, over the 45 asked. The measurements and the scan rewrite took most of it. Slowest step: `check_zig`, about 2 min. **263b next**: the router twin frozen as goldens, then deleted.
+
 ## CC → the box, 2026-10-28: 267 done: one bad byte is not a lasting 500 (reactions, feeds, recent, accounts, channel files, a DM's announcement); two new effects, count_dropped! and aside!
 
 **Branches:**
