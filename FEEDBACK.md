@@ -7,6 +7,26 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 284 done: a cache read that fails is a miss (Files.read_cache!)
+
+**284 done: a cache read that fails is a miss.** Branches `claude/port-284`, on 283: roc-webbox `1797f30`, angry-gopher `01d96df`.
+
+- **One home:** `Files.read_cache!`, with `Try(List(U8), [Miss])` in place of `Files.read_at!`. A cache that isn't there and one whose read failed are the same `Miss`, so no call site can fail the request over a cache, and none has a fallback of its own. Both caches read through it:
+  - 275's count: `Last.sidecar!` is now `Try(Counted, [Malformed])`, and `believed_count!` lost its `Failed`;
+  - 277's window: `Last.of!`'s `Err(Missing) | Err(Failed)` became `Err(Miss)`.
+
+  Those were `Host.read_at!`'s only Roc callers, so the hosted call itself is now "a cache's read". I kept its name and record so 280's glue and the crash probes stay as they are; renaming it to `read_cache!` would be one mechanical commit if the box wants it.
+- **The host:** `Call.readAt` answers `Failed` through `missed`, which logs (`chat: a cache's read failed, a miss: <path>: <err>`) and never calls `c.fail`. The lint's `// absent-ok:` lines say so. Every other read still fails the request: `read!`, `stat!`, and the transcript's whole read in `whole!` and `count_messages!`.
+- **Tests:**
+  - **The count:** a sidecar that would be believed (`41 <size>`) but can't be read, and a folder in the sidecar's place: both sends are numbered 3, by a recount. A transcript that is a folder still fails the send.
+  - **The window and the sidecar** (`/chat/recent`): with every cache read failing, the JSON equals the JSON once every `.count` is deleted, and a folder planted at one sidecar gives the same again. That JSON differs from the cached answer: a current record's author, where the block names nobody, is lost on a miss, as on any miss.
+  - **A test hook:** a folder plant can't fail the window read without failing the transcript's whole read too, so `chat_router.test_cache_fails` (beside `test_now`) fails every cache read on demand.
+  - **The host call:** `Call.readAt` on a folder is `.failed` with `call.failed == null`.
+- **Census:** the chat's Zig on live paths went from 2,901 to 2,907 lines (+6); the Roc from 4,142 to 4,139 (−3).
+- **Gates:** green. The quick gate passed in 43 s; `check_zig` 0; the hunt's `bool_returns` 0.
+- **Wall time and slowest step:** about 30 min. The slowest step was angry-gopher's `zig build test`, 38 s.
+- **For the box:** it happened again, once (now four times tonight). One `zig build test` run's test binary failed with "failed command" and no test or error named, and the re-run passed. Something in angry-gopher's test binary is flaky and fails silently; I didn't chase it.
+
 ## CC → the box, 2026-10-28: 283 done: the welcome for new members only (a signup marker)
 
 **283 done: the welcome DM for new members only.** Branches `claude/port-283`: roc-webbox `d9a8b2b`, from `origin/box/roc-cleanup`; angry-gopher `ca0369e`. angry-gopher's `box/roc-cleanup` didn't have the overnight chain yet, so that branch starts from `claude/port-282`, which already contains `box/roc-cleanup`.
