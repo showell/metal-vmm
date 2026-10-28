@@ -7,6 +7,31 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 287 done: the store is the Roc s, which writes .count
+
+**287 done: a message's store is the Roc's, and the Roc writes `.count`.** On `claude/roc-chat`: roc-webbox `047e9cd` (the seam record) and `33540c8`; angry-gopher `68f3628`; roc-apps `6a2d0c8` (the style rule).
+
+- **Primitives:** `store_message!` is gone. In its place:
+  - `append_message! : Conv, sid, block => { size : U64, status : [Appended, Failed] }`, whose record `AppendedAtRec` (16 bytes, `size` at 0) has its own commit and asserts;
+  - `index_message!` (search_index `noteAppend`; it cannot fail);
+  - `write_cache!` (`Files.write_cache!`): a cache's whole file, whose failure the host logs and never makes the request's.
+- **The Roc's `store_block!`, in its order:**
+  1. the append;
+  2. the `.count`, by `Count.text(index + 1, size, Known({ offset: size - len(block), uid }))`;
+  3. the index.
+
+  An append that fails fails the send with nothing stored. After it, nothing can fail the send, as before. `chat_store.storeMessage` became `appendBlock` (append, answer the size). The test fixture `storeForTest` now stores in the Roc's order.
+- **The tests:**
+  - **Byte-identity twin:** after each of two sends (the second's body holds a separator line), the `.count` the Roc wrote equals byte for byte what `backfillSidecars` writes for the same transcript once it's deleted.
+  - **The crash:** a third message's append with the count the second left put back (as a crash between append and count leaves it) is a miss, and the next send is numbered 4 by the transcript, its count `4 …`.
+  - **Frozen:** the send's frozen run (`sendRun`: transcripts, `.count` files, feeds, frames, search) hashes unchanged.
+  - **The seam:** probes cover the append, the index's every message field, a cache write, and a store that fails, which asks no count and no index.
+- **The style guide:** "A failed read of a cache is a miss" now covers writes: `Files.write_cache!` answers nothing, and a request whose truth is written is never failed over its cache.
+- **Census:** live Zig 34,408 → 34,494 tokens (+86), unreached 3,000 → 3,069; the Roc 30,656 → 30,804 nodes (+148). The Zig grew: three host primitives (each with its own failure handling and log line) replace one call into `storeMessage`. The count's decision moved, but `chat_count.writeCount` stays for the backfill, the other writer, and the fixture. Unreached grew by what only the fixture still reaches.
+- **Gates:** green. The quick gate passed in 42 s; `check_zig` 0; the hunt's `bool_returns` 0 and `stack` 57 (my new long lines stacked, or named with a type `BlockAt`).
+- **Shale (Steve's reminder):** from this item's later edits on, I edited with Shale's `edit` and `append` (`[=[ ... ]=]` strings) instead of Python. Nothing was harder yet. Multi-line `old` strings need `\n` written out inside `"..."`; a long-string form for `old` and `new` would read better.
+- **Wall time:** about 80 min, against M-L.
+
 ## The box → CC, 2026-10-28: the style guide moves with the code: from 286 on, an item that makes a style decision updates roc-style.md
 
 Steve, 2026-10-28: "stay on top of it as CC makes changes". roc-apps' docs/roc-style.md is now organized by topic (principles, naming, types and data, text and bytes, errors, effects, modules, the host boundary, layout, testing and enforcement, tools), each rule a bold line, its why, and an example. QUEUE 285's rules now say: **an item that makes or changes a style decision also adds or edits its rule there**, in its section and form, and says which rule in its FEEDBACK. A new Shale check joins the guide's enforcement list.
