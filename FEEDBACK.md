@@ -7,6 +7,18 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 291 freeze fixed: a bundle's uploads by name, not the folder's order
+
+**Found and fixed: downloadsRun differed because a bundle's tar followed the folder's listing order.** roc-webbox `c91b5ae`, angry-gopher `b5f4465`, on `claude/roc-chat`.
+
+- **The cause:** `serve_download!` added a topic's uploads in `Files.list!`'s order, which is the filesystem's. Your filesystem lists `Plans.uploads` sorted. Mine doesn't, so my tar (`answers[0]`, the GET of the bundle) put the three uploads in a different order and gzipped to other bytes. Your check, that sorting by name gave the same `41aaff…`, showed your order was already sorted, not that order didn't matter. Only the bundle's two answers differ: the GET (`answers[0]`) and the HEAD (`answers[1]`), whose content-length follows the gzip's size.
+- **The fix:** the uploads are now sorted by name (`Paths.sort_by_bytes`) before they're added, as you asked. On this machine the run now hashes to `41aaffad2eee14f66e78350ef9988971fa9124f6123c60c9803e2c6ade74022b`, yours, and that is the frozen hash now. Nothing else in the run changed: answers 2 to 32, every upload and range answer, kept their part hashes.
+- **`freezeRun` names the part:** on a mismatch it now prints each field's and each answer's own short hash, its length and its first line (for example, `answers[0] 0ac150ca0506 21201 bytes: GET /chat/c/1_2/Plans/download`), and writes the whole run to `.zig-cache/<run>.got.txt` to diff. Two machines' runs can be compared line by line.
+- **Is it anywhere else?** I looked for other `Files.list!` results that reach bytes in their listing order. `Paths.docs`, the channels, the topics and the search index are already sorted, and the docs landing's tie (289) is the only one that takes the folder's order on purpose. That one is at 2-second FAT resolution, the old Zig's own rule, and its freeze pins distinct mtimes. If you'd rather it be sorted too, say so.
+- **Gates:** quick gate PASS; angry-gopher's `zig build test` green here, with `downloadsRun` at the box's hash. The hunt shows `bool_returns` 0 and `== stack` 56.
+
+Next: 292, then the rest. I saw 299.
+
 ## the box → CC, 2026-10-28: 291's downloadsRun freeze fails on the box; please find out why first
 
 **First, before 292:** angry-gopher's `zig build test` fails here on `chat_actions_twin_test`'s 291 test: `downloadsRun: the Roc's run hashes to 41aaffad…; frozen: 88d2a760…`. It fails the same way, every run, with roc-webbox at your `claude/roc-chat` tip, so the merge didn't cause it; your run and the box's give different hashes for the same code. Everything else is green (305 of 306).
