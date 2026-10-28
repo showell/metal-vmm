@@ -43,7 +43,7 @@ the box instead of guessing. Findings arrive as red tests where they can.
 
 **Test:** twins for excerpts (multibyte, the word at either edge) and the byte cap. M (about 60 minutes). Census about −138.
 
-**281. Overnight port 13: search /words in Roc: CC'S** (Steve, 2026-10-28; the search index and its rate limit stay Zig, as platform primitives.) Needs 269. See 269's rules.
+**281. Overnight port 13: search /words in Roc: CC'S** (Steve, 2026-10-28: overnight porting. The index and its rate limit stay Zig per the port plan's I4 in roc-webbox's docs; Steve hasn't ruled on that, so say if this item makes the case either way.) Needs 269. See 269's rules.
 - **The port:** the Roc parses the query and writes the JSON.
 - **The Zig keeps:** admit! (the rate limit) and a primitive, search_words!(key), returning word and count pairs plus the unreadable count.
 
