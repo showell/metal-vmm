@@ -7,6 +7,48 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 277 done: /chat/recent's rows gathered in Roc, held to gatherRows and lastMessage; gather_recent!, RecentRec, gatherRows and lastMessage gone; two differences, each a row instead of a 500
+
+**Branches:** roc-webbox `claude/port-277` (`fddd9eb`, on 276) and angry-gopher `claude/port-277` (`8f88f74`, on 275).
+
+**The port:** main.roc `load_recent!` reads what `gatherRows` read, in its order:
+- the viewer's name;
+- a DM with every other authorized member (`listAuthorized`'s roster and order);
+- the member's channels (`listUserChannels`);
+- each topic's last message, through 276's `Last.of!`;
+- the member's docs: `Paths.docs` is `listUserDocs` (a slug, `.md`, not a folder, sorted), and `Recent.doc_title` is `titleFromSlug`.
+
+A topic with no message, or whose last date won't read, is dated by `Files.stat!`, floored to an even second. The rows are the same `Recent.Written` as before, so 267's damaged-row rule is unchanged.
+
+**Deleted:**
+- roc-webbox: `Host.gather_recent!`, `roc_chat_gather_recent`, the `RecentRec` seam record and its assert, `RecentRow`, `RowKind` and `RowConv`.
+- angry-gopher: `recent.gatherRows` and its row type (recent.zig keeps only the stream), the host's `recentRows`, `chat_count.lastMessage`, `windowLast`, `authorOf`, `fallbackLast` and `recordedAuthor`. The last two were reached only by twins, so those twins are frozen as 263d froze the others.
+
+**Test:** `router_recent_test.zig` holds the page's JSON over one tree.
+- **The tree:**
+  - **DMs:** one with topics, one with none, and one Steve isn't in.
+  - **Channels:** one he's in and one he isn't.
+  - **Topics dated by their file:** an empty topic, a bad date and an unnamed block.
+  - **Docs:** two slugs, a non-slug, a `.txt`, a folder named `.md`, and another member's docs.
+  - **276's cases:** a current record, a record behind, a full window, the fallback (no sidecar), a nameless author, duplicate names, the wrong offset, a sidecar past 1 KiB, and an excerpt with a quote and an image.
+- **How it was pinned:** it passed against the old Zig first, and the JSON it pinned then is what the Roc answers now.
+- **Added after the port:** five cases from `lastMessage`'s own tests, which went with it: one message at offset 0, a body holding the separator, a count ahead, a size far past the file, and a current record of nobody. Their answers match what those tests asserted. The backfill halves of those tests stay, read back through `readCount`.
+
+**Two differences, each a row instead of a 500:**
+1. **A name that won't read.** Since 267 the Roc lists a name that isn't UTF-8 as `Unreadable`, so `Accounts.authorized` fails the whole roster. The Zig had handed the bytes over, and the Roc's door dropped only that row (267's own test, "a torn recent row", says so). To keep that, `Accounts.roster_named` lets a member's unreadable name be theirs alone.
+   - A DM labelled by such a name, or a row whose author has one, is left out and counted (`RecentRow`).
+   - An unreadable kind still fails the request.
+   - The cost: the Roc can't tell non-UTF-8 from a name read that failed, so a failed read also drops the row where the Zig answered 500. Say if you'd rather have the 500.
+2. **A window read that fails.** It fails the request in the Roc; in the Zig it fell back to the whole transcript. This is the same family as 275's open difference (a cache read through a primitive that fails on error).
+
+**Measure:** one /chat/recent on the 14-row tree (Debug test build, one 64 KiB message read whole) took 42 ms in the Zig (one run) and 47–52 ms in the Roc (three runs).
+
+**Gates:** the quick gate passes in 56 s; `check_zig` passes in 2 min 6 s; the hunt's `bool_returns` is 0 and `long_definitions` 1.
+
+**Census:** the chat's live Zig went from 3,616 lines (399 unreached) to 3,475 (394 unreached), so −141 reached against the queue's guess of −440. angry-gopher's diff is −561/+198, test lines included. The Roc went from about 3,600 lines to 3,811.
+
+**Wall time:** about 80 min against 60, inside 1.5x. The slowest step was taking `lastMessage`'s tests apart: which halves were backfill, and which cases the route twin lacked.
+
 ## CC → the box, 2026-10-28: 276 done: a topic's last message in Roc (Last.of!), its window, fallback and one-member author rule; its twin rides with 277
 
 **Branch:** roc-webbox `claude/port-276` (`f39405f`), on top of 275. No angry-gopher change.
