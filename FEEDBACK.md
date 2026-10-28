@@ -7,6 +7,40 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 273 done: saved ids in Roc, read each time, no cache; 7 ms per 1,000-entry list against the Zig cache's 0.9 ms
+
+**Branches:** roc-webbox `claude/port-273` (`462707b`) and angry-gopher `claude/port-273` (`5885db5`), each on top of 272.
+
+**The port:**
+- **The Roc serves `GET <topic>/saved`.** It reads `users/<uid>/docs/reading-list.md` as bytes and parses the jump URLs with the new `chat/Saved.roc`, an exact port of `parseRefs`.
+- **Quirks kept:** all `/chat/c/` refs come before all `/channel/` refs, a ref matches a conversation by its key's text, and a malformed ref is passed over.
+- **The answer:** the ids, as a JsonOut array; no list answers `[]`.
+- **Deleted from the Zig:** `savedIds`, `savedIdsFor` and the mtime cache (its entry and byte budgets, eviction, `forgetCache`) with their tests. `reading_list.zig` lost 315 lines net, counting the tests.
+- **What stays:** the save itself, and `parseRefs` as the twin's oracle.
+
+**Tests:**
+- **The route test pins the answers both ways.** It was written first and passed against the old Zig. It covers no list, an empty list, refs among others, a channel ref named as this DM's key, malformed refs, bytes that aren't UTF-8, and a list saved only elsewhere.
+- **Twin 74** holds `Saved.refs` to `parseRefs` over 3,000 generated near-miss texts plus the byte corpus.
+- **The route corpus** took the test's quoted paths: 12 golden lines added, none changed.
+
+**Measured (debug builds, the Roc at `--opt=dev` as the server runs it), the topic's saved-ids request with a 1,000-entry, 133 KB list:**
+
+| | Saved-ids request |
+|---|---|
+| Before: Zig, cache warm | 874 µs |
+| After, first port (byte-at-a-time walk) | 16.9 ms |
+| After, index scan | 12.9 ms |
+| After, builtin `Str.split_on` scan, as pushed | 7.4 ms |
+| After, a one-entry list | 0.27 ms |
+
+So about 7 ms of the request is parsing. The page itself is unchanged at 1.7 ms. 7 ms isn't something a person would notice, but it holds the global turn; on that basis I'd leave the cache out. **Yours to decide.** If it matters, the next step is a Roc profile of the scan, not a cache.
+
+**Gates:** the quick gate passes in 55 s, `check_zig` in 85 s, and `bool_returns` is 0. Two Bool helpers first tripped the hunt and were renamed to questions (`has_at`, `has_from`).
+
+**Census:** the chat's live Zig went from 3,617 to 3,602 lines. `reading_list.zig` falls outside the census's chat set, so its 315 lines don't show there. The Roc went from 3,481 to 3,554 lines.
+
+**Wall time:** about 75 min against 60. The slowest step was the timing loop and two rewrites of the scan.
+
 ## CC → the box, 2026-10-28: 272 done: the page's limits are Roc constants, held to the Zig's; limits! and its seam record gone
 
 **Branches:** roc-webbox `claude/port-272` (`1e0e44e`) and angry-gopher `claude/port-272` (`407f418`), each on top of 271.
