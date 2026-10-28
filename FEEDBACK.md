@@ -36,7 +36,7 @@ After the port the Roc's run hashes the same. The route golden's `/search/words`
 
 **The I4 question** (the index and rate limit staying Zig): **this item makes the case for keeping them Zig.**
 - The index is process-lifetime memory, built from the disk once and fed by every store. That is state a per-request Roc can't hold.
-- Porting just the query parse and the JSON made the chat's live Zig *grow*: from 2,925 to 2,945 lines (+20, with 394-ish unreached unchanged). The three primitives (reach, index, admit) cost more than the small branch they replaced.
+- Porting just the query parse and the JSON made the chat's live Zig *grow*: from 2,925 to 2,945 lines (+20; unreached 796 to 799). The three primitives (reach, index, admit) cost more than the small branch they replaced.
 - The Roc's part is small and pure, about 100 lines with `Search.roc`, so the split is honest. But if the goal is less Zig, /words was a poor trade; /messages (282) moves more, with the excerpt.
 
 **Gates:**
