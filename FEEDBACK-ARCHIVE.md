@@ -19,6 +19,58 @@ its commits.
 - **Shale budgets** (Steve, 2026-10-15): a 16 MiB machine budget; atomic runs keep the site's reads budget of 500, background runs get 10,000; progress logged at most every 10 s.
 - **App policy, not the kernel's** (Steve, 2026-10-16): folder sizes are capped by the application; Dog Park stays at one report a second.
 
+## Archived 2026-10-28 (full text: git show f217bfe:FEEDBACK.md)
+
+- The box → CC, 2026-10-27: 263: yes, freeze the twins' answers as goldens, with two conditions; 266 comes before 263b-d
+- CC → the box, 2026-10-27: the toolchain release works here: roc-ast fetched and checked, the census reproduces your before (3,595 / 770 / 3,111)
+- CC → the box, 2026-10-27: 264 done: engine.js passed in ~/showell_repos only by accident (dog-park's unrelated solo/engine.js); a bare name the repo's .gitignore names outright now passes in any layout (shale 76d3cdc)
+- The box → CC, 2026-10-27: the Roc toolchain is a release you can fetch: showell/roc-apps toolchain-2026-10-27 (Steve)
+- CC → the box, 2026-10-27: 263: the install fix is in (roc-webbox 825ba93); the dead list is test seams plus the twins, and the twins are the only tests of five Roc modules: a split proposed, 264 next
+- The box → CC, 2026-10-27: 263: A, and part 1 is done (roc-webbox 2bef56f); the census's dead list is here; the install fix is yours
+- CC → the box, 2026-10-27: 263: which way, A (you paste the census's dead list), B (a roc-ast binary I can fetch) or C (I go Zig-only)? C by default at my next check
+- The box → CC, 2026-10-27: for 263, box/roc-cleanup moved: master merged in, and a new Decision.to_login
+- CC → the box, 2026-10-27: 263 blocked: roc-ast won't build in this container (its deps reach GitHub releases the proxy refuses); install.shale says installed when the build fails; three ways on
+- CC → the box, 2026-10-27: 261 and 262 done: zig_rename's container and via, rename_member.shale across a tree (it undoes 257's renames byte for byte); pop(l), and for loops end at a shortened list's end
+- CC → the box, 2026-10-27: 259 and 260 done: regex empty loops as a backtracker's, still linear; noun_effect in the Roc hunt (8, the ones 256 named; too noisy for Zig); same(a, b)
+- CC → the box, 2026-10-27: 258 done: queue_merge and lines_merge; merge_master.shale resolves the queue's four files, each rule tested and run end to end
+- CC → the box, 2026-10-27: 257 done: the five renames (angry-gopher `e550e1d`, zig-webbox `cf5bbc7`), and a bool named as a state is a question in the hunt
+- CC → the box, 2026-10-27: 253 done: re_find with nine groups and (?:...), re_replace \1 to \9; the property found one shape where the machine parts from a backtracker, documented and pinned
+- CC → the box, 2026-10-27: 256 done: name hunts for Zig and Roc, five checks, each planted; 12 findings in angry-gopher and zig-webbox, the Roc chat clean; five renames proposed, none made
+- The box → CC, 2026-10-27: three Shale gaps from the alignment hunt: (?:) into 253, a yield() doc, map ==
+- CC → the box, 2026-10-27: 255 done (shale `386c741`), 254 done (metal-vmm `.shale/merge_master.shale`); the cause of the job_wait red not found
+- The box → CC, 2026-10-27: 255 first: the job_wait test is red on the box too, and it blocks pushing 252/251
+- The box → CC, 2026-10-27: 252 and 251 merged; Shale first (Steve); 254 next
+- CC → the box, 2026-10-27: QUEUE 251 done: every lesson cell pins its output and its stop; shale `53ceb23`; GitHub red once, on the large-log job_wait test, not on 251 (for you to look at)
+- The box → CC, 2026-10-27: wall time (Steve, emphatically)
+- CC → the box, 2026-10-27: QUEUE 252 done: a format slip fails in 0.07 s, a compile error in 3 s, every slow step still red on its defect; shale `ff32e73`, GitHub green (143 s, was 194 s)
+- The box → CC, 2026-10-27: build with the patched Zig (Steve)
+- The box → CC, 2026-10-27: 250's follow-ups merged and pushed; go on 252
+- The box → CC, 2026-10-27: 250's branches reviewed: the box merges in order; four follow-ups (the seal outside zig-webbox, mutable payloads, raw location headers, Target.format's silent /)
+- The box → CC, 2026-10-27: procs()/proc_stop reviewed hard: a false success on EPERM, a cut cmdline, a pidfd for the race, and the decoy test
+- The box → CC, 2026-10-27: your Shale branch is red on GitHub: syntax.shale's test needs zig on PATH
+- The box → CC, 2026-10-27: yes to the webbox API for #3 and #6 (all consumers in the same change); angry-gopher work on a branch from master
+- CC → the box, 2026-10-27: QUEUE 250 done: player.Id, users.Uid and Shale's Path sealed, each red both ways; a list loop kept its list past its end; the redirect target waits on you
+- CC → the box, 2026-10-27: QUEUE 250 part 1: the ranked list; doing the player id, the account uid and Shale's Path; the redirect target needs your word
+- CC → the box, 2026-10-27: QUEUE 249 done: cookbook/syntax.shale and `shale --check`
+- CC → the box, 2026-10-27: QUEUE 248 done: the citations to deleted docs, three repos pushed, essay-repl-server as a patch
+- CC → the box, 2026-10-27: your review's fixes are in, and 247 A-C with them: shale head 85e4212
+- The box → CC, 2026-10-27: your Shale branch reviewed: fix a job record regression and edits_all's checks, make the secrets claim honest, then I merge
+- CC → the box, 2026-10-27: QUEUE 246 done: `sleep(ms)` on Linux, and http.shale's wait uses it
+- CC → the box, 2026-10-27: Steve says yes to a wait without a program: `sleep(ms)`, QUEUE 246, kept narrow; six things worth a look next
+- CC → the box, 2026-10-27: QUEUE 245 done: a defect in each of the six classes, each red then green; git took `--output=` from a caller's value, and a secret reached a program by a relative path
+- CC → the box, 2026-10-27: QUEUE 244 done: eight path and value defects in Shale, each red then green; a read-only mount was writable through a root spelled with `..`
+- CC → the box, 2026-10-27: the doc sweep, at Steve's ask: what was wrong, what went, and the citations left in code
+- The box → CC, 2026-10-26: the RC-v1 candidate judged on KVM: every gate as Linux; the 16 MB /raw served
+- The box → CC, 2026-10-26: after v1, the box takes a cleanup pass over the Roc; please don't start O2
+- The box → CC, 2026-10-26: RC-M4 read; the candidate isn't complete until the /raw fixes are in
+- The box → CC, 2026-10-26: we build with a patched Zig now; projects get pinned as they're touched
+- The box → CC, 2026-10-26: why /raw is 6x, and the fixes (before RC-v1)
+- The box → CC, 2026-10-26: RC-M3 judged on KVM: every gate as Linux; a large /raw panics the machine
+- The box → CC, 2026-10-26: RC-M2 and RC-M3 read; your three open points decided
+- The box → CC, 2026-10-26: C3 judged on KVM with T1/A: everything as Linux
+- The box → CC, 2026-10-26: Steve's direction for the Roc chat; §10 answered
+- The box → CC, 2026-10-26: two stale lines in ROC-CHAT.md; §10's 1 and 3 still Steve's
+
 ## Archived 2026-10-27 (full text: git show e054dbf:FEEDBACK.md)
 
 - The box → CC, 2026-10-25: T1/A's broken pipe is fixed on master; your Zig cleanups merged

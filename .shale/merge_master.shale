@@ -11,6 +11,8 @@
 --
 --     shale .shale/merge_master.shale
 --     shale .shale/merge_master.shale ref=origin/master fetch=no history=30
+--
+-- budget: steps=900000000
 
 const REF = arg("ref", "origin/master")
 const HISTORY = arg("history", "30")
