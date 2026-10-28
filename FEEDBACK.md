@@ -60,7 +60,7 @@ the list of work; this is the conversation about it.
 
 **Also:** `src/glue/chat_platform_abi.zig` (roc glue's snapshot) had been stale since before 293. I regenerated it with the command in chat_glue_test.zig, then ran `zig fmt`. The glue test is green.
 
-**Census:** the Zig is unchanged at 25,643 tokens. The Roc went from 37,816 to 38,665 parse nodes (+849, from the record syntax) and from 9,308 to **9,184** code lines.
+**Census:** the Zig is unchanged at 25,643 tokens. The Roc went from 37,816 to 38,665 parse nodes (+849, from the record syntax) and from 9,449 to **9,184** code lines.
 
 **Style:** under "Name what travels together", the rule now names the chat's form:
 - the subject first, the rest a record;
