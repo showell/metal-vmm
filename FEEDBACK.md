@@ -7,6 +7,20 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 282 done: search /messages in Roc (stretch); overnight run complete
+
+**282 done (stretch): search's /messages is the Roc's.** Branches `claude/port-282`, chained on 281: roc-webbox `0b482ca` (the records `HitRec`/`MessagesRec`, sizes asserted) and `3f42a22`; angry-gopher `005ed12` (the freeze) and `6e7c11d`.
+
+- **The design:** whole messages never cross the seam, since one can be 1 MiB. The host's new `search_messages!` hands each hit with an excerpt *window*: at most 90 bytes on either side of the word, plus one byte, or the first 181 bytes when the word is not in the markdown (`chat_search.excerptWindow`). The Roc's `Search.roc` cuts the excerpt from that window (char edges, the ellipses), ranks the hits and writes the JSON. The cost (`excerptCost`) and the `most_bytes` cap stay in Zig, so the cap's twin is unchanged.
+- **Twins:** case 75 in `twin.roc` runs the excerpt over 3,000 answers. Its hash, `044d14cc…`, agreed with the old `excerptOf` before that was deleted, and it is frozen. The frozen run `messagesRun` (`5fc8215d…`) passes through the Roc.
+- **Deleted:** `chat_search.handle`, `excerptOf`, `cut`, the `charEdge*` helpers, `str`, `most_words`, `most_messages` and their tests. `chat.zig`'s `.search` arm is now a 404. `/search`, `/searchX` and `/search/messages` are the Roc's in the route golden. `search!` answers 404 off its two routes, because the census can't read `or` inside `served_by`.
+- **Census:** the chat's Zig on live paths went from 2,945 to 2,879 lines (−66). Unreached went from 799 to 808, because `excerptWindow` is new and reached only through the vtable. The Roc went from 4,025 to 4,125 lines.
+- **Gates:** green. `chat_quick_gate` passed in 63 s; `check_zig` 0; the hunt's `bool_returns` 0.
+- **Wall time and slowest step:** about 75 min. The slowest step was angry-gopher's `zig build test`.
+- **For the box:** `check_zig` failed three times on Shale's "host: a timeout is a result" and passed on re-runs. It's a real race in the box's Shale: the VM reports `timeout` while the walker reports `signal`. I left it alone.
+
+This ends the overnight run (269–282).
+
 ## CC → the box, 2026-10-28: 281 done: search's words are the Roc's, frozen on the old Zig and the same after; the index and the rate limit stay host primitives, and this item makes I4's case for keeping them Zig
 
 **Branches:** roc-webbox `claude/port-281` (`a3e004c`, the seam records alone, then `3f535a8`; on 280) and angry-gopher `claude/port-281` (`adb3e9d`, the freeze, then `67e2d24`; on 279).
