@@ -7,6 +7,24 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 289 done: the docs read pages are the Roc's
+
+**289 done: the docs' read pages are the Roc's.** angry-gopher `6e0a5ab` (the freeze), then roc-webbox `9a8f1d9` and angry-gopher `181665f`; all on `claude/roc-chat`.
+
+- **Freeze first:** `docsReadRun` (hash `9f6b8fcb…`) has 33 asks: the landing (it 303s to the doc touched last, or shows the editor when there are none), a doc's editor, its `.md`, the list JSON, and the preview. It asks as the owner, as another member, and as one whose docs folder is a file. It covers every 303, 404 and 405, the 500 for a name that is no slug (`/chat/docs/Bad.md`, `/chat/docs/.md`), and a POST to a read page. The hash is unchanged after the port.
+- **The Roc:** a new `chat/Docs.roc` builds the three-pane editor with Chrome.page, and the list's JSON with JsonOut. The CSS is a `\\` multiline string, copied byte for byte from the Zig. In `main.roc`, `docs_read!` handles the landing (`last_touched!`), `docs_list!`, `raw_doc!` and `docs_editor!`/`open_doc!`, through `Files.list!`, `stat!`, `read_bytes!` and `Host.render!`. `Paths.docs_in_order` keeps the folder's order, so on a tie in mtime the first doc wins, as before.
+- **Still Zig (for 290):** `/new`, `/save`, `/save_to_reading_list` and `/render`. I left the live preview with them. It is not a read page, and it counts hostile markdown (`edge.count(.malformed_markdown)`) with no primitive the Roc has. It goes with 290's writes. `docs.zig` drops 210 lines: `handle` keeps the four verbs and panics on anything else. `docs_store` drops `listUserDocs`, `mostRecentDocSlug`, `docExists` and `DocSummary`.
+- **New Chrome entry, worth a look:** `Chrome.rendered`, for Host.render!'s HTML as markup. The hunt allows `Html.host_markup` only in Chrome.roc, and the editor's preview paints the server's own rendered markdown, so I gave that markup its one door there. I didn't use `serve_rendered!`, because it renders as *trusted* (the links page), not as `markdown.render`.
+- **Small differences, said plainly:**
+  - (a) The landing's "touched last" compares whole seconds (`stat!`), where the Zig compared nanoseconds. Two docs saved within one second now tie, and the first in the folder's order wins. On FAT the Zig already tied at 2 s.
+  - (b) A doc whose read fails (a symlink loop) now fails the request with the error, which is the host's 500. The old answer was a 500 that said "The doc cannot be read: …". router_failures_test now accepts either form, never a 404.
+  - (c) A slug in the list's `href` now goes through `Html.text`. A valid slug escapes to itself, so the bytes are the same.
+- **Route golden:** six docs rows now show the Roc's own answers (the editor's 200, a nested 404, the 303 for a name that is no slug, and two 404s for a missing `.md`). Each is what the old Zig would have answered.
+- **Census tool:** `zig_census.shale` now reads a block holding one tag inside `served_by` (`if r.rest == "/new" { Zig } else if ...`). Without that it stopped.
+- **Gates:** quick gate PASS; check_zig passed in 49 s; hunt `bool_returns` 0 and `== stack` 56, unchanged. Docs.roc's five long CSS lines stay byte-identical, and I paid for them by fixing five old long lines: the `links_css` multiline (295's direction), a comment, `Saved`'s method check, a crash message, and a Paths test.
+- **Census:** Zig on live paths went from 34,156 to 32,156 tokens; the Roc from 31,007 to 32,340 parse nodes.
+- **Shale:** inside a Shale function, only `const`s are visible, not `local`s. `find` takes no "plain" flag (it is literal already). Cutting a file between two markers took a small `cut(p, from, to)` built on `find_in` and `sub`. A builtin `edit` form for "from this marker to that one" would cover what I needed in 288, 289 and probably 290.
+
 ## CC → the box, 2026-10-28: 288 done: presence broadcast is the Roc's; /settings no longer broadcasts
 
 **288 done: presence's broadcast is the Roc's.** roc-webbox `bc66ab2`, angry-gopher `b3d94f8` (the freeze), `8ac464e`; all on `claude/roc-chat`.
