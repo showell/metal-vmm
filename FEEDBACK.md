@@ -7,6 +7,25 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 296 done: stack.shale in the cookbook, applied to the chat in both repos
+
+**296 done: three or more, one a line.** The tool is shale `claude/roc-chat` `ebc5d84`. Applied: roc-webbox `claude/roc-chat` `0ec6a03` (the stacking) and `01031bf` (the hunt), from `origin/main`; angry-gopher `claude/roc-chat` `8d9c2d5`.
+
+- **The recipes:** `cookbook/roc/stack.shale` and `cookbook/zig/stack.shale`, each in its cookbook's README.
+  - **The check:** a group (list, record, tuple, call's or lambda's arguments, tag payload; in Zig a struct, tuple or array literal, argument or parameter list, container or error set) holding three or more items on one line is a finding, `path:line: stack: N items in (...)`. So is a line over `width=` (100), `long: ...`, which says whether a group of two could take it.
+  - **The rewrite:** `write=1` gives each finding a trailing comma, outermost group first (a long line with no group of three gets its widest group of two, as `roc_commas.shale` did), runs `roc fmt` or `zig fmt` on the files it changed, and repeats until a pass changes nothing. A second run changes nothing; I checked on the plants and both trees.
+  - **Plants:** `self_test=1` holds one plant of each kind, plus `clean.roc`/`clean.zig`, which hold commas and brackets inside strings, `'x'`, `\\` lines and comments, and in Zig a three-operand `for` and a three-name capture. Every plant gives its finding; the clean ones give none.
+  - **A departure from the item: it reads characters, not tokens.** It's a scanner that steps over strings with their escapes, character literals, `\\` lines and comments, as `roc_commas.shale` does. The Roc side has no tokenizer to call. The Zig side could use `zig_tokens`, but then the two would differ; the clean plants hold the line. Say if you want Zig's on the tokenizer.
+- **Applied:**
+  - roc-webbox `chat/**/*.roc` and `src/chat_*.zig`: 39 files, +8,238 −1,193. The Roc took 3 passes, the Zig 5. Pages.roc's `sidebar_json` `room` and `topic` now read one field a line.
+  - angry-gopher `zig-server/src/chat*.zig`: 21 files, +11,437 −1,771, 5 passes.
+  - **Left:** lines the rewrite can't reach, each listed by the recipe. 57 in the Roc: long strings, conditions, a function type's bare arguments, long comments. 90 in roc-webbox's Zig and 185 in angry-gopher's: long strings and format strings, mostly in the twins.
+- **The hunt:** `tools/roc_hunt/hunt.shale` now runs `cookbook:roc/stack.shale` over `chat/**/*.roc`, `== stack: 57`, and its `self_test=1` runs the recipe's plants too. It needs the `cookbook` mount, as the box's config has.
+- **Census:** the chat's live Zig went from 2,907 to 4,949 lines, unreached from 258 to 506, and the Roc from 4,139 to 7,544. That's the layout, not code: the census counts code lines, and stacking one call of three arguments turns one line into five. From here on the census measures layout as much as code. I suggest it count statements or tokens; or read 4,949, 506 and 7,544 as the new baseline.
+- **Gates:** green. The quick gate passed in 46 s; `check_zig` 0, store-absence lint included; the hunt's `bool_returns` 0; Shale's `zig build test` green.
+- **For the box: line-based lints.** The store-absence lint and the other line readers still pass, but a call that once sat on one line now spans several. A lint that matches a call and its `catch` on one line could miss one now. I didn't audit each lint for that; it's worth a look at the ones that read `catch` off the call's line.
+- **Wall time:** about 70 min. The slowest step was `check_zig` over the stacked tree, 121 s.
+
 ## The box → CC, 2026-10-28: go on: 296 next, then 286; 285 merged; FEEDBACK archived
 
 **Next: 296 (the Shale stacking tool), then 286.** 296 was meant to come before the ports, so each later port writes stacked code; 285 only deleted code, so nothing is lost by its going first.
