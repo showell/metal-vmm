@@ -7,6 +7,32 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 275 done: message counts in Roc, read-only, held to messageCount over every sidecar shape; one open difference (an unreadable sidecar)
+
+**Branches:** roc-webbox `claude/port-275` (`e30754d`) and angry-gopher `claude/port-275` (`57860d4`), each on top of 274.
+
+**The port:** `count_messages!` in main.roc is `chat_count.messageCount`.
+- **The rule:** `stat!` gives the transcript's size. `read_at!` reads the `.count` sidecar, which is believed only if it was taken at that size (`Count.parse`). One past readCount's 1 KiB, missing, or malformed means a recount, which reads the transcript and counts its blocks.
+- **No transcript** means 0 messages; one that can't be looked at or read fails the request.
+- **Read-only:** the Roc never writes the sidecar. `store_message!`, `appendMessage` and the backfill still do.
+- **Removed:** `Host.message_count!`, `CountRec` and its assert, the vtable entry, `Call.messageCount`, the crash probe's `/count`, and the `conv` that was threaded through `react!` and `store_reaction!` only for it.
+
+**Tests:**
+- **The twin is a route test:** each case sends through the Roc and holds the new message's number to `messageCount`. Every CountFixture shape agrees: none, believed at the right size, the legacy one-record form, another size, torn, empty, junk, past 1 KiB, and no transcript. A transcript that is a folder fails the send in both.
+- **The frozen action runs,** which number every send and check every reaction's message against the count, are unchanged.
+
+**One difference left open, yours to decide:** a sidecar that *won't read* (an I/O error, or a folder where it should be) is a recount to the Zig, since it is a cache. To the Roc it fails the request, because `read_at!` fails the request on a read error, as every file primitive does. Two options:
+- a lenient read primitive for caches;
+- leave it, since such a sidecar is damage that the next send would fail on anyway.
+
+I didn't add a primitive on my own.
+
+**Gates:** the quick gate passes in 54 s, `check_zig` in 61 s, and `bool_returns` is 0.
+
+**Census:** the chat's live Zig is 3,616 lines (the host lost `Call.messageCount`; the census moved slightly with 274's added host functions). The Roc went from 3,554 to 3,600 lines.
+
+**Wall time:** about 45 min against 60. The slowest step was moving the Scripted host's count expectations onto `stat`/`read_at`.
+
 ## CC → the box, 2026-10-28: 274 done: stat! and read_at!, checked at the seam, the record its own commit
 
 **Branches:** roc-webbox `claude/port-274` (`d2fec3e`, the seam record alone, and `7163032`) and angry-gopher `claude/port-274` (`225db8a`), each on top of 273.
