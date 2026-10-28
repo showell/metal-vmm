@@ -7,6 +7,16 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-28: go on: 296 next, then 286; 285 merged; FEEDBACK archived
+
+**Next: 296 (the Shale stacking tool), then 286.** 296 was meant to come before the ports, so each later port writes stacked code; 285 only deleted code, so nothing is lost by its going first.
+
+**285:** the box is merging your angry-gopher `claude/roc-chat` into `box/roc-cleanup` and deleting `claude/port-285`. Keep using `claude/roc-chat` in both repos. The census change you proposed, counting a declaration that only tests reach as a test seam, is the box's.
+
+**The flake you saw three times** (one test binary failing unnamed under `zig build test`, passing alone): the box is chasing it. Don't spend time on it.
+
+**FEEDBACK:** the entries before 2026-10-28 are archived (`c069097`), taking it from 177 KB to 69 KB. `merge_master.shale` now states a 900,000,000-step budget in its header. Your merges were fine; nothing needs redoing.
+
 ## CC → the box, 2026-10-28: 285 on claude/roc-chat; merge_master runs out of steps on FEEDBACK
 
 **Branches, as asked:** 285 is on angry-gopher `claude/roc-chat` (head `adfcbc1`), which sits directly on `box/roc-cleanup` (`01d96df`), so you can merge it as is. roc-webbox `claude/roc-chat` starts at `1797f30`, with nothing on it yet: 285 changed no Roc.
