@@ -7,6 +7,57 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 298 done: cookbook/prose.shale finds and edits a phrase across wrapped lines; one more (not yet settled) found and gone
+
+**298 is done.**
+- Shale `claude/roc-chat`: `32fcac5`, the new recipe `cookbook/prose.shale` with its plants, plus rows in SHALE-AGENTS.md.
+- roc-apps `8a9ef75`: the surprise, fixed.
+
+**What I built, and why:** a cookbook recipe, not a builtin.
+- **Why not a builtin:**
+  - **Every rule in it is a choice about which lines count as prose** (Markdown's paragraphs and list items, a comment marker per language). A builtin would freeze those choices in Zig.
+  - **Shale can already do it in Shale:** about 570 lines, and fast. QUEUE.md and FEEDBACK.md take 0.4 s together.
+  - **It runs under cookbook-test like the other recipes,** and it is easy to copy and change.
+- **How it reads prose:**
+  - **In Markdown:** a paragraph, a list item (continuation lines included), a block quote or a heading at a time. A blank line ends one. A code fence, a table row and an HTML line are never prose.
+  - **In code:** comment blocks, meaning consecutive whole-line comments with one marker at one indent. The markers are `//`, `///` and `//!` for Zig, `##` and `#` for Roc, `--` for Shale, and `#` for shell. An empty comment line ends a block.
+- **How it matches:**
+  - **The paragraph's words are joined by one space,** and so are the phrase's. A break, an indent or a run of spaces inside the phrase then counts as one space.
+  - **A hit is reported as `path:line`, the line it starts on,** with `(N lines)` when it crosses breaks.
+  - **Markup:** a phrase that matches only once `*` and backticks are removed from both sides is reported `(markup inside)` and never edited. Choosing which `*` goes with the edit is the reader's call. Searching again with the markup in the phrase gives a plain hit.
+- **How it edits:** `new=` shows the edit and `write=1` makes it.
+  - **A replacement with as many words as the hit** puts them in the old words' places, line by line.
+  - **Any other replacement** folds the hit's lines into one.
+  - **Either way, a line that becomes too wide carries its last words into the next line,** and the first line that fits after the edit ends the rewrap. The rest of the paragraph is kept as it was.
+  - **Nothing is pulled up:** a line the edit shortened stays short. The diff is only the lines the edit moved.
+  - **A removal next to punctuation:** removing `*(not yet settled)*` from `settled)*.` hands the `.` to the word before, so no ` .` is left.
+- **The trade-offs:**
+  - **A rewrap moves words,** so a paragraph whose line breaks mean something is still yours to edit by hand.
+  - **The width is the paragraph's widest line,** not a fixed 80 columns.
+  - **Inline code is read as prose.**
+  - **Markup stripping counts only `*` and backticks,** not `_`, since `_` is too common inside names.
+
+**Tests (plants):**
+- the `*(not yet` / `settled)*` case;
+- a phrase split inside `a **phrase / split**` (markup inside);
+- a list item's continuation line;
+- a phrase inside a code fence (no hit);
+- a phrase across a blank line (no hit);
+- a Zig comment, and the same words in a string beside it (no hit);
+- four edits checked against expected files:
+  - the removal;
+  - a longer replacement in a list item, its hanging indent kept;
+  - a same-length replacement in a comment, which leaves the third line alone;
+  - a removal before a full stop.
+
+`zig build cookbook-test` runs them and they pass. Doc check passes.
+
+**The surprise:** a run over the docs we keep (each repo's README, roc-apps docs, metal-vmm's QUEUE, FEEDBACK and CLOUD_WORK) **found one more `*(not yet settled)*` in roc-style.md** (line 402, "Private helpers live outside the block"). It was split the same way, and **it is on roc-apps master too.** The recipe removed it in two lines (`8a9ef75`). Nothing else turned up for the phrases I tried: "not settled", "unsettled", "for now", "the old Zig" and "(metal-vmm" in the guide.
+
+**Push-back, small:** an editor rewrap would read better if it pulled words up after a removal. That makes bigger diffs, so I chose the smaller diff; say if you'd rather have it the other way.
+
+Next: 294 (the triage), last in the run.
+
 ## CC → the box, 2026-10-28: 297 done: three or more arguments take a record (signature findings 0), the twelve renamed
 
 **297 is done.** Commits:
