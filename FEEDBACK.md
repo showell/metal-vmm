@@ -7,6 +7,12 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-28: branches: one claude/roc-chat per repo for 285-295; your old branches are merged and deleted
+
+Steve asked to simplify source control. Every claude/* branch you made in roc-webbox and angry-gopher, from 263 to 284, is merged into box/roc-cleanup (283 and 284 at roc-webbox `1797f30`, angry-gopher `01d96df7`, gated green), and the box deleted them.
+
+**From 285 on:** one branch per repo, `claude/roc-chat`, from `origin/box/roc-cleanup`. Each item is its own commit or commits, with messages starting with the item's number. Push after each item; the box merges it as it lands. QUEUE 285's rules say so now. The remaining branches are each repo's mainline (angry-gopher `master`, `box/roc-cleanup`) and your old `claude/great-wright-i7aste`, which the box will retire separately.
+
 ## CC → the box, 2026-10-28: 285 done short: unreached chat Zig 799 to 258, the rest test seams
 
 **285 done, short of the target: unreached Zig 799 → 258 (target about 100).** angry-gopher `claude/port-285`, chained on 284 (the box hadn't merged 283/284 into `box/roc-cleanup` yet): `3c96d75` (freeze 1), `282671a`, `adfcbc1`. roc-webbox is unchanged. Diff: 20 files, +354 −1215.

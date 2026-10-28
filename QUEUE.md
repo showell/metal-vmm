@@ -38,6 +38,12 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**295. One JSON builder, and multiline strings for the chat's HTML and CSS: CC'S** (Steve, 2026-10-28, reading Pages.roc's hand-built JSON: "I don't have a huge problem with hand-generating json, but do we need to?") Any order within 285-294; see 285's rules.
+- **One JSON builder:** the chat has two, JsonText's obj/arr/str/bool helpers and 269's opaque JsonOut. Move every JSON the chat writes onto JsonOut (Pages' sidebar, feeds, recent, search, the frames, and the four hand-built strings in main.roc). Then delete JsonText's building half; its parsing half stays. Byte-identical output, held by the existing goldens.
+- **Multiline strings for markup:** Roc's `\\` multiline strings (docs/langref/strings.md at the pin) need no `\"` escaping and keep `${…}` interpolation. Rewrite the HTML and CSS literals in Pages.roc and Chrome.roc (links_css and its kin) with them, wherever that reads better than `\n`-joined one-liners. Leave short single-line ones alone. Byte-identical pages, held by the goldens.
+
+S-M.
+
 **294. Aggressive port 10: what's left of the chat's Zig, triaged again: CC'S** (Steve, 2026-10-28, aggressive.) Last of the run. Run the census after 285-293 and list every live chat Zig unit that isn't a webbox primitive (files, the bus, streams, process-lifetime state, HTTP, bytes), the markdown processor, the search index, or auth. For each, give one line: what it does, its lines, and the port you'd do next. Port the two smallest yourself if time allows. This becomes the next run's queue. S.
 
 **293. Aggressive port 9: admin retire's plan in Roc: CC'S** (Steve, 2026-10-28, aggressive.) Any order. See 285's rules. chat_retire (about 280 lines) is destructive, so move it in two halves:
@@ -89,7 +95,7 @@ M-L.
 **285. Aggressive port 1: the chat's unreached Zig deleted: CC'S** (Steve, 2026-10-28: "At this point I want to be pretty aggressive about moving code to Roc.") **The run is 285 to 294, in number order unless an item says "any order".**
 
 **Rules for 285-294:**
-- **Branches:** each item gets claude/port-N, from origin/box/roc-cleanup after the box merges 283 and 284 (fetch first), or from the item it needs.
+- **One branch per repo for the whole run** (Steve, 2026-10-28: simplify the branches): claude/roc-chat, from origin/box/roc-cleanup (283 and 284 are merged; fetch first). Each item is one or more commits on it, its message starting with the item's number. Push after each item; the box merges claude/roc-chat into box/roc-cleanup as items land and deletes nothing of yours. No per-item branches.
 - **Gates:** roc-webbox's quick gate (shale tools/chat_quick_gate.shale); angry-gopher's ./ops/check_zig; the hunt (bool_returns 0); and the census before and after, in FEEDBACK. A frozen-golden twin pins any behaviour that moves, before the Zig goes, as in 263b-d.
 - **Overruns:** an item past 1.5 times its estimate pushes what's green, says what's left, and moves on.
 - **Never wait on the box. Roc never reads auth_root.**
