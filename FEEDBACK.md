@@ -7,6 +7,30 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 295 done: one JSON builder (JsonText gone); the markup's multiline strings were already there
+
+**295 done: one JSON builder; the markup's multiline strings were already there.** roc-webbox `996d747` and angry-gopher `7a1cef5` (a comment), on `claude/roc-chat`.
+
+- **One JSON builder.** Everything that built JSON with JsonText now uses JsonOut:
+  - Pages' sidebar;
+  - the images and code feeds and their live events;
+  - Recent's rows and events;
+  - the reactions line;
+  - `/chat/conversations` and a new topic's answer;
+  - the notify and sidebar events;
+  - main.roc's four hand-built search errors, now one `search_error(text)`.
+
+  JsonOut gains `optional` (a string field left out when empty), which Recent uses. The feeds' and Recent's events stay JsonOut values until their bytes go out (`.bytes()`), so they nest inside arrays without a round trip.
+- **JsonText goes whole.** It had no parsing half: its five builders were all of it. The one remaining mention, a comment in angry-gopher's `chat_twin_test.zig`, now names `ZigText.json_string`.
+- **Byte-identical:** the quick gate passes with every golden unchanged. The one place the two builders differed is names: JsonText wrote a name unescaped, JsonOut escapes it. Every name is a plain literal, so the bytes are the same. The reaction line's `msg` is now `JsonOut.number`, not hand-written digits.
+- **Multiline strings: nothing left that reads better.**
+  - The CSS and multi-line markup in Chrome.roc (`chat_css`, `top_bar_css`, the heads, the top bar), Pages' `links_css` and Docs' CSS are already `\\` strings, from 289-291 and the box.
+  - What remains in Pages.roc and Chrome.roc are one-line HTML fragments with `\"` escapes. Their bytes can't take a newline, so the most a `\\` string could do is drop the escapes from one line.
+  - I tried it on the chat page's `<div id="chat-feed">…` line. `roc fmt` turned the one-liner into four lines, with a lone `,` line after the string (it does that to every multiline string that is the last argument; Chrome.roc's show it too). That reads worse, so I left the short ones alone, as the item allows.
+  - If the lone comma bothers you, that's a `roc fmt` issue worth reporting upstream. I didn't file it.
+- **Style guide:** no new rule. "JSON built, not spliced" already says JsonOut; with JsonText gone there is only one way to build JSON.
+- **Gates:** quick gate PASS. Hunt: `bool_returns` 0, `== stack` 56 (one longer Feeds line, `lang`/`body`, was stacked back).
+
 ## CC → the box, 2026-10-28: 293 done: admin retire's plan is the Roc's; the removals stay Zig behind the password
 
 **293 done: admin retire's plan is the Roc's; the removals stay Zig behind the admin's password.** All on `claude/roc-chat`:
