@@ -38,13 +38,30 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**298. Shale finds a phrase in prose wherever a line break splits it: CC'S** (Steve, 2026-10-28: "Our doc editing methods in shale for docs are ready for this level of sophistication--we need to spot these kind of quirks. Let CC pick the best strategy. It doesn't have to be perfect, and there are some tradeoffs. They can push back as needed. The main thing is to identify them, even if in some cases the actual edit might need to be done in custom shale.") Any order within the run.
+
+**The quirk that started it:** in roc-apps' docs/roc-style.md the box removed every "(not yet settled)" mark with a search, and one survived. Markdown wrapped it as `*(not yet` at the end of one line and `settled)*` at the start of the next, so a line-by-line search never saw the phrase. Prose in our docs, memory and comments is hard-wrapped, so any phrase search or edit over it has this blind spot. Markup inside the phrase (`*`, `**`, a backtick) can split it too.
+
+**The goal:** Shale can *find* a phrase in wrapped prose, reporting each hit by its starting line, wherever line breaks, indentation and inline markup fall inside it. Then, where it can, *edit* it. Your call on the strategy, for example:
+- normalize each paragraph (join its lines, collapse whitespace, optionally strip inline markup) and map a match back to its lines;
+- a match whose regex treats a space as any run of whitespace including a newline;
+- a markdown-aware reader of paragraphs, list items, block quotes and code fences, so a fenced code block is never treated as prose.
+
+**What to build** is up to you; say which and why in FEEDBACK. Push back if a better shape exists:
+- **Finding:** a builtin, or a prelude function or cookbook recipe, that finds a phrase across wrapped lines (and in comments, if cheap). Report every hit as path:line, the starting line, so a human can see it.
+- **Editing:** an edit that rewraps the paragraph after replacing the phrase, where that's safe. Where it isn't (markup in the middle, a list item's hanging indent), the finder at least says so, and a custom script does the rest.
+- **The trade-offs to name:** reflowing a paragraph churns the diff; stripping markup can make a match ambiguous; comment blocks have their own prefixes (`--`, `//`, `##`).
+- **Tests:** the `*(not yet` / `settled)*` case, a phrase split inside `**bold**`, a list item's continuation line, a phrase inside a code fence (must not count as prose), and a phrase split across a blank line (two paragraphs: must not match).
+
+Then run the finder for a few phrases over the docs we keep (each repo's README, roc-apps docs, metal-vmm's QUEUE and FEEDBACK) and report any surprises. S-M.
+
 **297. Three or more arguments take a record; the name hunt's five: CC'S** (Steve, 2026-10-28: "I prefer the record approach", for signatures with three or more arguments, which roc fmt can't stack since it refuses a trailing comma in a type annotation.) Any order within the run; see 285's rules. It's in roc-apps' roc-style.md under "Name what travels together", marked as Steve's preference.
 
 **Part (1), records:** the stack hunt (roc-webbox's hunt, cookbook roc/stack.shale) now names 73 signatures with three or more bare arguments, for example main.roc's `Chat.Request, Route.R, Paths.TopicAt, Chat.Conv, Who`. Each becomes one record argument, or two arguments where one is a record of the rest, with call sites passing named fields. Where a record already exists that holds the same things, reuse it rather than making another.
 - **Hosted effects (chat/platform/Host.roc) cross the seam:** a record there is a new seam record, so it goes in its own commit with its mirror in roc-webbox's src/chat_abi.zig, its size asserted, and a test driving each field through the real ABI. If a hosted effect's arguments would make a big record, split it, or leave that effect with its arguments and say why in FEEDBACK.
 - Done when the hunt's signature findings are 0, or every one left is explained.
 
-**Part (2), the name hunt's five,** now that it reads module members: noun_effect `Files.stat!` (Files.roc:58), `Last.of!` (Last.roc:32) and `Last.sidecar!` (Last.roc:97); vague `Form.value` (Form.roc:20) and `JsonOut.object` (JsonOut.roc:51). Rename each for its act or meaning, or, where the name is right (a JSON builder's `object` names the JSON value it makes), say so and leave it.
+**Part (2), the name hunt's twelve,** now that it reads module members and bare annotations (roc-webbox `b0d5ea4`, Shale `075a5b9`): the hosted effects in chat/platform/Host.roc named as nouns, `stat!` (:95), `aside!` (:196), `welcome_pending!` (:257), `welcome_done!` (:265), `srcs!` (:269), `me!` (:277) and `now!` (:281), whose renames cross the seam with their Zig side; and the module members: noun_effect `Files.stat!` (Files.roc:58), `Last.of!` (Last.roc:32) and `Last.sidecar!` (Last.roc:97); vague `Form.value` (Form.roc:20) and `JsonOut.object` (JsonOut.roc:51). Rename each for its act or meaning, or, where the name is right (a JSON builder's `object` names the JSON value it makes), say so and leave it.
 
 Goldens hold behaviour byte for byte. M-L: split part (1) as you see fit, pure modules first and hosted effects last.
 
