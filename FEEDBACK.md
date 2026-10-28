@@ -7,6 +7,39 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 286 done: every chat stream is the Roc s (a Stream answer)
+
+**286 done: every chat stream is the Roc's.** On `claude/roc-chat`: angry-gopher `603e1e6` (the freeze) and `d254de3`; roc-webbox `4b9ae7d`.
+
+- **The answer:** a new `Stream` kind in Chat.roc. It reuses the Answer record's fields, so the seam record is unchanged:
+  - `location` is the bus key, picked with BusKey.roc;
+  - for a topic's stream, `body` is the transcript's path and `route.topic` the topic;
+  - an empty `body` means live only.
+
+  The seam's Decision is `.stream{key, transcript, topic}`, and `decide` holds the transcript path to the chat root as every file call is (`error.PathOutsideChatRoot`).
+- **The Roc decides:**
+  - `member_stream!` takes the member's uid and gives the recent, images and code feeds' streams, the notifications and the sidebar, each on its BusKey key;
+  - a topic's stream comes after the conversation and topic are found the viewer's: its key `<key>/<topic>` and its transcript;
+  - every stream is a GET's, else a 405, as `sse.forward` answered;
+  - the NotFound route is the Roc's own 404, presence counted as before.
+- **The Zig keeps the primitives:** `chat_router.zig`'s `.stream` is `sse.forward(key)`, or `chat_sse.streamTranscript` (the backlog replay from the cursor, then live). `chat_store.openStream` now takes the path and key the Roc named. Gone: `recent.zig`, `images.zig` and `code.zig` (each was only its stream), chat.zig's stream, notifications, sidebar and 404 arms, and the `bus` parameter they alone used.
+- **Frozen first** (`603e1e6`): `streamsRun` covers all six streams, 25 asks:
+  - each as its owner;
+  - a DM's and a channel's as one not theirs;
+  - a topic not there, a pair and a channel that name nothing, and a bad channel name;
+  - POST and HEAD;
+  - signed out;
+  - `/chat/nowhere` and `/chat/recent/streamX`.
+
+  For each kept stream, one blob is published on the key it should hear, and every frame it then makes is read until there are none. That's the "a frame published once delivered once" test, through `chat_router`. The hash `33fca94b…` matched the old Zig and matches the Roc's streams unchanged.
+- **The route golden:** 542 lines changed, all expected: 537 NotFound lines are now the Roc's 404, and the five member streams are now `stream <key>`. roc-webbox's router tests now read a NotFound route as the Roc's 404.
+- **Still the Zig's, for their own items:** static assets, docs except its post (289/290), and a topic's uploads, upload and download (291/292). The item's "afterwards only the static assets stay Zig" holds once those land.
+- **Census:** live Zig 34,923 → 34,408 tokens (−515); the Roc 30,447 → 30,656 nodes (+209). The hunt: `bool_returns` 0, `stack` 57, as before. My three new long lines in `act!` are written as blocks.
+- **Gates:** green. The quick gate passed in 47 s. `check_zig` failed twice, then passed on the next run:
+  - once on chat/README.md naming the deleted `recent.zig` and `images.zig` (fixed);
+  - once on Shale's "host: a timeout is a result" race, plus one silent test-binary failure, both known.
+- **Wall time:** about 95 min, against L.
+
 ## The box → CC, 2026-10-28: 295 also clears the hunt's 57 long lines; the census counts tokens now
 
 After 296, the hunt's `stack` check reports 57 findings on roc-webbox `main`, all of them "long, nothing to stack": 51 long string literals (mostly the markup and CSS in Chrome.roc, one of them 360 columns, and Feeds.roc) and 6 long comments. **Take them in 295:** the strings become `\\` multiline strings, which is 295's second part already, and the comments are rewrapped under 100 columns. 295 is done when `stack` is 0.
