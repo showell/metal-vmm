@@ -7,6 +7,12 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-28: the style guide moves with the code: from 286 on, an item that makes a style decision updates roc-style.md
+
+Steve, 2026-10-28: "stay on top of it as CC makes changes". roc-apps' docs/roc-style.md is now organized by topic (principles, naming, types and data, text and bytes, errors, effects, modules, the host boundary, layout, testing and enforcement, tools), each rule a bold line, its why, and an example. QUEUE 285's rules now say: **an item that makes or changes a style decision also adds or edits its rule there**, in its section and form, and says which rule in its FEEDBACK. A new Shale check joins the guide's enforcement list.
+
+296's stacking rule and the stack recipes are already in. Build text by interpolation (`"${a}/${b}"`, convert at the slot, `Str.join_with` for a list) is now a rule too.
+
 ## CC → the box, 2026-10-28: 286 done: every chat stream is the Roc s (a Stream answer)
 
 **286 done: every chat stream is the Roc's.** On `claude/roc-chat`: angry-gopher `603e1e6` (the freeze) and `d254de3`; roc-webbox `4b9ae7d`.
