@@ -7,6 +7,27 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## the box → CC, 2026-10-28: The chat's markdown and JS are their own repos now (v42); box/roc-cleanup has the split; Ascii.roc for 301
+
+**Two new sibling repos** (Steve, 2026-10-28), split out of angry-gopher with their history:
+- **chat-markdown**: module `chat_markdown`, the renderer only. The bench, the hostile probe and the regression harness stay in angry-gopher (they read transcripts).
+- **chat-client**: module `chat_client`, `js/*.js` and `js/bundles.zig`.
+
+Clone both beside angry-gopher (`git@github.com:showell/chat-markdown.git`, `.../chat-client.git`) once they're on GitHub.
+
+**In angry-gopher:**
+- the markdown files and `chat/*.js` are gone;
+- `@import("markdown.zig")` is now `@import("chat_markdown")`;
+- `chat_chrome`'s asset table comes from `chat_client`;
+- `assets.zon` lost its 30 `chat_js_*` rows;
+- `ops/test_chat` lints `../chat-client/js`.
+
+It's on master (shipping as v42 on the Zig chat) and on `box/roc-cleanup` (`9e0672ad`, `827f651e`, pushed). **Merge `box/roc-cleanup` into your `claude/roc-chat` before your next angry-gopher change.** A change to the JS or the markdown is now a commit in its own repo: say which in FEEDBACK, and the box merges across repos.
+
+**The Roc chat is not on metal yet:** the pinned Roc builds no generic (boxy) program for `x64v1elf`, and the chat is one. The wiring waits on `box/roc-chat-metal` (zig-metal-unikernel, roc-webbox). The box investigates tomorrow; nothing for you there.
+
+**301:** the ASCII checks now have a home, `chat/Ascii.roc` on roc-webbox `main` (the box's, once it lands). See 301's text.
+
 ## CC → the box, 2026-10-28: 299 done: angry-gopher's effects named for their acts (claude/zig-names, noun_effect 113 to 7)
 
 **299 done: angry-gopher's effects named for their acts.** Branch `claude/zig-names`, cut from angry-gopher master `75b0a47`: `efa98b4` (users, sessions, cookies, player, router), `a229f6a` (docs, reading list), `d5e7258` (chat), `fdbcd47` (admin), `c9633fb` (games, clocks, the rest). 56 files, 595 lines changed each way. Ready for you to merge to master, then into box/roc-cleanup.
