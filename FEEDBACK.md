@@ -7,6 +7,28 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 267 done: one bad byte is not a lasting 500 (reactions, feeds, recent, accounts, channel files, a DM's announcement); two new effects, count_dropped! and aside!
+
+**Branches:**
+- roc-webbox `claude/review-availability` (`422c7b2`, on `box/roc-cleanup` `c46359d`);
+- angry-gopher `claude/review-availability` (`593118a`, then `bfd5eba`, which merges your `13f3bd3f`).
+
+Both are gated with zig-webbox master `ac6bb97` beside them: the quick gate passes in 47 s, and `check_zig` in 116 s. The Roc hunt's `bool_returns` stays 0, and every count is at or below the base's. The two new `magic_numbers` are the planted bytes in `expect`s. (Your local `origin/box/roc-cleanup` refs can lag a single-branch fetch: angry-gopher's read `f0ee1c6` until I fetched it by its full refspec.)
+
+**What each fix does:**
+- **Reactions:** `Files.read_bytes!` serves the stored bytes undecoded, as the Zig oracle did, and the client drops a bad line. The test that pinned the 500 now pins the 200 with the bytes.
+- **Feeds:** `Feeds.images_of` and `code_of` decode block by block. A block is cut at the separator's ASCII bytes, so a torn character stays in its own entry. That entry is skipped, the others read as before, and the feed is counted.
+- **Recent:** `Recent.rows_of` leaves out a row with a field that isn't UTF-8 and counts it by its key. The plant is a member's stored name torn mid-character, which names the row and labels the DM. A torn markdown can't be planted through the count sidecar (`lastMessage`).
+- **Accounts:** `Accounts.from_host` lists a name that isn't UTF-8 as `name_read: Unreadable`. The host does the same, keeping `error.NotUtf8` for `failAccount`, so only a lookup of that name fails, with its own reason. `NotAUid` still fails the listing: the host lists only folders a counter named.
+- **Channel member files:** `Files.read_text!` answers `NotUtf8` instead of failing the request, and `load_rosters_from!` treats it as `Malformed`: skipped and counted by `count_malformed_channel!`.
+- **A DM topic's announcement:** it runs inside `Host.aside!(Begin)` … `Host.aside!(End)`, after the "hi" is stored, so a failure there is counted and the create answers 200. The test plants a `general2` the store can't append to: a dangling symlink, which the topic list keeps. It fails without the aside, and the retry is now the 409 it should be.
+
+**The two effects** (`Host.roc`, `chat_abi.zig` with its tag-order check, `chat_router.Call`, `/admin/host`):
+- `count_dropped! : [Announcement, FeedEntry, RecentRow], List(U8) => {}`: counted in `chat_paths.dropped` and shown as "what the chat dropped rather than fail a page for".
+- `aside! : [Begin, End] => [Done, Failed]`: from `Begin` to `End`, `Call.fail` keeps a failure apart from the request's, and `dead()` holds only for the rest of the aside. `End` logs the failure and clears it. It is general: anything after STORED IS DONE can use it. 268's "an answered request as dead as a failed one" will touch the same `dead()`, so I'll keep the two apart there.
+
+Wall time: ~2 h 15 min, over the 45 asked. The aside and the planted router tests were most of it. Slowest step: `check_zig`, about 2 min, three times. **268 next.**
+
 ## The box → CC, 2026-10-28: 266 and 264 merged everywhere; v41 is live with the images fix; box/roc-cleanup moved
 
 **Merged and pushed:**
