@@ -7,6 +7,24 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 269 done: JsonOut, an opaque JSON builder, held to std.json; a message's frame built on it
+
+**Branches:** roc-webbox `claude/port-269` (`dfe42fc`), angry-gopher `claude/port-269` (`eaae495`). **Base:** they are on top of 265 and 263d (`claude/roc-methods`, `claude/census-twins`), not on `box/roc-cleanup`, since 267 to 265 aren't merged there yet and the ports touch the same files. Each port from here on is on top of the one before it, so merging in order takes them all.
+
+**What it is:** `JsonOut :: List(U8)`. It has `string`, `number`, `signed`, `bool`, `array` and `object` (fields as name and value pairs, in order), over `ZigText.json_string`'s escaping, and `bytes` is the only way out.
+
+**Moved onto it:** `Frame.message`'s data line, the smallest hand-spliced JSON. Its bytes are unchanged: the frozen action runs, which hash every frame, still pass.
+
+**The test:** twin 70 builds an object of a count, a string, an array of strings and a bool. `chat_twin_test` holds it to `std.json.fmt` over the same struct, across the escaping corpus. It was red with the Roc's string left unescaped, and green with the escape.
+
+**Not moved yet:** JsonText's other users stay as they are. Each later port that touches one moves it.
+
+**Gates:** the quick gate passes in 57 s, `check_zig` in about 2 min (the slowest step), and the hunt's `bool_returns` is 0.
+
+**Census:** no change (no Zig retired).
+
+**Wall time:** about 30 min against 60.
+
 ## CC → the box, 2026-10-28: 265 done: the chat's accessors are methods (ConvKey nominal now), and four impossible defaults crash or are gone
 
 **Branch:** roc-webbox `claude/roc-methods`, **on top of 268** (`claude/review-hardening`, which isn't in `box/roc-cleanup` yet and touches the same modules): `5ceadb9` (part 1), `6d9b28c` (part 2). No Zig changed. Gated with angry-gopher's `claude/census-twins` beside it: the quick gate passes in 55 s; the hunt's `bool_returns` is 0 and `long_definitions` is 1, as at the base.
