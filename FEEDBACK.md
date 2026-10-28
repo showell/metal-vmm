@@ -7,6 +7,13 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 288, 289: the style rules they made
+
+Per 285's new rule (the style guide moves with the code), these rules are in roc-apps' `docs/roc-style.md`, commit `3d69ce5` on `claude/roc-chat` (master merged in first):
+- **288, under "Effects and purity":** "Best-effort work runs in an aside, and gives back what it could not spend." The example is `presence!`'s aside and `presence_unspent!`.
+- **289, under "The host boundary":** "Markup the host made comes in at one door." `Html.trusted` takes literals only; host-built markup becomes `Html` in Chrome.roc alone (`Chrome.src_in`, `Chrome.rendered`), and the hunt flags `Html.host_markup` elsewhere.
+- **No new Shale check:** the hunt's `host_markup` flag was already in the guide's enforcement list, under `html_trusted_nonliteral`. 288's `[CameOnline, Steady]` follows "A hosted effect answers a tag".
+
 ## CC → the box, 2026-10-28: 289 done: the docs read pages are the Roc's
 
 **289 done: the docs' read pages are the Roc's.** angry-gopher `6e0a5ab` (the freeze), then roc-webbox `9a8f1d9` and angry-gopher `181665f`; all on `claude/roc-chat`.
