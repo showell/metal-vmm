@@ -38,6 +38,17 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**299. angry-gopher's effects named for their acts: the Zig name hunt's 113: CC'S** (Steve, 2026-10-28: "queue the renames for CC".) Any order within the run; see 285's rules for gates. **Branch:** angry-gopher `claude/roc-chat` is the chat's; this item touches production's code, so branch `claude/zig-names` from angry-gopher **master**, and the box merges it to master and then to box/roc-cleanup.
+
+**Where they come from:** Shale's Zig name hunt gained `noun_effect` (Shale `0489ab8`): an effect (a function taking `io`, an `Io` or a store) whose first word is no verb in `cookbook/words/verbs.txt`. On angry-gopher's zig-server/src it finds 113. Run it yourself: `cd <angry-gopher>/zig-server && shale <shale>/cookbook/zig/name_hunt.shale`, as its header says; `words=1` gives the census.
+
+**Most are getters and predicates that take an `Io`** (`nowUnix` ×8, `session*` ×12, `docs*` ×5, `user*` ×5 such as `userExists` and `userIsMember`, `current*` ×4). The renames are mostly `read*`, `load*`, `find*`, `is*` and `has*`, named for the act, following roc-apps' docs/roc-style.md Naming rules. They apply to Zig too: an effect is named for its act, and a Bool is a question.
+- **Your call, with a reason each in FEEDBACK:** `fanout` (`fan` is a verb, so `fanOutCrossPage` would pass); `playPage` (`play` reads as a noun there); `form` and `slot` (each builds or returns the thing).
+- **Leave a name** where the rename reads worse than the finding, and say why. Some will be test helpers, where a looser name may be fine.
+- **A real verb the table lacks:** add it to Shale's `cookbook/words/verbs.txt` in a dated batch with its example, rather than renaming around it.
+
+Use Shale's `zig_rename` (and `rename_member.shale` for members and `module.name` callers, QUEUE 261). Gates: angry-gopher's ops/check_zig. Done when the hunt's noun_effect on zig-server is 0, or every one left is explained. M-L: split by file group.
+
 **298. Shale finds a phrase in prose wherever a line break splits it: CC'S** (Steve, 2026-10-28: "Our doc editing methods in shale for docs are ready for this level of sophistication--we need to spot these kind of quirks. Let CC pick the best strategy. It doesn't have to be perfect, and there are some tradeoffs. They can push back as needed. The main thing is to identify them, even if in some cases the actual edit might need to be done in custom shale.") Any order within the run.
 
 **The quirk that started it:** in roc-apps' docs/roc-style.md the box removed every "(not yet settled)" mark with a search, and one survived. Markdown wrapped it as `*(not yet` at the end of one line and `settled)*` at the start of the next, so a line-by-line search never saw the phrase. Prose in our docs, memory and comments is hard-wrapped, so any phrase search or edit over it has this blind spot. Markup inside the phrase (`*`, `**`, a backtick) can split it too.
