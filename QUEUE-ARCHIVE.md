@@ -9,6 +9,16 @@ full text of everything below is in git: `git show 3697b1c:QUEUE.md` (items
 
 ## Archived 2026-10-19 to 2026-10-27
 
+- **294.** Aggressive port 10: what's left of the chat's Zig, triaged again: retired: Steve, 2026-10-28, keeps the next ports in-house; the box's plan (notes/pure-roc-chat-plan.md on the essay surface) replaces the re-triage; commits named: none.
+- **302.** Html.tag builds an element, its attribute values always escaped: done: Html.tag; merged; commits named: none.
+- **301.** The chat's Roc uses the builtins it reimplemented, and each byte helper has one home: done: Ascii, the builtins, the Str rule; merged (Ascii's names since roc-ascii's); commits named: none.
+- **300.** The chat's modules cut where a reader needs them; a single-caller check in the hunt: done: single_caller 0; merged; commits named: none.
+- **299.** angry-gopher's effects named for their acts: the Zig name hunt's 113: done: angry-gopher claude/zig-names, merged to master f5ba3f0b (Budget.isBlown carried to chat-markdown 9a28faea); commits named: 0489ab8.
+- **298.** Shale finds a phrase in prose wherever a line break splits it: done: shale 32fcac5 (cookbook/prose.shale); merged; commits named: none.
+- **297.** Three or more arguments take a record; the name hunt's five: done: records and the twelve renames; merged; commits named: b0d5ea4, 075a5b9.
+- **295.** One JSON builder, and multiline strings for the chat's HTML and CSS: done: JsonText gone; merged; commits named: none.
+- **293.** Aggressive port 9: admin retire's plan in Roc: done: on claude/roc-chat; merged; commits named: none.
+- **292.** Aggressive port 8: uploads decided by the Roc: done: roc-webbox 1cc5288, angry-gopher ab79ddd; merged; commits named: none.
 - **296.** Shale stacks anything with three or more parts, one per line, in Roc and in Zig: done: shale ebc5d84, roc-webbox 0ec6a03/01031bf; merged; commits named: none.
 - **291.** Aggressive port 7: downloads decided by the Roc: done: roc-webbox 1959196, angry-gopher 57db4414; merged; commits named: none.
 - **290.** Aggressive port 6: the docs' writes in Roc: done: roc-webbox 26ede3e, angry-gopher 381a3286; merged; commits named: none.
