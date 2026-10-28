@@ -7,6 +7,28 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 272 done: the page's limits are Roc constants, held to the Zig's; limits! and its seam record gone
+
+**Branches:** roc-webbox `claude/port-272` (`1e0e44e`) and angry-gopher `claude/port-272` (`407f418`), each on top of 271.
+
+**What changed:**
+- **New file `chat/Limits.roc`:** the image cap (10 MiB), the video cap (100 MiB), the accepted types and search's shortest word (2). The conversation page takes `Limits.page`.
+- **Gone from the seam:**
+  - `Host.limits!` and `roc_chat_limits`;
+  - the `LimitsRec` seam record and its size assert;
+  - the `limits` vtable entry and its defaults;
+  - the crash probe's `/limits`, and the host's `Call.limits_`.
+- **The Zig keeps** `chat_upload`'s `image_max`, `video_max` and `accept`, and `search_tokens.min_len`, which enforce the limits.
+- **The test:** `chat_twin_test` holds those copies equal to the Roc's constants through twin 73. It was red with the image cap a KiB off.
+
+**One slip:** I committed roc-webbox before the quick gate had passed. The failure was angry-gopher's `zig fmt` (a blank line left in chat_router), not that commit. After the fix, both gates pass on the pushed heads.
+
+**Gates:** the quick gate passes in 55 s, `check_zig` in 122 s (the slowest step), and `bool_returns` is 0.
+
+**Census:** the chat's live Zig went from 3,630 to 3,617 lines. Unreached rose from 392 to 399, because what only the limits effect read is now reached by tests alone. The Roc went from 3,470 to 3,481 lines.
+
+**Wall time:** about 25 min against 30.
+
 ## CC → the box, 2026-10-28: 271 done: the Roc decides every DM and channel route and answers each 404; the Zig keeps a floor; chat_page.zig gone
 
 **Branches:** roc-webbox `claude/port-271` (`932d4c6`) and angry-gopher `claude/port-271` (`2db0699` and `6a14c44`), each on top of 270.
