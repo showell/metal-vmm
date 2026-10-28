@@ -7,6 +7,21 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 288 done: presence broadcast is the Roc's; /settings no longer broadcasts
+
+**288 done: presence's broadcast is the Roc's.** roc-webbox `bc66ab2`, angry-gopher `b3d94f8` (the freeze), `8ac464e`; all on `claude/roc-chat`.
+
+- **Freeze first:** `presenceRun` in `chat_actions_twin_test.zig` pins every frame the old `markActiveAndBroadcast` published, in four members' order, including a member whose name will not read (no one told, the edge kept, retried 30 s on, then told). Its hash is unchanged after the move.
+- **The seam:** `count_presence! : {} => [CameOnline, Steady]` (new `PresenceEdge` enum, in `assertRocOrder`), and a new `presence_unspent! : {} => {}`. The online map stays the host's: it lasts the process.
+- **The Roc:** `presence!` runs `came_online!` in an aside. It reads the uid, the accounts, the member's name and `Accounts.authorized`, then publishes `user-online` on each other account's `sb:` key and the "has come online." strip with `/chat/c/<pair>` on its `ntf:` key. A failed read tells no one, never fails the request, and calls `presence_unspent!`, which keeps the 30-second retry.
+- **Seam shrank:** a Zig route's presence is now counted by the Roc before it hands the route back, so `Chat.Counting`, `Answer.presence` and `Decision.serve.presence` are gone. In the route golden, 9 docs rows go from `+presence a-` to `am`; it is the same presence, counted by the Roc.
+- **Deleted:** `markActiveAndBroadcast` and `unmark`. The router's `.serve` presence arm is gone, and so is `settings.handle`'s `bus` parameter. `presence.zig` drops five imports.
+- **BEHAVIOUR CHANGE, /settings:** `/settings` used to mark presence AND broadcast the came-online edge. It now marks the member seen (`presence.markSeen`) and tells no one. If that visit was the edge, the edge is kept, owed at once, so the member's next chat request broadcasts it. So a member who opens only /settings shows online on others' first paint, but no live "came online" goes out until they touch the chat. A new test pins this.
+- **Security:** nothing touches auth_root. The Roc reads only the accounts listing it already read.
+- **Gates:** quick gate PASS; `./ops/check_zig` passed (the known silent "failed command" line showed once, and the summary passed). The hunt shows `bool_returns` 0 and `== stack` at 56, down from 57: two crash probes restacked.
+- **Census:** Zig on live paths went from 34,494 to 34,156 tokens; the Roc from 30,804 to 31,007 parse nodes.
+- **Shale:** every edit went through Shale. Two snags, both my own: I wrote `let` instead of `local`, and I reached for a `write` that Shale doesn't have (`replace(p, s)` writes the whole file, and `edit(..., {all = true})` covers the repeated spots). One real gap: replacing a file's tail needs `sub(s, 1, find_in(p, marker))`, which mixes 1-based `sub` with the 0-based offsets `find_in` returns. It works, but it's easy to get off by one. An `edit` form that replaces from a marker to the end of the file would remove the arithmetic.
+
 ## CC → the box, 2026-10-28: 287 done: the store is the Roc s, which writes .count
 
 **287 done: a message's store is the Roc's, and the Roc writes `.count`.** On `claude/roc-chat`: roc-webbox `047e9cd` (the seam record) and `33540c8`; angry-gopher `68f3628`; roc-apps `6a2d0c8` (the style rule).
