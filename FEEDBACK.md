@@ -7,6 +7,32 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 283 done: the welcome for new members only (a signup marker)
+
+**283 done: the welcome DM for new members only.** Branches `claude/port-283`: roc-webbox `d9a8b2b`, from `origin/box/roc-cleanup`; angry-gopher `ca0369e`. angry-gopher's `box/roc-cleanup` didn't have the overnight chain yet, so that branch starts from `claude/port-282`, which already contains `box/roc-cleanup`.
+
+- **I chose a marker over a cutover stamp.** Signup writes `{users_root}/{id}/welcome-pending`: the gopher's own per-user state, beside `upload-bytes`, so not the chat's files and not auth_root. Both ways of becoming a member write it: a new account (`.stranger`) and a guest who upgrades (`.upgrade`), the two places the old `sendHostWelcome` ran. Why not a stamp: an account's creation time lives in auth_root, which the Roc must never read, and it would need a cutover constant to keep forever. With the marker, an account made before today has none, so it is "old" with no migration step. Deleting an account removes its `users_root` folder, so the marker goes with it.
+- **The seam:** two new hosted calls, scoped to the request's own member. `welcome_pending! : {} => [Failed, None, Pending]` and `welcome_done! : {} => Try({}, [Failed])`, served by `users.welcomePending` and `clearWelcomePending`; `chat_route.Welcome` is in `assertRocOrder`. The Roc reads only the yes or no. A look that fails fails the aside: no welcome this time, and /chat is served.
+- **The Roc's rule:** `welcome!`, still best-effort in its aside:
+  - No marker: nothing, and the accounts aren't even read.
+  - Marker, and the DM with the host has no topic: the hello, the bookmark, then the marker goes.
+  - Marker, and the DM already has a topic: the marker just goes.
+  - No host yet: the marker stays for the next visit.
+  - The host's own marker: it just goes.
+- **Never twice, and nothing inferred from a missing DM.** The marker alone decides whether there is a welcome. The DM's topic check only stops a second one: a crash after the hello was stored but before the marker's removal leaves the marker, and the next visit sees the topic and only clears it.
+- **Tests:** the router test (`router_chat_test.zig`) now covers:
+  - a new member welcomed exactly once, the marker gone after;
+  - no host: no welcome, and the marker stays;
+  - the crash, replayed by putting the marker back: still one message, and the marker goes;
+  - the topics that won't list, then mended;
+  - members made before today, with no DM with the host and with one: never welcomed, and their DM unchanged.
+
+  The frozen `welcomeRun` (a real `POST /login/full` signup, then /chat) still hashes to `fdedb210…`, the old login's output. The upgrade path has no test of its own; it's one call, like register's.
+- **Census:** the chat's Zig on live paths went from 2,879 to 2,901 lines (+22, the two host calls); the Roc from 4,125 to 4,142.
+- **Gates:** green. `chat_quick_gate` passed; `check_zig` 0, once I gave `welcomePending`'s catch its `// absent-ok:` line (the error is kept, as the other `fail` paths keep theirs); the hunt's `bool_returns` 0.
+- **Wall time and slowest step:** about 35 min. The slowest step was `check_zig`, 61 s.
+- **For the box:** once more, one run of angry-gopher's `zig build test` failed with a "failed command" line and no test named; the re-run was clean.
+
 ## CC → the box, 2026-10-28: 282 done: search /messages in Roc (stretch); overnight run complete
 
 **282 done (stretch): search's /messages is the Roc's.** Branches `claude/port-282`, chained on 281: roc-webbox `0b482ca` (the records `HitRec`/`MessagesRec`, sizes asserted) and `3f42a22`; angry-gopher `005ed12` (the freeze) and `6e7c11d`.
