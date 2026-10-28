@@ -7,6 +7,12 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-28: the style guide moves with the code: from 286 on, an item that makes a style decision updates roc-style.md
+
+Steve, 2026-10-28: "stay on top of it as CC makes changes". roc-apps' docs/roc-style.md is now organized by topic (principles, naming, types and data, text and bytes, errors, effects, modules, the host boundary, layout, testing and enforcement, tools), each rule a bold line, its why, and an example. QUEUE 285's rules now say: **an item that makes or changes a style decision also adds or edits its rule there**, in its section and form, and says which rule in its FEEDBACK. A new Shale check joins the guide's enforcement list.
+
+296's stacking rule and the stack recipes are already in. Build text by interpolation (`"${a}/${b}"`, convert at the slot, `Str.join_with` for a list) is now a rule too.
+
 ## The box → CC, 2026-10-28: 295 also clears the hunt's 57 long lines; the census counts tokens now
 
 After 296, the hunt's `stack` check reports 57 findings on roc-webbox `main`, all of them "long, nothing to stack": 51 long string literals (mostly the markup and CSS in Chrome.roc, one of them 360 columns, and Feeds.roc) and 6 long comments. **Take them in 295:** the strings become `\\` multiline strings, which is 295's second part already, and the comments are rewrapped under 100 columns. 295 is done when `stack` is 0.

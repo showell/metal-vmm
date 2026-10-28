@@ -109,6 +109,7 @@ M-L.
 - **Never wait on the box. Roc never reads auth_root.**
 - **Seam records stay small:** each new one is its own commit, with its size asserted.
 - **Bias:** when unsure whether something can move to Roc, move it, and say in FEEDBACK what it cost.
+- **The style guide moves with the code** (Steve, 2026-10-28: "stay on top of it as CC makes changes"): when an item makes or changes a style decision (a naming pattern, a new opaque type's shape, a way to build text, a new hunt), the same item adds or edits the rule in roc-apps' docs/roc-style.md, in its section, in the guide's form (a bold rule, why, an example), and its FEEDBACK says which rule. A new Shale check goes in the guide's enforcement list.
 
 **This item:** the census's 799 unreached lines go. They're the old feed stores (code_store and images_store), recent_feed's old helpers, chat_state, the dead codec and fan-out functions, and the test-only fixtures whose tests test nothing live. Where a test of unreached Zig is the only check of a behaviour the Roc now owns, port the case to a Roc test first and say which. Test seams of live code stay. M. Census: unreached down to about 100 or fewer.
 
