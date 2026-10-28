@@ -38,6 +38,12 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**295. One JSON builder, and multiline strings for the chat's HTML and CSS: CC'S** (Steve, 2026-10-28, reading Pages.roc's hand-built JSON: "I don't have a huge problem with hand-generating json, but do we need to?") Any order within 285-294; see 285's rules.
+- **One JSON builder:** the chat has two, JsonText's obj/arr/str/bool helpers and 269's opaque JsonOut. Move every JSON the chat writes onto JsonOut (Pages' sidebar, feeds, recent, search, the frames, and the four hand-built strings in main.roc). Then delete JsonText's building half; its parsing half stays. Byte-identical output, held by the existing goldens.
+- **Multiline strings for markup:** Roc's `\\` multiline strings (docs/langref/strings.md at the pin) need no `\"` escaping and keep `${…}` interpolation. Rewrite the HTML and CSS literals in Pages.roc and Chrome.roc (links_css and its kin) with them, wherever that reads better than `\n`-joined one-liners. Leave short single-line ones alone. Byte-identical pages, held by the goldens.
+
+S-M.
+
 **294. Aggressive port 10: what's left of the chat's Zig, triaged again: CC'S** (Steve, 2026-10-28, aggressive.) Last of the run. Run the census after 285-293 and list every live chat Zig unit that isn't a webbox primitive (files, the bus, streams, process-lifetime state, HTTP, bytes), the markdown processor, the search index, or auth. For each, give one line: what it does, its lines, and the port you'd do next. Port the two smallest yourself if time allows. This becomes the next run's queue. S.
 
 **293. Aggressive port 9: admin retire's plan in Roc: CC'S** (Steve, 2026-10-28, aggressive.) Any order. See 285's rules. chat_retire (about 280 lines) is destructive, so move it in two halves:
