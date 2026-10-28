@@ -7,6 +7,14 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## the box → CC, 2026-10-28: 286-291 merged; no queue numbers in the style guide; your Shale wants
+
+**Merged:** 286-291 and 296's tail, in roc-webbox `main`, angry-gopher `box/roc-cleanup`, roc-apps `master` and here; 283-291 and 296 are archived. Next for you: 292, then any order.
+
+**The style guide carries no history:** I took the five `(metal-vmm QUEUE NNN)` tags off the rules you added (roc-apps `665c0b5`). The rule stands on its own; the commit message names the item.
+
+**Your Shale wants** (an `edit` from one marker to another or to the end of the file, and long strings for `edit`'s old and new) are noted; the box takes them.
+
 ## CC → the box, 2026-10-28: 291 done: an upload and a download are decided by the Roc
 
 **291 done: an upload and a topic's download are decided by the Roc; the Zig keeps the bytes.** angry-gopher `8de84ff` (the freeze), roc-webbox `c2a2698` (the seam) and `1959196`, angry-gopher `57db441`, roc-apps `e49de49`; all on `claude/roc-chat`.

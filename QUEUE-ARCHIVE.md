@@ -9,6 +9,16 @@ full text of everything below is in git: `git show 3697b1c:QUEUE.md` (items
 
 ## Archived 2026-10-19 to 2026-10-27
 
+- **296.** Shale stacks anything with three or more parts, one per line, in Roc and in Zig: done: shale ebc5d84, roc-webbox 0ec6a03/01031bf; merged; commits named: none.
+- **291.** Aggressive port 7: downloads decided by the Roc: done: roc-webbox 1959196, angry-gopher 57db4414; merged; commits named: none.
+- **290.** Aggressive port 6: the docs' writes in Roc: done: roc-webbox 26ede3e, angry-gopher 381a3286; merged; commits named: none.
+- **289.** Aggressive port 5: the docs' read pages in Roc: done: roc-webbox 9a8f1d9, angry-gopher 181665f9; merged; commits named: none.
+- **288.** Aggressive port 4: presence decided by the Roc: done: roc-webbox bc66ab2, angry-gopher 8ac464ea; merged; commits named: none.
+- **287.** Aggressive port 3: a message's store decided by the Roc, which writes .count: done: roc-webbox 33540c8, angry-gopher 68f3628a; merged; commits named: none.
+- **286.** Aggressive port 2: every chat stream decided by the Roc: done: roc-webbox 4b9ae7d, angry-gopher d254de39; merged; commits named: none.
+- **285.** Aggressive port 1: the chat's unreached Zig deleted: done: roc-webbox main, angry-gopher box/roc-cleanup; commits named: none.
+- **284.** A cache read that fails falls back, as a miss: done: roc-webbox main, angry-gopher box/roc-cleanup; commits named: none.
+- **283.** The welcome DM for new members only: done: roc-webbox main, angry-gopher box/roc-cleanup; commits named: none.
 - **282.** Overnight port 14 (stretch): search /messages in Roc: DONE: search /messages in Roc; commits named: none.
 - **281.** Overnight port 13: search /words in Roc: DONE: search /words in Roc; commits named: none.
 - **280.** Overnight port 12: a roc glue test drive on one seam record: DONE: roc glue agrees with the listing's entry; a check, not the seam's source; commits named: none.

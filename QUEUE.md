@@ -76,14 +76,6 @@ Then run the finder for a few phrases over the docs we keep (each repo's README,
 
 Goldens hold behaviour byte for byte. M-L: split part (1) as you see fit, pure modules first and hosted effects last.
 
-**296. Shale stacks anything with three or more parts, one per line, in Roc and in Zig: CC'S** (Steve, 2026-10-28, on a long Pages.roc line: "We should make our shale aggressive about vertically stacking things. Almost anything with 3+ whatevers will read nice if it's stacked imho.") Do this first in the run, before 285: the ports after it then write stacked code.
-
-**The tool,** in Shale's cookbook as recipes for any repo, not only the chat (cookbook/roc/ and cookbook/zig/):
-- **A check:** any list, record, tuple, call's arguments, tag payload, or (Zig) struct literal or argument list with three or more elements on one line is a finding, path:line plus what to stack. A line over about 100 columns is a finding too. Plant one example of each.
-- **A rewrite:** it stacks a finding one element per line, with a trailing comma. Roc's and Zig's formatters keep a trailing-comma collection stacked, so roc fmt and zig fmt hold the result. The rewrite is idempotent: a second run changes nothing. Comments and strings are never touched (read tokens, as the name hunts do).
-
-**Then apply it** to roc-webbox's chat/ (its Roc and src/chat_*.zig) and to angry-gopher's chat Zig (zig-server/src/chat*.zig). That's one commit per repo, with the formatters and the usual gates green, and byte-identical behaviour held by the goldens. Add the check to roc-webbox's hunt, so a long line coming back is a finding. Pages.roc's sidebar_json `room` and `topic` lambdas are the example Steve read. M.
-
 **295. One JSON builder, and multiline strings for the chat's HTML and CSS: CC'S** (Steve, 2026-10-28, reading Pages.roc's hand-built JSON: "I don't have a huge problem with hand-generating json, but do we need to?") Any order within 285-294; see 285's rules.
 - **One JSON builder:** the chat has two, JsonText's obj/arr/str/bool helpers and 269's opaque JsonOut. Move every JSON the chat writes onto JsonOut (Pages' sidebar, feeds, recent, search, the frames, and the four hand-built strings in main.roc). Then delete JsonText's building half; its parsing half stays. Byte-identical output, held by the existing goldens.
 - **Multiline strings for markup:** Roc's `\\` multiline strings (docs/langref/strings.md at the pin) need no `\"` escaping and keep `${…}` interpolation. Rewrite the HTML and CSS literals in Pages.roc and Chrome.roc (links_css and its kin) with them, wherever that reads better than `\n`-joined one-liners. Leave short single-line ones alone. Byte-identical pages, held by the goldens.
@@ -103,73 +95,6 @@ Retire must never remove more than the old Zig would: the twin holds that. The a
 - **The Zig keeps** what has to touch every byte, as primitives: reading the multipart body to disk, and sniffing the type from the first bytes.
 
 Say what moved and what couldn't, and why. **Tests:** goldens frozen on the old Zig for an image, a video, a refused type, over quota, too big, and a non-member. L: split as you see fit.
-
-**291. Aggressive port 7: downloads decided by the Roc: CC'S** (Steve, 2026-10-28, aggressive.) Any order. See 285's rules. chat_download (about 60 lines) bundles a topic. The Roc authorizes and names the bundle. The Zig keeps the tar.gz streaming as a primitive (it is bytes and compression). Range handling for /uploads goes the same way: the Roc decides, the Zig serves the bytes. **Tests:** goldens of the headers and statuses (full, a range, a bad range, a non-member) frozen on the old Zig. S-M.
-
-**290. Aggressive port 6: the docs' writes in Roc: CC'S** (Steve, 2026-10-28, aggressive.) Needs 289. See 285's rules. Move docs' save, new and save-to-the-reading-list: the forms, the checks and the files they write, through the file primitives. Afterwards, delete docs.zig, and docs_store except for whatever outside callers (reading_list, admin) still reach. Say which those are. **Tests:** goldens of the files written and the answers, frozen on the old Zig. Forms that are malformed, hostile or too big are refused as before. M.
-
-**289. Aggressive port 5: the docs' read pages in Roc: CC'S** (Steve, 2026-10-28, aggressive.) See 285's rules. angry-gopher's docs.zig and docs_store (about 390 lines) serve /chat/docs. Move the pages that only read: the three-pane page, a doc's view, the list. Use JsonOut and the existing page modules. The Zig keeps only what 291 hasn't moved yet. **Tests:** route goldens frozen on the old Zig first, for the owner, another member and a missing doc. M.
-
-**288. Aggressive port 4: presence decided by the Roc: CC'S** (Steve, 2026-10-28, aggressive.) See 285's rules.
-- **The change:** count_presence! shrinks. The Zig keeps the online map: mark it active and answer whether this was the offline-to-online edge, plus check_online!. The Roc builds and publishes the came-online frames on that edge.
-- **settings.zig** marks presence through the same map without a broadcast. **That's a behaviour change:** a settings view no longer announces a member coming online. Say so plainly in FEEDBACK, so Steve can object.
-- **A failed accounts read during the broadcast** loses the broadcast, never the request.
-
-**Tests:** the edge, broadcast once to each other member; no broadcast on a second request; and settings marks the member without a broadcast. M.
-
-**287. Aggressive port 3: a message's store decided by the Roc, which writes .count: CC'S** (Steve, 2026-10-27, on .count: "Wait for one writer". 279 removed the old store, so the Roc and the startup backfill are now the only writers, and they never run at once.) See 285's rules.
-- **The change:** store_message! shrinks to primitives:
-  - an append that returns the transcript's new size;
-  - an index_message! for the search index (process-lifetime state, so it stays a primitive).
-- **Moves to the Roc:** the block, the count sidecar's text (Count.roc already parses it), and the order: append, count, index.
-- **Stays Zig:** the startup backfill, the one other writer.
-
-**Tests:**
-- A byte-identity twin: the sidecar the Roc writes must equal what the backfill writes for the same transcript.
-- A send's files and frames frozen before the change and the same after.
-- A crash between the append and the count leaves a state the next count reads correctly (a stale count is a miss).
-
-M-L.
-
-**286. Aggressive port 2: every chat stream decided by the Roc: CC'S** (Steve, 2026-10-28, aggressive.) See 285's rules. Six routes are still Zig's: a topic's stream, the recent, images and code streams, notifications and the sidebar stream.
-- **The change:** a Stream answer kind. The Roc authorizes the request (as 271 does for the other tails), picks the bus key with BusKey, and answers Stream(key). The Zig's sse.forward is the primitive that holds the connection.
-- **Also:** the NotFound route becomes the Roc's answer too.
-- **Afterwards:** only the static assets stay Zig.
-
-**Tests:** route goldens for each stream: an owner, a non-member, a bad key. One real stream through chat_router delivering a published frame exactly once. L: split it as you see fit, the topic stream first.
-
-**285. Aggressive port 1: the chat's unreached Zig deleted: CC'S** (Steve, 2026-10-28: "At this point I want to be pretty aggressive about moving code to Roc.") **The run is 285 to 294, in number order unless an item says "any order".**
-
-**Rules for 285-294:**
-- **One branch per repo for the whole run** (Steve, 2026-10-28: simplify the branches): claude/roc-chat, from roc-webbox's origin/main (its default now; Steve, 2026-10-28) and angry-gopher's origin/box/roc-cleanup (283 and 284 are merged; fetch first). Each item is one or more commits on it, its message starting with the item's number. Push after each item; the box merges claude/roc-chat into box/roc-cleanup as items land and deletes nothing of yours. No per-item branches.
-- **Gates:** roc-webbox's quick gate (shale tools/chat_quick_gate.shale); angry-gopher's ./ops/check_zig; the hunt (bool_returns 0); and the census before and after, in FEEDBACK. A frozen-golden twin pins any behaviour that moves, before the Zig goes, as in 263b-d.
-- **Overruns:** an item past 1.5 times its estimate pushes what's green, says what's left, and moves on.
-- **Never wait on the box. Roc never reads auth_root.**
-- **Seam records stay small:** each new one is its own commit, with its size asserted.
-- **Bias:** when unsure whether something can move to Roc, move it, and say in FEEDBACK what it cost.
-- **The style guide moves with the code** (Steve, 2026-10-28: "stay on top of it as CC makes changes"): when an item makes or changes a style decision (a naming pattern, a new opaque type's shape, a way to build text, a new hunt), the same item adds or edits the rule in roc-apps' docs/roc-style.md, in its section, in the guide's form (a bold rule, why, an example), and its FEEDBACK says which rule. A new Shale check goes in the guide's enforcement list.
-
-**This item:** the census's 799 unreached lines go. They're the old feed stores (code_store and images_store), recent_feed's old helpers, chat_state, the dead codec and fan-out functions, and the test-only fixtures whose tests test nothing live. Where a test of unreached Zig is the only check of a behaviour the Roc now owns, port the case to a Roc test first and say which. Test seams of live code stay. M. Census: unreached down to about 100 or fewer.
-
-**284. A cache read that fails falls back, as a miss: CC'S** (Steve, 2026-10-28, on 275's and 277's open differences: "fall back on cache reads".) After 283; any order with it.
-
-**The rule:** a read of a cache (the .count sidecar, the last-message window) that fails is a cache miss. The Roc recounts or reads the whole transcript, as the Zig did, and never fails the request. A read of the truth (the transcript itself) that fails still fails it.
-
-**One home for it:** a single way to read a cache that answers Failed without failing the request, either a variant of read_at! or a mode. Both 275's count and 277's window use it. Every other read keeps failing the request on error. Don't add a fallback at each call site.
-
-**Tests:** for both the count and the window, a sidecar or window read that errors (the folder-in-place-of-the-file plant) gives the same answer as a miss; a transcript that errors still fails the request. The usual gates. S.
-
-**283. The welcome DM for new members only: CC'S** (Steve, 2026-10-28, on 279's first point: "new members only".) Branch claude/port-283 from origin/box/roc-cleanup, which the box is merging your overnight chain into now: fetch first.
-
-**The rule:** a member who signs up from now on gets the welcome on their first /chat. An existing member never does, whether or not they have a DM with the host.
-
-**The design is yours. Constraints:**
-- Login stays out of the chat's files (Steve chose the first-/chat seeding for that reason).
-- Nothing is inferred from the absence of a DM.
-- The decision is made from a fact written when the account is made: for example, a "welcome pending" marker in the member's own users folder that signup writes and the Roc consumes, or the account's creation time against a cutover stamp.
-- Say which you chose and why. Existing accounts must need no migration step to be "old".
-
-**Tests:** a member made after the change is welcomed exactly once; one made before isn't, with or without a DM with the host; a crash between the welcome and the marker's removal doesn't welcome twice (or say why it can't happen). The usual gates. S-M.
 
 ## Parked
 
