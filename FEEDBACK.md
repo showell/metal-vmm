@@ -7,6 +7,33 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 263b-d done: the router, the pure twins and the oracle frozen as hashes of the Roc's answers, then deleted; the census's unreached Zig 768 to 383
+
+**Branch:** angry-gopher `claude/census-twins`, **on top of 268** (`claude/review-hardening`): `8ea4592` (263b), `79f4aeb` (263c), `ff4af9f` (263d). No roc-webbox change. Gated with zig-webbox master beside it: the quick gate passes in 53 s, `check_zig` in 89 s (its slowest step, the angry-gopher `zig build test` in it, 50 s).
+
+**Census:** the chat's Zig on live paths 3,698 code lines, **383 unreached (was 768 after 268, 770 at your before)**; its Roc 3,380.
+
+**How a twin was retired:** every answer was frozen through the real ABI while the Roc's and the twin's still agreed, after 266's fixes (so no golden pins the raw `<img>`, the forgeable code entry or the `</`-only escaping). No case differed, so nothing had to be named. The goldens live in the Zig tests, not as `roc test`s: they are the Roc's answers to the corpora the twin tests already build, and the corpora are Zig.
+- **263b, the router:** `chat_route_twin.zig` is gone. `chat_route_corpus_test.zig` holds the corpus, a golden file of the Roc router's decisions (`chat_route_golden.txt`, 1,310 lines, route decisions only), and the rules the twin stated, checked over the whole corpus. On a mismatch it writes `.zig-cache/chat_route_golden.got.txt` to diff.
+- **263c, the pure modules:** reactionLine, the react form, validEmoji, the sidebar's JSON, the feeds and the pins: each is one SHA-256 over its length-prefixed answers (`Frozen` in `chat_twin_test.zig`), with the answer count.
+- **263d, the oracle:** `chat_actions_twin.zig` and chat_router's test-oracle hook are gone. Each scenario run is one hash over every answer, file, frame and search of the Roc's run; a script's hashed src is read as `?v=*`, so a script edit is not a change of the run. The memory bound is now absolute: the Roc's peak is at most the answer plus half again plus 256 KiB. Then the last three live page checks (the first-topic shell, the empty /chat, the conversation page) were frozen, naming each script by a fixed hash.
+
+**Deleted with the oracle (nothing reached them):**
+- `chat.zig`: Found, findConv, convTitle, findTopic.
+- `chat_page.zig`: all but the 404.
+- `chat_state`: lastUserConv and the pin writers.
+- `chat_store`: appendReaction and reactionLine.
+- `code_store` and `images_store`: their readers.
+- `reactions.zig`, the whole file (its body cap is `limits.body.reaction` now).
+
+**What still tests the writers:** the security tests of the code and images writers (266, 185) now read back through the Roc's reader; the torn-line test runs over `appendLine`, which had none of its own.
+
+**Left on the dead list:** only what you said to keep: test helpers and seams (Data, parseData, stage, refusingRemovals, Forgot, forgetAll, repeated, CountFixture, echoed, appendMany, forgetForTest, Emptied, expectWords), plus `parsePinned`, which `pinnedTopics` (the tests' reader of the Roc's pins) uses.
+
+**Wall time:** about 3 h over the three, against no estimate. **Slowest step:** sizing the 263b golden (the first cut was ~6 MB; it is route decisions only now).
+
+**Next:** 265, then 269.
+
 ## CC → the box, 2026-10-28: 268 done: the seam checks what the Roc hands it, an answered request is dead, NotAUid its own reason; the scans were quadratic (4.6 s debug for an unclosed <img) and are linear now
 
 **Branches:** roc-webbox `claude/review-hardening` (`b038e00`) and angry-gopher `claude/review-hardening` (`23f0150`), each **on top of its 267 branch** (`claude/review-availability`), since both touch `Call.dead()`. Merge 267 first, or take both. They are gated with zig-webbox master beside them: the quick gate passes in 66 s, `check_zig` in 75 s, and the Roc hunt's `bool_returns` is 0, with `long_definitions` at the base's.
