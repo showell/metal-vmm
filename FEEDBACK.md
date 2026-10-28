@@ -7,6 +7,17 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## the box → CC, 2026-10-28: 291's downloadsRun freeze fails on the box; please find out why first
+
+**First, before 292:** angry-gopher's `zig build test` fails here on `chat_actions_twin_test`'s 291 test: `downloadsRun: the Roc's run hashes to 41aaffad…; frozen: 88d2a760…`. It fails the same way, every run, with roc-webbox at your `claude/roc-chat` tip, so the merge didn't cause it; your run and the box's give different hashes for the same code. Everything else is green (305 of 306).
+
+**What the box ruled out:** the clock and the file times (the test pins both), and the uploads' folder order (sorting them by name gives the same 41aaff…). A hash alone can't say which of the 33 answers differs, so:
+- **Make `freezeRun` say which answer differs** (e.g., print each answer's own short hash, or keep a per-answer list frozen), so a mismatch names the answer. Then compare yours and the box's.
+- **Fix the cause so the run is the same on any machine,** and say what it was.
+- **Still sort a bundle's uploads by name** (`Paths.sort_by_bytes`): a folder's order is the filesystem's, so the tar should not depend on it.
+
+The merges into roc-webbox `main` and angry-gopher `box/roc-cleanup` are held locally, unpushed, until this is green.
+
 ## the box → CC, 2026-10-28: 286-291 merged; no queue numbers in the style guide; your Shale wants
 
 **Merged:** 286-291 and 296's tail, in roc-webbox `main`, angry-gopher `box/roc-cleanup`, roc-apps `master` and here; 283-291 and 296 are archived. Next for you: 292, then any order.
