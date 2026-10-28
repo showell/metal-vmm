@@ -7,6 +7,39 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 300 done: each flow in one module (Members, the routes, the count, Topics, Fence); single_caller 0
+
+**300 done: each flow in one module; the hunt's `single_caller` is 0.** roc-webbox `4ce4406` and `512b2b7`, roc-apps `4446e88`, all on `claude/roc-chat`. main.roc went from 3,429 to 2,592 lines.
+
+- **The check:** `tools/roc_hunt/hunt.shale` gains `single_caller`. It flags a module when every production reference to it (a qualified `Module.name` outside an `expect`; twin.roc counts as a caller) comes from one other module, unless `kept_alone` names the module with a reason. The plants are a folder (`plants/single_caller/`): `FiresSolo` fires; `QuietShared` (twin calls it too), `QuietKept` (allowlisted) and `QuietTested` (only inside an `expect`) stay quiet. `self_test=1` checks them.
+- **One limit, said plainly:** the check sees qualified names only, so a method call on an opaque value (`path.bytes()`) counts toward no module. That undercounts callers, which can only make a module look more single-caller, never less.
+- **The moves:**
+  - **Members** (new): who is asking and the accounts asked once (`load_uid!`, `load_viewer!`, `load_accounts!` and the unreadable-account failures), moved out of main. Without this, no route could leave main. main keeps `Who : Members.Who` so its signatures read as before.
+  - **Upload:** the upload route is whole in Upload.roc: `Upload.post!`, `Upload.serve!` and their `keep!`. I moved the route into the module, not the pure module into main. The module stays pure but for its route, and the route takes `Paths.TopicAt` rather than main's `AtTopic`.
+  - **Retire:** `Retire.answer!` (was main's `retire!`).
+  - **Docs:** every docs route is Docs': `Docs.docs!` dispatches new, save, render, save-to-reading-list and the read pages. `Recent.doc_title` is now `Docs.title`.
+    - Posting a doc to chat (`post_doc!`) stays in main, because it is the chat's message flow (`post_text!` → `store!`). main's `docs!` is now one line: `/post` to it, anything else to `Docs.docs!`.
+  - **The count:** main → `Last.messages!` → `Count`'s pure rules. The sidecar's read (`sidecar!`) sits beside `messages!` and `of!` in Last.
+    - I first put the flow in Count, but twin.roc's platform has no Host, and Count is the twin's. Count must stay pure, so the effects went to Last, which already had them.
+  - **Topics into Conversation:** `has_topic` folds case itself; `is_same_name` only forwarded to `caseless_ascii_equals`. Its four `expect`s were already covered by `has_topic`'s.
+  - **Feeds' helpers:**
+    - The byte searches and scans Recent borrowed (`find_seen` and its `Seen`, `find_byte`, `lower`, `is_space`, `count_while`, `count_back`) moved to **Bytes**. 301 will fold them in with their siblings.
+    - The markdown fence (`fence_open`, `close_at`, `is_close`, `trim_info`) is a new **Fence** module, which Feeds and Recent both call. It uses `U64.min` in place of Feeds' `smaller`.
+    - A feed's append step now carries its separator (`sep`), set where Fanout builds it, so main reads nothing of Feeds.
+  - **The platform's Chat** gains `html`, `json` and `refuse` (the 400 in words), so the moved routes keep no copies of their own.
+- **Allowlisted, with reasons, in `kept_alone`:**
+  - Chat and Host (the platform);
+  - Docs, Upload and Retire (each a route whole; main only dispatches to it);
+  - Last (the topic's count and last message, effectful, read through by main; Count holds the rules and is the twin's);
+  - SafeImg (a security rule, audited alone).
+
+  The modules called only by main and twin needed no entry, since twin counts as a caller. Files needs none either, as many modules call it.
+- **Style guide** (roc-apps, Modules and visibility): new rule "A flow is read in one module, not five", with the reasons a module may stand alone. `single_caller` is added to the enforcement list.
+- **Gates:** quick gate PASS; every twin and frozen run unchanged. Hunt: `bool_returns` 0, `single_caller` 0. `== stack` is 144, the count after merging the box's main into my branch: the new stack rule counts 3+-argument signatures (297). Nothing new is left from 300; the moves' long lines were restacked.
+- **Census:** a pure move, as it should be. The Roc went from 38,333 to 38,335 parse nodes, and from 9,539 to 9,526 code lines. The Zig is unchanged.
+- **Order, and why:** I'm doing 297 (records for 3+ arguments) after 300 and 301. 301 deletes many of the helpers 297 would turn into records (the split loops, `leading`, the `count_while` scans, `index_of`), so doing 297 first would be thrown away. 299 is running beside this on `claude/zig-names`. I merged roc-webbox `main` and Shale `master` into my branches before 300; both were clean.
+- **Shale:** I needed "cut this definition with its doc comment" four times and wrote it as a 40-line `take(path, indent, name)` helper. My first version lost a top-level definition's closing `}`. A cookbook recipe for it (a Roc definition's extent, read from roc-ast's tree rather than its lines) would make these moves one call each. Nothing here was harder than Python would have been.
+
 ## CC → the box, 2026-10-28: 295 done: one JSON builder (JsonText gone); the markup's multiline strings were already there
 
 **295 done: one JSON builder; the markup's multiline strings were already there.** roc-webbox `996d747` and angry-gopher `7a1cef5` (a comment), on `claude/roc-chat`.
