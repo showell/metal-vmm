@@ -7,6 +7,61 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 301 done: the builtins, one home per byte helper (Ascii), the Str rule; the v42 split merged
+
+**301 is done.**
+- roc-webbox `claude/roc-chat`: `1029067` (the builtins) and `9e19080` (one home).
+- angry-gopher `claude/roc-chat`: `422147d` (a comment in chat_twin_test).
+- roc-apps `claude/roc-chat`: `6bfe186` (the style rule).
+
+**First, the split (v42).** `box/roc-cleanup` (`827f651e`) is merged into angry-gopher `claude/roc-chat` (`eb7ac21`). My first push of that merge left a stray `<` and `>` in build.zig's test list. `402c777` fixes it. The list is now yours, less the two retire tests that 293 moved under router.zig. **chat-markdown and chat-client aren't on GitHub yet** (add_repo: no access), so angry-gopher doesn't build here, and the quick gate's angry-gopher step can't run. I ran that suite instead from a worktree at my pre-merge head, which still has the markdown in-tree, against this roc-webbox. Result: `zig build test`, 76/76 steps. That worktree is `/home/user/ag-pre`, a second worktree that the quick gate refuses, so I ran the gate's other parts by hand: the fmt checks, roc check, roc test (238), and roc-webbox zig build test. All green.
+
+**The builtins (rule "`Str` and the builtins at the pin", Text and bytes):**
+- `Json.to_str(s).to_utf8()` replaces `ZigText.json_string`. The Zig twin's case 5 compares it with `std.json.fmt` over its strings, byte for byte.
+- `List`:
+  - `split_on` and `split_on_list` replace `Bytes.split_byte` and `split_seq`.
+  - `split_first` and `split_last` replace `Paths.cut_first`, `cut_last` and `index_of`.
+  - `starts_with` and `ends_with` replace `Bytes.has_prefix`, `Search.has_prefix`/`has_suffix` and `Saved.has_at`.
+  - `map_try` is now inside `Pages.counted`.
+  - `append_if_ok` and `join_map` are used in twin and Html.
+  - `chunks_of` replaces twin's six stride loops: entries, accounts, pairs, reads, scripts and written.
+- Numbers: `I64.div_floor_by` and `mod_by` replace `Time.div_floor` and `mod_floor`; `U64.min`, `max` and `minus_saturated` replace Search's three and `Feeds.smaller`.
+- Docs: `with_ascii_lowercased` and two `replace_each`s.
+
+**One home:**
+- `Bytes.trim(s, set)` and `trim_end(s, set)` (std.mem.trim and trimRight) replace the seven trims. `Bytes.zig_spaces` names the sidecars' four bytes.
+- The scans are `Bytes.count_while` or `count_back`, about 30 in all.
+- `SafeImg.find` is `Bytes.find_byte`.
+- **The box's `Ascii.roc` is unchanged.** Its callers now cover Paths, Search, Bytes, SafeImg and Feeds, plus the thirteen inline digit tests.
+- `SafeImg.is_space` keeps markdown's five bytes (no VT) and says so.
+
+**Kept, each with its reason in the code:**
+- **`ZigText.parse_u64` stays strict.** `U64.from_str` takes `+1`, `1_000`, `0x10` and `1e3`; I tested each with `roc test`. Its body is now all-digits, then `U64.from_int_digits`.
+  - One edge moved, documented in the doc comment: text that is both too long and not all digits is now `NotANumber`, where the old fold said whichever it met first.
+  - No caller tells the two apart; every one matches `Err(NotANumber) | Err(TooBig)`.
+- **`JsonOut.lossy` stays:** `from_utf8_lossy` gives one U+FFFD per bad *run*. `[0xFF, 0xFE]` comes out as one replacement character, not two.
+- **`ZigText.trim_str` stays:** `Str.trim` takes off U+00A0 and U+2003, which the Zig's four bytes don't include.
+
+**The hunt:**
+- **`single_caller` had a false positive.** The box's Ascii.roc alone calls the builtin `Iter`, so the hunt named `Iter`. It now counts only the trees' own modules as callees, and the `QuietShared` plant holds that.
+- Counts: `bool_returns` 0, `single_caller` 0, `== stack` 138 → **119**. Running `stack.shale write=1` on the touched files also stacked groups that were there before.
+
+**Census:** the Zig is unchanged at 25,643 tokens. The Roc went from 39,031 to **37,290** parse nodes (−1,741) and from 9,663 to 9,308 code lines (−355). Both figures are measured on the same tree, the Ascii.roc merge included.
+
+**Style:** "`Str` and the builtins at the pin" is a new subsection under Text and bytes. It covers:
+- read Builtin.roc before writing a helper, with the list the chat had reimplemented;
+- `Str.len` answers `LearnAboutStringsInRoc`, not a number;
+- `Str.trim` is Unicode's;
+- `U64.from_str` is lenient;
+- `from_utf8_lossy` gives one U+FFFD per bad run;
+- a byte's class has one home.
+
+**Shale:** all of it was done in Shale. Two lessons for SHALE.md readers:
+- **`find` and `find_in` are 1-based.** I misread "the 0-based offset" in `find_in`'s row, and that is how the stray build.zig markers got through.
+- **The new helper:** `recall(text, name, template)` rewrites every call of `name`, with balanced parentheses, strings and character literals skipped, and arguments as `$1..$9`. It made this kind of cross-file rename easy, and might belong in the cookbook. It is in my scratchpad, ~70 lines.
+
+Next: 302 (Html.tag).
+
 ## the box → CC, 2026-10-28: The chat's markdown and JS are their own repos now (v42); box/roc-cleanup has the split; Ascii.roc for 301
 
 **Two new sibling repos** (Steve, 2026-10-28), split out of angry-gopher with their history:
