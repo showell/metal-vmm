@@ -7,6 +7,70 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 297 done: three or more arguments take a record (signature findings 0), the twelve renamed
+
+**297 is done.** Commits:
+- roc-webbox `claude/roc-chat`:
+  - `d86a4f8`: 64 signatures, everything but the hosted effects.
+  - `a87f348`, `055b53b`, `3343e6c`, `537c22b`: the four hosted effects, one seam record per commit.
+  - `3fb528d`: the renames.
+  - `ea567a7`: the glue snapshot.
+- roc-apps `3e4932f`: the style rule.
+
+**Part (1), records.**
+- **The shape:** the queue's second form, the subject first and a record of the rest: `Bytes.count_while(line, { keep: Ascii.is_digit, at: 0 })`. Call sites name the fields, punned where the variable is the field's name.
+- **Field names:**
+  - **One-letter parameters get a field's name** but keep their own in the body (`{ at: i }`, `{ byte: b }`, `{ kept: n }`, `{ block: m }`), so no body changed.
+  - **A parameter that was already a record pattern** becomes a field named for its type: `posted: { markdown: md, cid }`.
+- **Reused records:** none. The hunt's 68 were mostly loop helpers carrying an index and an accumulator, and main's handlers, which have no existing record holding the same things. `TopicAt` and `Conv` already travel as single arguments.
+- **The four hosted effects:** `append_message!`, `index_message!`, `append_entry!` and `report_fanout_failure!`. Each got:
+  - a seam record (`AppendMessageArgs`, `IndexMessageArgs`, `AppendEntryArgs`, `FanoutFailureArgs`), each field's offset and the size asserted;
+  - its own commit, each run through roc-webbox's zig build test.
+  - **The crash test already drove every field with a distinct value, so no new probe was needed.** I checked that it would catch a wrong layout: swapping `block` and `sid` in the mirror fails it ("Plans the block" read as "the block Plans").
+  - **The layout:** Roc's, as the earlier records show: 8-byte numbers by name, then the lists by name, then the smaller fields (`fault : U16`) last.
+- **Result: the hunt's signature findings are 0** (68 before). `== stack` went from 122 to **56**. The records stack, and `stack.shale write=1` ran on every touched file.
+- **Bytes and behaviour are unchanged:** roc test passes (247), and the angry-gopher twin and freeze run passed in full (in `/home/user/ag-pre` again: chat-markdown is still not on GitHub, so this session can't build angry-gopher at its head).
+
+**Part (2), the twelve.**
+- **Hosted, renamed with their `roc_chat_*` exports;** the platform's hosted list is sorted again:
+
+  | Old | New |
+  |---|---|
+  | `stat!` | `read_stat!` |
+  | `aside!` | `mark_aside!` |
+  | `welcome_pending!` | `check_welcome!` |
+  | `welcome_done!` | `clear_welcome!` |
+  | `srcs!` | `list_srcs!` |
+  | `me!` | `read_uid!` |
+  | `now!` | `read_time!` |
+
+  **The host's `Host` struct fields keep their old names** (`h.stat`, `h.aside`, ...). The gopher implements them, they are Zig names, and I can't build the gopher here to change its side. Say if you want them to follow.
+- **Members:**
+
+  | Old | New |
+  |---|---|
+  | `Files.stat!` | `Files.read_stat!` |
+  | `Last.of!` | `Last.read_message!` |
+  | `Last.sidecar!` | `Last.read_sidecar!` |
+  | `Form.value` | `Form.decode` |
+
+  `Form.value` was only a wrapper round a private `decode`; that function is now the public member.
+- **`JsonOut.object` stays:** the builder names the JSON value it makes, as `string`, `number`, `bool` and `array` do.
+- **The name hunt now finds more than the queue's twelve:** 36 `noun_effect` and 10 `state_effect` findings, mostly in Retire.roc (293's) and main.roc, such as `folders!`, `swept!`, `gone_dms!`, `presence!`, `docs!` and `hello!`. That code came after the queue's count. I've left them; they'd make a good next item.
+
+**Also:** `src/glue/chat_platform_abi.zig` (roc glue's snapshot) had been stale since before 293. I regenerated it with the command in chat_glue_test.zig, then ran `zig fmt`. The glue test is green.
+
+**Census:** the Zig is unchanged at 25,643 tokens. The Roc went from 37,816 to 38,665 parse nodes (+849, from the record syntax) and from 9,308 to **9,184** code lines.
+
+**Style:** under "Name what travels together", the rule now names the chat's form:
+- the subject first, the rest a record;
+- a loop's index and accumulator are fields;
+- a hosted effect's record is a seam record, laid out as Roc lays it out.
+
+**Shale, harder than Python here:** Shale has no function values. The call rewriter couldn't take a rewrite callback, so it takes the field list as data (`recall_fields`). That worked, but it is one more function per kind of rewrite. With closures this would be one general `recall_with(text, name, fn)`.
+
+Next: 298 (Shale finds phrases across wrapped lines), then 294.
+
 ## CC → the box, 2026-10-28: 302 done: Html.tag, every attribute value escaped; the pages' bytes unchanged
 
 **302 is done.**
