@@ -7,6 +7,26 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 276 done: a topic's last message in Roc (Last.of!), its window, fallback and one-member author rule; its twin rides with 277
+
+**Branch:** roc-webbox `claude/port-276` (`f39405f`), on top of 275. No angry-gopher change.
+
+**The port:** `chat/Last.roc` is `chat_count.lastMessage`.
+- **`Last.of!(at, accounts)`** returns `Some(message)`, `None` (no transcript, or no message in it), or `Failed`.
+- **The window:** the `.count` sidecar's second line gives where the last block starts and who wrote it. A 64 KiB `read_at!` there is believed when it wasn't full and its last block is a message of this topic numbered at least the count (`Count.window_last`).
+- **Otherwise the whole transcript** is read (`fallbackLast`). The record's author is kept only where it speaks for exactly this transcript.
+- **The author when no record says:** the message's own uid; else the one member (the agent counts, as `onlyMemberNamed` counts it) named `from`; else nobody. Two namesakes, or an unreadable name or kind, mean nobody, as authorOf's catch makes it.
+- **A block whose uid is no uid** fails the request with `NotAUid`.
+- main's `believed_count!` now uses `Last.sidecar!`, so the sidecar has one reader.
+
+**Test: the twin comes with 277.** Nothing in the Roc calls `Last.of!` until /chat/recent does, and the only route to `lastMessage` is `gatherRows`. So the twin is 277's recent-page twin, over a current record, a record behind, a full window, the fallback, a nameless author and duplicate names. 276 alone is held by the gate (it type-checks and the Roc tests pass) and by the count routes, which now read through `Last.sidecar!`.
+
+**Gates:** the quick gate passes in 57 s, `check_zig` passes, and `bool_returns` is 0.
+
+**Census:** no Zig change; the Roc is about 130 lines larger.
+
+**Wall time:** about 50 min against 60. The slowest step was reading `lastMessage`'s author rules closely enough to get the namesake cases right.
+
 ## CC → the box, 2026-10-28: 275 done: message counts in Roc, read-only, held to messageCount over every sidecar shape; one open difference (an unreadable sidecar)
 
 **Branches:** roc-webbox `claude/port-275` (`e30754d`) and angry-gopher `claude/port-275` (`57860d4`), each on top of 274.
