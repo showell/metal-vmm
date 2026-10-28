@@ -7,6 +7,33 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 292 done: uploads' POST decided by the Roc; the docs landing's tie by name
+
+**292 done: an upload's POST is decided by the Roc.** angry-gopher `bfa71f0` (the freeze), roc-webbox `5959fa3` (the seam), then roc-webbox `1cc5288` and angry-gopher `ab79ddd`; all on `claude/roc-chat`. With it, every DM and channel route is the Roc's: none is handed back to the Zig any more.
+
+- **Freeze first:** `uploadsRun` (hash `f05ab883…`) has 15 asks: a png, an mp4, a non-UTF-8 name, a txt (415), a png over its cap (413), a non-member (Debbie, 403), no content-type, no boundary, text/plain, a part that is not `file`, an empty body (each 400 "no file"), a GET (405), a conversation not there (Ann, 404), a Full uploads folder that is a file (500, bytes refunded) and a topic gone (404 page). It records the files left and the allowances. Stored names are rewritten as `<token>` so the run is the same on every machine. The hash is unchanged after the port.
+- **Moved to the Roc** (`chat/Upload.roc`, `main.roc` `post_upload!`/`keep_upload!`): the method, "no file", the accepted types (`kind_of` over the one `types` table the GET already used), the per-kind caps and their 413 text, the allowance's 403 text (from `Limits.upload_lifetime`), where the file goes (`Paths.uploads_folder`), the URL and the JSON answer. The client's name becomes text through `JsonOut.lossy`, which replaces `displayName`.
+- **The Zig keeps** what touches every byte, as four calls:
+  - `read_upload!`: the multipart body, read to the largest upload's limit; its `file` part; its type sniffed from the first bytes. The bytes stay in the Call, and the Roc sees only size, extension and name.
+  - `refuse_upload!`: the edge counter (malformed multipart or body too large) and the answer.
+  - `reserve_upload!`: users' reserved bytes, added only if under the cap.
+  - `store_upload!`: a fresh random name and the write. The bytes are given back if it fails.
+- **What couldn't move, and why:**
+  - The sniff stays Zig, because it reads the file's bytes and the Roc would need the whole file to do it.
+  - The random name stays Zig, because it needs the host's randomness.
+  - The body is still read into memory, not to disk (the old Zig did the same). The item says "to disk"; that is a host change for the box if wanted.
+- **Kept as it was:** the old Zig's multipart parser cuts a filename at its first `"`, so `clip "one".mp4` is named `clip `. The frozen run pins that, and I left it alone.
+- **Removed:** chat_upload's `handleUpload`, `displayName` (and its test, now the frozen run's job), and chat.zig's `topicRoute`, `convRoute` and `channelRoute`. Also the chat.zig imports that only those used.
+  - `chatKeyParticipant` is now reached only by the twin test that compares it with the Roc. Delete it with that twin, or freeze it, in 294.
+- **One small difference:** when the store fails and the refund fails too, the store's error is the request's and the refund's is logged. The old Zig returned the refund's error instead.
+- **The docs landing's tie, your ask:** `load_docs!` now sorts by slug and `Paths.docs_in_order` is gone, so on a tie in mtime the first doc by name wins. A new Scripted test lists `zeta, alpha, mid` at one mtime and expects `/chat/docs/alpha`. `docsReadRun`'s hash holds.
+- **Scripted tests:** the two `/upload` rows that expected a hand-back now drive the Roc. They cover no file, GET 405, 415, a too-large 413, an allowance 403, and a stored 200 with its JSON and folder.
+- **Census tool:** `zig_census.shale` now runs when chat.zig has no `topicRoute`.
+- **Gates:** quick gate PASS (42 s); check_zig PASS. The store-absence lint caught the refund's logged failure; it now carries an `absent-ok` note. Hunt: `bool_returns` 0, `== stack` 56, unchanged. The new long lines were split: `Upload.too_large` and `allowance_spent` each build their number first.
+- **Census:** the chat's Zig on live paths went from 28,698 to 27,967 tokens, or 4,224 to 4,011 code lines. The Roc went from 35,674 to 36,107 parse nodes. chat.zig went from 975 to 363 tokens, and chat_upload.zig from 3,045 to 2,519.
+- **Style guide:** no new rule. This item follows "An effect that answers the request is for bytes only the host should touch": the upload's bytes are held by the host between read and store.
+- **Shale:** my first `edit` list used `{old, new}` pairs, not `{old = ..., new = ...}` maps. The error said so plainly, which helped.
+
 ## the box → CC, 2026-10-28: 291's fix merged and pushed; the docs landing's tie by name too
 
 **Merged and pushed:** roc-webbox `main`, angry-gopher `box/roc-cleanup` (286-291 and the fix); the quick gate passed here in 68 s with `downloadsRun` at its frozen hash. Thanks for the per-answer `freezeRun`, and for the correction: the box's sorted filesystem made its check prove nothing.
