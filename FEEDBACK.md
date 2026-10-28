@@ -7,6 +7,33 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 280 done: roc glue agrees with the listing's entry, field by field, held at compile time; good as a check, not as the seam's source (hash names, its own ownership model)
+
+**Branch:** roc-webbox `claude/port-280` (`f092b5d`, on 279). No angry-gopher change. Nothing replaced.
+
+**The run:** `roc glue <roc-src>/src/glue/src/ZigGlue.roc src/glue chat/platform/main.roc` with the pinned compiler (nightly-2026-10-09-258ab27).
+- It took 2.6 s and wrote one file, `roc_platform_abi.zig`, 128 KB, which I checked in as `src/glue/chat_platform_abi.zig` after `zig fmt`.
+- It covers all 29 hosted functions and the provided `roc_chat_handle`.
+
+**The check:** `src/chat_glue_test.zig`, in roc-webbox's test step and linked with the chat's Roc for the seam's exports. At compile time it holds glue's layout of `Host.list!`'s entry, and of the answer that carries it, to `chat_abi.zig`'s hand-laid `EntryRec` and `ListRec`: size, alignment, every field's offset and size, and the tags' numbering (`EntryKind` as dir/file/other = 0/1/2, `ReadStatus`). A test confirms the check has teeth: the same fields in the other order don't pass.
+
+**The diff: none in layout.**
+- Glue's entry is `{ name: RocList(u8), kind: enum(u8) }`, 32 bytes, align 8, and so is `EntryRec`.
+- The only difference is a name: glue's `List(U8)` calls its pointer `elements_ptr`, where our `RocBytes` says `ptr`. The offset and size are the same.
+
+**What glue can't do for us, as it stands:**
+1. **Unstable names.** An anonymous record has no stable name. Glue calls it `__AnonStruct_9379215c6a8da602`, a hash that changes when the record changes. The check reaches the type through the hosted symbol's signature (`@typeInfo(@TypeOf(glue.roc_chat_list))`) instead, which is stable. A host written against glue's names would break on every record edit.
+2. **Not formatted.** Its output isn't `zig fmt` clean: it quotes every field as `@"name"`, 846 lines of difference. The gate checks formatting, so the checked-in copy is formatted.
+3. **The spec isn't shipped.** The compiler ships glue's platform but no spec, so I used ZigGlue.roc from a roc source checkout (`1df370f`). Pinning glue means pinning that file too.
+4. **Different ownership model.** Glue's host contract is per-argument decref/incref, with a refcount release named for each hosted symbol. Our seam copies bytes in and out under an arena per call (`roc_abi.zig`). Adopting glue's types would mean adopting its ownership model or ignoring half of what it generates.
+5. **Duplication.** Every record comes twice, a 32-bit and a 64-bit `extern struct` behind `if (@sizeOf(usize) == 4)`, with glue's own size asserts.
+
+**Verdict, for you:** glue agrees with the hand-laid records, and its output is good as a check: a compile-time diff that would catch a field order we got wrong. It isn't good as the seam's source, because of the unstable names and the different ownership model. Extending this check to every seam record would be cheap: one `sameShape` per hosted function, by signature.
+
+**Gates:** the quick gate passes. There's no Roc or angry-gopher change, so the hunt and the census are unchanged.
+
+**Wall time:** about 30 min against 60. The slowest step was Zig 0.17's `@typeInfo` shapes (`field_names`/`field_types`).
+
 ## CC → the box, 2026-10-28: 279 done: the welcome DM is the Roc's, on the first /chat, frozen on login's and the same after; appendMessage and fanoutCrossPage go; two behaviour points for you
 
 **Branches:** roc-webbox `claude/port-279` (`93e047d`, on 278) and angry-gopher `claude/port-279` (`7ffd1b2`, the freeze, then `ee0f116`, the port; on 278).
