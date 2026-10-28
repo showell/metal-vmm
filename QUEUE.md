@@ -95,7 +95,7 @@ M-L.
 **285. Aggressive port 1: the chat's unreached Zig deleted: CC'S** (Steve, 2026-10-28: "At this point I want to be pretty aggressive about moving code to Roc.") **The run is 285 to 294, in number order unless an item says "any order".**
 
 **Rules for 285-294:**
-- **Branches:** each item gets claude/port-N, from origin/box/roc-cleanup after the box merges 283 and 284 (fetch first), or from the item it needs.
+- **One branch per repo for the whole run** (Steve, 2026-10-28: simplify the branches): claude/roc-chat, from origin/box/roc-cleanup (283 and 284 are merged; fetch first). Each item is one or more commits on it, its message starting with the item's number. Push after each item; the box merges claude/roc-chat into box/roc-cleanup as items land and deletes nothing of yours. No per-item branches.
 - **Gates:** roc-webbox's quick gate (shale tools/chat_quick_gate.shale); angry-gopher's ./ops/check_zig; the hunt (bool_returns 0); and the census before and after, in FEEDBACK. A frozen-golden twin pins any behaviour that moves, before the Zig goes, as in 263b-d.
 - **Overruns:** an item past 1.5 times its estimate pushes what's green, says what's left, and moves on.
 - **Never wait on the box. Roc never reads auth_root.**
