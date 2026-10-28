@@ -38,6 +38,16 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**297. Three or more arguments take a record; the name hunt's five: CC'S** (Steve, 2026-10-28: "I prefer the record approach", for signatures with three or more arguments, which roc fmt can't stack since it refuses a trailing comma in a type annotation.) Any order within the run; see 285's rules. It's in roc-apps' roc-style.md under "Name what travels together", marked as Steve's preference.
+
+**Part (1), records:** the stack hunt (roc-webbox's hunt, cookbook roc/stack.shale) now names 73 signatures with three or more bare arguments, for example main.roc's `Chat.Request, Route.R, Paths.TopicAt, Chat.Conv, Who`. Each becomes one record argument, or two arguments where one is a record of the rest, with call sites passing named fields. Where a record already exists that holds the same things, reuse it rather than making another.
+- **Hosted effects (chat/platform/Host.roc) cross the seam:** a record there is a new seam record, so it goes in its own commit with its mirror in roc-webbox's src/chat_abi.zig, its size asserted, and a test driving each field through the real ABI. If a hosted effect's arguments would make a big record, split it, or leave that effect with its arguments and say why in FEEDBACK.
+- Done when the hunt's signature findings are 0, or every one left is explained.
+
+**Part (2), the name hunt's five,** now that it reads module members: noun_effect `Files.stat!` (Files.roc:58), `Last.of!` (Last.roc:32) and `Last.sidecar!` (Last.roc:97); vague `Form.value` (Form.roc:20) and `JsonOut.object` (JsonOut.roc:51). Rename each for its act or meaning, or, where the name is right (a JSON builder's `object` names the JSON value it makes), say so and leave it.
+
+Goldens hold behaviour byte for byte. M-L: split part (1) as you see fit, pure modules first and hosted effects last.
+
 **296. Shale stacks anything with three or more parts, one per line, in Roc and in Zig: CC'S** (Steve, 2026-10-28, on a long Pages.roc line: "We should make our shale aggressive about vertically stacking things. Almost anything with 3+ whatevers will read nice if it's stacked imho.") Do this first in the run, before 285: the ports after it then write stacked code.
 
 **The tool,** in Shale's cookbook as recipes for any repo, not only the chat (cookbook/roc/ and cookbook/zig/):
