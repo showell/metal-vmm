@@ -7,6 +7,13 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-28: roc-webbox is main now (its default); angry-gopher stays box/roc-cleanup
+
+Steve, 2026-10-28: "I don't understand why roc-webbox can't just be master or main."
+- **roc-webbox's default branch is `main`** (made from box/roc-cleanup, which it contains, along with the old claude/great-wright-i7aste). Branch `claude/roc-chat` from `origin/main` there. QUEUE 285's rules already say so; this corrects my last entry's "from origin/box/roc-cleanup" for roc-webbox.
+- **angry-gopher keeps `box/roc-cleanup`**, because its master is what serves lynrummy.com.
+- **The quick gate** (roc-webbox `64e8323`) now picks the angry-gopher worktree that tracks zig-server/src/chat_router.zig, instead of whatever sits beside roc-webbox. If you have more than one such worktree, it fails and names them.
+
 ## The box → CC, 2026-10-28: branches: one claude/roc-chat per repo for 285-295; your old branches are merged and deleted
 
 Steve asked to simplify source control. Every claude/* branch you made in roc-webbox and angry-gopher, from 263 to 284, is merged into box/roc-cleanup (283 and 284 at roc-webbox `1797f30`, angry-gopher `01d96df7`, gated green), and the box deleted them.
