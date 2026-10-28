@@ -7,6 +7,37 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 299 done: angry-gopher's effects named for their acts (claude/zig-names, noun_effect 113 to 7)
+
+**299 done: angry-gopher's effects named for their acts.** Branch `claude/zig-names`, cut from angry-gopher master `75b0a47`: `efa98b4` (users, sessions, cookies, player, router), `a229f6a` (docs, reading list), `d5e7258` (chat), `fdbcd47` (admin), `c9633fb` (games, clocks, the rest). 56 files, 595 lines changed each way. Ready for you to merge to master, then into box/roc-cleanup.
+
+- **The hunt:** noun_effect went from 113 to 7, state_effect from 4 to 0 and question from 5 to 0. preposition_split 1 is left: search_index's `unreadableFor`/`unreadableIn`, which the item made optional.
+- **The renames:** mostly `read*`, `load*`, `find*`, `serve*`, `is*` and `has*`. Some:
+  - `currentUserID` → `loadCurrentUserID`, and the session family the same way;
+  - `userExists` → `hasAccount`, `userIsMember` → `hasPassword` (`isMember` already wraps it), `userIsAuthorized` → `isAuthorized`;
+  - `nowUnix` → `readNowUnix` (x8), `messageCount` → `countMessages`;
+  - `docsNew` → `createDoc`;
+  - `topicExists` → `hasTopic`, `convHasTopic` → `hasTopicExactly`.
+
+  Every caller was updated, along with the comments that cite these names, router_edges_test's `edge_sites`, and tools/mutate.py's snippets. The full table is in my scratch notes if you want it as a list.
+- **Your four calls:**
+  - `fanout` → `fanOutCrossPage`, since `fan` is a verb;
+  - `playPage` → `servePlayPage`, as a route that answers is `serve*`;
+  - `form` → `serveForm`: it builds the page and answers. The three sibling admin forms got the same name so the four match;
+  - `slot` → `findSlot`: it finds the id's slot, or takes the least recently asked one.
+- **The 7 left, each explained:**
+  - **Four are not effects (hunt false positives):** `byName` and `mtimeOf` (admin_backup, over `store.Entry` and `store.Stat`), `backlogFrom` (chat_sse, over `store.ChatMessage`) and `ms` (search_bench, over `Io.Timestamp` values). All are pure. The hunt seems to count any type whose name holds `store` or `Io` as a store or an Io. That's worth fixing in Shale's name_hunt: count the `Io` type and the store handle themselves, not every type in those modules.
+  - **Three are test helpers named by their struct:** `ask.admin`, and the `struct { fn f }.f` behind `post` and `send`. Their callers read as verbs; renaming the inner `f` would read worse.
+- **Verbs for verbs.txt:** none were needed. Four were avoided that you may want: `peek` (`peekNext...`, as `counter.peek`), `stat` (`statRoot`), `sum` (`sumDirBytes`) and `generate`. The table also treats `can`/`should` as nouns, so a `can*` effect would be flagged.
+- **Already stale before this item, not fixed:**
+  - two of tools/mutate.py's "users" entries point at users.zig, but the code is in users_session.zig, and one snippet matches nowhere;
+  - a comment in admin_search.zig cites `chat_store.listVisibleConvs`, which lives in chat_paths.
+- **Gates:** check_zig PASS before each commit. `fdbcd47` and `c9633fb` were gated together as one tree, then committed in two parts. One run's Shale self-test failed once (`shale_host_linux: a timeout is a result`: the VM and the tree-walker disagreed on a timeout) and passed on the rerun. That test does not touch this code; it's the timeout race you know.
+- **How:** a subagent did this in a separate worktree, with Shale's `rename_member.shale` and `edit {word=true, all=true}`. Every repo edit went through Shale, but `zig fmt`.
+- **Shale notes:**
+  - A script can't `read` an absolute path such as the scratchpad, so the rename pairs went in as `pairs=a:b,...`.
+  - `zig_rename` leaves comments, strings and `value.member` calls to you. So each group took three passes: rename_member, a word pass, then hand edits for names that are also English words (`current`, `cookie`, `page`, `exists`). None of this was much harder than Python.
+
 ## CC → the box, 2026-10-28: 300 done: each flow in one module (Members, the routes, the count, Topics, Fence); single_caller 0
 
 **300 done: each flow in one module; the hunt's `single_caller` is 0.** roc-webbox `4ce4406` and `512b2b7`, roc-apps `4446e88`, all on `claude/roc-chat`. main.roc went from 3,429 to 2,592 lines.
