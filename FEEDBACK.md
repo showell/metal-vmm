@@ -7,6 +7,33 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 265 done: the chat's accessors are methods (ConvKey nominal now), and four impossible defaults crash or are gone
+
+**Branch:** roc-webbox `claude/roc-methods`, **on top of 268** (`claude/review-hardening`, which isn't in `box/roc-cleanup` yet and touches the same modules): `5ceadb9` (part 1), `6d9b28c` (part 2). No Zig changed. Gated with angry-gopher's `claude/census-twins` beside it: the quick gate passes in 55 s; the hunt's `bool_returns` is 0 and `long_definitions` is 1, as at the base.
+
+**Part (1), methods:**
+- **What moved:** `PairKey` (`is_participant`, `partner`, `to_str`, `bytes`), `ChannelName` (`to_str`, `bytes`) and `ChatPath` (`bytes`) carry their accessors in their own blocks.
+- **`ConvKey` is nominal now (`:=`),** so it carries `bytes`, `to_str`, `base` and `kind`: `key.base()` rather than `Paths.conv_base(key)`.
+- **Call sites:** every site of those is in the method form. So is `Html.bytes(page)` in main.roc and Pages.roc.
+- **The one cost of nominal:** a bare `Dm(pair)` with no type to steer it has no methods, so the one test that called `Dm(pair).base()` says `Paths.ConvKey.Dm(pair)`. Where the type is known, a plain tag still works. Nothing crossing the seam changed layout.
+- **Left as calls, because the call form reads better there:**
+  - `Uid.to_str` passed as a function: `map_ok(Uid.to_str)` says what it maps.
+  - The path builders (`Paths.transcript_path(at)` and its kin) make a path from parts and read no field of their first argument.
+  - twin.roc's dispatch table.
+- **Found on the way:** a nested type's method call already falls back to its enclosing module's functions, so `pair.pair_key_to_str()` compiled before this. That is why a few sites were half in method form.
+
+**Part (2), crash on the impossible:**
+- **Now crashes, because the case can't happen:**
+  - `Count.parse`'s two `??`s: bytes that end in a newline split into two lines at least.
+  - `Html.fill`'s missing value: every template is a literal. Its `expect` had pinned "a missing value fills as empty", so it now fills both slots.
+  - `find_channel!`'s name that fails validation: load_rosters_from! keeps no such name. Until now that case was folded into the "no such topic here" skip.
+- **Gone without a crash:** `Time.offset_of`'s `rest ?? []` inside its own `Ok` arm; the pattern binds the digits now.
+- **Kept, because each case can happen:** the commit lists them. They are a member with no account, the self-DM, the end of a scan, a conversation with no topics, the twin's decoding, and parse failures.
+
+**Wall time:** about 35 min against 45. **Slowest step:** the quick gate, run three times (55 s each).
+
+**Next:** 269.
+
 ## CC → the box, 2026-10-28: 263b-d done: the router, the pure twins and the oracle frozen as hashes of the Roc's answers, then deleted; the census's unreached Zig 768 to 383
 
 **Branch:** angry-gopher `claude/census-twins`, **on top of 268** (`claude/review-hardening`): `8ea4592` (263b), `79f4aeb` (263c), `ff4af9f` (263d). No roc-webbox change. Gated with zig-webbox master beside it: the quick gate passes in 53 s, `check_zig` in 89 s (its slowest step, the angry-gopher `zig build test` in it, 50 s).
