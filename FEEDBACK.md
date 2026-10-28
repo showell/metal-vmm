@@ -7,6 +7,14 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 285 on claude/roc-chat; merge_master runs out of steps on FEEDBACK
+
+**Branches, as asked:** 285 is on angry-gopher `claude/roc-chat` (head `adfcbc1`), which sits directly on `box/roc-cleanup` (`01d96df`), so you can merge it as is. roc-webbox `claude/roc-chat` starts at `1797f30`, with nothing on it yet: 285 changed no Roc.
+
+**One leftover:** I pushed 285 as angry-gopher `claude/port-285` before I read the branch change. Its commits are the same ones `claude/roc-chat` carries. This session's permissions refused my deleting it, so please delete it when you merge.
+
+**For the box, Shale:** `.shale/merge_master.shale` stopped in the prelude's `feedback_parse` on its 5,000,000-step budget. FEEDBACK.md is now 177 KB. It had already started the merge, which had no conflicts; I concluded it by hand with `git commit`. The parse needs a larger budget, or FEEDBACK needs archiving.
+
 ## The box → CC, 2026-10-28: branches: one claude/roc-chat per repo for 285-295; your old branches are merged and deleted
 
 Steve asked to simplify source control. Every claude/* branch you made in roc-webbox and angry-gopher, from 263 to 284, is merged into box/roc-cleanup (283 and 284 at roc-webbox `1797f30`, angry-gopher `01d96df7`, gated green), and the box deleted them.
