@@ -54,18 +54,6 @@ Gates as above. Wall time: about 45 minutes.
 - **STORED IS DONE across creating a DM topic** (`main.roc` ~:885-888): the "hi" is stored, then `announce!` can fail and 500 the create, and the retry gets a 409. Make the announcement best-effort after the store, like the fan-out, counted when it fails.
 Each with a test that plants the bad byte or the failure. Gates as for the security item. Wall time: about 45 minutes.
 
-**266. The Roc chat's adversarial review, security: feeds and page JSON (Roc and the live Zig): CC'S** (Steve, 2026-10-27: adversarial reviews of the Roc chat; "fix easy things yourself; queue up CC for more involved things".) **First after 263**, ahead of 264 and 265: two of these are live on lynrummy.com.
-
-**Already fixed by the box** (angry-gopher master `fc0b3ee2`): stored XSS through the images feed. `images_store.encodeImagesEvent` now rebuilds each stored `<img>` with `markdown_media.safeImgAt` (allowlist, same-origin src) and drops what it can't. Read that commit first; it's the pattern.
-
-**Part (1), the same XSS in the Roc port** (`box/roc-cleanup`): chat/Fanout.roc `parts_of` takes raw `<img …>` spans via `Feeds.img_tags` (`Feeds.roc` ~:209/:384), stores them in members' images.md and publishes them live; `Pages.roc` ~:261 puts them in the page JSON. Give the Roc the renderer's rule. Either a hosted primitive that returns the safe rebuild (the host has `safeImgAt`), or a Roc port of it with tests matching markdown_media's cases. Say which and why. Rebuild at the one place both the live event and the page backlog pass through, so stored entries are covered too. Then merge angry-gopher master (with `fc0b3ee2`) into `box/roc-cleanup`.
-
-**Part (2), forged code-feed entries** (live Zig `code_store.formatCodeEntry`, and Roc `Feeds.code_entry` ~:356): a fenced block whose body contains the entry separator (`\n\n-------------\n\n`) and a fake `Sent by … source MSG_x in …:` header becomes its own entry in every member's code.md, showing a forged sender. `images_entry` already neutralizes CR/LF; give code entries an encoding that can't contain the separator, with the reader matching, and keep existing files readable. Fix master's Zig and the Roc. Tests: the forging body produces one entry with the real sender.
-
-**Part (3), JSON inside `<script>`** (Roc `Html.script_safe` ~:74, and the Zig that builds the same pages on master): it escapes only `</`, so a message holding `<!--<script` in the recent excerpt or a code body puts the HTML tokenizer into its double-escaped state, which swallows the page's own `</script>` and `<script src>`. Escape every `<` in JSON embedded in a script as `<` (and `>`/`&` if you like), in one shared function per side. Test with that input.
-
-**Gates:** angry-gopher master: ./ops/check_zig. The branch: shale tools/chat_quick_gate.shale and angry-gopher's `check_zig` in the roc-clean layout (264's doc-check finding is known). Push master's fixes to master, the Roc's to `claude/review-security` from `origin/box/roc-cleanup`. Wall time: about 60 minutes. Part (1) first.
-
 **265. The Roc chat's accessors as methods, and crash on the impossible: CC'S (needs the Roc toolchain)** (Steve, earlier rounds of the Roc chat cleanup; queued 2026-10-27.) After 264. **Needs the pinned `roc` in your container**, because the chat's gate runs `roc check`/`roc test`. If you can't get it, say so in FEEDBACK and skip this item; the box will publish the binaries somewhere you can fetch.
 
 Branch `claude/roc-methods` from `origin/box/roc-cleanup` (roc-webbox, plus angry-gopher only if a seam changes). Style: roc-apps docs/roc-style.md, and the langref round-2 items Steve approved:
@@ -73,14 +61,6 @@ Branch `claude/roc-methods` from `origin/box/roc-cleanup` (roc-webbox, plus angr
 - **Part (2), crash on the impossible:** each `?? 0`, `?? ""` or `Err(_) => <default>` that hides a case which can't happen becomes a `crash` with a reason, site by site. A case that *can* happen keeps its handling. Each site's commit line says which it is and why.
 
 **Gates:** shale tools/chat_quick_gate.shale; angry-gopher's ./ops/check_zig if any Zig changed; shale tools/roc_hunt/hunt.shale (`bool_returns` stays 0). Wall time: about 45 minutes, with part (1) and part (2) as separate commits.
-
-**264. Shale's doc check calls a gitignored build output gone in a sibling-worktree layout: CC'S** (The box, 2026-10-27; Steve: keep CC's queue full.) After 263. Shale and Zig only, so it needs no Roc toolchain.
-
-**The symptom:** angry-gopher's ./ops/check_zig runs `cd ../shale && zig build doc-check -- only=angry-gopher`. In `~/showell_repos` that passes. In `~/build/roc-clean`, where `shale`, `angry-gopher`, `zig-webbox` and the rest are sibling worktrees and checkouts, it reports `engine.js` as gone, twice: `games/lynrummy/README.md:79` and `games/lynrummy/elm/src/Puzzle/README.md:43`. The docs are identical, the file exists at `games/lynrummy/elm/engine.js` in both, and it is gitignored in both.
-
-**Where to look:** `tools/doc_check.shale`'s `ignored(at, repo, paths)` runs `git -C real(at .. repo) check-ignore --no-index --stdin` over the citation as written (`engine.js`) and as joined from the doc's folder (games/lynrummy/engine.js). Neither is the file's real path. Also check `is_dir(at .. t)` and `real()` when `at` isn't a mount root (the roc-clean siblings are under the `build:` mount, or reached by a relative `..`).
-
-**The change:** find why the two layouts differ, and fix the root cause. Either the check is wrong in one layout, or it passes in the other only by accident. If a bare file name is meant to pass because any file of that name is ignored, say so in a comment and make that hold in both layouts. **Tests:** a fixture in each layout, a plain checkout and sibling worktrees, both giving the same answer, and a citation of a file that is really gone still reported in both. Wall time: about 30 minutes.
 
 **263. The Roc chat's dead Zig: what only tests or twins reach, deleted (the census): CC'S** (Steve, 2026-10-27: "give CC the census Zig deletions".) The Roc chat's work lives on branch `box/roc-cleanup` of roc-webbox and angry-gopher (both pushed; neither repo has CI). Branch `claude/census-deletions` from `origin/box/roc-cleanup` in each repo you change, and fetch first: the box's cold agent is renaming the Host seam on that branch now (hosted effects in `chat/platform/Host.roc` and their Zig side), so expect it to move under you; the box merges with conflict detection.
 

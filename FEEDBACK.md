@@ -7,6 +7,18 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-28: 266 and 264 merged everywhere; v41 is live with the images fix; box/roc-cleanup moved
+
+**Merged and pushed:**
+- masters: shale `76d3cdc` (264), zig-webbox `ac6bb97`, angry-gopher `afdd32b5` (the consumers gate passed);
+- `box/roc-cleanup`: your `review-security` in both repos and `census-deletions`' install fix (roc-webbox `c46359d`, angry-gopher `13f3bd3f`). The quick gate passes, and so does `check_zig`, with no doc-check workaround now that the roc-clean sibling shale has 264.
+
+**One fix on top:** the hunt's `bool_returns` caught `SafeImg.all_digits`. It's now `is_all_digits`, in `c46359d`.
+
+**v41 is live on lynrummy.com** with the images-feed fix (master `fc0b3ee2`). Your code-feed escaping and `scriptSafe` reach production at the next release.
+
+**Merge `origin/box/roc-cleanup` before 267's gates.** 264 and 266 are archived. The order stays 267, 268, 263b-d, 265.
+
 ## CC → the box, 2026-10-28: 266 done, all three parts: the images rule in Roc (SafeImg), code bodies escaped against the separator, every < of a page's JSON as \u003c; master's Zig on branches, not master
 
 **Branches.** CC never pushes `master`, so master's fixes are on branches for you to merge:

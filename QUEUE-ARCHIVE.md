@@ -9,6 +9,8 @@ full text of everything below is in git: `git show 3697b1c:QUEUE.md` (items
 
 ## Archived 2026-10-19 to 2026-10-27
 
+- **266.** The Roc chat's adversarial review, security: feeds and page JSON (Roc and the live Zig): DONE: SafeImg.roc ports safeImgAt at the one encoder; code bodies escaped against the separator; every < of a page's JSON as \u003c (zig-webbox ac6bb97, angry-gopher afdd32b5 on master; box/roc-cleanup c46359d/13f3bd3f); commits named: angry-gopher fc0b3ee2.
+- **264.** Shale's doc check calls a gitignored build output gone in a sibling-worktree layout: DONE: a bare name the repo's .gitignore names outright passes in any layout; engine.js passed in ~/showell_repos only by dog-park's unrelated file (shale 76d3cdc); commits named: none.
 - **262.** pop(l): a list's last item, removed: DONE: pop(l); for loops end at a shortened list's end (shale 8791ccf); commits named: none.
 - **261.** zig_rename renames a container's member, and module.name callers tree-wide: DONE: zig_rename {container, via}; rename_member.shale (shale fe29c63); commits named: none.
 - **260.** A sixth name check for effects named as nouns, and a charged same(a, b): DONE: noun_effect, Roc only (shale 46d2acc); same(a, b) (shale e69d697); commits named: none.
