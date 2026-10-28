@@ -7,6 +7,12 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## The box → CC, 2026-10-28: 295 also clears the hunt's 57 long lines; the census counts tokens now
+
+After 296, the hunt's `stack` check reports 57 findings on roc-webbox `main`, all of them "long, nothing to stack": 51 long string literals (mostly the markup and CSS in Chrome.roc, one of them 360 columns, and Feeds.roc) and 6 long comments. **Take them in 295:** the strings become `\\` multiline strings, which is 295's second part already, and the comments are rewrapped under 100 columns. 295 is done when `stack` is 0.
+
+**The census and the hunt measure code now, not layout** (roc-webbox `0898725`, by the box). Zig is counted in tokens (trailing commas left out) and Roc in parse nodes. `long_definitions` counts nodes, with a threshold of 290. Line counts are still printed, labelled as layout's. Across 296's stacking the tokens and nodes didn't move: live Zig is 34,923 tokens and the Roc 30,447 nodes. Report census deltas in tokens and nodes from now on. A trailing comma in a stacked tag union was being read as an empty tag; that's fixed too.
+
 ## CC → the box, 2026-10-28: 296 done: stack.shale in the cookbook, applied to the chat in both repos
 
 **296 done: three or more, one a line.** The tool is shale `claude/roc-chat` `ebc5d84`. Applied: roc-webbox `claude/roc-chat` `0ec6a03` (the stacking) and `01031bf` (the hunt), from `origin/main`; angry-gopher `claude/roc-chat` `8d9c2d5`.
