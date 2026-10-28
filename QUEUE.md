@@ -38,6 +38,86 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**282. Overnight port 14 (stretch): search /messages in Roc: CC'S** (Steve, 2026-10-28.) Needs 281. See 269's rules.
+- **The port:** hits cross the seam as flat byte strings, and excerptOf moves to the Roc. chat_search.handle goes.
+
+**Test:** twins for excerpts (multibyte, the word at either edge) and the byte cap. M (about 60 minutes). Census about −138.
+
+**281. Overnight port 13: search /words in Roc: CC'S** (Steve, 2026-10-28; the search index and its rate limit stay Zig, as platform primitives.) Needs 269. See 269's rules.
+- **The port:** the Roc parses the query and writes the JSON.
+- **The Zig keeps:** admit! (the rate limit) and a primitive, search_words!(key), returning word and count pairs plus the unreadable count.
+
+**Test:** a twin over a built index. M (about 60 minutes).
+
+**280. Overnight port 12: a roc glue test drive on one seam record: CC'S** (Steve, 2026-10-28.) Any order. See 269's rules. Run roc glue on one small seam record (the listing's Entry). Assert at compile time that its generated layout equals the hand-laid one in chat_abi.zig. Report the diff and anything glue can't express. **Replace nothing.** M (about 60 minutes).
+
+**279. Overnight port 11: the welcome DM seeded on a member's first /chat visit: CC'S** (Steve, 2026-10-28: "Seed on first /chat visit".) Needs 278. See 269's rules.
+- **The change:** login stops writing to the chat. When a member opens /chat and has no DM with the host account yet, the Roc creates it, with the welcome message as login's code writes it today: the same text, topic and author.
+- **Then:** if docs' post (278) has moved, delete the old Zig store's appendMessage, fanoutCrossPage and the chat_state functions only they reach. Otherwise say what still calls them.
+
+**Test:** a new member's first /chat makes the DM exactly once; a second visit doesn't; an existing member with the DM sees no change. Compare against login's old output. Census: report the drop. M (about 60 minutes).
+
+**278. Overnight port 10: docs' post to chat in Roc: CC'S** (Steve, 2026-10-28.) Needs 269. See 269's rules.
+- **The port:** served_by sends the docs' post to the Roc. The partner check and the resume topic move there, and the Roc's own append_message! stores the message. The Zig docsPost goes.
+- **Afterwards:** say what is left reaching the old Zig store (appendMessage, fanoutCrossPage and chat_state). The welcome DM (279) should then be the only caller.
+
+**Test:** chat_actions_twin compares the transcript, the count sidecar, the frames and the 303 against the old Zig. M (about 60 minutes).
+
+**277. Overnight port 9: gather_recent in Roc: CC'S** (Steve, 2026-10-28.) Needs 269, 275 and 276. See 269's rules.
+- **The port:** the /chat/recent rows built in Roc: accounts, channels, topics and docs, with the mtime floored to even seconds as now.
+- **Deleted:** the hosted gather_recent!, the RecentRow seam record, recent.gatherRows, and chat_count.lastMessage once nothing reaches it.
+
+**Test:** the recent page twin over a tree that has DMs, channels, an empty topic and docs. **Measure:** one /chat/recent before and after. M (about 60 minutes). Census about −440 reached.
+
+**276. Overnight port 8: a topic's last message in Roc: CC'S** (Steve, 2026-10-28.) Needs 274. See 269's rules. Port chat_count.lastMessage: a topic's last message without reading the whole transcript, through read_at! and stat!, with its window, its fallback, and its rule of one member as the author or nobody. **Test:** a twin against lastMessage for a current record, a record behind, a full window, the fallback, a nameless author and duplicate names. M (about 60 minutes).
+
+**275. Overnight port 7: message_count! in Roc (read-only): CC'S** (Steve, 2026-10-28; **the Roc does not write the count sidecar tonight**: "Wait for one writer".) Needs 274 (stat!, read_at!). See 269's rules.
+- **The port:** the Roc trusts the count sidecar only when the transcript's size matches; otherwise it reads the transcript and counts its blocks, as chat_count.messageCount does. Count.roc already parses the sidecar. The hosted message_count! goes.
+- **The Zig keeps writing the sidecar:** store_message!, the backfill and appendMessage all still do.
+
+**Test:** a twin over CountFixture's cases (a stale size, a torn sidecar, the legacy two-line form, a missing transcript), and a send's numbering in chat_actions_twin. M (about 60 minutes).
+
+**274. Overnight port 6: stat! and read_at!, two file primitives: CC'S** (Steve, 2026-10-28; see 269's rules.) Two hosted primitives, each checked like read!:
+- **stat!(path):** Missing, a size and an mtime in seconds, or Failed.
+- **read_at!(path, offset, max):** the bytes.
+
+The record is laid out by hand in chat_abi.zig with its size asserted, in its own commit. **Tests:** scripted-host tests for missing, a folder, a failed stat and a short read, plus one through the real ABI. S (about 30 minutes).
+
+**273. Overnight port 5: saved in Roc, without the mtime cache: CC'S** (Steve, 2026-10-28: "Drop it, measure".) Needs 269. See 269's rules.
+- **The port:** the Roc reads the member's reading list (users/<uid>/docs/reading-list.md, through read!), parses its refs and answers the saved ids as JSON. The Zig savedIds, reading_list's savedIdsFor and its mtime cache go.
+- **Test:** a twin of parseRefs (malformed refs, both prefixes, a bad id); route twins for no doc, an empty doc, and a doc saved in another topic.
+- **Measure:** one topic page load with a 1,000-entry reading list, before and after. A cache comes back only if the difference is measurable to a person.
+
+M (about 60 minutes). Census about −100.
+
+**272. Overnight port 4: limits! as Roc constants: CC'S** (Steve, 2026-10-28; see 269's rules.) Any order. The upload and search caps become Roc constants. The hosted limits! and its Limits seam record go. The Zig keeps the copies that enforce them, held equal by a Zig test that reads the Roc constants (or their values, pinned). S (about 30 minutes).
+
+**271. Overnight port 3: the Roc answers every chat 404 and authorizes every DM and channel route: CC'S** (Steve, 2026-10-28: "Roc decides, Zig keeps a floor".) See 269's rules.
+- **The 404s:** the Invalid and NotFound routes, plus the "not yours" and no-topic pages, come from Roc. Pages.roc gets the page.
+- **Authorization:** served_by runs find! and the topic check before delegating any DM or channel tail (upload, uploads, stream, download, saved). The Roc becomes the one authorization point.
+- **The Zig keeps a floor:** angry-gopher's chat.zig convRoute and channelRoute become a dispatch that builds the folder from the key. It keeps a cheap check that the path is under the chat root and the key is canonical, and never answers a 404 page itself. notFoundPage, topicExists and partnerName go.
+
+**Test:** chat_actions_twin scenarios: every tail by a non-member, with a missing topic, and with an invalid tail. Status and bytes must equal the old Zig's. Red first, by deleting a Zig arm. Report what a stream open now costs (a list_accounts!). M (about 60 minutes). Census about −90.
+
+**270. Overnight port 2: BusKey and ChatUrl in the Roc chat: CC'S** (Steve, 2026-10-28; see 269's rules.) Any order. Two small opaque types:
+- **BusKey:** the bus keys Fanout and Feeds build from strings.
+- **ChatUrl:** the Roc twin of webbox's http.Target, for the URLs they build.
+
+Replace the string-built keys and URLs. **Test:** a twin against chat_fanout's bus-key functions, its conv base URL and Target formatting, and a hostile path refused. S (about 30 minutes).
+
+**269. Overnight port 1: an opaque JSON builder in the Roc chat: CC'S** (Steve, 2026-10-28: overnight porting, from the box's triage of the census.) **The overnight run is 269 to 282, after 267, 268, 263b-d and 265, in number order unless an item says "any order".**
+
+**Rules for 269-282:**
+- **Branches:** each item gets branch claude/port-N, from origin/box/roc-cleanup, or from the item it needs when it says "needs". The box merges them in order.
+- **Gates:** roc-webbox's shale tools/chat_quick_gate.shale; angry-gopher's ./ops/check_zig whenever Zig changes; the hunt (shale tools/roc_hunt/hunt.shale, with bool_returns 0); and the census before and after, for any item that retires Zig.
+- **Each item's FEEDBACK** gives its census delta (live Zig lines, Roc lines), its wall time and its slowest step.
+- **Overruns:** an item past 1.5 times its estimate pushes what's green, says what's left, and moves on.
+- **Never wait on the box.**
+- **Roc never reads auth_root.**
+- **Seam records stay small** (laid out by hand in roc-webbox's chat_abi.zig); a new one is its own commit, with its size asserted.
+
+**This item, any order:** an opaque builder for JSON output (JsonOut; Json is reserved): object, array, string, number, built in order, over JsonText's escaping. Move one existing hand-built JSON (the smallest) onto it. **Test:** a twin against Zig's std.json formatting over the escaping corpus, red then green. M (about 60 minutes).
+
 **268. The Roc chat's adversarial review, hardening the seam's trust: CC'S** (Steve, 2026-10-27.) After the availability item. The box fixed the easy seam findings on `box/roc-cleanup`: a path that isn't UTF-8 no longer panics the router; the compile-time tag check now covers `Membership`, `Done` and `Serving`; and Roc's field-order rule is stated once, correctly, in `src/roc_abi.zig`. Left for you, branch `claude/review-hardening`:
 - **The Zig trusts a Roc value and panics on a bad one:** `chat_abi.zig` ~:685 `@errorFromInt(fault)` on any U16 (0 or garbage is illegal behaviour); ~:784 a 405 allowing `Other`; angry-gopher's chat router (box/roc-cleanup) ~:302 a `Conv` family that is neither Dm nor Channel. Make each a checked conversion that fails the request (a 500 via `call.failed`), never a panic or UB.
 - **"After a failure the host does nothing more" covers failures, not answers:** `check_hostile!`'s Refused (~:671) and `read_body!`'s 413 (~:334) respond to the request themselves but don't stop later effects or a second response. Make an answered request as dead as a failed one. And `.answered` with neither a host failure nor a host answer should be the router's 500, not silence.
