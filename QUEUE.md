@@ -38,6 +38,66 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**294. Aggressive port 10: what's left of the chat's Zig, triaged again: CC'S** (Steve, 2026-10-28, aggressive.) Last of the run. Run the census after 285-293 and list every live chat Zig unit that isn't a webbox primitive (files, the bus, streams, process-lifetime state, HTTP, bytes), the markdown processor, the search index, or auth. For each, give one line: what it does, its lines, and the port you'd do next. Port the two smallest yourself if time allows. This becomes the next run's queue. S.
+
+**293. Aggressive port 9: admin retire's plan in Roc: CC'S** (Steve, 2026-10-28, aggressive.) Any order. See 285's rules. chat_retire (about 280 lines) is destructive, so move it in two halves:
+- **The plan, pure:** which conversations and topics to retire under a mode, days and keep, plus keepProblem. It moves to the Roc, with a twin against the Zig plan over the retire tests' trees.
+- **The execution** (staging and removals) stays Zig behind the admin gate, taking the Roc's plan.
+
+Retire must never remove more than the old Zig would: the twin holds that. The admin page's handler can call the Roc plan through a second entry, or through the existing one with an admin route. Choose and say why. M-L.
+
+**292. Aggressive port 8: uploads decided by the Roc: CC'S** (Steve, 2026-10-28, aggressive.) See 285's rules. chat_upload has about 270 lines.
+- **Moves to the Roc:** every decision: the quota check against users' reserved bytes (through a primitive), the accepted types, the size limits (272's constants), the stored name, and the answer.
+- **The Zig keeps** what has to touch every byte, as primitives: reading the multipart body to disk, and sniffing the type from the first bytes.
+
+Say what moved and what couldn't, and why. **Tests:** goldens frozen on the old Zig for an image, a video, a refused type, over quota, too big, and a non-member. L: split as you see fit.
+
+**291. Aggressive port 7: downloads decided by the Roc: CC'S** (Steve, 2026-10-28, aggressive.) Any order. See 285's rules. chat_download (about 60 lines) bundles a topic. The Roc authorizes and names the bundle. The Zig keeps the tar.gz streaming as a primitive (it is bytes and compression). Range handling for /uploads goes the same way: the Roc decides, the Zig serves the bytes. **Tests:** goldens of the headers and statuses (full, a range, a bad range, a non-member) frozen on the old Zig. S-M.
+
+**290. Aggressive port 6: the docs' writes in Roc: CC'S** (Steve, 2026-10-28, aggressive.) Needs 289. See 285's rules. Move docs' save, new and save-to-the-reading-list: the forms, the checks and the files they write, through the file primitives. Afterwards, delete docs.zig, and docs_store except for whatever outside callers (reading_list, admin) still reach. Say which those are. **Tests:** goldens of the files written and the answers, frozen on the old Zig. Forms that are malformed, hostile or too big are refused as before. M.
+
+**289. Aggressive port 5: the docs' read pages in Roc: CC'S** (Steve, 2026-10-28, aggressive.) See 285's rules. angry-gopher's docs.zig and docs_store (about 390 lines) serve /chat/docs. Move the pages that only read: the three-pane page, a doc's view, the list. Use JsonOut and the existing page modules. The Zig keeps only what 291 hasn't moved yet. **Tests:** route goldens frozen on the old Zig first, for the owner, another member and a missing doc. M.
+
+**288. Aggressive port 4: presence decided by the Roc: CC'S** (Steve, 2026-10-28, aggressive.) See 285's rules.
+- **The change:** count_presence! shrinks. The Zig keeps the online map: mark it active and answer whether this was the offline-to-online edge, plus check_online!. The Roc builds and publishes the came-online frames on that edge.
+- **settings.zig** marks presence through the same map without a broadcast. **That's a behaviour change:** a settings view no longer announces a member coming online. Say so plainly in FEEDBACK, so Steve can object.
+- **A failed accounts read during the broadcast** loses the broadcast, never the request.
+
+**Tests:** the edge, broadcast once to each other member; no broadcast on a second request; and settings marks the member without a broadcast. M.
+
+**287. Aggressive port 3: a message's store decided by the Roc, which writes .count: CC'S** (Steve, 2026-10-27, on .count: "Wait for one writer". 279 removed the old store, so the Roc and the startup backfill are now the only writers, and they never run at once.) See 285's rules.
+- **The change:** store_message! shrinks to primitives:
+  - an append that returns the transcript's new size;
+  - an index_message! for the search index (process-lifetime state, so it stays a primitive).
+- **Moves to the Roc:** the block, the count sidecar's text (Count.roc already parses it), and the order: append, count, index.
+- **Stays Zig:** the startup backfill, the one other writer.
+
+**Tests:**
+- A byte-identity twin: the sidecar the Roc writes must equal what the backfill writes for the same transcript.
+- A send's files and frames frozen before the change and the same after.
+- A crash between the append and the count leaves a state the next count reads correctly (a stale count is a miss).
+
+M-L.
+
+**286. Aggressive port 2: every chat stream decided by the Roc: CC'S** (Steve, 2026-10-28, aggressive.) See 285's rules. Six routes are still Zig's: a topic's stream, the recent, images and code streams, notifications and the sidebar stream.
+- **The change:** a Stream answer kind. The Roc authorizes the request (as 271 does for the other tails), picks the bus key with BusKey, and answers Stream(key). The Zig's sse.forward is the primitive that holds the connection.
+- **Also:** the NotFound route becomes the Roc's answer too.
+- **Afterwards:** only the static assets stay Zig.
+
+**Tests:** route goldens for each stream: an owner, a non-member, a bad key. One real stream through chat_router delivering a published frame exactly once. L: split it as you see fit, the topic stream first.
+
+**285. Aggressive port 1: the chat's unreached Zig deleted: CC'S** (Steve, 2026-10-28: "At this point I want to be pretty aggressive about moving code to Roc.") **The run is 285 to 294, in number order unless an item says "any order".**
+
+**Rules for 285-294:**
+- **Branches:** each item gets claude/port-N, from origin/box/roc-cleanup after the box merges 283 and 284 (fetch first), or from the item it needs.
+- **Gates:** roc-webbox's quick gate (shale tools/chat_quick_gate.shale); angry-gopher's ./ops/check_zig; the hunt (bool_returns 0); and the census before and after, in FEEDBACK. A frozen-golden twin pins any behaviour that moves, before the Zig goes, as in 263b-d.
+- **Overruns:** an item past 1.5 times its estimate pushes what's green, says what's left, and moves on.
+- **Never wait on the box. Roc never reads auth_root.**
+- **Seam records stay small:** each new one is its own commit, with its size asserted.
+- **Bias:** when unsure whether something can move to Roc, move it, and say in FEEDBACK what it cost.
+
+**This item:** the census's 799 unreached lines go. They're the old feed stores (code_store and images_store), recent_feed's old helpers, chat_state, the dead codec and fan-out functions, and the test-only fixtures whose tests test nothing live. Where a test of unreached Zig is the only check of a behaviour the Roc now owns, port the case to a Roc test first and say which. Test seams of live code stay. M. Census: unreached down to about 100 or fewer.
+
 **284. A cache read that fails falls back, as a miss: CC'S** (Steve, 2026-10-28, on 275's and 277's open differences: "fall back on cache reads".) After 283; any order with it.
 
 **The rule:** a read of a cache (the .count sidecar, the last-message window) that fails is a cache miss. The Roc recounts or reads the whole transcript, as the Zig did, and never fails the request. A read of the truth (the transcript itself) that fails still fails it.
