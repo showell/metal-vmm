@@ -7,6 +7,51 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 278 done: a doc posted to chat is the Roc's, frozen on the old Zig and the same after; docsPost goes; the welcome DM is the old store's last caller
+
+**Branches:** roc-webbox `claude/port-278` (`3f60275`, on 277) and angry-gopher `claude/port-278` (`3248a74`, the freeze, then `049c97d`, the port; on 277).
+
+**The port:** `served_by` sends `/chat/docs/post` alone to the Roc; the rest of docs stays Zig. `post_doc!` is `docsPost`, step by step:
+- the method (405 POST);
+- the body, read to the doc's limit;
+- the slug, trimmed and checked ("bad slug");
+- the doc, read: empty or not there is "doc is empty";
+- the hostile check, in the docs' own words;
+- the default partner (1's is 2, everyone else's 1), who must be in the authorized roster ("no default chat partner available");
+- the topic resumed (`resume_at!`: last viewed, else first, else the day);
+- the doc stored by the Roc's own `append_message!`, which now answers the stored message's id;
+- 200 with `{conv, session, id}`.
+
+**Seam changes, no new record:**
+- `read_body!` takes `[Doc, Message, Reaction]`. The Zig `Form` enum is `{doc, message, reaction}`, and the order check covers it.
+- `check_hostile!` takes the refusal's words. The Zig host's hostile check rejects with what the Roc hands it, so the send and the post each say their own thing.
+
+**Test:**
+- **`docsRun` in chat_actions_twin_test, frozen on the old Zig** (its own commit, `3248a74`, before the port). It posts:
+  - to the topic last viewed, to the first of a DM's topics, and to a new topic named for the day;
+  - with a spaced slug, no slug, a non-slug, two slugs, and a form that won't decode;
+  - an empty doc and one that isn't there;
+  - a GET, a stranger, and `/post/`;
+  - last, with no partner left.
+
+  It pins every answer, file (transcript, `.count`, feeds) and frame. After the port the Roc's run hashes the same, byte for byte.
+- **No hostile input in the run:** I couldn't find a short doc the renderer calls hostile, so a test-host test (`chat_hosted.zig`) holds that a refused doc asks nothing after the check and says "not posted: too much markdown formatting; break the doc up".
+
+**One new behaviour:** a doc that isn't UTF-8 text fails the post with NotUtf8, and nothing is stored (route test in `router_failures_test`). The Zig posted its bytes as they were. The doc *is* the message, and the send's form already refuses such text.
+
+**What still reaches the old Zig store:** only login's welcome DM (`login.zig`), through `store.appendMessage` (and with it `fanoutCrossPage`) and `chat_state.setLastViewedTopic`. That is 279's to move.
+- `chat_state.resumeTopic` had only `docsPost`, so it's deleted.
+- `chooseResumeTopic`, `lastViewedTopic` and `pinnedTopics` are now reached only by twins and tests; I left them for 279's sweep.
+
+**Gates:**
+- The quick gate passes in 53 s, and the hunt's `bool_returns` is 0.
+- `check_zig` failed once, on Shale's own "host: a timeout is a result" (a timing test in a repo this doesn't touch), and passed on the one re-run.
+- I've also seen angry-gopher's `zig build test` fail twice tonight with no failure message. Its test binary passed on every seed I tried after, so I couldn't catch it. I'll write it up if it shows its face.
+
+**Census:** the chat's live Zig went from 3,475 lines (394 unreached) to 3,414 (406 unreached); the Roc from 3,811 to 3,887.
+
+**Wall time:** about 60 min against 60. The slowest step was the hostile-markdown hunt, which I cut off after two probes.
+
 ## CC → the box, 2026-10-28: 277 done: /chat/recent's rows gathered in Roc, held to gatherRows and lastMessage; gather_recent!, RecentRec, gatherRows and lastMessage gone; two differences, each a row instead of a 500
 
 **Branches:** roc-webbox `claude/port-277` (`fddd9eb`, on 276) and angry-gopher `claude/port-277` (`8f88f74`, on 275).
