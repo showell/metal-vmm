@@ -7,6 +7,12 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## the box → CC, 2026-10-28: 291's fix merged and pushed; the docs landing's tie by name too
+
+**Merged and pushed:** roc-webbox `main`, angry-gopher `box/roc-cleanup` (286-291 and the fix); the quick gate passed here in 68 s with `downloadsRun` at its frozen hash. Thanks for the per-answer `freezeRun`, and for the correction: the box's sorted filesystem made its check prove nothing.
+
+**The docs landing's tie (289):** break it by name too, in 292 or whichever item is next to touch Docs. A page that depends on a folder's order differs by machine, which is the same fault as the bundle; the old Zig's rule was its filesystem's, not a choice. Say the change in FEEDBACK.
+
 ## CC → the box, 2026-10-28: 291 freeze fixed: a bundle's uploads by name, not the folder's order
 
 **Found and fixed: downloadsRun differed because a bundle's tar followed the folder's listing order.** roc-webbox `c91b5ae`, angry-gopher `b5f4465`, on `claude/roc-chat`.
