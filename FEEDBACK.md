@@ -7,6 +7,40 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 271 done: the Roc decides every DM and channel route and answers each 404; the Zig keeps a floor; chat_page.zig gone
+
+**Branches:** roc-webbox `claude/port-271` (`932d4c6`) and angry-gopher `claude/port-271` (`2db0699` and `6a14c44`), each on top of 270.
+
+**How it was proved:** chat_actions_twin.zig is gone (263d), so the old Zig's answers were frozen first, while the old Zig still gave them (`2db0699`).
+- **What was added:** the action scenario gains 75 asks: every Zig tail by a member, by one who isn't, and for a missing topic, in a DM and a channel, plus an invalid tail and keys that name no conversation.
+- **One snag:** a download's tarball carries this run's file times, so a gzip answer is held by its status and headers.
+- **The result:** the run's hash is unchanged after the port. It went red with the Roc's missing-topic page swapped for a plain 404.
+
+**The Roc decides:** `served_by` sends every DM and channel route to the Roc, and it finds the conversation and the topic before it hands anything back.
+- **What still goes to the Zig:** a found topic's uploads, upload, stream, download and saved.
+- **The 404s are the Roc's:**
+  - a DM that isn't the viewer's, or a non-canonical pair, is webbox's plain 404;
+  - a channel that isn't there or isn't theirs, and a missing topic, get the page that says why (`Pages.not_found`, byte-equal to the old `notFoundPage`);
+  - an invalid part or tail is the plain 404.
+- **Presence:** a stream still counts none.
+
+**The Zig's floor:** convRoute and channelRoute build the folder from the key, and fail the request (`error.NotAHandedBackTail`) when the key isn't canonical, the viewer isn't in the pair, or the name isn't a channel's. They never answer a page. `chat_page.zig` (its last page, the 404), `topicExists` and `partnerName` are deleted.
+
+**Found on the way:** `load_channel_members!` answered no members after a malformed member file had failed the request. The Roc then went on to read the accounts and scripts for a page the host would discard. It now says `Failed`, and the request is answered.
+
+**Tests that moved:**
+- **The Roc router's golden:** 740 lines changed, every one a hand-back to the Zig that became the Roc's own 404, with presence as the Zig counted it.
+- **chat_hosted:** the not-theirs cases are now 404s, and new cases check that the tails handed back were found first.
+- **The pre-turn hooks test:** it asks the router's parse directly (twin 72), because almost nothing reaches `.serve` any more. `familyOf` and `routeBodyLimit` moved to `route_family.zig` and the corpus to `chat_route_paths_test.zig`, so the twin test binary can reach them.
+
+**What a stream open now costs:** a DM's stream lists the accounts (`list_accounts!`) and the topics before it is handed back; a channel's reads its member file and the topics.
+
+**Census:** the chat's live Zig went from 3,698 to 3,630 lines. Unreached rose from 383 to 392, because `hasTopic` now serves only its twin. The Roc went from 3,380 to 3,470 lines.
+
+**Gates:** the quick gate passes in 55 s, `check_zig` in 108 s, and `bool_returns` is 0. `check_zig` first caught chat/README naming `chat_page.zig`, which is fixed.
+
+**Wall time:** about 1 h 40 min against 60, past 1.5x. The slowest step was moving the tests that pinned the old split (the golden, chat_hosted and the hooks test); the port itself was quick. Nothing is left undone.
+
 ## CC → the box, 2026-10-28: 270 done: BusKey and ChatUrl; on_site held to Target.of over hostile paths
 
 **Branches:** roc-webbox `claude/port-270` (`27110b2`) and angry-gopher `claude/port-270` (`cad0e29`), each on top of 269.
