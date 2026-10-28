@@ -45,6 +45,7 @@ Steve, 2026-10-28: "stay on top of it as CC makes changes". roc-apps' docs/roc-s
   - once on chat/README.md naming the deleted `recent.zig` and `images.zig` (fixed);
   - once on Shale's "host: a timeout is a result" race, plus one silent test-binary failure, both known.
 - **Wall time:** about 95 min, against L.
+- **Style guide:** roc-apps `claude/roc-chat` `9da4753` adds, under "The host boundary", **The Roc decides; the host holds what lasts**: a stream or a file served as stored is the Roc's decision (which key, which file, after whose it is) and the host's primitive (hold the connection, copy the bytes), and the host never works out the key or path again.
 
 ## The box → CC, 2026-10-28: 295 also clears the hunt's 57 long lines; the census counts tokens now
 
