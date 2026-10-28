@@ -7,6 +7,46 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 293 done: admin retire's plan is the Roc's; the removals stay Zig behind the password
+
+**293 done: admin retire's plan is the Roc's; the removals stay Zig behind the admin's password.** All on `claude/roc-chat`:
+- angry-gopher `1ef2dd6`: the freeze.
+- roc-webbox `e079f42`: the seam.
+- roc-webbox `d373345` and angry-gopher `51ba789`: the port.
+- roc-apps `7da163a`: the style rule. Its message lacks the `293:` prefix; amending a pushed commit was refused here, so it stays.
+
+- **Freeze first.** `retireRun` (hash `1f328c7a…`) runs the retire tests' seven trees as the admin page runs them:
+  - the dry run, the confirm, the tree left, and a second confirm;
+  - a keep name that matches no account; an account with no name;
+  - empty, undated, recent and old topics with no accounts;
+  - removals the store refuses, then one refused under the removed user's game data, then the confirm that finishes;
+  - a name that will not read;
+  - days 0 with everyone kept.
+
+  Items are sorted and trees listed sorted, so the run is the same on every machine. The hash is unchanged after the port.
+- **The twin, as the item asks.** The old Zig plan, unchanged, is now test-only in `chat_retire_twin_test.zig`. A new test runs `retireRun` through both plans and requires every answer and every tree to match, so the Roc never removes more. I checked that it bites: a planted wrong label in `Retire.roc` turned both the freeze and the twin red.
+- **The entry: the existing one, with a new `Retire` area.** I chose this over a second entry:
+  - It shares `decide`'s guard: the crash's jump, one call at a time, the Roc's memory ended. A second `provides` would need a second copy of all of that, and no platform here has one yet.
+  - `handle!` tests the area before anything else, so the retire runs none of the chat's prelude (no member check, no presence).
+  - The Zig side, `chat_router.retire`, builds its Host from `askingOnly`. It answers only the plan's reads (`list`, `read`, `list_accounts`, the failures) and its five steps; every other effect panics.
+- **Moved to the Roc** (`chat/Retire.roc`):
+  - the keep list's check (`refused`);
+  - which topics are old, with the newest date read by `Transcript.decode_file` and `Time.unix_from_rfc3339`;
+  - which accounts go, their DMs, their channel lines (the file rewritten), and the kept members' dangling pointers, projected as before.
+
+  The plan is built whole as a list of steps (`Note`, `Remove(path, File|Tree)`, `Replace`, `Retired(uid)`), and only then handed over one call at a time.
+- **The Zig keeps** (`chat_retire.Report`): doing each step only on a confirm (a dry run only records it), and each retired member's folders outside the chat (player, users, data and chat state), in the old order. **The accounts still go last**, in `finish`, after every step. Search is rebuilt after any confirm. **Roc never reads auth_root:** the names come from `list_accounts!` as for every chat page. `retire_user!` takes a uid only if it is digits with no leading zero; anything else fails the request at the seam.
+- **Kept as it was:** pruning a channel file writes every newline-separated piece back with a newline, the empty one after the final newline too. So `1\n2\n9\n` less 9 is `1\n2\n\n`. The freeze pins this, and an `expect` in `Retire.roc` says it. Worth fixing in its own item if you want.
+- **Small differences, each one that removes less:**
+  - (a) Conversations and topics are walked in name order, not the disk's, so the report's order no longer depends on the machine.
+  - (b) A transcript or folder read that fails now fails the whole retire with its error. The old Zig skipped that conversation and went on.
+  - (c) A pointer naming something that is no single path part (empty, `..`, holding `/`) is never swept.
+  - (d) A folder name that is not UTF-8 is not walked.
+- **Tests moved:** chat_retire.zig's and admin_retire.zig's tests now call the router, so they need `roc_chat`. They left build.zig's standalone list and run under router.zig's test root. The edge-sites list lost `chat_retire.zig allMembers`, which now lives in the test-only oracle.
+- **Style guide** (roc-apps `docs/roc-style.md`, "The host boundary"): new rule, "What destroys is planned as data, then handed over a step at a time". I also removed the five `(metal-vmm QUEUE NNN)` tags left in the guide, some of them mine from 286-291.
+- **Gates:** quick gate PASS (42 s); check_zig PASS. Hunt: `bool_returns` 0, `== stack` 56, unchanged. The refusal texts got their own small functions so no line runs long.
+- **Census:** the chat's Zig on live paths went from 27,967 to 26,143 tokens, or 4,011 to 3,592 code lines. The Roc went from 36,107 to 38,449 parse nodes. chat_retire.zig's live code went from 3,450 to 822 tokens. Its unreached tokens (1,351) are the tests' fixtures and the twin's `plan` helper.
+
 ## CC → the box, 2026-10-28: 292 done: uploads' POST decided by the Roc; the docs landing's tie by name
 
 **292 done: an upload's POST is decided by the Roc.** angry-gopher `bfa71f0` (the freeze), roc-webbox `5959fa3` (the seam), then roc-webbox `1cc5288` and angry-gopher `ab79ddd`; all on `claude/roc-chat`. With it, every DM and channel route is the Roc's: none is handed back to the Zig any more.
