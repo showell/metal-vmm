@@ -7,6 +7,58 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 302 done: Html.tag, every attribute value escaped; the pages' bytes unchanged
+
+**302 is done.**
+- roc-webbox `claude/roc-chat`: `b053617`.
+- roc-apps `claude/roc-chat`: `2a2fead` (the style rule).
+
+**The function:** `Html.tag : { name : Str, attrs : List(Attr), inner : Html } -> Html`, where `Attr : [Attr(Str, Str), Bare(Str)]`.
+- **Why a record:** the style guide's "Name what travels together". Three bare arguments would also be a `stack` finding that no comma fixes.
+- **Why not plain pairs:** the chrome's head has `<script defer src="...">` twice. The twin holds the shell to the Zig's bytes, so a bare attribute is needed: `Bare("defer")`. `defer=""` would mean the same to a browser but break byte-equality.
+- **Names are checked at run time, not by the hunt:** lowercase ASCII letters, digits and `-`, anything else a crash.
+- Also new: `Html.empty`. `json_script` now takes its `<script>`'s attributes, not a trusted opening tag.
+- Not taken: `void_tag` (no page puts a value in a void element) and `block_join` (no page wants it).
+
+**Applied:**
+- **No attribute value is filled into a template now.** The converted elements:
+  - the chrome's four head scripts and `Chrome.script`;
+  - the nav links;
+  - the docs textarea (`data-slug`) and the docs list (`href`, and `class` for the open one);
+  - the first-topic shell's `data-conv-base`;
+  - the 404's "Go back" link;
+  - the conversation page's `chat-root` and its ten data attributes;
+  - the sidebar data script;
+  - the recent page's data script;
+  - the feed and app pages' `-mount` div and `-data` script.
+- **A script's src is now host text (`Str`), escaped like every value.** The Zig placed it raw, but a hashed src is a path and a hex `?v=`, which `escape` leaves alone.
+  - `host_markup` stays, for the rendered markdown.
+  - `Limits.page.accept` became a `Str` to fit an attribute value.
+- **`fill` stays,** for the chrome's two text-only slots (title, viewer).
+- **The hunt:** `html_trusted_nonliteral` also flags a trusted literal with an odd number of `"`, which leaves an attribute open. Its new plant fires, and `Html.tag` stays quiet. On the chat: 0.
+
+**Bytes: unchanged everywhere I can check.**
+- The angry-gopher twin is byte for byte for the chrome shell and the 404, first-topic, empty-chat and conversation pages. It passed in full (my `/home/user/ag-pre` worktree again, since chat-markdown isn't on GitHub).
+- For the pages the twin doesn't cover (the docs list, the docs textarea, a feed page's mount and data, an escaped `data-conv-base`), I wrote `expect`s. I ran them against the **old** code first, where they passed, then kept them on the new code, where they pass too.
+- No attribute is escaped differently from before.
+
+**Tests:** the queue's cases are all in Html.roc:
+- an attribute holding each of `& < > " '`;
+- an empty attribute list, nesting, and an empty inner;
+- an empty value;
+- `Bare` before `Attr`.
+
+**Gates:**
+- `roc test` 247 (was 238); roc check (main, twin) and the fmt checks pass.
+- roc-webbox zig build test green; angry-gopher (ag-pre) green.
+- Hunt: `bool_returns` 0, `single_caller` 0, `html_trusted_nonliteral` 0, `== stack` **122** after `stack.shale write=1` on the touched files.
+
+**Census:** the Zig is unchanged at 25,643 tokens. The Roc went from 37,290 to **37,816** parse nodes (+526) and from 9,308 to 9,449 code lines (+141): Html.tag, its expects, and records stacked one item a line, where the trusted pieces had been shorter.
+
+**Style:** under Text and bytes, the new rule reads: "An element with attributes is built by `Html.tag`; a value never reaches an attribute through a template." It also names the hunt's open-quote finding.
+
+**Next:** 297 (records for 3+ arguments), then 298 and 294.
+
 ## CC → the box, 2026-10-28: 301 done: the builtins, one home per byte helper (Ascii), the Str rule; the v42 split merged
 
 **301 is done.**
