@@ -7,17 +7,199 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-28: 291 done: an upload and a download are decided by the Roc
+
+**291 done: an upload and a topic's download are decided by the Roc; the Zig keeps the bytes.** angry-gopher `8de84ff` (the freeze), roc-webbox `c2a2698` (the seam) and `1959196`, angry-gopher `57db441`, roc-apps `e49de49`; all on `claude/roc-chat`.
+
+- **Freeze first:** `downloadsRun` (hash `88d2a760…`) has 33 asks:
+  - The bundle by GET, HEAD and POST, a topic with nothing beside its transcript, a topic not there, and one not the viewer's.
+  - An upload whole, a 5 MiB one streamed past the whole-read size, and every shape of range: start and end, open, suffix, a suffix longer than the file, a list, spaced, past the end, reversed, `-0`, not bytes, an empty header, and an empty file.
+  - Names no upload has (`a.png`, a wrong extension, a missing file, a folder), and HEAD and POST.
+  - The hash is unchanged after the port, so headers and gzip bytes are identical.
+- **The seam, its own commit (`c2a2698`):**
+  - `serve_upload!` takes one new record, `UploadRec { first, last, size : U64, content_type, path : List(U8), part : [Range, Unsatisfiable, Whole] }`. Its offsets and size are asserted, and a crash probe drives every field for each part through the real ABI.
+  - `bundle_add!(name, path)` and `serve_bundle!(name)` carry bytes only. The host keeps the tar a file at a time, so no list of records crosses the seam.
+- **Moved to the Roc:**
+  - A new `chat/Upload.roc` holds `content_type` (32 hex digits, a dot and an accepted extension, which is also the path check on the file segment) and `range` (`bytes=`, the first of a list, spaces trimmed, a suffix, cut to the 8 MiB window), with `ZigText.parse_u64` for the numbers.
+  - In main.roc, `serve_upload!` checks the method (GET or HEAD, else 405), the name and the file's stat (404s), reads the `Range` header and passes the part.
+  - `serve_download!` checks the method, stats the transcript (404 if missing), then chooses the bundle's files: the transcript, the reactions when anyone reacted, and every upload in the folder's order, with folders skipped. It names each entry `<sid>/…` and serves it all as `<sid>.tar.gz`.
+  - New `Paths.uploads_folder` and `upload_path`; new `Files.bundle_add!`.
+  - The deleted parseRange Zig tests (RFC 9110 edges, the window) are now Roc `expect`s.
+- **What stays Zig, and why:** reading and streaming the file (`chat_upload.serveStored`: a whole read up to 4 MiB, chunked past it, one window read positionally for a range), and the tar and gzip (`chat_download.Bundle`). Both have to touch every byte.
+- **Deleted:** chat_upload's `serveUpload`, `parseRange`, `Range`, `uploadContentType`, `range_window` and the parseRange tests; chat_download's `serveBundle`; chat.zig's `.uploads` and `.download` arms (they now panic like the others), `isRead`, and its `download` import. I also removed the `parseRange` row from router_edges_test's edge-site table.
+- **Small differences, said plainly:**
+  - (a) An upload whose stored name isn't UTF-8 is now left out of a bundle (Files.list!'s text-at-the-door rule); the Zig included it. The upload path only ever writes hex names.
+  - (b) A reactions *path* that is under a file now counts as "no reactions" (stat's NotDir is Missing). The Zig's `read` failed the download with NotDir.
+- **Style (per 285's new rule):** two rules in roc-style.md under "The host boundary": "A list the host would mirror goes a call at a time" and "An effect that answers the request is for bytes only the host should touch". No new Shale check.
+- **Gates:** quick gate PASS; check_zig passed in 77 s. The hunt is at `bool_returns` 0 and `== stack` 56.
+- **Census:** Zig on live paths went from 29,309 to 28,698 tokens; the Roc from 34,007 to 35,608 parse nodes.
+- **Shale:** for the second time a cramped disk (0 MB free) hit mid-run. Shale's `edit` reported success while the shell around it failed, so I re-checked each file. Clearing `.zig-cache/o` freed 15 GB. No Shale gap here; the cache just grows.
+
+## CC → the box, 2026-10-28: 290 done: the docs writes are the Roc's; docs.zig is gone
+
+**290 done: the docs' writes and the live preview are the Roc's; docs.zig is gone.** angry-gopher `10b422f` (the freeze), then roc-webbox `26ede3e` and angry-gopher `381a328`; all on `claude/roc-chat`.
+
+- **Freeze first:** `docsWriteRun` (hash `1eb961a4…`) has 37 asks, and hashes the files they leave and the recent feed's frames. It covers:
+  - A new doc: suffixed past one that's there, a reserved name stepped over (`list` becomes `list-2`), a title of no letters (`untitled`), a non-ASCII title, an 80-character cut, and no title or a blank one (303).
+  - A save: a trimmed slug, an emptied doc, no body (400), a name that is no slug (400), a doc not there (404), a body that fits under 1 MiB, and a form over it (413).
+  - The preview, with hostile markdown counted.
+  - The reading list: a DM's entry, a channel's, a fence longer than the body's, one-line fields, the default note, a missing field (400), and a full list (413).
+  - Wrong methods (405 and 303), bad escapes and a field sent twice (400), another member's doc (404), and a docs folder that is a file (500, NotDir).
+  - The hash is unchanged after the port. The hostile count is in it, so the counter's delta is pinned too.
+- **The Roc:**
+  - Docs.roc gains the pure parts: `slug_of_title` (slugifyTitle), `reading_entry` (composeEntry, with its quote fence and one-line fields) and `recent_frame` (publishDocRecent's frame, built with JsonOut).
+  - main.roc gains `docs!` (one dispatch for every docs route), `new_doc!`/`create_doc!`/`unused_slug!` (uniqueDocSlug, checking with `stat!`), `save_doc!`, `preview_doc!`, `save_to_reading_list!`/`saved_message!` and `doc_touched!`.
+  - The reading list's cap is a new constant, `Limits.reading_list_bytes`.
+  - I ported reading_list's composeEntry tests and slugifyTitle's cases to Roc `expect`s.
+- **One new hosted effect:** `render_preview!` returns `render!`'s answer, and the host also counts hostile markdown (`edge.count(.malformed_markdown)`), as docsRender did. It reuses RenderRec, so there is no new seam record.
+- **Deleted:**
+  - `docs.zig`, the whole file.
+  - From `docs_store`: slugifyTitle, uniqueDocSlug, docFileExists, isReservedSlug, titleFromSlug, writeUserDoc, createUserDoc, appendToUserDoc, and their tests.
+  - From `reading_list`: jumpURL, composeEntry, save, oneLine, quoteFence, max_reading_list_bytes, and their tests.
+  - The docs arm in `chat.serve`, which now panics like the other Roc families, and `chat.serve`'s unused `bus` and `now` parameters.
+- **What still reaches docs_store and reading_list (the "say which"):** tests only.
+  - `docs_store`'s `userDocsDir`, `docPath`, `validDocSlug` and `readUserDoc` are used by router_failures_test, router_chat_test and chat_actions_twin_test, plus its own unreadable-doc test.
+  - `reading_list`'s `parseRefs` and `reading_list_slug` are used by chat_twin_test (the twin against the Roc's Saved.roc) and router_chat_test.
+  - No admin page or other production code reaches either. The census counts these as unreached (3,669 tokens), so they're candidates for 294.
+- **Small differences, said plainly:**
+  - (a) Form values are text at the door (Form.roc's rule), so a doc saved with bytes that aren't UTF-8 is now a 400. The Zig stored any bytes.
+  - (b) An 80-character slug suffixed past 80 (`…-2`) was the Zig's InvalidDocSlug error, a 500. It is now a 500 that says so in its body.
+  - (c) A *folder* named `<slug>.md` made the Zig count that slug as taken (`has()` sees it) and step to `-2`. The Roc's `stat!` answers Failed for a folder, so the request is a 500.
+  - (d) The route golden's three GET rows for `/docs/new`, `/save` and `/save_to_reading_list` are now the Roc's 303 and 405s, the same answers the old Zig gave.
+- **Gates:** quick gate PASS; check_zig passed in 69 s. The hunt is at `bool_returns` 0 and `== stack` 56. Docs.roc's five long CSS lines are unchanged from 289.
+- **Census:** Zig on live paths went from 32,156 to 29,309 tokens; the Roc from 32,340 to 34,007 parse nodes.
+- **Style:** no new rule. `docs!`'s chain of five `if`s shows in the hunt's chain list; a `match` on string literals would read better if this Roc pin takes it. I'll check that when I do 295/297.
+- **Shale:** every edit went through Shale, including `remove(p)` for docs.zig. For the files I trimmed I reused the `cut(p, from, to)` helper from 289. A builtin for it would still help (said under 289).
+
+## CC → the box, 2026-10-28: 288, 289: the style rules they made
+
+Per 285's new rule (the style guide moves with the code), these rules are in roc-apps' `docs/roc-style.md`, commit `3d69ce5` on `claude/roc-chat` (master merged in first):
+- **288, under "Effects and purity":** "Best-effort work runs in an aside, and gives back what it could not spend." The example is `presence!`'s aside and `presence_unspent!`.
+- **289, under "The host boundary":** "Markup the host made comes in at one door." `Html.trusted` takes literals only; host-built markup becomes `Html` in Chrome.roc alone (`Chrome.src_in`, `Chrome.rendered`), and the hunt flags `Html.host_markup` elsewhere.
+- **No new Shale check:** the hunt's `host_markup` flag was already in the guide's enforcement list, under `html_trusted_nonliteral`. 288's `[CameOnline, Steady]` follows "A hosted effect answers a tag".
+
+## CC → the box, 2026-10-28: 289 done: the docs read pages are the Roc's
+
+**289 done: the docs' read pages are the Roc's.** angry-gopher `6e0a5ab` (the freeze), then roc-webbox `9a8f1d9` and angry-gopher `181665f`; all on `claude/roc-chat`.
+
+- **Freeze first:** `docsReadRun` (hash `9f6b8fcb…`) has 33 asks: the landing (it 303s to the doc touched last, or shows the editor when there are none), a doc's editor, its `.md`, the list JSON, and the preview. It asks as the owner, as another member, and as one whose docs folder is a file. It covers every 303, 404 and 405, the 500 for a name that is no slug (`/chat/docs/Bad.md`, `/chat/docs/.md`), and a POST to a read page. The hash is unchanged after the port.
+- **The Roc:** a new `chat/Docs.roc` builds the three-pane editor with Chrome.page, and the list's JSON with JsonOut. The CSS is a `\\` multiline string, copied byte for byte from the Zig. In `main.roc`, `docs_read!` handles the landing (`last_touched!`), `docs_list!`, `raw_doc!` and `docs_editor!`/`open_doc!`, through `Files.list!`, `stat!`, `read_bytes!` and `Host.render!`. `Paths.docs_in_order` keeps the folder's order, so on a tie in mtime the first doc wins, as before.
+- **Still Zig (for 290):** `/new`, `/save`, `/save_to_reading_list` and `/render`. I left the live preview with them. It is not a read page, and it counts hostile markdown (`edge.count(.malformed_markdown)`) with no primitive the Roc has. It goes with 290's writes. `docs.zig` drops 210 lines: `handle` keeps the four verbs and panics on anything else. `docs_store` drops `listUserDocs`, `mostRecentDocSlug`, `docExists` and `DocSummary`.
+- **New Chrome entry, worth a look:** `Chrome.rendered`, for Host.render!'s HTML as markup. The hunt allows `Html.host_markup` only in Chrome.roc, and the editor's preview paints the server's own rendered markdown, so I gave that markup its one door there. I didn't use `serve_rendered!`, because it renders as *trusted* (the links page), not as `markdown.render`.
+- **Small differences, said plainly:**
+  - (a) The landing's "touched last" compares whole seconds (`stat!`), where the Zig compared nanoseconds. Two docs saved within one second now tie, and the first in the folder's order wins. On FAT the Zig already tied at 2 s.
+  - (b) A doc whose read fails (a symlink loop) now fails the request with the error, which is the host's 500. The old answer was a 500 that said "The doc cannot be read: …". router_failures_test now accepts either form, never a 404.
+  - (c) A slug in the list's `href` now goes through `Html.text`. A valid slug escapes to itself, so the bytes are the same.
+- **Route golden:** six docs rows now show the Roc's own answers (the editor's 200, a nested 404, the 303 for a name that is no slug, and two 404s for a missing `.md`). Each is what the old Zig would have answered.
+- **Census tool:** `zig_census.shale` now reads a block holding one tag inside `served_by` (`if r.rest == "/new" { Zig } else if ...`). Without that it stopped.
+- **Gates:** quick gate PASS; check_zig passed in 49 s; hunt `bool_returns` 0 and `== stack` 56, unchanged. Docs.roc's five long CSS lines stay byte-identical, and I paid for them by fixing five old long lines: the `links_css` multiline (295's direction), a comment, `Saved`'s method check, a crash message, and a Paths test.
+- **Census:** Zig on live paths went from 34,156 to 32,156 tokens; the Roc from 31,007 to 32,340 parse nodes.
+- **Shale:** inside a Shale function, only `const`s are visible, not `local`s. `find` takes no "plain" flag (it is literal already). Cutting a file between two markers took a small `cut(p, from, to)` built on `find_in` and `sub`. A builtin `edit` form for "from this marker to that one" would cover what I needed in 288, 289 and probably 290.
+
+## CC → the box, 2026-10-28: 288 done: presence broadcast is the Roc's; /settings no longer broadcasts
+
+**288 done: presence's broadcast is the Roc's.** roc-webbox `bc66ab2`, angry-gopher `b3d94f8` (the freeze), `8ac464e`; all on `claude/roc-chat`.
+
+- **Freeze first:** `presenceRun` in `chat_actions_twin_test.zig` pins every frame the old `markActiveAndBroadcast` published, in four members' order, including a member whose name will not read (no one told, the edge kept, retried 30 s on, then told). Its hash is unchanged after the move.
+- **The seam:** `count_presence! : {} => [CameOnline, Steady]` (new `PresenceEdge` enum, in `assertRocOrder`), and a new `presence_unspent! : {} => {}`. The online map stays the host's: it lasts the process.
+- **The Roc:** `presence!` runs `came_online!` in an aside. It reads the uid, the accounts, the member's name and `Accounts.authorized`, then publishes `user-online` on each other account's `sb:` key and the "has come online." strip with `/chat/c/<pair>` on its `ntf:` key. A failed read tells no one, never fails the request, and calls `presence_unspent!`, which keeps the 30-second retry.
+- **Seam shrank:** a Zig route's presence is now counted by the Roc before it hands the route back, so `Chat.Counting`, `Answer.presence` and `Decision.serve.presence` are gone. In the route golden, 9 docs rows go from `+presence a-` to `am`; it is the same presence, counted by the Roc.
+- **Deleted:** `markActiveAndBroadcast` and `unmark`. The router's `.serve` presence arm is gone, and so is `settings.handle`'s `bus` parameter. `presence.zig` drops five imports.
+- **BEHAVIOUR CHANGE, /settings:** `/settings` used to mark presence AND broadcast the came-online edge. It now marks the member seen (`presence.markSeen`) and tells no one. If that visit was the edge, the edge is kept, owed at once, so the member's next chat request broadcasts it. So a member who opens only /settings shows online on others' first paint, but no live "came online" goes out until they touch the chat. A new test pins this.
+- **Security:** nothing touches auth_root. The Roc reads only the accounts listing it already read.
+- **Gates:** quick gate PASS; `./ops/check_zig` passed (the known silent "failed command" line showed once, and the summary passed). The hunt shows `bool_returns` 0 and `== stack` at 56, down from 57: two crash probes restacked.
+- **Census:** Zig on live paths went from 34,494 to 34,156 tokens; the Roc from 30,804 to 31,007 parse nodes.
+- **Shale:** every edit went through Shale. Two snags, both my own: I wrote `let` instead of `local`, and I reached for a `write` that Shale doesn't have (`replace(p, s)` writes the whole file, and `edit(..., {all = true})` covers the repeated spots). One real gap: replacing a file's tail needs `sub(s, 1, find_in(p, marker))`, which mixes 1-based `sub` with the 0-based offsets `find_in` returns. It works, but it's easy to get off by one. An `edit` form that replaces from a marker to the end of the file would remove the arithmetic.
+
+## CC → the box, 2026-10-28: 287 done: the store is the Roc s, which writes .count
+
+**287 done: a message's store is the Roc's, and the Roc writes `.count`.** On `claude/roc-chat`: roc-webbox `047e9cd` (the seam record) and `33540c8`; angry-gopher `68f3628`; roc-apps `6a2d0c8` (the style rule).
+
+- **Primitives:** `store_message!` is gone. In its place:
+  - `append_message! : Conv, sid, block => { size : U64, status : [Appended, Failed] }`, whose record `AppendedAtRec` (16 bytes, `size` at 0) has its own commit and asserts;
+  - `index_message!` (search_index `noteAppend`; it cannot fail);
+  - `write_cache!` (`Files.write_cache!`): a cache's whole file, whose failure the host logs and never makes the request's.
+- **The Roc's `store_block!`, in its order:**
+  1. the append;
+  2. the `.count`, by `Count.text(index + 1, size, Known({ offset: size - len(block), uid }))`;
+  3. the index.
+
+  An append that fails fails the send with nothing stored. After it, nothing can fail the send, as before. `chat_store.storeMessage` became `appendBlock` (append, answer the size). The test fixture `storeForTest` now stores in the Roc's order.
+- **The tests:**
+  - **Byte-identity twin:** after each of two sends (the second's body holds a separator line), the `.count` the Roc wrote equals byte for byte what `backfillSidecars` writes for the same transcript once it's deleted.
+  - **The crash:** a third message's append with the count the second left put back (as a crash between append and count leaves it) is a miss, and the next send is numbered 4 by the transcript, its count `4 …`.
+  - **Frozen:** the send's frozen run (`sendRun`: transcripts, `.count` files, feeds, frames, search) hashes unchanged.
+  - **The seam:** probes cover the append, the index's every message field, a cache write, and a store that fails, which asks no count and no index.
+- **The style guide:** "A failed read of a cache is a miss" now covers writes: `Files.write_cache!` answers nothing, and a request whose truth is written is never failed over its cache.
+- **Census:** live Zig 34,408 → 34,494 tokens (+86), unreached 3,000 → 3,069; the Roc 30,656 → 30,804 nodes (+148). The Zig grew: three host primitives (each with its own failure handling and log line) replace one call into `storeMessage`. The count's decision moved, but `chat_count.writeCount` stays for the backfill, the other writer, and the fixture. Unreached grew by what only the fixture still reaches.
+- **Gates:** green. The quick gate passed in 42 s; `check_zig` 0; the hunt's `bool_returns` 0 and `stack` 57 (my new long lines stacked, or named with a type `BlockAt`).
+- **Shale (Steve's reminder):** from this item's later edits on, I edited with Shale's `edit` and `append` (`[=[ ... ]=]` strings) instead of Python. Nothing was harder yet. Multi-line `old` strings need `\n` written out inside `"..."`; a long-string form for `old` and `new` would read better.
+- **Wall time:** about 80 min, against M-L.
+
 ## The box → CC, 2026-10-28: the style guide moves with the code: from 286 on, an item that makes a style decision updates roc-style.md
 
 Steve, 2026-10-28: "stay on top of it as CC makes changes". roc-apps' docs/roc-style.md is now organized by topic (principles, naming, types and data, text and bytes, errors, effects, modules, the host boundary, layout, testing and enforcement, tools), each rule a bold line, its why, and an example. QUEUE 285's rules now say: **an item that makes or changes a style decision also adds or edits its rule there**, in its section and form, and says which rule in its FEEDBACK. A new Shale check joins the guide's enforcement list.
 
 296's stacking rule and the stack recipes are already in. Build text by interpolation (`"${a}/${b}"`, convert at the slot, `Str.join_with` for a list) is now a rule too.
 
+## CC → the box, 2026-10-28: 286 done: every chat stream is the Roc s (a Stream answer)
+
+**286 done: every chat stream is the Roc's.** On `claude/roc-chat`: angry-gopher `603e1e6` (the freeze) and `d254de3`; roc-webbox `4b9ae7d`.
+
+- **The answer:** a new `Stream` kind in Chat.roc. It reuses the Answer record's fields, so the seam record is unchanged:
+  - `location` is the bus key, picked with BusKey.roc;
+  - for a topic's stream, `body` is the transcript's path and `route.topic` the topic;
+  - an empty `body` means live only.
+
+  The seam's Decision is `.stream{key, transcript, topic}`, and `decide` holds the transcript path to the chat root as every file call is (`error.PathOutsideChatRoot`).
+- **The Roc decides:**
+  - `member_stream!` takes the member's uid and gives the recent, images and code feeds' streams, the notifications and the sidebar, each on its BusKey key;
+  - a topic's stream comes after the conversation and topic are found the viewer's: its key `<key>/<topic>` and its transcript;
+  - every stream is a GET's, else a 405, as `sse.forward` answered;
+  - the NotFound route is the Roc's own 404, presence counted as before.
+- **The Zig keeps the primitives:** `chat_router.zig`'s `.stream` is `sse.forward(key)`, or `chat_sse.streamTranscript` (the backlog replay from the cursor, then live). `chat_store.openStream` now takes the path and key the Roc named. Gone: `recent.zig`, `images.zig` and `code.zig` (each was only its stream), chat.zig's stream, notifications, sidebar and 404 arms, and the `bus` parameter they alone used.
+- **Frozen first** (`603e1e6`): `streamsRun` covers all six streams, 25 asks:
+  - each as its owner;
+  - a DM's and a channel's as one not theirs;
+  - a topic not there, a pair and a channel that name nothing, and a bad channel name;
+  - POST and HEAD;
+  - signed out;
+  - `/chat/nowhere` and `/chat/recent/streamX`.
+
+  For each kept stream, one blob is published on the key it should hear, and every frame it then makes is read until there are none. That's the "a frame published once delivered once" test, through `chat_router`. The hash `33fca94b…` matched the old Zig and matches the Roc's streams unchanged.
+- **The route golden:** 542 lines changed, all expected: 537 NotFound lines are now the Roc's 404, and the five member streams are now `stream <key>`. roc-webbox's router tests now read a NotFound route as the Roc's 404.
+- **Still the Zig's, for their own items:** static assets, docs except its post (289/290), and a topic's uploads, upload and download (291/292). The item's "afterwards only the static assets stay Zig" holds once those land.
+- **Census:** live Zig 34,923 → 34,408 tokens (−515); the Roc 30,447 → 30,656 nodes (+209). The hunt: `bool_returns` 0, `stack` 57, as before. My three new long lines in `act!` are written as blocks.
+- **Gates:** green. The quick gate passed in 47 s. `check_zig` failed twice, then passed on the next run:
+  - once on chat/README.md naming the deleted `recent.zig` and `images.zig` (fixed);
+  - once on Shale's "host: a timeout is a result" race, plus one silent test-binary failure, both known.
+- **Wall time:** about 95 min, against L.
+- **Style guide:** roc-apps `claude/roc-chat` `9da4753` adds, under "The host boundary", **The Roc decides; the host holds what lasts**: a stream or a file served as stored is the Roc's decision (which key, which file, after whose it is) and the host's primitive (hold the connection, copy the bytes), and the host never works out the key or path again.
+
 ## The box → CC, 2026-10-28: 295 also clears the hunt's 57 long lines; the census counts tokens now
 
 After 296, the hunt's `stack` check reports 57 findings on roc-webbox `main`, all of them "long, nothing to stack": 51 long string literals (mostly the markup and CSS in Chrome.roc, one of them 360 columns, and Feeds.roc) and 6 long comments. **Take them in 295:** the strings become `\\` multiline strings, which is 295's second part already, and the comments are rewrapped under 100 columns. 295 is done when `stack` is 0.
 
 **The census and the hunt measure code now, not layout** (roc-webbox `0898725`, by the box). Zig is counted in tokens (trailing commas left out) and Roc in parse nodes. `long_definitions` counts nodes, with a threshold of 290. Line counts are still printed, labelled as layout's. Across 296's stacking the tokens and nodes didn't move: live Zig is 34,923 tokens and the Roc 30,447 nodes. Report census deltas in tokens and nodes from now on. A trailing comma in a stacked tag union was being read as an empty tag; that's fixed too.
+
+## CC → the box, 2026-10-28: 296 done: stack.shale in the cookbook, applied to the chat in both repos
+
+**296 done: three or more, one a line.** The tool is shale `claude/roc-chat` `ebc5d84`. Applied: roc-webbox `claude/roc-chat` `0ec6a03` (the stacking) and `01031bf` (the hunt), from `origin/main`; angry-gopher `claude/roc-chat` `8d9c2d5`.
+
+- **The recipes:** `cookbook/roc/stack.shale` and `cookbook/zig/stack.shale`, each in its cookbook's README.
+  - **The check:** a group (list, record, tuple, call's or lambda's arguments, tag payload; in Zig a struct, tuple or array literal, argument or parameter list, container or error set) holding three or more items on one line is a finding, `path:line: stack: N items in (...)`. So is a line over `width=` (100), `long: ...`, which says whether a group of two could take it.
+  - **The rewrite:** `write=1` gives each finding a trailing comma, outermost group first (a long line with no group of three gets its widest group of two, as `roc_commas.shale` did), runs `roc fmt` or `zig fmt` on the files it changed, and repeats until a pass changes nothing. A second run changes nothing; I checked on the plants and both trees.
+  - **Plants:** `self_test=1` holds one plant of each kind, plus `clean.roc`/`clean.zig`, which hold commas and brackets inside strings, `'x'`, `\\` lines and comments, and in Zig a three-operand `for` and a three-name capture. Every plant gives its finding; the clean ones give none.
+  - **A departure from the item: it reads characters, not tokens.** It's a scanner that steps over strings with their escapes, character literals, `\\` lines and comments, as `roc_commas.shale` does. The Roc side has no tokenizer to call. The Zig side could use `zig_tokens`, but then the two would differ; the clean plants hold the line. Say if you want Zig's on the tokenizer.
+- **Applied:**
+  - roc-webbox `chat/**/*.roc` and `src/chat_*.zig`: 39 files, +8,238 −1,193. The Roc took 3 passes, the Zig 5. Pages.roc's `sidebar_json` `room` and `topic` now read one field a line.
+  - angry-gopher `zig-server/src/chat*.zig`: 21 files, +11,437 −1,771, 5 passes.
+  - **Left:** lines the rewrite can't reach, each listed by the recipe. 57 in the Roc: long strings, conditions, a function type's bare arguments, long comments. 90 in roc-webbox's Zig and 185 in angry-gopher's: long strings and format strings, mostly in the twins.
+- **The hunt:** `tools/roc_hunt/hunt.shale` now runs `cookbook:roc/stack.shale` over `chat/**/*.roc`, `== stack: 57`, and its `self_test=1` runs the recipe's plants too. It needs the `cookbook` mount, as the box's config has.
+- **Census:** the chat's live Zig went from 2,907 to 4,949 lines, unreached from 258 to 506, and the Roc from 4,139 to 7,544. That's the layout, not code: the census counts code lines, and stacking one call of three arguments turns one line into five. From here on the census measures layout as much as code. I suggest it count statements or tokens; or read 4,949, 506 and 7,544 as the new baseline.
+- **Gates:** green. The quick gate passed in 46 s; `check_zig` 0, store-absence lint included; the hunt's `bool_returns` 0; Shale's `zig build test` green.
+- **For the box: line-based lints.** The store-absence lint and the other line readers still pass, but a call that once sat on one line now spans several. A lint that matches a call and its `catch` on one line could miss one now. I didn't audit each lint for that; it's worth a look at the ones that read `catch` off the call's line.
+- **Wall time:** about 70 min. The slowest step was `check_zig` over the stacked tree, 121 s.
 
 ## The box → CC, 2026-10-28: go on: 296 next, then 286; 285 merged; FEEDBACK archived
 
