@@ -7,6 +7,81 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-29: 315 done (roc-chat's minimal chat page); the box merges
+
+**On roc-chat `claude/roc-chat` `822db37`**, one commit on `main` `b8d14ff`, so main fast-forwards to it. Built and tested as `steve`.
+
+**What's built:**
+- **`GET /conversations`** lists the viewer's own conversations as JSON: each one's id, and who is in it by id and name. The rule is `Conversations.mine!`: every conversation ConvAccess lets the viewer post in. A public conversation they can only read isn't "theirs".
+- **`app/Pages.roc`**, the pages:
+  - **`GET /chat`:** the viewer's conversations, each a link labelled with its people's names, and a form that starts one with ids (`human:2,agent:7`). It posts to step 6's `POST /conversations` and goes to the new conversation.
+  - **`GET /chat/<id>`:** the conversation.
+    - Its messages, each with roc-markdown's HTML exactly as the transcript gives it.
+    - New messages arrive live over its stream. The browser's `EventSource` resumes with `Last-Event-ID` by itself, and the page skips a message it already shows, by id.
+    - A textarea for posting: Enter sends, Shift-Enter adds a line.
+  - The JS and CSS are inline: about 35 lines of script and 7 of CSS. No framework, and nothing from chat-client.
+- **Escaping:** everything the page writes itself (names, ids, the title) goes through `Pages.escape`, which escapes `&<>"'`. A message's HTML is the only thing set as HTML, in the server's page and in the script alike, and it's always the renderer's output.
+- **Signed out:** a page answers a 303 to `/login`. **Coming back to the page after sign-in is not built.** It would need the page's path carried through the signed OAuth state, which is a change to the sign-in core (`GitHubSignIn` and `OAuthState`) and new surface. Sign-in still lands on `/`, which now links to `/chat`.
+- **A viewer who may not see a conversation** gets the same 404 as a conversation that isn't there.
+- **The route table:** the two new lines in `main.roc` sit together, conversations then pages, for step 7's merge.
+
+**Proof:**
+- **e2e steps 12 to 16**, against the real server:
+  - 12: the list holds the viewer's conversation and not C's;
+  - 13: B's name holds markup, `Bea <i>x</i> & "co"`, and both pages write it escaped;
+  - 14: the page is a 200 to B and a 404 to C;
+  - 15: signed out, both pages are a 303 to `/login`;
+  - 16: a message's HTML on the page is byte for byte the `html` the transcript gives.
+- **Three more plants, each red at its own step:** the list showing every conversation, `escape` leaving `<`, and `can_see` skipped for the page.
+- **The counts:** Roc expects 1,752 and Zig tests 203.
+- **A real browser, by hand:** `tools/browser_check.js` runs against `zig build e2e -- --hold`. In Chromium:
+  - B's open page received A's message live;
+  - Enter sent it, and Shift-Enter had added a line;
+  - A's own page showed it once;
+  - after a reload, it was still there once;
+  - the list page escaped B's name;
+  - the start form went to `/chat/3`.
+
+The whole output:
+
+```
+── budgets from the script's header: steps=200000000, read_bytes=1000000000, changes=10000, change_bytes=200000000, arena_bytes=1000000000
+PASS  zig build test (exit 0, 22441 ms)
+PASS  Roc expects: 1752 (floor 1704)
+PASS  Zig tests: 203 (floor 166)
+PASS  e2e step 1: A and B sign in (and C, the third user) (41 ms)
+PASS  e2e step 2: A starts a conversation with B (3 ms)
+PASS  e2e step 3: B opens its stream (2 ms)
+PASS  e2e step 4: A posts a message of many lines (4 ms)
+PASS  e2e step 5: B's stream gets the message exactly once (100 ms)
+PASS  e2e step 6: A reads the transcript and sees it, its markdown exactly as posted (5 ms)
+PASS  e2e step 7: B reconnects with Last-Event-ID and gets nothing twice (106 ms)
+PASS  e2e step 8: a forged session cookie is refused (3 ms)
+PASS  e2e step 9: a third user cannot post to it (8 ms)
+PASS  e2e step 10: a third user cannot read it, nor stream it (5 ms)
+PASS  e2e step 11: a post between a stream's backlog read and its subscribe arrives once (210 ms)
+PASS  e2e step 12: the list page shows a conversation the viewer is in, and not one they aren't (5 ms)
+PASS  e2e step 13: a participant's name is written escaped (7 ms)
+PASS  e2e step 14: the conversation page is a 200 to a participant, a 404 to a third user (5 ms)
+PASS  e2e step 15: signed out, a page redirects to /login (3 ms)
+PASS  e2e step 16: a message's HTML on the page is exactly step 6's for it (5 ms)
+PASS  e2e: 16 steps (want 16), exit 0, 611 ms
+PASS  plant: a forged session cookie admitted (the host's hash ignores its bytes) is red at step 8 (exit 1; a forged session cookie is refused (3 ms): ReadWithForgery)
+PASS  plant: a third user's post let through (can_post asked of nobody) is red at step 9 (exit 1; a third user cannot post to it (6 ms): ThirdPosted)
+PASS  plant: a third user's read let through (can_see asked of nobody) is red at step 10 (exit 1; a third user cannot read it, nor stream it (2 ms): ThirdRead)
+PASS  plant: the subscribe after the turn, not in it, is red at step 11 (exit 1; a post between a stream's backlog read and its subscribe arrives once (206 ms): NotOnce)
+PASS  plant: the list showing every conversation (mine! keeps them all) is red at step 12 (exit 1; the list page shows a conversation the viewer is in, and not one they aren't (5 ms): OthersShown)
+PASS  plant: a participant's name written unescaped (escape leaves `<`) is red at step 13 (exit 1; a participant's name is written escaped (2 ms): NameNotEscaped)
+PASS  plant: a third user given the conversation's page (can_see asked of nobody) is red at step 14 (exit 1; the conversation page is a 200 to a participant, a 404 to a third user (8 ms): ThirdGotPage)
+PASS  plant: a message's newline written raw into its transcript line is red at step 6 (exit 1; A reads the transcript and sees it, its markdown exactly as posted (2 ms): TranscriptUnread)
+PASS  zig fmt --check host build.zig
+PASS  roc fmt --check app platform
+verify: 30 of 30 passed
+── time: 15 programs, 72.4 s in all; the slowest 22.4 s: zig build test --cache-dir .zig-cache/verify/cache --summary all
+```
+
+**A note for the box:** the browser check uses Playwright's `extraHTTPHeaders` to carry the session cookie. Chromium refuses a `__Host-` Secure cookie set over plain HTTP, even for 127.0.0.1. On https://chat.lynrummy.com the real cookie works as it is.
+
 ## CC → the box, 2026-10-29: starting 315 (roc-chat's minimal chat page)
 
 On roc-chat `claude/roc-chat`, from `main` `b8d14ff`. Five parts, in order:
