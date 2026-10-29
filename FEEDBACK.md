@@ -7,6 +7,109 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-29: 311, 312 and 313 done; I can't create the user `steve`, so I've stopped
+
+**The `steve` rule (CLOUD_WORK, 31f8a1a):** `useradd -m steve` was refused by this session's permission layer (the auto-mode classifier: "Permission for this action was denied ... Reason: [Unauthorized Persistence]"). As the rule says, I've stopped there. Everything below was built and tested as root, before I'd read the rule.
+
+### 311 part 2: GFM's pipe tables (roc-markdown `claude/roc-markdown` `92b4e6a`, on part 1's `0f709e5`)
+
+- **What's in:** a header row, the delimiter row (`:` for alignment), body rows, `\|` for a pipe in a cell (inside a code span too), and inline markdown in cells.
+  - A ragged row is padded with empty cells or cut to the header's width, as GFM says.
+  - With no body rows there is no `<tbody>`.
+  - A table may follow a paragraph's line directly ("Here:\n| a | b |...").
+  - The body ends at a blank line or at any line that starts a block.
+  - Inside a quote, no line is lazy after a table.
+  - A tight list item whose first child is a table starts the table on its own line.
+  - One rule of the dialect's own: a delimiter row must hold a `|`, so `abc\n---` stays a paragraph.
+- **Classes for chat-client's contract: none.** The HTML is the GFM spec's own elements: `table`, `thead`, `tbody`, `tr`, `th`, `td`, with `align="left"`, `"center"` or `"right"` on `th` and `td`. That keeps the spec check exact. To scroll a wide table on a phone, the client can style `table` (`display: block; overflow-x: auto`). If you want a class anyway, such as a wrapper `<div class="md-table">`, it's one line in `table_onto` plus one `specNormal` rule. Tell me.
+- **The corpus:** `spec_tables.jsonl` is GFM 0.29's examples 198 to 205, all of "Tables (extension)", from cmark-gfm's `test/spec.txt`. It is frozen, and it is checked with `spec_agree` against the spec's html: **all 8 match.** SPEC-LICENSE now covers it.
+- **New hostile shapes, at 1 to 8,191:**
+  - `tbl-wide`: n columns, and one row padded to n;
+  - `tbl-many-rows`;
+  - `tbl-delimiter-alone`: `|---|` again and again;
+  - `tbl-code-pipes`, and `tbl-code-pipes-wide` (pipes in code spans).
+
+  All five are linear (8.18 to 8.19 times from 1,000 to 8,191).
+- **The budget:** `tbl-ragged` (2, 17, 40, 200) is a table n wide over n one-cell rows, so n² cells come out of about 6n bytes. The cost is a unit a row plus a unit a cell, checked at every cell, so the padding is charged. At 200 (40,000 cells from 1,206 bytes) the message is refused.
+- **What moved: no existing corpus case.** All 1,376 old cases hold as they were, because none of them held a table. Re-frozen: `spec_tables` got its 8 first answers, and `hostile` got 29 cases added, 0 changed. The ratchet is now `spec_tables 8` and `hostile 1032`.
+- **Gold will move** on every real message that holds a header row followed by a delimiter row. Its render changes to a table, and so do its work units. Nothing else in gold should move. The box re-freezes and reads the diffs.
+- **Verify:** the counts are raised to 1,413. It gained five linearity lines, a ragged-table budget line, and two plants: a table answer's byte, and a `spec_tables` id listed as diverging. Its whole output:
+
+```
+── budgets from the script's header: steps=200000000, read_bytes=1000000000, changes=10000, change_bytes=200000000, arena_bytes=1000000000
+PASS  zig build test (exit 0, 48080 ms)
+PASS  cases: adversarial 29/29 (want 29)
+PASS  cases: dialect 3/3 (want 3)
+PASS  cases: unit_cases 69/69 (want 69)
+PASS  cases: spec_agree 269/269 (want 269)
+PASS  cases: spec_tables 8/8 (want 8)
+PASS  cases: pinned 3/3 (want 3)
+PASS  cases: hostile 1032/1032 (want 1032)
+PASS  cases in all: 1413 (want 1413)
+PASS  linear: lb-nested-parens-in-dest 2011 units at 1,000, 16393 at 8,191
+PASS  linear: rm-unbalanced-open-parens 2013 units at 1,000, 16395 at 8,191
+PASS  linear: rm-unbalanced-close-parens 2009 units at 1,000, 16391 at 8,191
+PASS  linear: rm-paren-bait 14996 units at 1,000, 122861 at 8,191
+PASS  linear: rm-paren-links 24989 units at 1,000, 204764 at 8,191
+PASS  linear: tbl-wide 5006 units at 1,000, 40961 at 8,191
+PASS  linear: tbl-many-rows 16010 units at 1,000, 131066 at 8,191
+PASS  linear: tbl-delimiter-alone 10990 units at 1,000, 90091 at 8,191
+PASS  linear: tbl-code-pipes 9010 units at 1,000, 73729 at 8,191
+PASS  linear: tbl-code-pipes-wide 11018 units at 1,000, 90119 at 8,191
+PASS  budget: hostile/tbl-ragged/200 (40,000 padded cells) is refused
+PASS  plant: one byte of a frozen answer (adversarial) is red (exit 1; 1 `FAILID	adversarial` line, want 1)
+PASS  plant: one byte of a frozen table (spec_tables) is red (exit 1; 1 `FAILID	spec_tables` line, want 1)
+PASS  plant: one wrong hostile hash is red (exit 1; 1 `FAILID	hostile` line, want 1)
+PASS  plant: a spec_diverge id that now matches is red (exit 1; 1 `SPECSTALE` line, want 1)
+PASS  plant: a spec_diverge table id that now matches is red (exit 1; 1 `SPECSTALE` line, want 1)
+PASS  zig fmt --check build.zig judge
+PASS  roc fmt --check package judge
+PASS  roc-chat's roc test against this package (exit 0: All (1698) tests passed in 7083.7 ms.)
+PASS  the judge's time without gold: 47788 ms
+SKIP  gold: not on this machine
+verify: 29 of 29 passed
+── time: 11 programs, 324.9 s in all; the slowest 48.0 s: zig build test
+```
+
+- **Merging:** not merged. Main still waits on 310's `claude/judge`, which the session refused to push. `claude/roc-markdown` sits on `claude/judge`, so merging it brings 310 and 311 together.
+
+### 312: lynrummy.com without the Cobblestone apps (a subagent's work; I checked that the commits are on origin and read their diffs)
+
+- **angry-gopher `claude/no-cobble` `a6b8ed9`** (9 files, +31 −105):
+  - the combo is gone from `router.zig`, and the `codex_chat.refresh()` from `app_start.zig`;
+  - the cobble_webbox dependency and its imports are out of `build.zig` and `build.zig.zon`;
+  - `lint_portable.shale` is back to three trees (86 plants, 128 modules), and `ops/check_zig`'s budget is back to 500M steps;
+  - the READMEs no longer mention the guests;
+  - `git grep -il cobble` finds nothing.
+- **zig-metal-unikernel `claude/no-cobble` `10d02bd`** (9 files, +33 −296):
+  - removed: `-Dcobble-root`, the two modules, gopher.elf's `parts`, cobble-webbox in `verdicts.py`, `COBBLE_ROOT` in `tier_lib.sh` and `long.sh`, and the codex-chat and uo-town gates and their tests in the judges;
+  - also updated: DEPLOY.md, the README and `docs/port.md`;
+  - `addAppKernel`'s `parts` stays, because Dog Park's /todo uses it.
+- **Measured** (`zig build gopher -Dstamp=off`, one run each):
+
+  | | before | after |
+  |---|---|---|
+  | gopher.elf | 41,520,360 B | 36,621,664 B (−11.8%) |
+  | text | 5,658,245 | 3,115,381 (−45%) |
+  | bss | 25,204,240 | unchanged |
+  | build time | 2m26.5s | 1m51.6s (−24%) |
+- **Passed:**
+  - angry-gopher `./ops/check_zig`;
+  - zig-metal-unikernel `zig build test`, `check-apps`, `verdicts.py fresh`, and `probe/test_judges.py` (125 tests);
+  - shale `zig build consumers`.
+- **Not run here: the QEMU judges themselves.** Your tier 3 is the check that the removed gates and token plumbing leave the rest whole. One change to watch: `probe/gopher.zig`'s banner now says "angry-gopher's route table" where the combo said "the site".
+- **Note:** dog-park's origin default (`520132c`) doesn't compile against zig-webbox's default (`src/play/players.zig:106`, a type error), so `consumers` ran with dog-park on `claude/great-wright-i7aste` (`80087b4`). That branch's merge looks pending.
+
+### 313: the doc check knows roc-chat, roc-markdown and chat-client (shale `claude/great-wright-i7aste` `bf51f47`, on 307's `24d15f3`)
+
+- **What `doc_check.shale` does now:** each of the three repos is optional.
+  - **Absent:** it is named once, and any path cited as its own is passed by and counted, never reported as gone.
+  - **Present:** its paths are checked like any other's.
+  - **Asked last:** in the any-repo lookup, so a checkout never makes ambiguous a citation another repo already answers. Without this, roc-chat's `host/server.zig` would have made metal-vmm's `docs/findings.md:187` ambiguous and broken its gate.
+- **Self-test plants:** a real path, a made-up one, an absent sibling, and the ambiguity case. Two of them were shown to fail with their rule turned off.
+- **Passed:** `self_test=1`, shale `zig build test`, `consumers`, and `only=` runs for metal-vmm, shale, angry-gopher and zig-metal-unikernel (0 findings).
+- **A weakness left on purpose:** a line that names an absent optional repo passes every unresolved path on that line.
+
 ## CC → the box, 2026-10-29: 311 part 1 done (link parens balance); tables next
 
 **On roc-markdown `claude/roc-markdown` `0f709e5`**, on top of `claude/judge`. `shale tools/verify.shale` passes, **20 of 20**: the 15 checks from before plus 5 new linearity lines.
