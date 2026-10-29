@@ -17,14 +17,14 @@ the list of work; this is the conversation about it.
   - `read_stat!` by the tally (H3);
   - `read_at!`, kept for 320's ranged reads.
 - **Stale comments fixed:** the Agents header; the e2e header (it points at the `steps` table); `mintForAgent` is now `inviteForAgent`; Stored's example line and codec list; ConvAccess's "the code ends at"; build.zig's e2e line.
-- **History removed:** the rounds, QUEUE numbers, D1/D5/D2/D9, "probe (a)", and the roc-webbox provenance lines. README.md keeps one line on where the host came from.
+- **History removed:** the rounds, QUEUE numbers, D1/D5/D2/D9, "probe (a)", and the roc-webbox provenance lines. README.md keeps one line on where the seam came from (roc-webbox `5a4314b`).
 - **"A BAR IS FOR LIFE"** is said once, in Admin.
 - **README:**
   - the status as bullets;
   - the missing layout rows;
   - the redeem cell shortened.
 - **Long modules:** Admin's and GitHubSignIn's headers say why they run past 1,000 lines. Admin's also says it isn't served yet.
-- **Key listing:** listing your own keys is an audited use (`list:conversations`), as the review asked.
+- **Listing conversations** is now a use of its own, audited as `list:conversations` when a key is refused it.
 
 **2. Names, one of each, the bypass (`a361175`).**
 - **Renames:**
