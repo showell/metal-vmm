@@ -7,6 +7,131 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+<<<<<<< HEAD
+## CC → the box, 2026-10-29: 318 done (roc-markdown's uploads prefix, one escape, the review's polish); verify 61 of 61; starting 319
+
+- **On roc-markdown `claude/roc-markdown` `05d9021`.** I merged main twice: first the playground (`66b99a7`), then your merge of 316 and 317 (`f446451`). There are three steps, each its own commit:
+
+**1. The uploads prefix (`588ffa5`).**
+- `MdChat.uploads_prefix` is `/user_uploads/`. `MdSafety.is_upload_url` replaces `is_local_url`, and it holds for rebuilt `<img>`/`<video>` tags and for `![alt](src)` alike.
+- **How `..` and percent-encoding are judged, as a browser reads the path:**
+  - a `..` segment is refused in every spelling a browser resolves (`..`, `.%2e`, `%2e.`, `%2e%2e`, any case);
+  - an encoded separator (`%2f`, `%5c`) is refused, since a server may decode it;
+  - every other escape stays, since an upload's name may need one;
+  - control bytes and backslashes stay refused, as before.
+- **Frozen, both sides:** `uploads/inside`, `uploads/stream`, `uploads/login`, `uploads/dot-dot`, `uploads/encoded-dot-dot` (dialect).
+- **What you copy where:**
+  - `zig build playground` still writes the page to `zig-out/playground/`, for `/markdown/`;
+  - it now also writes `zig-out/user_uploads/sample.png`, for the site root's `/user_uploads/sample.png`;
+  - `safety` points there. TESTING.md says the same.
+- **Moved, each named in the commit:**
+  - `examples` `safety`;
+  - `dialect` `image/alt-markup` (its src moved under the prefix);
+  - `unit_cases`: 13 of the Zig's test inputs whose srcs are now text (`markdown:715/716/722`, `markdown_media:298/299/311/315/316/336/337/348/349/353`);
+  - `spec_images` cm/572, 574, 575, 579 and 581 (572, 579 and 581 are now listed as dialect);
+  - `hostile` `imgs`, `videos`, `rm-images`, `rm-image-nest`, `rm-image-alt-markup`. Their srcs moved under the prefix, so they still exercise the rebuild.
+- **Gold will move a lot:** the old chat's uploads live under `/chat/c/<conv>/<topic>/uploads/…`, and every such `<img>`/`<video>` is now escaped text. That follows from the decision as I read it. If gold's real uploads should still render, the prefix in MdChat is the one place to change, or it could become a list.
+
+**2. One escape (`ee4a8d3`).**
+- `MdText.escape_onto` writes `'` as `&#39;`, which is what roc-chat's `Pages.escape` writes. The package exposes it as `Md.escape`.
+- The spec check reads our `&#39;` as the spec's `'`, the way it reads `<br>`.
+- **Moved:**
+  - `examples` `fences` and `safety`;
+  - `hostile` `gr-bang-quote-openers/*` and `lb-unclosed-open-tags/*`;
+  - `spec_agree` gfm/630;
+  - `spec_escapes` cm/12.
+- Every move is a `'` turning into `&#39;`. **Gold moves** wherever a message held a `'`.
+
+**3. The readability review (`05d9021`).**
+- **No answer moved:** no re-freeze. The judge takes 50 to 52 s, against 52 s before.
+- **`MdInline.render_onto`:** each byte class's scan yields a `Step` (a piece taken, the pending text cut, or bytes skipped), and the step is applied in one place.
+- **`Md.blocks_onto`:**
+  - `block_at` dispatches, and its result is applied once;
+  - `heading_onto` is split out, and `raw_html_onto` finds its own end;
+  - `run` is the one seed for `work_units`, `hostility` and `rendered`.
+- **The rest:**
+  - the renames;
+  - the stale Zig claims, Feeds, Bytes' roc-webbox mention and the QUEUE numbers removed;
+  - about 60 docstrings no longer open with a Zig function name;
+  - Ascii's header line;
+  - verify reads ratchet.txt;
+  - MdEmphasis's worked examples, and the test labels;
+  - README and TESTING accuracy (314 spec examples and how the 269 were chosen, about a thousand hostile cases, why MdFence/MdMedia/MdTable are exposed, `Md.escape`).
+
+**Plants, each red:** a media src outside the prefix accepted; a `'` left unescaped; one byte of a split function's answer.
+
+**319** starts now from roc-chat `box/security-2` (`b2dd182`). `Pages.escape` can become `Md.escape` once 318 is merged; until then I leave `Pages.escape` in place, as 319 says.
+
+**verify's whole output** (`as-steve shale tools/verify.shale`):
+
+```
+── budgets from the script's header: steps=200000000, read_bytes=1000000000, changes=10000, change_bytes=200000000, arena_bytes=1000000000
+PASS  zig build test (exit 0, 55371 ms)
+PASS  cases: adversarial 29/29 (want 29)
+PASS  cases: dialect 12/12 (want 12)
+PASS  cases: unit_cases 69/69 (want 69)
+PASS  cases: spec_agree 269/269 (want 269)
+PASS  cases: spec_tables 8/8 (want 8)
+PASS  cases: spec_strike 2/2 (want 2)
+PASS  cases: spec_escapes 13/13 (want 13)
+PASS  cases: spec_images 22/22 (want 22)
+PASS  cases: pinned 3/3 (want 3)
+PASS  cases: examples 5/5 (want 5)
+PASS  cases: hostile 1097/1097 (want 1097)
+PASS  cases in all: 1529 (want 1529)
+PASS  the REPL:  10 cases (5 canned examples) in 3 modes, 23 runs of the REPL, 0 fail
+PASS  the playground:  10 cases (5 canned examples) in 3 modes through md.wasm in node, 0 fail; `blocks` renders in 0.98 ms (the median of 50 runs)
+PASS  the playground's page: starts on inline; 5 examples chosen, 3 modes, typing, a hostile message and the source toggle; fetched md.wasm, examples.jsonl
+PASS  linear: lb-nested-parens-in-dest 2011 units at 1,000, 16393 at 8,191
+PASS  linear: rm-unbalanced-open-parens 2013 units at 1,000, 16395 at 8,191
+PASS  linear: rm-unbalanced-close-parens 2009 units at 1,000, 16391 at 8,191
+PASS  linear: rm-paren-bait 14996 units at 1,000, 122861 at 8,191
+PASS  linear: rm-paren-links 24989 units at 1,000, 204764 at 8,191
+PASS  linear: tbl-wide 5006 units at 1,000, 40961 at 8,191
+PASS  linear: tbl-many-rows 16010 units at 1,000, 131066 at 8,191
+PASS  linear: tbl-delimiter-alone 10990 units at 1,000, 90091 at 8,191
+PASS  linear: tbl-code-pipes 9010 units at 1,000, 73729 at 8,191
+PASS  linear: tbl-code-pipes-wide 11018 units at 1,000, 90119 at 8,191
+PASS  linear: rm-image-openers 2001 units at 1,000, 16383 at 8,191
+PASS  linear: rm-images 56973 units at 1,000, 466860 at 8,191
+PASS  linear: rm-image-nest 63964 units at 1,000, 524188 at 8,191
+PASS  linear: rm-image-alt-markup 164953 units at 1,000, 1351468 at 8,191
+PASS  linear: rm-images-refused 53975 units at 1,000, 442289 at 8,191
+PASS  linear: rm-image-labels-alone 7997 units at 1,000, 65525 at 8,191
+PASS  linear: lb-nested-images 13997 units at 1,000, 114671 at 8,191
+PASS  linear: rm-tilde-run 1006 units at 1,000, 8197 at 8,191
+PASS  linear: rm-strike-nest 17001 units at 1,000, 139248 at 8,191
+PASS  linear: rm-strike-unclosed 8000 units at 1,000, 65528 at 8,191
+PASS  linear: rm-strike-mixed 29001 units at 1,000, 237543 at 8,191
+PASS  linear: rm-strike-star-alternate 12999 units at 1,000, 106482 at 8,191
+PASS  linear: rm-escaped-strikes 7000 units at 1,000, 57337 at 8,191
+PASS  linear: rm-backslash-breaks 6002 units at 1,000, 49148 at 8,191
+PASS  linear: lb-tilde-runs 12001 units at 1,000, 98293 at 8,191
+PASS  linear: lb-mixed-delimiters-tilde 20003 units at 1,000, 163823 at 8,191
+PASS  budget: hostile/tbl-ragged/200 (40,000 padded cells) is refused
+PASS  plant: one byte of a frozen answer (adversarial) is red (exit 1; 1 `FAILID	adversarial` line, want 1)
+PASS  plant: one byte of a frozen table (spec_tables) is red (exit 1; 1 `FAILID	spec_tables` line, want 1)
+PASS  plant: one wrong hostile hash is red (exit 1; 1 `FAILID	hostile` line, want 1)
+PASS  plant: a spec_diverge id that now matches is red (exit 1; 1 `SPECSTALE` line, want 1)
+PASS  plant: a spec_diverge table id that now matches is red (exit 1; 1 `SPECSTALE` line, want 1)
+PASS  plant: `~~` paired across a line is red (exit 1; 1 `FAILID	dialect` line, want 1)
+PASS  plant: a backslash escape applied inside a code span is red (exit 1; 1 `FAILID	spec_escapes` line, want 1)
+PASS  plant: one byte of a frozen strikethrough (spec_strike) is red (exit 1; 1 `FAILID	spec_strike` line, want 1)
+PASS  plant: an image allowed from another origin is red (exit 1; 1 `FAILID	dialect` line, want 1)
+PASS  plant: markup kept inside an alt is red (exit 1; 1 `FAILID	dialect` line, want 1)
+PASS  plant: a javascript: src rendered is red (exit 1; 1 `FAILID	dialect` line, want 1)
+PASS  plant: a media src outside the uploads prefix accepted is red (exit 1; 1 `FAILID	dialect` line, want 1)
+PASS  plant: a ' left unescaped is red (exit 1; 1 `FAILID	spec_escapes` line, want 1)
+PASS  plant: one byte of a split function's answer (a heading) is red (exit 1; 1 `FAILID	examples` line, want 1)
+PASS  zig fmt --check build.zig judge playground
+PASS  roc fmt --check package judge playground
+PASS  roc-chat's roc test against this package (exit 0: All (1949) tests passed in 7683.3 ms.)
+PASS  the judge's time without gold: 50113 ms
+SKIP  gold: not on this machine
+verify: 61 of 61 passed
+── time: 20 programs, 821.9 s in all; the slowest 55.3 s: zig build test
+```
+
 ## CC → the box, 2026-10-29: 317 done (roc-markdown's `![alt](src)`); verify 56 of 56
 
 - **On roc-markdown `claude/roc-markdown` `a850b09`**, on top of 316 (`894f563`). The box merges and refreezes gold.
@@ -390,6 +515,23 @@ On roc-chat `claude/roc-chat`, restarted from `main` `7864d9b` (309 is merged th
 4. `tools/verify.shale`, with the end-to-end script, the five plants and the times.
 
 Builds and tests run as `steve`. It's a big item, so I'll write here at each part.
+=======
+## the box → CC, 2026-10-29: 316 and 317 merged; for 318, merge main first (the README, TESTING.md and the examples moved)
+
+**316 and 317 are merged** into roc-markdown `main` (`f446451`), together with the box's own work since you branched:
+- a README rewritten for the developer deciding whether to use the package, with the judge and the tools moved to a new TESTING.md;
+- five canned examples (a nested `fences` example now stands on its own), each showing both sides of its decision;
+- the playground's sample image, and a "source on GitHub" link in its header.
+
+Gold is re-frozen. 44 messages moved, each explained in the merge commit. Verify passed 59 of 59.
+
+**For 318:** please merge `main` into `claude/roc-markdown` before you finish. The examples changed under you:
+- `safety`'s images still point at `/markdown/sample.png`, which your uploads-prefix step moves;
+- `inline` now opens with emoji and shows strikethrough and escapes;
+- the README's dialect table and TESTING.md's corpora list are new.
+
+The examples file (judge/data/examples.jsonl) is the one home; re-freeze `examples` after merging.
+>>>>>>> origin/master
 
 ## CC → the box, 2026-10-29: 311, 312 and 313 done; builds and tests now run as `steve`
 
