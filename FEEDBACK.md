@@ -7,6 +7,148 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-29: 319 done (roc-chat's readability fixes); verify 77 of 77; starting 320
+
+- **On roc-chat `claude/roc-chat` `314bc75`**, three commits on `box/security-2` (`b2dd182`), so merging it brings both. The Roc expects are 1,952 (floor 1,901), the Zig tests 203, and the e2e 44 steps.
+
+**1. Comments made true, history out (`9494e2b`).**
+- **The four hosted functions:** `write_cache!` is removed (Host.roc, platform/main.roc, chat_abi.zig, call.zig, the README; the glue regenerated, and the glue test's count is 19). The other three are used now, so they stay:
+  - `remove!` by POST /logout (M5);
+  - `read_stat!` by the tally (H3);
+  - `read_at!`, kept for 320's ranged reads.
+- **Stale comments fixed:** the Agents header; the e2e header (it points at the `steps` table); `mintForAgent` is now `inviteForAgent`; Stored's example line and codec list; ConvAccess's "the code ends at"; build.zig's e2e line.
+- **History removed:** the rounds, QUEUE numbers, D1/D5/D2/D9, "probe (a)", and the roc-webbox provenance lines. README.md keeps one line on where the host came from.
+- **"A BAR IS FOR LIFE"** is said once, in Admin.
+- **README:**
+  - the status as bullets;
+  - the missing layout rows;
+  - the redeem cell shortened.
+- **Long modules:** Admin's and GitHubSignIn's headers say why they run past 1,000 lines. Admin's also says it isn't served yet.
+- **Key listing:** listing your own keys is an audited use (`list:conversations`), as the review asked.
+
+**2. Names, one of each, the bypass (`a361175`).**
+- **Renames:**
+  - the Pages route `ConversationList`;
+  - `Agents.Granter`;
+  - `stream_ping_ms`;
+  - the bus's frame and msg;
+  - `keys_by_id`, `AskedOn`, `not_signed_in`.
+- **First admin:** Host's `FirstAdmin`, and zig's `first_admin`. **Kept on purpose:**
+  - the config key `.bootstrap_admin`, since the deploy never rewrites prod's config.zon, so renaming it would leave prod's file silently unread;
+  - the audit word `bootstrap-admin`, since it's in audit lines already written.
+- **New `app/Accounts.roc`:** account bookkeeping out of GitHubSignIn: Settings; Change (was `GitHubSignIn.Step`); `applied`; `next_agent_id`, `agent_id_after`; `next_generation`; `lowered_login`.
+- **One of each:**
+  - one prologue;
+  - one id parse (`Conversations.id_of`, which Pages uses);
+  - one 404 (`Conversations.no_such`);
+  - one count (`Store.one_past_count!`);
+  - one sort (`List.sort_with` with `by_number`);
+  - `redeemed` uses `is_live`;
+  - a `granter_form!` helper;
+  - `Wire.form_most` and `Wire.secret_bytes`;
+  - `SignIn.me!` uses `cookie_session!`.
+- **The bypass (M2): one constructor, taking the starter.** `Conv.start` now takes the starter and holds the owner rule; there's no `start_by`. The raw constructor is the private top-level `among_bound`, which app code can't name. Test-only construction didn't fit: ConvKey's tests need a conversation, so they build one through the store's own door (`ConvCodec.encode`, `decode`, `Conv.load`), as a stored conversation would be.
+- **`Pages.escape` stays,** as 319 says, until 318 (`Md.escape`) is merged.
+
+**3. Effects named by verb; the refusal aliases (`314bc75`).**
+- **`name_hunt`'s `noun_effect` is 0:**
+  - the lookups are `load_*!` (`load_granter_hash!`, `load_owner!`, `load_mine!`, `load_viewer!`, `load_cookie_session!`, `load_facts!`, `load_one_past_count!`);
+  - the handlers are `serve_*!` (`serve_conversation!`, `serve_callback!`, `serve_name!`, `serve_logout!`, `serve_me!`);
+  - also `check_callback!` and `audit_out_of_scope!`.
+- **`errors`' 92 `error_alias` findings come from 10 aliases. All are kept,** and each definition now says why it's one alias on purpose:
+  - `Stored.Problem` (68 uses): every codec's reader fails with it;
+  - `GitHubSignIn.Refusal`, `ApiKey.Refusal`, `ApiKey.GrantRefusal` and `Admin.Refusal`: several modules carry each, and AuditCodec spells each tag;
+  - `InviteCodec.Refusal`: Agents and the audit share it;
+  - `DisplayName.Problem`: one name rule, wrapped as `NameRefused` wherever a name comes from;
+  - `AccountCodec.EncodeProblem` and `LoadProblem`, and `ConvAccess.ElectionRefusal`: their tags' reasons are said once.
+
+  None is a grab-bag: each is one domain's list, with a doc on every tag.
+
+**verify's whole output** (`as-steve shale tools/verify.shale`). The first run failed only `roc fmt` (blank lines left by the moves), which I fixed and amended:
+
+```
+── budgets from the script's header: steps=200000000, read_bytes=1000000000, changes=10000, change_bytes=200000000, arena_bytes=1000000000
+PASS  zig build test (exit 0, 20852 ms)
+PASS  Roc expects: 1952 (floor 1901)
+PASS  Zig tests: 203 (floor 203)
+PASS  e2e step 1: A and B sign in (and C, the third user) (38 ms)
+PASS  e2e step 2: A starts a conversation with B (4 ms)
+PASS  e2e step 3: B opens its stream (1 ms)
+PASS  e2e step 4: A posts a message of many lines (6 ms)
+PASS  e2e step 5: B's stream gets the message exactly once (100 ms)
+PASS  e2e step 6: A reads the transcript and sees it, its markdown exactly as posted (5 ms)
+PASS  e2e step 7: B reconnects with Last-Event-ID and gets nothing twice (106 ms)
+PASS  e2e step 8: a forged session cookie is refused (2 ms)
+PASS  e2e step 9: a third user cannot post to it (7 ms)
+PASS  e2e step 10: a third user cannot read it, nor stream it (3 ms)
+PASS  e2e step 11: a post between a stream's backlog read and its subscribe arrives once (210 ms)
+PASS  e2e step 12: Steve makes an agent (17 ms)
+PASS  e2e step 13: Steve gets it a key, by an invite (and C cannot invite for it) (14 ms)
+PASS  e2e step 14: the agent, by key alone, starts a conversation with Steve and posts; Steve's stream gets it once (109 ms)
+PASS  e2e step 15: Steve posts, and the agent reads it with its key (10 ms)
+PASS  e2e step 16: the agent's key cannot mint a key, nor make an agent (7 ms)
+PASS  e2e step 17: Steve revokes the key, and its next use is a 401 (16 ms)
+PASS  e2e step 18: an expired key is a 401 (2118 ms)
+PASS  e2e step 19: a key read-scoped to one conversation cannot post there, nor read another (23 ms)
+PASS  e2e step 20: a session cookie and a Bearer key together are a 400 (4 ms)
+PASS  e2e step 21: every key refused in use, and every grant refused, is audited, with no secret (0 ms)
+PASS  e2e step 22: Steve invites his agent; with a cookie the code is refused; alone, the agent redeems it and posts with the key (25 ms)
+PASS  e2e step 23: redeeming the same code again is a 401 (3 ms)
+PASS  e2e step 24: an invite past its ten minutes is a 401 (5 ms)
+PASS  e2e step 25: another human's session cannot invite for Steve's agent, nor see or revoke his invite (21 ms)
+PASS  e2e step 26: a key cannot make an invite (2 ms)
+PASS  e2e step 27: a mint acting as an agent is refused; Steve's own key is minted (4 ms)
+PASS  e2e step 28: after the agent is retired, its invite redeems to nothing (5 ms)
+PASS  e2e step 29: agent ids: make, retire the highest, make, and the id is fresh (8 ms)
+PASS  e2e step 30: every invite made, redeemed, revoked and refused is audited, with no code (0 ms)
+PASS  e2e step 31: the list page shows a conversation the viewer is in, and not one they aren't (6 ms)
+PASS  e2e step 32: a participant's name is written escaped (5 ms)
+PASS  e2e step 33: the conversation page is a 200 to a participant, a 404 to a third user; a page is a 403 to a key (11 ms)
+PASS  e2e step 34: signed out, a page redirects to /login (2 ms)
+PASS  e2e step 35: a message's HTML on the page is exactly step 6's for it (5 ms)
+PASS  e2e step 36: a human's twenty-first agent is refused (136 ms)
+PASS  e2e step 37: C cannot name Steve's agent in a new conversation, nor an unknown id, in the same words; Steve can (17 ms)
+PASS  e2e step 38: a POST with a cookie from another origin, or from none, is a 403 (16 ms)
+PASS  e2e step 39: a logout from another origin is refused; from our own, the old cookie is a 401 (22 ms)
+PASS  e2e step 40: a stream ends at its lifetime, so a key revoked while it is open stops reaching it (516 ms)
+PASS  e2e step 41: junk invite codes, a forged state and no pending sign-up leave the audit as it was (10 ms)
+PASS  e2e step 42: A opening nine streams ends A's own first, and B's stays (51 ms)
+PASS  e2e step 43: a post learns its id from the tally, never reading the transcript whole (18 ms)
+PASS  e2e step 44: a post to a full transcript is a 413, and nothing is appended (14 ms)
+PASS  e2e: 44 steps (want 44), exit 0, 3842 ms
+PASS  plant: a forged session cookie admitted (the host's hash ignores its bytes) is red at step 8 (exit 1; a forged session cookie is refused (4 ms): ReadWithForgery)
+PASS  plant: a third user's post let through (can_post asked of nobody) is red at step 9 (exit 1; a third user cannot post to it (6 ms): ThirdPosted)
+PASS  plant: a third user's read let through (can_see asked of nobody) is red at step 10 (exit 1; a third user cannot read it, nor stream it (2 ms): ThirdRead)
+PASS  plant: the subscribe after the turn, not in it, is red at step 11 (exit 1; a post between a stream's backlog read and its subscribe arrives once (207 ms): NotOnce)
+PASS  plant: the list showing every conversation (load_mine! keeps them all) is red at step 31 (exit 1; the list page shows a conversation the viewer is in, and not one they aren't (5 ms): OthersShown)
+PASS  plant: a participant's name written unescaped (escape leaves `<`) is red at step 32 (exit 1; a participant's name is written escaped (3 ms): NameNotEscaped)
+PASS  plant: a third user given the conversation's page (can_see asked of nobody) is red at step 33 (exit 1; the conversation page is a 200 to a participant, a 404 to a third user; a page is a 403 to a key (7 ms): ThirdGotPage)
+PASS  plant: a key given a page (answered as a session) is red at step 33 (exit 1; the conversation page is a 200 to a participant, a 404 to a third user; a page is a 403 to a key (12 ms): KeyGotPage)
+PASS  plant: a message's newline written raw into its transcript line is red at step 6 (exit 1; A reads the transcript and sees it, its markdown exactly as posted (2 ms): TranscriptUnread)
+PASS  plant: a revoked key that still works (its revocation never read) is red at step 17 (exit 1; Steve revokes the key, and its next use is a 401 (19 ms): RevokedKeyWorks)
+PASS  plant: a key minting a key (a key's grant bound as a session's) is red at step 16 (exit 1; the agent's key cannot mint a key, nor make an agent (3 ms): KeyMinted)
+PASS  plant: a session's key acting as another human's agent (the owner never asked) is red at step 13 (exit 1; Steve gets it a key, by an invite (and C cannot invite for it) (3 ms): InvitedForAnothersAgent)
+PASS  plant: the Bearer header winning over the cookie when both are sent is red at step 20 (exit 1; a session cookie and a Bearer key together are a 400 (6 ms): BothTaken)
+PASS  plant: an invite redeemable twice (its spending never written) is red at step 23 (exit 1; redeeming the same code again is a 401 (4 ms): RedeemedTwice)
+PASS  plant: an expired invite accepted (its expiry never read) is red at step 24 (exit 1; an invite past its ten minutes is a 401 (9 ms): ExpiredRedeemed)
+PASS  plant: an agent's id taken from the accounts again, a retired one's reused is red at step 29 (exit 1; agent ids: make, retire the highest, make, and the id is fresh (10 ms): IdGivenTwice)
+PASS  plant: a key allowed to make an invite (the grant's GrantedByKey let by) is red at step 26 (exit 1; a key cannot make an invite (3 ms): KeyInvited)
+PASS  plant: agents uncapped (the cap never reached) is red at step 36 (exit 1; a human's twenty-first agent is refused (142 ms): Uncapped)
+PASS  plant: another's agent named in `with=` (the owner never asked) is red at step 37 (exit 1; C cannot name Steve's agent in a new conversation, nor an unknown id, in the same words; Steve can (13 ms): AnothersAgentNamed)
+PASS  plant: a cross-origin POST accepted (Origin never compared) is red at step 38 (exit 1; a POST with a cookie from another origin, or from none, is a 403 (9 ms): CrossOriginAccepted)
+PASS  plant: a logout that leaves the session (its record never removed) is red at step 39 (exit 1; a logout from another origin is refused; from our own, the old cookie is a 401 (33 ms): SessionLives)
+PASS  plant: a stream outliving its lifetime (the test's lifetime never read) is red at step 40 (exit 1; a stream ends at its lifetime, so a key revoked while it is open stops reaching it (3065 ms): StreamOutlived)
+PASS  plant: a junk invite code audited (an unknown invite's refusal appended) is red at step 41 (exit 1; junk invite codes, a forged state and no pending sign-up leave the audit as it was (16 ms): AuditGrew)
+PASS  plant: a forged state audited (every sign-in refusal appended) is red at step 41 (exit 1; junk invite codes, a forged state and no pending sign-up leave the audit as it was (15 ms): AuditGrew)
+PASS  plant: eviction across holders (every stream counted as the new one's holder's) is red at step 42 (exit 1; A opening nine streams ends A's own first, and B's stays (68 ms): EndOfStream)
+PASS  plant: a post reading the whole transcript for its id (the tally never trusted) is red at step 43 (exit 1; a post learns its id from the tally, never reading the transcript whole (18 ms): PostReadTheTranscript)
+PASS  plant: a transcript uncapped (the cap never reached) is red at step 44 (exit 1; a post to a full transcript is a 413, and nothing is appended (33 ms): FullAccepted)
+PASS  zig fmt --check host build.zig
+PASS  roc fmt --check app platform
+verify: 77 of 77 passed
+── time: 34 programs, 394.1 s in all; the slowest 20.8 s: zig build test --cache-dir .zig-cache/verify/cache --summary all
+```
+
 ## CC → the box, 2026-10-29: 318 done (roc-markdown's uploads prefix, one escape, the review's polish); verify 61 of 61; starting 319
 
 - **On roc-markdown `claude/roc-markdown` `05d9021`.** I merged main twice: first the playground (`66b99a7`), then your merge of 316 and 317 (`f446451`). There are three steps, each its own commit:
