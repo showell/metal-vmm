@@ -38,6 +38,36 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**316. roc-markdown: GFM's strikethrough and CommonMark's backslash escapes: CC'S** (Steve, 2026-10-29: "Yes to strike/escapes".) **showell/roc-markdown only**, on `claude/roc-markdown` from `main`. Finish as 311 did: roc-markdown's verify script passes, and its whole output goes in FEEDBACK. The box merges, re-freezes gold, and explains every gold move (gold never leaves the box).
+
+**Why:** roc-markdown's canned examples (judge/data/examples.jsonl, the `inline` example's caption) say it: "Unlike GitHub: no ~~strikethrough~~ and no backslash escapes". The chat's users are technical and know GitHub's and Zulip's markdown, and both have strikethrough.
+
+**Read first:**
+- the package as it now stands, after today's reorganization: README's Layout, `package/MdInline.roc` (the pass), `package/MdEmphasis.roc` (the delimiter engine), `package/MdHtml.roc` (every tag lives there), `package/MdSafety.roc`, `package/MdChat.roc`;
+- a local agent is building the web playground on `box/playground` at the same time, touching roc-markdown's build.zig, its verify script and a new playground folder. Expect a small merge there; keep your verify changes to new lines and new counts.
+
+**Build:**
+1. **Strikethrough, as GFM's extension specifies it:** `~~text~~` (and `~text~`, if you follow GFM's tilde rules) to `<del>`, through the emphasis engine's delimiter runs. The tag goes in `MdHtml`.
+   - The GFM spec's strikethrough examples become their own frozen corpus, like `spec_tables`.
+   - New hostile shapes at 1, 10, 100, 1,000 and 8,191 (long `~` runs, mixed `~` and `*`), with their work units held linear.
+2. **Backslash escapes, as CommonMark specifies them:** a backslash before an ASCII punctuation character makes it literal.
+   - Inside code spans and fences, a backslash stays a backslash.
+   - A backslash at a line's end is a hard break per CommonMark. But the chat already breaks every line, so say what you chose and why.
+   - The CommonMark spec's backslash-escape cases should now match. Take them off the diverge list.
+3. **The examples:** update the `inline` example's caption and source, and re-freeze `examples` (named in the commit).
+
+**Gold will move** wherever a real message held `~~` or a backslash before punctuation. Say which corpora moved and why, case by case for the frozen ones.
+
+**What roc-markdown's verify script checks:**
+- raised counts;
+- a linearity line per new hostile shape;
+- **plants, each red:**
+  - `~~` pairing across a line;
+  - a backslash escape applied inside a code span;
+  - a strikethrough answer's byte changed.
+
+Run everything as `steve`.
+
 **315. roc-chat: a minimal chat page, to read and post in a conversation in a browser: CC'S** (Steve, 2026-10-29: "yes".) **showell/roc-chat only.** Work on `claude/roc-chat`, from `main` at `b8d14ff`, which has step 6 (314) merged. Finish as 314 did: extend roc-chat's verify script, and put its whole output in FEEDBACK. The box merges, since your session refuses pushes to `main`.
 
 **Why:** the milestone is a three-way conversation between Steve, CC and LC on https://chat.lynrummy.com, which is live with GitHub sign-in.
