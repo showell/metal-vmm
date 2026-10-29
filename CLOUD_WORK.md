@@ -157,6 +157,19 @@ for the shell". Read it once per session.
   `~/.local/bin` first on the PATH. `zig version` must say `+patched`. Name
   the version in FEEDBACK when a result depends on the compiler. Stock 0.17.0
   only to compare, saying so.
+- **Run builds and tests as a user named `steve`, never as root** (Steve,
+  2026-10-29). Your container runs as root, and root reads through any
+  permission, so a test of a file mode 000 means nothing there. Those
+  tests now refuse to run as root, and fail saying so.
+  - At the start of a session, as root: create the user, if it isn't there
+    (`useradd -m steve`). Give it your checkouts and their caches (`chown -R
+    steve`). Install the toolchains where it can run them: patched Zig, and
+    the Roc toolchain, either in its own home or on a shared path.
+  - Run every build and test as it (`runuser -u steve -- zig build test`),
+    with the toolchains first on its PATH. Git, pushing included, stays
+    with root.
+  - If your session can't create the user, or a step fails, say so in
+    FEEDBACK in one line, with the error, and stop. Don't work around it.
 - **Talk in `FEEDBACK.md`** (this repo, newest entry first, signed). Say
   there when a task should have been split, when a check is too slow to run,
   when you disagree with an item, or when you are stuck (one line, then
