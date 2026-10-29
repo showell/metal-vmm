@@ -258,5 +258,30 @@ local a_theirs = q_arch_with("- **9.**", "- **6.** Theirs.\n- **9.**")
 local am = lines_merge(QARCH, a_ours, a_theirs)
 expect(contains(am, "- **7.** Ours.") and contains(am, "- **6.** Theirs.") and contains(am, "- **9.** The ninth"), "an archive merged by its lines keeps each side's new line")
 
+-- **A STOP PART WAY LEAVES BOTH FILES OR NEITHER** (QUEUE 304: a
+-- queue_done once ran out of steps with item gone from QUEUE.md and no
+-- line in the archive). `queue_done` in a child run, under step budgets
+-- from too few to enough: after each, item 11 is in QUEUE.md or its line
+-- is in the archive, exactly one of the two.
+function done_under(steps)
+  local d = fresh("small")
+  local r = run({"shale", "--verbose", "--budget", "steps=" .. steps, "-e", "queue_done(11, \"cut\", \"" .. d .. "\")"}, {timeout_ms = 60000, tail = 3})
+  local in_q = contains(read(d .. "/QUEUE.md"), "**11. ")
+  local in_a = contains(read(d .. "/QUEUE-ARCHIVE.md"), "- **11.** ")
+  local used = re_find(r.out, "used: ([0-9]+) of")
+  return {code = r.code, in_q = in_q, in_a = in_a, used = used and parse_int(used.group) or 0}
+end
+local whole = done_under(5000000)
+expect(whole.code == 0 and not whole.in_q and whole.in_a, "queue_done with steps enough moves item 11")
+local cuts = 0
+local k = 0
+while k < whole.used do
+  local got = done_under(k)
+  if got.in_q == got.in_a then fail("queue test: at " .. k .. " of " .. whole.used .. " steps, item 11 is " .. (got.in_q and "in both files" or "in neither")) end
+  if got.code ~= 0 then cuts = cuts + 1 end
+  k = k + max(whole.used // 40, 1)
+end
+expect(cuts >= 39, "queue_done stopped at any of " .. cuts .. " step budgets leaves item 11 in exactly one file")
+
 remove_tree(SCRATCH)
 print("all queue tests passed")

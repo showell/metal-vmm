@@ -21,21 +21,72 @@ function queue_text(ls)
   return join(ls, "\n") .. "\n"
 end
 
--- QUEUE.md's sections (`## ` lines) and items (`**N. ` lines), each with
--- its line, numbered from 1.
-function queue_parse(text)
-  local items = {}
-  local sections = {}
-  local section = ""
+-- **A FILE'S LINES AS ROWS**, `{line, text}` numbered from 1, the shape
+-- `grep` gives. Every parser below reads rows: a text's every line
+-- (`queue_rows`, for a revision's text in a merge), or only a file's lines
+-- holding the literals it looks for (`queue_rows_at`, a tenth of the cost:
+-- `grep` scans in Zig, where a Shale loop over every line pays for each).
+function queue_rows(text)
+  local got = {}
   local i = 0
   for l in lines(text) do
     i = i + 1
+    push(got, {line = i, text = l})
+  end
+  return got
+end
+
+-- The lines of file `p` holding any of `lits`, each once, in order; none
+-- for a file that is not there.
+function queue_rows_at(p, lits)
+  if not exists(p) then return {} end
+  local got = grep(p, lits[1])
+  for k = 2, #lits do
+    -- Two lists in line order, merged in order: a line both hold once.
+    local more = grep(p, lits[k])
+    local both = {}
+    local i = 1
+    local j = 1
+    while i <= #got or j <= #more do
+      if j > #more or (i <= #got and got[i].line < more[j].line) then
+        push(both, got[i])
+        i = i + 1
+      elseif i > #got or more[j].line < got[i].line then
+        push(both, more[j])
+        j = j + 1
+      else
+        push(both, got[i])
+        i = i + 1
+        j = j + 1
+      end
+    end
+    got = both
+  end
+  return got
+end
+
+-- QUEUE.md's sections (`## ` lines) and items (`**N. ` lines), each with
+-- its line, numbered from 1.
+function queue_parse(text)
+  return queue_parse_rows(queue_rows(text))
+end
+
+function queue_parse_at(p)
+  return queue_parse_rows(queue_rows_at(p, {"## ", "**"}))
+end
+
+function queue_parse_rows(rows)
+  local items = {}
+  local sections = {}
+  local section = ""
+  for r in rows do
+    local l = r.text
     if starts_with(l, "## ") then
       section = sub(l, 4)
-      push(sections, {name = section, line = i})
-    else
+      push(sections, {name = section, line = r.line})
+    elseif starts_with(l, "**") then
       local m = re_find(l, "^\\*\\*([0-9]+)\\. ")
-      if m ~= nil then push(items, {n = parse_int(m.group), line = i, section = section}) end
+      if m ~= nil then push(items, {n = parse_int(m.group), line = r.line, section = section}) end
     end
   end
   return {items = items, sections = sections}
@@ -44,14 +95,24 @@ end
 -- QUEUE-ARCHIVE.md's numbered lines (`- **N.** ...`), each with its line
 -- and section.
 function queue_archived(text)
+  return queue_archived_rows(queue_rows(text))
+end
+
+function queue_archived_at(p)
+  return queue_archived_rows(queue_rows_at(p, {"## ", "- **"}))
+end
+
+function queue_archived_rows(rows)
   local got = {}
   local section = ""
-  local i = 0
-  for l in lines(text) do
-    i = i + 1
+  for r in rows do
+    local l = r.text
     if starts_with(l, "## ") then section = sub(l, 4) end
-    local m = re_find(l, "^- \\*\\*([0-9]+)\\.\\*\\*")
-    if m ~= nil then push(got, {n = parse_int(m.group), line = i, section = section}) end
+    if starts_with(l, "- **") then
+      -- `- **N.**`: literals, not a regex, which costs ten times as much.
+      local n = parse_int(between(l, "- **", ".**") or "")
+      if n ~= nil and starts_with(l, "- **" .. n .. ".**") then push(got, {n = n, line = r.line, section = section, text = l}) end
+    end
   end
   return got
 end
@@ -60,12 +121,16 @@ end
 -- proposals' ids), each with its line: an id, like a number, is
 -- archived once.
 function queue_archived_ids(text)
+  return queue_archived_ids_rows(queue_rows(text))
+end
+
+function queue_archived_ids_rows(rows)
   local got = {}
-  local i = 0
-  for l in lines(text) do
-    i = i + 1
-    local m = re_find(l, "^- \\*\\*([A-Z][0-9]+)\\.")
-    if m ~= nil then push(got, {id = m.group, line = i}) end
+  for r in rows do
+    if starts_with(r.text, "- **") and re_find(sub(r.text, 5, 5), "^[A-Z]$") ~= nil then
+      local m = re_find(r.text, "^- \\*\\*([A-Z][0-9]+)\\.")
+      if m ~= nil then push(got, {id = m.group, line = r.line}) end
+    end
   end
   return got
 end
@@ -74,14 +139,33 @@ end
 -- its line, date and heading; and the headings that are not entries, but
 -- for the one pointing at the archive.
 function feedback_parse(text)
+  return feedback_parse_rows(queue_rows(text))
+end
+
+-- An entry heading's date, `<who> → <who>, <date>: <title>`, or nil when
+-- the heading is not one: the date the first after the arrow, and the
+-- first colon after the date the one before the title. A regex over the
+-- whole heading costs five times as much, on every heading of the file.
+function feedback_heading_date(h)
+  local arrow = find(h, " → ")
+  if arrow == nil or arrow == 1 then return nil end
+  local rest = sub(h, arrow + #" → ")
+  local m = re_find(rest, ", ([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9])")
+  if m == nil or m.at == 1 then return nil end
+  local tail = sub(rest, m.at + #m.text)
+  local c = find(tail, ":")
+  if c == nil or sub(tail, c, c + 1) ~= ": " or #tail <= c + 1 then return nil end
+  return m.group
+end
+
+function feedback_parse_rows(rows)
   local entries = {}
   local bad = {}
-  local i = 0
-  for l in lines(text) do
-    i = i + 1
+  for r in rows do
+    local l = r.text
     if starts_with(l, "## ") and not starts_with(l, "## Older entries") then
-      local m = re_find(l, "^## .+ → .+, ([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9])[^:]*: .+")
-      if m == nil then push(bad, {line = i, text = l}) else push(entries, {line = i, date = m.group, heading = sub(l, 4)}) end
+      local date = feedback_heading_date(sub(l, 4))
+      if date == nil then push(bad, {line = r.line, text = l}) else push(entries, {line = r.line, date = date, heading = sub(l, 4)}) end
     end
   end
   return {entries = entries, bad = bad}
@@ -99,8 +183,9 @@ function queue_check(dir?)
   local qp = queue_path(dir, "QUEUE.md")
   local ap = queue_path(dir, "QUEUE-ARCHIVE.md")
   local fp = queue_path(dir, "FEEDBACK.md")
-  local q = queue_parse(read(qp))
-  local arch = queue_archived(read_or(ap, ""))
+  local q = queue_parse_at(qp)
+  local arch_rows = queue_rows_at(ap, {"## ", "- **"})
+  local arch = queue_archived_rows(arch_rows)
   local got = {}
   local in_archive = {}
   for a in arch do
@@ -112,7 +197,7 @@ function queue_check(dir?)
     end
   end
   local ids = {}
-  for a in queue_archived_ids(read_or(ap, "")) do
+  for a in queue_archived_ids_rows(arch_rows) do
     if has_key(ids, a.id) then
       push(got, ap .. ":" .. a.line .. ": " .. a.id .. " is archived twice (also line " .. ids[a.id] .. ")")
     else
@@ -131,7 +216,8 @@ function queue_check(dir?)
     if a.section == b.section and b.n > a.n then push(got, qp .. ":" .. b.line .. ": " .. b.n .. " after " .. a.n .. " in `" .. b.section .. "`: a section's items are newest first") end
   end
   if exists(fp) then
-    local f = feedback_parse(read(fp))
+    local heads_at = queue_rows_at(fp, {"## "})
+    local f = feedback_parse_rows(heads_at)
     for b in f.bad do push(got, fp .. ":" .. b.line .. ": `" .. b.text .. "` is not an entry's heading, `## <who> → <who>, <date>: <title>`") end
     for i = 2, #f.entries do
       local a = f.entries[i - 1]
@@ -139,14 +225,24 @@ function queue_check(dir?)
       if b.date > a.date then push(got, fp .. ":" .. b.line .. ": " .. b.date .. " after " .. a.date .. ": entries are newest first") end
     end
     -- A heading glued to the line above, one twice, one the archive holds.
-    local fls = lines(read(fp))
+    -- The line above each heading that starts a line: the last line of
+    -- the text before its "\n## ", in order.
+    local above = {}
+    local parts = split(read(fp), "\n## ")
+    local k = 0
+    for r in heads_at do
+      if starts_with(r.text, "## ") and r.line > 1 then
+        k = k + 1
+        above[tostring(r.line)] = last(split(parts[k], "\n"), 1)[1]
+      end
+    end
     local archived = {}
-    for l in lines(read_or(queue_path(dir, "FEEDBACK-ARCHIVE.md"), "")) do
-      if starts_with(l, "- ") then archived[sub(l, 3)] = true end
+    for r in queue_rows_at(queue_path(dir, "FEEDBACK-ARCHIVE.md"), {"- "}) do
+      if starts_with(r.text, "- ") then archived[sub(r.text, 3)] = true end
     end
     local heads = {}
     for e in f.entries do
-      if e.line > 1 and trim(fls[e.line - 1]) ~= "" then push(got, fp .. ":" .. e.line .. ": `## " .. e.heading .. "` is glued to the line above: a blank line before each heading") end
+      if e.line > 1 and trim(get(above, tostring(e.line), "")) ~= "" then push(got, fp .. ":" .. e.line .. ": `## " .. e.heading .. "` is glued to the line above: a blank line before each heading") end
       if has_key(heads, e.heading) then push(got, fp .. ":" .. e.line .. ": `## " .. e.heading .. "` twice (also line " .. heads[e.heading] .. ")") else heads[e.heading] = e.line end
       if has_key(archived, e.heading) then push(got, fp .. ":" .. e.line .. ": `## " .. e.heading .. "` is archived too: an archived entry never comes back") end
     end
@@ -165,8 +261,8 @@ end
 -- One more than the highest number in either file.
 function queue_next(dir?)
   local top = 0
-  for it in queue_parse(read(queue_path(dir, "QUEUE.md"))).items do top = max(top, it.n) end
-  for a in queue_archived(read_or(queue_path(dir, "QUEUE-ARCHIVE.md"), "")) do top = max(top, a.n) end
+  for it in queue_parse_at(queue_path(dir, "QUEUE.md")).items do top = max(top, it.n) end
+  for a in queue_archived_at(queue_path(dir, "QUEUE-ARCHIVE.md")) do top = max(top, a.n) end
   return top + 1
 end
 
@@ -344,7 +440,6 @@ function queue_move(name, ns, outcomes, dir)
   local qp = queue_path(dir, "QUEUE.md")
   local ap = queue_path(dir, "QUEUE-ARCHIVE.md")
   local ls = lines(read(qp))
-  local alines = lines(read(ap))
   local q_edits = {}
   local entries = {}
   for i = 1, #ns do
@@ -368,12 +463,11 @@ function queue_move(name, ns, outcomes, dir)
   local adds = {}
   for e in entries do push(adds, e.line) end
   -- Above the archive's first numbered line: its newest section's top.
-  local first = 0
-  for i = 1, #alines do
-    if first == 0 and re_find(alines[i], "^- \\*\\*[0-9]+\\.\\*\\*") ~= nil then first = i end
+  local anchor = nil
+  for r in queue_rows_at(ap, {"- **"}) do
+    if anchor == nil and #queue_archived_rows({r}) == 1 then anchor = r.text .. "\n" end
   end
-  if first == 0 then fail("`" .. name .. "`: QUEUE-ARCHIVE.md has no numbered line to put these above") end
-  local anchor = alines[first] .. "\n"
+  if anchor == nil then fail("`" .. name .. "`: QUEUE-ARCHIVE.md has no numbered line to put these above") end
   edits_all({{qp, q_edits}, {ap, {{old = anchor, new = join(adds, "\n") .. "\n" .. anchor}}}})
   return #ns
 end
