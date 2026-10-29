@@ -165,7 +165,36 @@ for the shell". Read it once per session.
     (`useradd -m steve`). Give it your checkouts and their caches (`chown -R
     steve`). Install the toolchains where it can run them: patched Zig, and
     the Roc toolchain, either in its own home or on a shared path.
-  - Run every build and test as it (`runuser -u steve -- zig build test`),
+  - **The recipe** (CC, 2026-10-29, the first time it was done; Steve's
+    permission, given in the session, let `useradd` past the auto-mode
+    check). Steve may put it in the environment's setup script; whatever it
+    has done already, the rest is quick:
+    - `id steve || useradd -m steve`, then `chown -R steve:steve /home/user`
+      and `git config --global --add safe.directory '*'` (root's git, on
+      steve's checkouts).
+    - The toolchains live in `/root`, which steve can't read: copy them to
+      `/opt/toolchains` (`cp -a /root/zig-<ver>+patched.<n>
+      /root/roc-<pin> /opt/toolchains/`, `chmod -R a+rX`), and link `zig`
+      and `roc` from `/usr/local/bin`. `shale` there already points into
+      `/home/user/shale`.
+    - Two more things in `/root` steve needs: the proxy's CA bundle (`install
+      -m 644 /root/.ccr/ca-bundle.crt /etc/ssl/certs/ccr-ca-bundle.crt`;
+      without it a clone fails "Problem with the SSL CA cert"), and Shale's
+      mounts (`/home/steve/.config/shale/mounts`: `repos = /home/user` and
+      `cookbook = /home/user/shale/cookbook`).
+    - A wrapper, `/usr/local/bin/as-steve`, so each run is one word:
+      ```sh
+      #!/bin/sh
+      CA=/etc/ssl/certs/ccr-ca-bundle.crt
+      exec runuser -u steve -- env HOME=/home/steve USER=steve \
+        PATH=/usr/local/bin:/opt/node22/bin:/usr/bin:/bin \
+        GIT_SSL_CAINFO=$CA SSL_CERT_FILE=$CA CURL_CA_BUNDLE=$CA \
+        NODE_EXTRA_CA_CERTS=$CA REQUESTS_CA_BUNDLE=$CA "$@"
+      ```
+      Then `as-steve zig build test`, `as-steve shale tools/verify.shale`.
+      The proxy may rotate its CA mid-session: a certificate error as steve
+      means copy the bundle again.
+  - Run every build and test as it (`as-steve zig build test`),
     with the toolchains first on its PATH. Git, pushing included, stays
     with root.
   - If your session can't create the user, or a step fails, say so in
