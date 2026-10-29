@@ -7,6 +7,101 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-29: 305 done, the box can run the gold check; 303 done
+
+### 305: the chat's markdown in Roc
+
+**Every case I can run agrees, html and work units both, and the ratchet is at its maximum. The box can run gold:**
+
+```
+cd zig-server && zig build markdown-twin -- --also /home/steve/showell_repos/gopher-gold/gold.jsonl
+```
+
+It prints counts and `FAILID <corpus> <id> <answers that differ>` lines, never a message's text.
+
+**The branches:**
+- **roc-webbox `claude/roc-chat`:** `5f5ca54`, `a40107a`, `f4e6cc7` and `c7a711e`, on `main` at `0240417`.
+- **angry-gopher `claude/roc-markdown`:** `25fabaa`, **a new branch on `box/roc-cleanup`**. It is not on `claude/roc-chat`:
+  - `origin/claude/roc-chat` holds 31 older commits (the 285-301 work, merged from an earlier `box/roc-cleanup`).
+  - Those commits call the old seam (`askingOnly`), so they don't build against roc-webbox `main`.
+  - Putting the judge there would have meant force-pushing over them.
+- **roc-apps `claude/roc-chat`:** `f6e85a5`, the style guide.
+
+**What was built:**
+- **The Roc**, in roc-webbox `chat/`, about 1,900 code lines with expects. Each module is one Zig file's port, read beside it:
+  - `MdText`: markdown_text, the budget, the escape, the byte classes.
+  - `MdFence`: markdown_fence. Fence.roc is folded in; Feeds and Recent call it.
+  - `MdMedia`: markdown_media. SafeImg.roc is folded in; the Images feed's `rebuild` is `img_at` at the tag's start, and SafeImg's cases are its expects.
+  - `MdInline`: markdown_inline, with markdown_links folded in (its one caller).
+  - `Md`: markdown.zig.
+- **The traps:**
+  - Every walk is a loop. The only recursion is the block nesting the Zig's depth cap bounds, and a link label's single level.
+  - The one change of structure: a delimiter run carries the emphasis it opens and closes. The Zig splices marker nodes into a linked list, but only ever beside a run, so the output order is the same.
+- **twin.roc's function 82** answers all five: `render`, `work_units`, the hostility's words, `render_trusted` and `render_trusted_reflow`.
+
+**The judge**, angry-gopher `zig-server/src/markdown_twin_test.zig`:
+- It runs inside `zig build test`, and on its own as `zig build markdown-twin`.
+- Every case must agree with chat-markdown's Zig, a path dependency as on master, on all five answers.
+- **The corpora** (`markdown_twin/corpora.txt`):
+  - adversarial: 29;
+  - dialect: 3;
+  - zig_tests: 69, every literal in chat-markdown's tests plus its 4,000-repeat message;
+  - hostile: 766, generated, 320 of them hostile. They are markdown_hostile_probe's shapes, cmark's pathological tests and the dialect's corners at sizes 1 to 1,000. They also include a sweep of a quadratic shape across the budget's edge, in each of nine contexts a line renders in, so every check point is the one that trips.
+- **The ratchet** (`markdown_twin/ratchet.txt`) holds each corpus's count and may only rise (`--raise`).
+- **Planted faults are caught:**
+  - one byte added to `render` fails all 867;
+  - a budget of 15 a byte instead of 16 fails 2 hostile cases.
+- **The fuzzer** (`--fuzz N --seed S`) agreed on 303,000 random messages over seeds 1-4, so `fuzz_found.jsonl` is empty. Its grammar is token soup (the dialect's markers, URLs, tags, line starts); a hunter with more structure might do better.
+- **The speed backend agrees too:** 867/867 under `-Doptimize=ReleaseFast`.
+
+**Honest about the ratchet:** I wrote the port whole against the Zig, and all 867 agreed on the judge's first run. So the ratchet went from 0 to its maximum in one step, and the commits are split by layer (M1/M5, M2-M4, M1/M5-M7), not by a rising count.
+
+**Speed (M7: measured, not optimized).** CPU time for all five answers of every case, Zig's then Roc's, through `--time`:
+
+| corpus | Zig Debug | Roc dev | Zig ReleaseFast | Roc speed |
+|---|---|---|---|---|
+| zig_tests (69, one 128 KB) | 148 ms | 777 ms | 25 ms | 103 ms |
+| hostile (766) | 3,721 ms | 20,848 ms | 302 ms | 987 ms |
+
+- Roc dev is about 5.5 times the Zig in Debug, and 30 to 70 times the Zig in ReleaseFast.
+- Roc speed is 3 to 4 times the Zig in ReleaseFast.
+- The speed archive built in 90 s here.
+
+**The checks:**
+- **roc fmt:** clean.
+- **The name hunt** over `chat/Md*.roc`: 0, after renaming `Run` to `DelimiterRun`.
+- **The stack check** (`write=1`): 0 to stack. 16 long lines remain, all expects with long literals.
+- **The Roc hunt:**
+  - `single_caller` now has two `kept_alone` entries with reasons: `MdInline` (Md is its one caller) and `Md` (twin's until 306). SafeImg's entry is gone with SafeImg.
+  - The Bools left are CommonMark's own flanking predicates. The caller-facing flags are tags (`Tight`/`Loose`, `HardWrap`/`Reflow`, `Linked`/`InLabel`). Both choices are now in the guide.
+- **The quick gate:** every part passes up to angry-gopher's `zig build test`. There, the judge and all 201 tests pass, but the router's test binary fails to compile.
+- **`./ops/check_zig`:** every lint passes (webbox library, doc check, test roots, zig fmt), then `zig build` fails with the same compile error.
+- **That compile error is not 305's:**
+  - roc-webbox `main` moved its seam in `73f05a8` ("the Host vtable becomes a comptime host type") and `6dfddcb` (`count!`).
+  - No angry-gopher branch I can see has the matching `chat_router.zig`, which still has `.serve` and `.check_member`.
+  - My roc-webbox commits touch only `chat/*.roc` and `tools/roc_hunt/hunt.shale`.
+- **The quick gate's glue step** needs roc at `258ab27` in `~/tools`. I checked it out here; the box has its own.
+
+**Concerns:**
+1. **The API is bytes in, bytes out** (`List(U8)`), like the Zig, so the judge can hand it any bytes. 306 will want a `Str` door. Since what the renderer slices is always at ASCII bytes, `Str.from_utf8` on its output cannot fail on text input.
+2. **box/roc-cleanup still has its own `src/markdown*.zig`.** The judge holds the Roc to chat-markdown's copy. They agree today; one should go.
+3. **306's dev-backend number** is the one to watch: about 20 to 70 times the optimized Zig.
+
+### 303 (done by a subagent, relayed)
+
+- **What became of the drafts:**
+  - **Into name_hunt:** s2 is the new `mixed_tense`, and `List(T)` arguments are now judged as `T`. s4 is the new `container`, its words in `cookbook/words/containers.txt`; a doc that says whose the word is keeps a domain word quiet.
+  - **New recipes:** `nest_depth.shale` (gating at `min=4`), `boundaries.shale` (`single`, and `fixed` with S7's filter: 117 hits on main became 0) and `errors.shale` (`error_alias`, `optional_tag`).
+  - **Every check has plants**, and a self-test fails when a check has none.
+  - **Dropped:** s11, a listing for a reader with no verdict. Also errors' "unbuilt error tags" part, which misfires on every body that passes a callee's `Try` through (about 40 on main), and S8, which no rule in the guide backs.
+- **The branches**, each `claude/style-recipes`: shale `0334c05`, roc-webbox `2388fda` and `af8abc3`, roc-apps `b2d9e58`. `hunt.shale` and its `self_test=1` pass.
+- **Merge shale first:** the hunt calls the new cookbook recipes.
+- **On roc-webbox main:** every gating check is 0 except one `optional_tag`, `chat/platform/Host.roc:337`, the `None` that `check_welcome!` answers. Renaming it crosses the host seam, so it is left for you.
+- **The chat edits** (comments and two expects in Fanout, Feeds, Html and Host) may conflict with my `claude/roc-chat`'s Feeds change. They are in different lines.
+- **`box/style-check-drafts` is still there:** this session's git proxy refuses to delete a branch outside `claude/*`. Please delete it.
+
+**Next:** 306 waits on your gold run's FEEDBACK. Send me the failing ids and I'll fix them first.
+
 ## CC → the box, 2026-10-29: 304 done: queue_done writes both files or neither, and costs 0.8M steps; edit_between; JSON in and out
 
 **304 is done**, on `claude/great-wright-i7aste` in shale (`d1ab329`, `7c495df`) and metal-vmm (`c35b1f9`). `zig build test` and `zig build consumers` pass.
