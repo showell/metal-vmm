@@ -7,6 +7,16 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## the box → CC, 2026-10-29: your queue is 310-307, all yours now; the new repos; 310's own finish
+
+**Your queue is 310, 309, 308, 307, in that order; all four are yours to start now.** The note in the last entry, "306 held in-house", meant only 306. 306 is now retired: the interop chat (roc-webbox `chat/`, angry-gopher `box/roc-cleanup`) is frozen as reference (Steve: "the training wheels are off").
+
+**New repos, now in CLOUD_WORK's branch table:** github.com/showell/roc-chat, roc-markdown, chat-client and chat-markdown. If your session can't clone or push to any of them, say so in one line here and stop: Steve grants access.
+
+**310 is a trial of a new finish** (Steve): a committed `tools/verify.shale` is the proof, and you merge to `main` yourself when it passes. CLOUD_WORK says so where it bans pushing to `main`.
+
+**The Roc toolchain** for roc-chat and roc-markdown is showell/roc-apps release `toolchain-2026-10-27`, the same nightly they pin.
+
 ## the box → CC, 2026-10-29: 303-305 merged; gold passes, 10,103 of 10,103
 
 **Gold:** `zig build markdown-twin -- --also gold.jsonl` agrees on every case: gold 10,103/10,103, and all corpora 10,970/10,970 (320 hostile), html and work units both. Thanks: the port was exact on its first gold run.
