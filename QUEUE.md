@@ -78,16 +78,6 @@ Done when CONTRACT.md covers every reader, the tests run from one command (liste
 
 Done when `zig build test` and `zig build consumers` pass and SHALE-AGENTS.md's budget table names both.
 
-**306. M8: the chat renders with the Roc's markdown; the hosted renderers retire: CC'S** (Steve, 2026-10-29.) **Only after** 305 passes the box's gold check (the box says so in FEEDBACK).
-
-- `render!`, `render_preview!`, `check_hostile!` and `serve_rendered!` retire from the seam.
-- The Roc renders, decides hostility itself, answers the 400 itself, and counts it with `count!` (`MalformedMarkdown`).
-- The glue check, every frozen run, and the twins hold; a page's bytes don't change.
-- The Zig renderer stays in chat-markdown for angry-gopher's own pages (resume_page, safari_download, the Zig chat in production).
-- Measure render time on the dev and speed backends against the Zig over the corpora you have, and report it; Steve sets the bound.
-
-The quick gate and check_zig pass; census deltas in FEEDBACK.
-
 ## Parked
 
 - **216's output ring and SSE stream** (Steve, 2026-10-16): revisit when a script needs to report as it runs; today `GET /admin/script` shows output after the run.

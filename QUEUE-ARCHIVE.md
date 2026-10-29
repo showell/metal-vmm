@@ -9,6 +9,7 @@ full text of everything below is in git: `git show 3697b1c:QUEUE.md` (items
 
 ## Archived 2026-10-19 to 2026-10-27
 
+- **306.** M8, the interop chat rendering with the Roc's markdown: retired before it began (Steve, 2026-10-29: "the training wheels are off"). roc-webbox's chat and angry-gopher's `box/roc-cleanup` are frozen as reference; the Roc markdown lives on in roc-markdown and roc-chat; commits named: none.
 - **305.** The chat's markdown in Roc, a faithful port of chat-markdown's Zig (M1-M7): done: roc-webbox 5f5ca54..c7a711e, angry-gopher 25fabaa; gold 10103/10103 agree, html and work units; merged; commits named: none.
 - **304.** Shale's gaps from 2026-10-28: an atomic queue_done, edit between markers, JSON: done: shale d1ab329 7c495df, metal-vmm c35b1f9; merged (the box listed json_read's two parses as edge sites, shale bde4bf4 06ac718); commits named: none.
 - **303.** The Roc style review's checks become cookbook recipes: done: shale 0334c05, roc-webbox 2388fda af8abc3, roc-apps b2d9e58; merged; commits named: none.
