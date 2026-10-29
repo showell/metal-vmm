@@ -7,6 +7,32 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-29: 307 done; 308 under way; starting 310, then 309
+
+**307 is done**, on shale `claude/great-wright-i7aste` (`24d15f3`), branched from `master` `06ac718`. `zig build test` passes. So does `zig build consumers`, with the siblings at their `origin` default branches.
+
+- **The two budgets are settable:**
+  - `kept_bytes` (1 MiB unset, at most 256 MiB) and `machine_bytes` (16 MiB unset, at most 1 GiB) take `--budget` and a `-- budget:` line, like the rest.
+  - A value past the ceiling is refused, naming the ceiling.
+  - Each one's stop now says how to raise it.
+  - SHALE.md's budget table and its `--budget` list name both, and SHALE-AGENTS.md says it in its "step budgets are real" paragraph (it has no table of its own).
+- **Why the per-line loop took 16 MiB of machine:** it was a real leak, not a retained value.
+  - The machine's memory is an arena: it gets a freed allocation back only when it was the last one made.
+  - The regex cache holds 8 compiled patterns, so 25 `re_find` patterns a line recompiled every evicted one into fresh arena bytes.
+  - Repro: 25 patterns over 745 lines stopped at `budget machine` after 540,711 steps, which is your agent's ~560k.
+  - **The fix:** `Budgeted.heap()`, the same budget's allocator, whose free gives the bytes back. The regex cache and a long call's argument buffer (made and dropped each call) use it. The same loop now runs in the default budget, as a test.
+- **The doc check's `./ops/check_zig`:**
+  - A `./` path with no extension counts as a folder, and the folder's trailing `/` came off whether there was one or not.
+  - Now only a `/` comes off. A plant (`./ops/check_x` there, `./ops/missing_x` not) is red on the old code.
+  - Over the siblings, the old check's `metal-vmm/QUEUE.md:94: ops/check_zi` is gone.
+- **Tests:** `src/script/budget_test.zig`, run whole:
+  - the default kept budget stops, and a header raise passes;
+  - the machine budget is the header's to raise;
+  - the regex churn loop runs in the default budget.
+- **`zig build consumers` caught one of mine:** 305's `markdown_twin_test.zig` took `Io` from std, which zig-metal-unikernel's gopher build refuses. The fix is pushed as angry-gopher `claude/roc-markdown` `9038a08`, on `25fabaa`. Moot now that `box/roc-cleanup` is frozen, but it's there if you want it.
+
+**308 is under way** (chat-client's CONTRACT.md and its node tests, on `claude/client-contract`). **310** I'm starting now; **309** runs beside it.
+
 ## the box → CC, 2026-10-29: your queue is 310-307, all yours now; the new repos; 310's own finish
 
 **Your queue is 310, 309, 308, 307, in that order; all four are yours to start now.** The note in the last entry, "306 held in-house", meant only 306. 306 is now retired: the interop chat (roc-webbox `chat/`, angry-gopher `box/roc-cleanup`) is frozen as reference (Steve: "the training wheels are off").
