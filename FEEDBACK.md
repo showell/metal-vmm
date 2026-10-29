@@ -7,6 +7,96 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-29: 317 done (roc-markdown's `![alt](src)`); verify 56 of 56
+
+- **On roc-markdown `claude/roc-markdown` `a850b09`**, on top of 316 (`894f563`). The box merges and refreezes gold.
+- **Parsing:** an image is parsed where links are, by `MdLinks.link_at` from the `[` after the `!`. It has the same paren balancing and the same budget. Its destination may carry a title, in `"…"`, `'…'` or `(…)` (`MdLinks.image_dest`).
+- **Allowed:** a src that `MdSafety.is_local_url` accepts. `MdLinks.image` hands `MdSafety.media_attrs` the src, alt and title, so the result is exactly the `<img src alt title>` a member's tag of that src and alt is rebuilt as.
+- **Refused** (another site, `//…`, a relative path, `javascript:`): **a link, with the `!` dropped**, under the link rules. A `javascript:` src keeps no href, and another site's opens in a new tab. The reason is written in MdSafety's header:
+  - the link still says where the image is, and a reader can choose to open it;
+  - the page fetches nothing from another site (no tracking pixel, no hotlink);
+  - the markup as written would just be noise.
+- **The alt:** the label's inline content as plain text. The label is rendered, then its tags are dropped and its escapes read back (`MdHtml.plain_text`). It is escaped once more as the attribute's value. `![a *b* `c` ~~d~~](/x.png)` gives `alt="a b c d"`.
+- **Judge:**
+  - **New spec corpus:** `spec_images`, CommonMark's Images section, cm/572 to 593. The spec's `<img … />` is read as our `<img …>` (`specVoid`).
+  - **Four of the 22 match.** The other 18 are listed in spec_diverge.txt:
+    - 14 need link reference definitions (`[gap?]`, already a gap);
+    - 2 nest brackets (cm/574 and 575, the existing first-`]` gap);
+    - 2 are dialect (cm/578 `train.jpg` and cm/580 `<url>`): neither src is a same-origin path.
+  - **Six new hostile shapes, all linear:** `rm-image-openers`, `rm-images`, `rm-image-nest`, `rm-image-alt-markup`, `rm-images-refused`, `rm-image-labels-alone`. `lb-nested-images` is held linear too.
+  - **Three new dialect cases:** `image/off-site`, `image/alt-markup`, `image/javascript`. Each is the target of one plant.
+- **Which frozen corpora moved:**
+  - `examples` `safety`: two lines added. A same-origin `![an image](/markdown/sample.png)` now shows as an image, and `![another site's](https://elsewhere.example/a.png)` as a link. The caption is updated.
+  - `hostile` `lb-nested-images/1..8191`: the render changed. Its src `u` is refused, so its images are links now. Work units and verdicts didn't move.
+  - `hostile`: 30 cases added.
+  - `dialect`: three cases added.
+- **A merge to expect:** 317 names a `safety` line `![not an image](/markdown/sample.png)` that isn't on any pushed branch, so I take it to be your local `box/playground` work. I added both sides of the decision to `safety` on my branch. If the playground's `safety` differs, keep one of each.
+- **Gold** moves wherever a real message held `![…](…)`. Same-origin ones become images, and other ones lose their `!`.
+- **verify's whole output** (`as-steve shale tools/verify.shale`):
+
+```
+── budgets from the script's header: steps=200000000, read_bytes=1000000000, changes=10000, change_bytes=200000000, arena_bytes=1000000000
+PASS  zig build test (exit 0, 51950 ms)
+PASS  cases: adversarial 29/29 (want 29)
+PASS  cases: dialect 7/7 (want 7)
+PASS  cases: unit_cases 69/69 (want 69)
+PASS  cases: spec_agree 269/269 (want 269)
+PASS  cases: spec_tables 8/8 (want 8)
+PASS  cases: spec_strike 2/2 (want 2)
+PASS  cases: spec_escapes 13/13 (want 13)
+PASS  cases: spec_images 22/22 (want 22)
+PASS  cases: pinned 3/3 (want 3)
+PASS  cases: examples 4/4 (want 4)
+PASS  cases: hostile 1097/1097 (want 1097)
+PASS  cases in all: 1523 (want 1523)
+PASS  the REPL:  9 cases (4 canned examples) in 3 modes, 20 runs of the REPL, 0 fail
+PASS  linear: lb-nested-parens-in-dest 2011 units at 1,000, 16393 at 8,191
+PASS  linear: rm-unbalanced-open-parens 2013 units at 1,000, 16395 at 8,191
+PASS  linear: rm-unbalanced-close-parens 2009 units at 1,000, 16391 at 8,191
+PASS  linear: rm-paren-bait 14996 units at 1,000, 122861 at 8,191
+PASS  linear: rm-paren-links 24989 units at 1,000, 204764 at 8,191
+PASS  linear: tbl-wide 5006 units at 1,000, 40961 at 8,191
+PASS  linear: tbl-many-rows 16010 units at 1,000, 131066 at 8,191
+PASS  linear: tbl-delimiter-alone 10990 units at 1,000, 90091 at 8,191
+PASS  linear: tbl-code-pipes 9010 units at 1,000, 73729 at 8,191
+PASS  linear: tbl-code-pipes-wide 11018 units at 1,000, 90119 at 8,191
+PASS  linear: rm-image-openers 2001 units at 1,000, 16383 at 8,191
+PASS  linear: rm-images 30986 units at 1,000, 253907 at 8,191
+PASS  linear: rm-image-nest 21993 units at 1,000, 180195 at 8,191
+PASS  linear: rm-image-alt-markup 108966 units at 1,000, 892785 at 8,191
+PASS  linear: rm-images-refused 53975 units at 1,000, 442289 at 8,191
+PASS  linear: rm-image-labels-alone 7997 units at 1,000, 65525 at 8,191
+PASS  linear: lb-nested-images 13997 units at 1,000, 114671 at 8,191
+PASS  linear: rm-tilde-run 1006 units at 1,000, 8197 at 8,191
+PASS  linear: rm-strike-nest 17001 units at 1,000, 139248 at 8,191
+PASS  linear: rm-strike-unclosed 8000 units at 1,000, 65528 at 8,191
+PASS  linear: rm-strike-mixed 29001 units at 1,000, 237543 at 8,191
+PASS  linear: rm-strike-star-alternate 12999 units at 1,000, 106482 at 8,191
+PASS  linear: rm-escaped-strikes 7000 units at 1,000, 57337 at 8,191
+PASS  linear: rm-backslash-breaks 6002 units at 1,000, 49148 at 8,191
+PASS  linear: lb-tilde-runs 12001 units at 1,000, 98293 at 8,191
+PASS  linear: lb-mixed-delimiters-tilde 20003 units at 1,000, 163823 at 8,191
+PASS  budget: hostile/tbl-ragged/200 (40,000 padded cells) is refused
+PASS  plant: one byte of a frozen answer (adversarial) is red (exit 1; 1 `FAILID	adversarial` line, want 1)
+PASS  plant: one byte of a frozen table (spec_tables) is red (exit 1; 1 `FAILID	spec_tables` line, want 1)
+PASS  plant: one wrong hostile hash is red (exit 1; 1 `FAILID	hostile` line, want 1)
+PASS  plant: a spec_diverge id that now matches is red (exit 1; 1 `SPECSTALE` line, want 1)
+PASS  plant: a spec_diverge table id that now matches is red (exit 1; 1 `SPECSTALE` line, want 1)
+PASS  plant: `~~` paired across a line is red (exit 1; 1 `FAILID	dialect` line, want 1)
+PASS  plant: a backslash escape applied inside a code span is red (exit 1; 1 `FAILID	spec_escapes` line, want 1)
+PASS  plant: one byte of a frozen strikethrough (spec_strike) is red (exit 1; 1 `FAILID	spec_strike` line, want 1)
+PASS  plant: an image allowed from another origin is red (exit 1; 1 `FAILID	dialect` line, want 1)
+PASS  plant: markup kept inside an alt is red (exit 1; 1 `FAILID	dialect` line, want 1)
+PASS  plant: a javascript: src rendered is red (exit 1; 1 `FAILID	dialect` line, want 1)
+PASS  zig fmt --check build.zig judge
+PASS  roc fmt --check package judge
+PASS  roc-chat's roc test against this package (exit 0: All (1897) tests passed in 8751.1 ms.)
+PASS  the judge's time without gold: 56239 ms
+SKIP  gold: not on this machine
+verify: 56 of 56 passed
+── time: 17 programs, 697.4 s in all; the slowest 57.1 s: zig build judge -- --data /home/user/roc-markdown/.zig-cache/verify/data
+```
+
 ## CC → the box, 2026-10-29: 316 done (roc-markdown's strikethrough and backslash escapes); verify 45 of 45; starting 317
 
 - **On roc-markdown `claude/roc-markdown` `894f563`**, from `main` `44e2651`. The box merges and refreezes gold.
