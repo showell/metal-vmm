@@ -38,7 +38,23 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
-**319. roc-chat: the readability review's fixes: CC'S** (Steve, 2026-10-29.) **showell/roc-chat only**, on `claude/roc-chat`. **Start only when FEEDBACK has a box entry saying the security fixes (`box/security-2`) are merged into roc-chat `main`.** Until then, it isn't startable: finish 318 and stop. Branch from that `main`. Finish as 314 did: roc-chat's verify script passes in full, its output goes in FEEDBACK, and the box merges.
+**321. roc-chat: security H4, per-person indexes and caps: CC'S** (Steve, 2026-10-29: the security review's H4, which nobody has started.) **showell/roc-chat only**, on `claude/roc-chat`, after 320 and on top of it. Finish as 319 does.
+
+- **Per-principal index files** for conversations, keys and invites, so that listing what one person owns no longer scans everyone's. A missing index is rebuilt once from the full scan, the same pattern as H3's tally, so no deploy migration is needed. Give a stale index the tally's treatment too: detect it and rebuild.
+- **The caps:** wire `keys_per_human`, `invites_per_human` and `conversations_per_human` from the Limits module. A request past a cap is refused with a status and a message that say which cap.
+- **Sorting:** `List.sort_with` replaces Agents' insertion sorts.
+- **e2e:** one step per cap, with a test hook for a small cap, and a plant per step that turns it red.
+- **Verify:** as 319.
+
+**320. roc-chat: security H3, the rest: CC'S** (Steve, 2026-10-29.) **showell/roc-chat only**, on `claude/roc-chat`, after 319 and on top of it. Finish as 319 does. H3's first part, on `box/security-2`, gave each post its id from a tally sidecar and capped a transcript at 4 MB. Read docs/reviews/REVIEW-roc-security-2026-10-29.md (this repo) for H3 itself.
+
+- **Paging:** `GET /conversations/<id>` returns the last page of messages (`page_messages` in the Limits module), and takes `?before=<id>`. The /chat page shows the last page and can load the one before. List the new contract fields first, and update chat-client's CONTRACT.md if the wire changed (a separate commit there; say so in FEEDBACK).
+- **The backlog after `Last-Event-ID`:** `stream!` still reads the whole transcript. Grow the tally an id-to-offset index, or anything that bounds the read, and use `read_at!`. Note that 319 removes the unused hosted functions: keep `read_at!` if this needs it, and say so.
+- **Small:** `chat_abi.zig`'s header comment names `stream_holder`.
+- **A known trap:** an e2e `Listener` read past its timeout aborts the run (std's Io panics in debug builds) instead of failing the step. Step 40's `ends()` waits on `poll` instead; any new step that waits for data that may never come does the same.
+- **Verify:** as 319, with each new step's plant red.
+
+**319. roc-chat: the readability review's fixes: CC'S** (Steve, 2026-10-29.) **showell/roc-chat only**, on `claude/roc-chat`. **Startable now:** branch from roc-chat's `box/security-2` (b2dd182: M3, M1, H2 and H3's first part; its agent's verify passed 77 of 77, and the box hasn't re-run it yet). The box merges that branch and yours together. Finish as 314 did: roc-chat's verify script passes in full, its output goes in FEEDBACK, and the box merges.
 
 **Read first:**
 - docs/reviews/REVIEW-roc-readability-2026-10-29.md (this repo): take every **roc-chat** finding. The roc-markdown ones are 318's;
