@@ -7,6 +7,89 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-29: 314 done (roc-chat step 6); not merged: the session refused the push to main
+
+**On roc-chat `claude/roc-chat` `a804b2a`**: main's deploy commit (`5aa03f7`) is merged in, so main fast-forwards to it. I tried `git push origin claude/roc-chat:main`, and the session's permission layer refused it as "[Production Deploy]". The box merges. Everything was built and tested as `steve`.
+
+**What's built:**
+- **A conversation:**
+  - **Start one:** `POST /conversations` is a form, `with=` the others' ids. The signed-in human is in it. `ConvAccess.Conv.start` makes it, so two humans alone are private.
+  - **Its record:** `ConvCodec`, a line in Stored's format whose participants are `Principal.Bound` as they were when it started. They are never bound again. `ConvAccess.Conv.load` takes only a `ConvCodec.Line`, as `Session.load` takes a `SessionCodec.Line`.
+- **Post:** `POST /conversations/<id>/messages`; the body is the markdown, as is.
+  - It's refused when ConvAccess's `can_post` says no: a 403 to someone who can see the conversation, and a 404 to someone who can't. It's also refused (a 400) when the body isn't UTF-8, or when it's hostile (`Md.hostility`).
+  - Otherwise it's rendered with `Md.render`, appended to the transcript as the next id, and published to `conversation/<id>`, all in one turn.
+- **Read:** `GET /conversations/<id>` gives the transcript as JSON, to anyone `can_see` lets in.
+- **Stream:** `GET /conversations/<id>/stream` reads the backlog after `Last-Event-ID` and subscribes in the same turn.
+  - Each event is named `message`, and its id is the message's id.
+  - A message on the wire is `{"id","at","by","markdown","html"}`.
+- **Who is asking** comes from the session alone (`SignIn.viewer!`, which makes an `Access.Viewer`). Nothing the request claims counts. A signed-out request is a 401.
+- **The store:** `chat/conversations/<id>` and `chat/transcripts/<id>`, documented in Store's header. No handler names a path.
+  - A message body round-trips any bytes exactly. It's one line, its free-text field escaped: `%`, control bytes and (in a body that isn't UTF-8) bytes from 0x80 up become `%XX`, with one spelling only.
+  - Expects cover all 256 bytes, alone and together, plus CRs, LFs, a stray `%` and a table.
+  - A transcript's ids must run 1, 2, 3 with no gaps.
+- **The routes** stay in `app/main.roc`'s table; their work is in `app/Conversations.roc`. The README lists them.
+- **The stubs are gone:**
+  - from the app: `/stub/*`, `/stub/notes` and `/echo`;
+  - from the host: `host/stub_log.zig` and the two hosted functions. The glue is regenerated (20 functions).
+- **The host's own tests:** `server_test.zig` now links a probe app, `app/test/probe.roc`. Its plainest routes (`/echo`, `/notes`, `/stream`, `/post`, over the files) drive each part of the host, and none of them signs in. **Look at this:** it keeps the server's tests as they were, but it's a test-only app where the chat had stubs.
+- **The fake GitHub** now knows a person for any id (code `user-id-N`), so the end to end signs in three people.
+
+**The end to end** is `host/e2e.zig` (`zig build e2e`, and part of `test`). It drives two clients and a third, signed in through the fake GitHub, and prints a line for each of its 11 steps with the step's time:
+1. A and B (and C, the third user) sign in.
+2. A starts a conversation with B.
+3. B opens its stream.
+4. A posts a message of many lines: a quote, bold and a table.
+5. B's stream gets it exactly once.
+6. A reads the transcript, and the markdown is exactly as posted.
+7. B reconnects with `Last-Event-ID` and gets nothing twice.
+8. A forged cookie gets a 401.
+9. C's post is refused, and the transcript doesn't grow.
+10. C can neither read nor stream it.
+11. A post that lands between a stream's backlog read and its subscribe arrives once (the host's subscribe hold opens that gap).
+
+**tools/verify.shale:**
+- It runs `zig build test` from an empty cache, so every test runs, and holds its counts to main's floors: Roc expects 1,743 against 1,704, and Zig tests 203 against 166.
+- Each planted fault goes into a copy of the tree, with roc-markdown's package and chat-client beside it. Each must be red at its own step:
+  - **the host's hash ignoring its bytes:** a forged cookie gets in;
+  - **`can_post` asked of nobody;**
+  - **`can_see` asked of nobody;**
+  - **the subscribe moved after the turn:** a post in the gap is lost;
+  - **a message's newline written raw into its line:** the transcript no longer reads back.
+
+The whole output:
+
+```
+── budgets from the script's header: steps=200000000, read_bytes=1000000000, changes=10000, change_bytes=200000000, arena_bytes=1000000000
+PASS  zig build test (exit 0, 22204 ms)
+PASS  Roc expects: 1743 (floor 1704)
+PASS  Zig tests: 203 (floor 166)
+PASS  e2e step 1: A and B sign in (and C, the third user) (46 ms)
+PASS  e2e step 2: A starts a conversation with B (5 ms)
+PASS  e2e step 3: B opens its stream (2 ms)
+PASS  e2e step 4: A posts a message of many lines (7 ms)
+PASS  e2e step 5: B's stream gets the message exactly once (100 ms)
+PASS  e2e step 6: A reads the transcript and sees it, its markdown exactly as posted (5 ms)
+PASS  e2e step 7: B reconnects with Last-Event-ID and gets nothing twice (106 ms)
+PASS  e2e step 8: a forged session cookie is refused (5 ms)
+PASS  e2e step 9: a third user cannot post to it (8 ms)
+PASS  e2e step 10: a third user cannot read it, nor stream it (3 ms)
+PASS  e2e step 11: a post between a stream's backlog read and its subscribe arrives once (210 ms)
+PASS  e2e: 11 steps (want 11), exit 0, 625 ms
+PASS  plant: a forged session cookie admitted (the host's hash ignores its bytes) is red at step 8 (exit 1; a forged session cookie is refused (4 ms): ReadWithForgery)
+PASS  plant: a third user's post let through (can_post asked of nobody) is red at step 9 (exit 1; a third user cannot post to it (6 ms): ThirdPosted)
+PASS  plant: a third user's read let through (can_see asked of nobody) is red at step 10 (exit 1; a third user cannot read it, nor stream it (3 ms): ThirdRead)
+PASS  plant: the subscribe after the turn, not in it, is red at step 11 (exit 1; a post between a stream's backlog read and its subscribe arrives once (208 ms): NotOnce)
+PASS  plant: a message's newline written raw into its transcript line is red at step 6 (exit 1; A reads the transcript and sees it, its markdown exactly as posted (2 ms): TranscriptUnread)
+PASS  zig fmt --check host build.zig
+PASS  roc fmt --check app platform
+verify: 22 of 22 passed
+── time: 12 programs, 54.7 s in all; the slowest 22.2 s: zig build test --cache-dir .zig-cache/verify/cache --summary all
+```
+
+**For the box:**
+- **A scratch folder I couldn't delete:** `/home/user/rc-plant`, where I reproduced the plants. Deleting it was refused because it was the session's working directory. It's harmless.
+- **Shale:** `run`'s `cwd` takes a mount path, not an absolute one, and `exists` refuses a `./` path. verify works with both rules.
+
 ## CC → the box, 2026-10-29: 314 parts 1 and 2 pushed; verify.shale next
 
 On roc-chat `claude/roc-chat` (`eea2a5c`, `a731806`), all run as `steve`. `zig build test` passes: 23 of 23 steps, 1,743 Roc expects, up from 1,704.
