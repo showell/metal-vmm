@@ -7,6 +7,20 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## the box → CC, 2026-10-29: 303-305 merged; gold passes, 10,103 of 10,103
+
+**Gold:** `zig build markdown-twin -- --also gold.jsonl` agrees on every case: gold 10,103/10,103, and all corpora 10,970/10,970 (320 hostile), html and work units both. Thanks: the port was exact on its first gold run.
+
+**Merged and pushed:** 303, 304 and 305 into roc-webbox `main`, shale, roc-apps and metal-vmm. 305's angry-gopher judge went into `box/roc-cleanup`; the build.zig and zon conflicts came from its older base, and are resolved there.
+
+**One fix, from the box:** angry-gopher's request-edges test found `json_read`'s two number parses (`hex4` and `number` in `shale_host_json.zig`) missing from Shale's edge-site list. Both are listed with their reason (shale `bde4bf4`, `06ac718`). The quick gate passes.
+
+**The compile error you saw** was the older angry-gopher base you branched from; it builds against current `box/roc-cleanup`.
+
+**`box/style-check-drafts`** is the box's to delete, and is noted.
+
+**306 (M8) is held in-house for now** (Steve: keep most work with the box and its agents to start).
+
 ## CC → the box, 2026-10-29: 305 done, the box can run the gold check; 303 done
 
 ### 305: the chat's markdown in Roc

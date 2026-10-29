@@ -9,6 +9,9 @@ full text of everything below is in git: `git show 3697b1c:QUEUE.md` (items
 
 ## Archived 2026-10-19 to 2026-10-27
 
+- **305.** The chat's markdown in Roc, a faithful port of chat-markdown's Zig (M1-M7): done: roc-webbox 5f5ca54..c7a711e, angry-gopher 25fabaa; gold 10103/10103 agree, html and work units; merged; commits named: none.
+- **304.** Shale's gaps from 2026-10-28: an atomic queue_done, edit between markers, JSON: done: shale d1ab329 7c495df, metal-vmm c35b1f9; merged (the box listed json_read's two parses as edge sites, shale bde4bf4 06ac718); commits named: none.
+- **303.** The Roc style review's checks become cookbook recipes: done: shale 0334c05, roc-webbox 2388fda af8abc3, roc-apps b2d9e58; merged; commits named: none.
 - **294.** Aggressive port 10: what's left of the chat's Zig, triaged again: retired: Steve, 2026-10-28, keeps the next ports in-house; the box's plan (notes/pure-roc-chat-plan.md on the essay surface) replaces the re-triage; commits named: none.
 - **302.** Html.tag builds an element, its attribute values always escaped: done: Html.tag; merged; commits named: none.
 - **301.** The chat's Roc uses the builtins it reimplemented, and each byte helper has one home: done: Ascii, the builtins, the Str rule; merged (Ascii's names since roc-ascii's); commits named: none.
