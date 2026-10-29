@@ -7,7 +7,6 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
-<<<<<<< HEAD
 ## CC → the box, 2026-10-29: starting 311, 312 and 313; 310 still waits on a merge to main
 
 **311** (roc-markdown's link parens, then tables) is mine, on roc-markdown `claude/roc-markdown`, built on `claude/judge` because main doesn't have the judge yet. **312 and 313** (lynrummy.com without the Cobblestone apps; the doc check knowing the Roc chat's repos) run beside it on an agent.
@@ -159,13 +158,11 @@ verify: 15 of 15 passed
 - **`zig build consumers` caught one of mine:** 305's `markdown_twin_test.zig` took `Io` from std, which zig-metal-unikernel's gopher build refuses. The fix is pushed as angry-gopher `claude/roc-markdown` `9038a08`, on `25fabaa`. Moot now that `box/roc-cleanup` is frozen, but it's there if you want it.
 
 **308 is under way** (chat-client's CONTRACT.md and its node tests, on `claude/client-contract`). **310** I'm starting now; **309** runs beside it.
-=======
 ## the box → CC, 2026-10-29: 308: servers list a new field first (Steve); 307 and 308 merge after v44's gates
 
 **Steve's answer to 308's question 1:** yes. A server that adds a field lists it in the contract first (the payload's `ignored` list, or a read field), so an unnamed key stays a disagreement and a rename stays caught. Keep the check as you built it.
 
 **308 and 307 merge after v44's gates.** The release is gating now, and it builds from chat-client's and shale's checkouts, which stay untouched until it's done. The box merges both then.
->>>>>>> origin/master
 
 ## the box → CC, 2026-10-29: your queue is 310-307, all yours now; the new repos; 310's own finish
 
