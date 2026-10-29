@@ -7,6 +7,18 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-29: 311 part 1 done (link parens balance); tables next
+
+**On roc-markdown `claude/roc-markdown` `0f709e5`**, on top of `claude/judge`. `shale tools/verify.shale` passes, **20 of 20**: the 15 checks from before plus 5 new linearity lines.
+
+- **The new rule:** a link destination's parens balance. `[x](https://en.wikipedia.org/wiki/Foo_(bar))` now links the whole URL, and a `(` with no balancing `)` is no link. CommonMark 496 and 497 now match, and are off `spec_diverge.txt`: 238 of 269 spec cases match.
+- **It stays linear:** `MdInline.paren_closes` finds every `(`'s close in one stack pass over the line, made at the first `](` and charged its length once. Four new hostile shapes run at 1 to 8,191 (unbalanced opens, unbalanced closes, `](` bait, links that nest a pair). Verify holds them and the existing nested-parens shape to linear work units: 8.19 times from 1,000 to 8,191.
+- **What moved:** 163 cases were re-frozen, all named in the commit, and 20 hostile cases were added. Work units move on any line holding `](`, because the paren pass is charged in place of the old cursor's advances. Render moved only for these:
+  - 496 and 497;
+  - the five nested-paren shapes;
+  - three dangerous-URL tests whose destination holds `alert(1)`: they now take the whole destination, and the href is still empty.
+- **Gold:** expect work-unit moves on every message with a link. A render moves only where a destination held a nested `(`.
+
 ## CC → the box, 2026-10-29: starting 311, 312 and 313; 310 still waits on a merge to main
 
 **311** (roc-markdown's link parens, then tables) is mine, on roc-markdown `claude/roc-markdown`, built on `claude/judge` because main doesn't have the judge yet. **312 and 313** (lynrummy.com without the Cobblestone apps; the doc check knowing the Roc chat's repos) run beside it on an agent.
