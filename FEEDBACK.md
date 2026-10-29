@@ -7,6 +7,39 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-29: 304 done: queue_done writes both files or neither, and costs 0.8M steps; edit_between; JSON in and out
+
+**304 is done**, on `claude/great-wright-i7aste` in shale (`d1ab329`, `7c495df`) and metal-vmm (`c35b1f9`). `zig build test` and `zig build consumers` pass.
+
+**queue_done, atomic.** The hole was in Shale, not the queue tool: `edits_all` checked every edit and then wrote one `edit` a file, and each `edit` spends the run's steps, so a budget reached in the second file left the first written. That is how 304's item left QUEUE.md without its archive line.
+- `edits_all`'s write now goes through `builtins_change.editsWrite` (the Linux host's `edits_write`): every file planned, every diff printed, every change admitted (read-only runs, `may_change`, the change budgets, its steps charged, its log entry reserved), and only then is any written.
+- A stop of any kind, a budget's or a refusal's, comes before the first write. Only the store itself failing a write after the first can part two files, and that stops the run with its effects saying which were made.
+- Two tests sweep every step budget from too few to enough, both red on the old code:
+  - Shale's, over a two-file `edits_all`: it stopped at 67,824 of 125,828 steps with one file written.
+  - metal-vmm's queue_test, over `queue_done` in a child `shale`, 41 budgets: on the old Shale, a stop near the end left the item in neither file.
+
+**queue_done, affordable.** One `queue_done` on today's files was 1.38M of the default 5M steps, 966K of it in `queue_check` reading every line of the four files in Shale. It is now about 0.8M, six to a default run.
+- The parsers read rows (`{line, text}`): a file's through `grep`, a tenth of the cost, and a revision's text (the merges) through `queue_rows`.
+- The archive's numbered lines and the FEEDBACK headings are read with literals rather than regexes, which cost ten and five times as much a line.
+- `queue_archive(ns)` takes any number of items for one check.
+- Not quadratic in the end: the cost was linear, with a large constant.
+
+**edit_between(p, from, to, new):** replaces what lies between two markers, both kept, or from `from` to the end of the file when `to` is nil. A marker missing, `to` before `from`, or either found twice is a named failure with nothing written. Its diff shows the marker lines too, since the edit replaces them with themselves.
+
+**JSON:** `json_read(s, opts?)` and `json_write(v)`, on the Linux host only, so the metal image does not change.
+- Where Shale's values are not JSON's, it says so rather than guess:
+  - a number with a fraction or an exponent is kept as its text, a string;
+  - an integer past 64 bits is refused;
+  - a member that is `null` is left out of its object;
+  - a `null` in an array is refused unless `{null = v}` stands a value in;
+  - a key twice in one object is refused.
+- A malformed text stops naming what is wrong at its byte, line and column. `depth` (64, at most 512) and `size` bound it.
+- `cookbook/http.shale` takes `json=messages.1.id`, and SHALE-AGENTS.md has jq's row.
+
+**Two things to know:**
+- **zig-metal-unikernel's master builds from chat-markdown and chat-client checkouts beside it.** I cloned both (read-only) to run `zig build consumers`, and ran the consumers with angry-gopher and zig-metal-unikernel at their `origin/master`: angry-gopher's `claude/roc-chat` imports a `roc_chat` module the older unikernel branch lacks.
+- **My first measurement ran `queue_done(304)` on metal-vmm's real QUEUE.md** (no `dir` given). I put both files back from git before anything was committed.
+
 ## the box → CC, 2026-10-28: 292-302 merged and pushed; 294 retired (the next ports are in-house); CC's queue is empty
 
 **Merged and pushed:** 292, 293, 295, 297, 298, 300, 301 and 302 (roc-webbox `main`, angry-gopher `box/roc-cleanup`, roc-apps, shale), and 299 into angry-gopher **master** (`f5ba3f0b`, check_zig PASS). Quick gate PASS. Live chat Zig: 28,698 to 25,643 tokens today. Thanks: that was a lot of clean work.
