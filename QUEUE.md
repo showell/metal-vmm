@@ -38,6 +38,47 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**310. roc-markdown: finish moving the judge in, and prove it with one command: CC'S** (Steve, 2026-10-29: "give it to CC".) **showell/roc-markdown only.**
+
+**A trial of a new way of finishing** (Steve: "we need to refine our CC process so that we're not constantly worrying about final cold checks"; this item only for now, maybe CLOUD_WORK later):
+- **Your proof is a committed script, not a report.** Write `tools/verify.shale` (Shale; `shale --help` and docs/SHALE-AGENTS.md in the shale repo). In one run it does every check below and prints a fixed checklist: each line is `PASS` or `FAIL` with its numbers. Its last line is `verify: N of N passed` or `verify: FAILED`, and its exit code matches.
+- **The planted faults are in the script too.** For each plant, it changes a scratch copy, runs the judge, requires red, and never touches the tree.
+- **You merge it yourself.** When `shale tools/verify.shale` passes on `box/judge-wip`, merge that branch to `main`, push, and delete `box/judge-wip`. Then paste the script's whole output into FEEDBACK.
+- **The box's whole check is rerunning that one command,** which also runs gold, the one thing you can't. If it fails here, the box says so in FEEDBACK with its output.
+
+**Why:** the markdown judge, which holds every case to frozen answers, is moving out of angry-gopher (frozen as reference: Steve, "the training wheels are off") and into roc-markdown, with no Zig markdown left in it. A box agent got halfway and stopped, and its work is pushed on `box/judge-wip`. Start from there; its two commits say what they are.
+- **Done:** `judge/data/` is copied byte for byte from angry-gopher `c67657e4` (`zig-server/` and `zig-server/markdown_twin/`).
+  - `judge/judge.zig` is the old judge, ported from angry-gopher `zig-server/src/markdown_twin_test.zig`, without `--zig`, `zigAnswers`, `judgeZig*`, `fuzz`, the Zig half of `--time`, or the `roc_crashed` verdict. A Roc crash now stops the judge.
+  - The judge finds its data through a build-option module, `judge_paths.data`.
+  - Also there: `judge/roc_host.zig`, `judge/answers.roc` (the five answers, importing `../package/main.roc`) and `judge/platform/main.roc`.
+  - None of the Zig has been compiled.
+- **Left:**
+  1. **Build files.** `build.zig`, modeled on roc-chat's (github.com/showell/roc-chat):
+     - the `rocCompiler` pin check;
+     - `roc build judge/answers.roc --target=x64musl --opt=dev`, with every `.roc` in `judge/` and `package/` as inputs. Use `--opt=dev`: `roc build` defaults to LLVM, which took 5 minutes against 0.9 s;
+     - the `judge_paths` options module, pointing at `b.pathFromRoot("judge/data")`;
+     - a `judge` step with passthrough args;
+     - a `test` step running `roc test package/main.roc` and then the judge.
+
+     Also add `build.zig.zon` with `minimum_zig_version = "0.17.0"`, and `roc-version` containing `nightly-2026-10-09-258ab27`.
+  2. **Compile and debug.** The one known risk is whether the pinned Roc passes `List(U8)` by value as `roc_host.zig` assumes. If it doesn't, use roc-webbox's twin shape, `{which, args}`, which is proven (github.com/showell/roc-webbox, `chat/twin/platform/` and `src/twin_abi.zig`).
+  3. **Renames, in one commit after the copy:**
+     - `zig_tests` becomes `unit_cases`; record its origin, chat-markdown's Zig unit tests, once in the README;
+     - `corpora.txt`'s paths become bare names, and fix its header;
+     - fix `spec_diverge.txt`'s header, which names the old file;
+     - fix `package/Md.roc` lines 11-13, which name angry-gopher's judge, and any other package module that does the same.
+  4. **README:** rewrite the "Its judge" section, give the two commands (`zig build test`, and `zig build judge -- --also <gold>`), and drop "No LICENSE yet".
+
+**What `tools/verify.shale` checks:**
+- `zig build test` passes, and the judge's case counts per corpus are exactly: adversarial 29, dialect 3, unit_cases 69, spec_agree 269, pinned 3, hostile 983, for 1,356 in all. A different number is a FAIL, never a pass.
+- **Three planted faults, each red:** one byte changed in a frozen answer, one wrong hostile hash, and a spec_diverge id listed that now matches.
+- `zig fmt --check` and `roc fmt --check` are clean.
+- roc-chat's `roc test` still passes against this roc-markdown. Clone roc-chat beside it; it imports `../../roc-markdown/package/main.roc`.
+- **Gold:** if `~/showell_repos/gopher-gold/gold.jsonl` exists, run `zig build judge -- --also` on it, require 10,103 agreeing, and print only counts. **NEVER PRINT GOLD MESSAGE TEXT.** If it's absent, which it is for you, print `SKIP gold: not on this machine`. That SKIP is the only one allowed, and only for gold.
+- The judge's time, with and without gold, printed as a number.
+
+**Roc toolchain:** use showell/roc-apps release `toolchain-2026-10-27`, which carries the same nightly.
+
 **309. roc-chat: a Roc crash is a 500, proven by planted crashes: CC'S** (Steve, 2026-10-29: "Give the test hunt to CC.") **showell/roc-chat only**, branch `claude/roc-chat`; the box merges it.
 
 **Why:** roc-chat (github.com/showell/roc-chat, `main`) is the new, standalone Roc chat. Its host (`host/`, Zig on std.http) catches a crash in the Roc app and answers 500, but nothing tests that: the path was written, never run.
