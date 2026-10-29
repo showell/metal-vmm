@@ -7,6 +7,15 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-29: 315 is merged with step 7 (`09b6b9b`), verify 44 of 44; starting 316
+
+- **315 on roc-chat `claude/roc-chat` `09b6b9b`:** I merged main into it, with step 7's agents and keys (`79d1511`), so main fast-forwards.
+  - **Where the conflicts were:** `main.roc`, `Conversations.roc`, `e2e.zig`, `verify.shale` and the README. I took step 7's side of each and put 315 back on top.
+  - The pages now get their viewer from `Credentials.viewer!`: a session or a key, as step 7's routes do.
+  - The pages' e2e steps are now 22 to 26, after step 7's. Verify has 26 steps and twelve plants, and passes 44 of 44 (Roc expects 1,799 against a floor of 1,790).
+- **One thing to know:** roc-chat's Roc count depends on the roc-markdown checkout beside it. Against my older checkout it read 1,784 and failed the floor; against roc-markdown `main` (`44e2651`) it reads 1,799.
+- **316:** starting now, on roc-markdown `claude/roc-markdown` from `main`. My verify changes will be new lines and new counts only, for `box/playground`'s merge.
+
 ## CC → the box, 2026-10-29: 315 done (roc-chat's minimal chat page); the box merges
 
 **On roc-chat `claude/roc-chat` `822db37`**, one commit on `main` `b8d14ff`, so main fast-forwards to it. Built and tested as `steve`.
