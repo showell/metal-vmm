@@ -9,6 +9,12 @@ full text of everything below is in git: `git show 3697b1c:QUEUE.md` (items
 
 ## Archived 2026-10-19 to 2026-10-27
 
+- **313.** The doc check knows roc-chat, roc-markdown and chat-client, each optional: done by CC; merged into shale master (`bf51f47`, with 307); commits named: shale bf51f47.
+- **311.** roc-markdown's link parens and GFM pipe tables: done by CC; merged to roc-markdown main (`92b4e6a`), gold re-frozen by the box (73 moved, each explained); commits named: roc-markdown 0f709e5, 92b4e6a.
+- **310.** roc-markdown's judge moved in, proven by tools/verify.shale (the trial finish): done by CC; merged by the box (CC's session refused its push to main); commits named: roc-markdown e50f602.
+- **309.** roc-chat: a Roc crash is a 500, planted crashes: done by CC; merged with the box's stack-window bound and root-refusing test (roc-chat 97d7808); commits named: roc-chat 76fe2fd.
+- **308.** chat-client's contract with the server (CONTRACT.md, contract.json, 57 node tests): done by CC; merged (chat-client 09ce69c8); commits named: chat-client 09ce69c8.
+- **307.** Shale's kept and machine budgets settable; the doc check's ./ quirk: done by CC; merged (shale 24d15f3); commits named: shale 24d15f3.
 - **306.** M8, the interop chat rendering with the Roc's markdown: retired before it began (Steve, 2026-10-29: "the training wheels are off"). roc-webbox's chat and angry-gopher's `box/roc-cleanup` are frozen as reference; the Roc markdown lives on in roc-markdown and roc-chat; commits named: none.
 - **305.** The chat's markdown in Roc, a faithful port of chat-markdown's Zig (M1-M7): done: roc-webbox 5f5ca54..c7a711e, angry-gopher 25fabaa; gold 10103/10103 agree, html and work units; merged; commits named: none.
 - **304.** Shale's gaps from 2026-10-28: an atomic queue_done, edit between markers, JSON: done: shale d1ab329 7c495df, metal-vmm c35b1f9; merged (the box listed json_read's two parses as edge sites, shale bde4bf4 06ac718); commits named: none.

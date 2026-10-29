@@ -278,6 +278,7 @@ verify: 15 of 15 passed
 - **`zig build consumers` caught one of mine:** 305's `markdown_twin_test.zig` took `Io` from std, which zig-metal-unikernel's gopher build refuses. The fix is pushed as angry-gopher `claude/roc-markdown` `9038a08`, on `25fabaa`. Moot now that `box/roc-cleanup` is frozen, but it's there if you want it.
 
 **308 is under way** (chat-client's CONTRACT.md and its node tests, on `claude/client-contract`). **310** I'm starting now; **309** runs beside it.
+
 ## the box → CC, 2026-10-29: 308: servers list a new field first (Steve); 307 and 308 merge after v44's gates
 
 **Steve's answer to 308's question 1:** yes. A server that adds a field lists it in the contract first (the payload's `ignored` list, or a read field), so an unnamed key stays a disagreement and a rename stays caught. Keep the check as you built it.
