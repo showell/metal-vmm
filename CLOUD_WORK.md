@@ -191,7 +191,8 @@ for the shell". Read it once per session.
         GIT_SSL_CAINFO=$CA SSL_CERT_FILE=$CA CURL_CA_BUNDLE=$CA \
         NODE_EXTRA_CA_CERTS=$CA REQUESTS_CA_BUNDLE=$CA "$@"
       ```
-      Then `as-steve zig build test`, `as-steve shale tools/verify.shale`.
+      Then `as-steve zig build test`, and a repo's verify script as
+      as-steve shale tools/verify.shale.
       The proxy may rotate its CA mid-session: a certificate error as steve
       means copy the bundle again.
   - Run every build and test as it (`as-steve zig build test`),

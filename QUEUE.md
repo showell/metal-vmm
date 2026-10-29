@@ -38,6 +38,44 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**315. roc-chat: a minimal chat page, to read and post in a conversation in a browser: CC'S** (Steve, 2026-10-29: "yes".) **showell/roc-chat only.** Work on `claude/roc-chat`, from `main` at `b8d14ff`, which has step 6 (314) merged. Finish as 314 did: extend roc-chat's verify script, and put its whole output in FEEDBACK. The box merges, since your session refuses pushes to `main`.
+
+**Why:** the milestone is a three-way conversation between Steve, CC and LC on https://chat.lynrummy.com, which is live with GitHub sign-in.
+- **Already there:** step 6 gives JSON and SSE routes.
+- **In progress at the box:** step 7, agent accounts and API keys on branch `box/keys`, which is how CC and LC will join.
+- **Steve's part** needs a page: see his conversations, open one, read it live, post.
+- **Out of scope:** the real chat client (chat-client, with its CONTRACT.md) is later work. This page is small, plain and replaceable.
+
+**Build:**
+- **A list of the viewer's conversations,** if step 6 has no such route: who is in each, and a link to it. It's decided by ConvAccess, like everything in step 6.
+- **The page:**
+  - one for the list, and one for a conversation;
+  - the messages' HTML is step 6's, already rendered by roc-markdown;
+  - new messages arrive live over the conversation's stream (`EventSource`, resuming with `Last-Event-ID`, as the browser does by itself);
+  - a textarea posts markdown: Enter sends, Shift-Enter adds a line;
+  - a form starts a conversation with participants by account id.
+- **Keep it small:**
+  - one Roc module for the pages (say Pages.roc, to be written), with their HTML built through roc-markdown's escaping or the app's own;
+  - the JS inline in the page, or one small script;
+  - a few lines of CSS, in the page.
+  - No framework, and nothing from chat-client unless it fits as is.
+- **Signed out:** the page sends the browser to `/login`, and back to the page after sign-in, if the sign-in flow can carry that without new risk. If it can't, say so; don't build it.
+- **Never treat a message's HTML as anything but the renderer's output.** Any text the page itself writes (a name, an id) is escaped.
+- **The route table** stays `app/main.roc`'s. Step 7, on `box/keys`, adds routes there too; keep your lines together so the merge is easy.
+
+**Prove it:**
+- **e2e steps, against the real server,** each in verify:
+  - the list page shows a conversation the viewer is in, and not one they aren't;
+  - the conversation page answers 200 to a participant, and 404 or 403 to a third user;
+  - signed out, the page redirects to `/login`;
+  - a message's HTML on the page is exactly step 6's for it.
+- **Plants, each red:**
+  - the list showing every conversation;
+  - a participant's name written unescaped;
+  - a third user getting the conversation page.
+
+Run everything as `steve` (`as-steve`).
+
 **314. roc-chat, step 6: the smallest end to end (sign in, post, read, stream): CC'S** (Steve, 2026-10-29: "queue step 6 for CC".) **showell/roc-chat only.** Work on `claude/roc-chat` and finish as 310 and 311 did: a committed verify script is the proof, and its whole output goes in FEEDBACK. Merge to `main` yourself if your session allows it; otherwise the box merges.
 
 **Why:** roc-chat is the standalone Roc chat, a Zig host on std.http with every decision in Roc. Steps 1 to 5 of its host design are built. The design is the essay notes/roc-chat-host-design.md in showell/essay-repl-server; read section 4 for the build order.
