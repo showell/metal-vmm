@@ -217,7 +217,8 @@ box's scripts check, ask how to check it here:
 ## Git is the channel
 
 - **Push to the branch your session is given** (see "The branches"). Never
-  to `master` or `main`, which are the box's.
+  to `master` or `main`, which are the box's, unless a QUEUE item says you
+  merge it yourself (310 does, as a trial: Steve, 2026-10-29).
 - **Merge `master` into your branch; never rebase** (agreed 2026-10-08): a
   rebase rewrites hashes already cited in `QUEUE.md`.
 - **One topic per commit.** Its message says what changed and why, what you
