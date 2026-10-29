@@ -38,6 +38,24 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**319. roc-chat: the readability review's fixes: CC'S** (Steve, 2026-10-29.) **showell/roc-chat only**, on `claude/roc-chat`. **Start only when FEEDBACK has a box entry saying the security fixes (`box/security-2`) are merged into roc-chat `main`.** Until then, it isn't startable: finish 318 and stop. Branch from that `main`. Finish as 314 did: roc-chat's verify script passes in full, its output goes in FEEDBACK, and the box merges.
+
+**Read first:**
+- docs/reviews/REVIEW-roc-readability-2026-10-29.md (this repo): take every **roc-chat** finding. The roc-markdown ones are 318's;
+- Steve's decisions at its top:
+  - remove the four unused hosted functions;
+  - pages use roc-markdown's one HTML escape, which 318 exposes; if 318 isn't merged yet, leave `Pages.escape` and say so;
+  - keep both `Ascii` copies, with a header line saying why.
+
+Its line numbers are old (a restyle and renames came since: the Store's lookups are `load_*!`): search for the quoted text.
+
+**Also:**
+- **The bypass:** `ConvAccess.Conv.start` (the raw constructor) is still public beside `start_by`, which holds the owner rule (security M2). Make the rule impossible to bypass from app code: test-only construction, or one constructor taking the starter, whichever the pin allows. Say which.
+- **`name_hunt`'s 24 remaining `noun_effect` findings:** route handlers are `serve_*!`, and fallible lookups `load_*!`. A Shale fix teaching it mint, redeem, audit, spend and echo may land first; rerun the recipe.
+- **The domain refusal aliases `errors` flags** (`GitHubSignIn.Refusal`, `InviteCodec.Refusal`, `ApiKey.Refusal`, and so on): judge each one, keep a shared alias only where it's one vocabulary on purpose, and say why at its definition.
+
+**Verify:** the floors don't fall, every plant stays red at its step, and both formatters are clean. Run as `steve`.
+
 **318. roc-markdown: the reviews' polish, the uploads prefix, one escape: CC'S** (Steve, 2026-10-29: "Keep polishing markdown as top priority"; "2) yes" to the uploads prefix.) **showell/roc-markdown only**, after 317 and on top of it, on `claude/roc-markdown`. Finish as 316 and 317 do: roc-markdown's verify script passes, its output goes in FEEDBACK, and the box merges, re-freezes gold and explains every move.
 
 **Read first:** two cold reviews from today, in this repo:
