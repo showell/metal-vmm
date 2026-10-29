@@ -38,6 +38,65 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**306. M8: the chat renders with the Roc's markdown; the hosted renderers retire: CC'S** (Steve, 2026-10-29.) **Only after** 305 passes the box's gold check (the box says so in FEEDBACK).
+
+- `render!`, `render_preview!`, `check_hostile!` and `serve_rendered!` retire from the seam.
+- The Roc renders, decides hostility itself, answers the 400 itself, and counts it with `count!` (`MalformedMarkdown`).
+- The glue check, every frozen run, and the twins hold; a page's bytes don't change.
+- The Zig renderer stays in chat-markdown for angry-gopher's own pages (resume_page, safari_download, the Zig chat in production).
+- Measure render time on the dev and speed backends against the Zig over the corpora you have, and report it; Steve sets the bound.
+
+The quick gate and check_zig pass; census deltas in FEEDBACK.
+
+**305. The chat's markdown in Roc, a faithful port of chat-markdown's Zig (M1-M7): CC'S** (Steve, 2026-10-29: "I'm highly confident it can do a pretty faithful port of the zig code with possible shallow bugs once we run the final gold check. Have them run all the repo checks pretty frequently.") After 303 and 304, or before them, your order.
+
+**The source:**
+- the Zig renderer in showell/chat-markdown (`src/markdown*.zig`, 1,224 code lines, std only), the definition of the dialect;
+- its tests;
+- angry-gopher's corpora: `zig-server/adversarial.jsonl` and `zig-server/dialect.jsonl` on box/roc-cleanup.
+
+The plan is the box's essay notes/pure-roc-chat-plan.md, section 3; read it.
+
+**Where:** flat `Md*.roc` modules in roc-webbox `chat/`, on `claude/roc-chat`, branched from roc-webbox `main` (the box's auth work is on `box/auth`; leave it alone). SafeImg.roc and Feeds' fence grammar are already twins of parts of it, so fold them under the markdown modules: one home per rule.
+
+**The order (one commit or more each, a ratchet between them):**
+- **M1:** the harness, the ratchet, text and escaping, paragraphs and hard wraps, headings, fences.
+- **M2:** code spans, MSG_ refs, URL and email autolinks with monotonic cursors, external-link attributes.
+- **M3:** `[t](u)` links and the dangerous-URL rule.
+- **M4:** emphasis: the delimiter stack, flanking, the rule of 3.
+- **M5:** img and video through SafeImg, and the raw HTML block.
+- **M6:** lists (tight and loose, nested, the depth cap) and blockquotes.
+- **M7:** the budget, exactly: `workUnits` equal number for number, `hostileReason`, trusted rendering.
+
+**The judge you can run:**
+- a new angry-gopher `markdown_twin_test.zig` (on box/roc-cleanup through your angry-gopher `claude/roc-chat`) renders every case through twin.roc and through chat-markdown's Zig;
+- it requires identical html AND identical work units;
+- it reads its corpora from a path list, so the box can add the private gold corpus (10,103 real messages, which never leaves the box);
+- **it prints only counts and failing case ids, never message text.**
+
+Your corpora:
+- adversarial.jsonl;
+- dialect.jsonl;
+- every input in chat-markdown's own Zig tests, extracted to a jsonl you commit;
+- generated hostile shapes, from the plan's list and cmark's pathological patterns.
+
+A ratchet file holds the pass count, which may only rise. **A differential fuzzer** (random markdown from a grammar of the dialect's tokens, Zig vs Roc) hunts and doesn't gate; commit each difference it finds as a case.
+
+**The traps (plan section 3):**
+- per-byte recursion can overflow the stack, and a stack overflow is not a crash sljmp catches: use loops (`while`/`for`/`var` exist at the pin);
+- the dev backend may be slower; measure in M7 and report it, don't optimize yet.
+
+**Run the repo checks often** (Steve). After every M item:
+- the quick gate (`shale tools/chat_quick_gate.shale` in roc-webbox);
+- the Roc hunt (`shale tools/roc_hunt/hunt.shale`);
+- the name hunt over the new modules;
+- `roc fmt`;
+- and angry-gopher's `./ops/check_zig` at least every other item.
+
+Style: the guide as it now stands (roc-apps docs/roc-style.md, revised 2026-10-29). A style decision updates it, as 285's rule says.
+
+**Done when** every case in the corpora you can run passes, html and work units both, the ratchet is at its maximum, and FEEDBACK says the box can run the gold check. The box then runs gold and hands you the failing ids, never the text; you fix them before M8.
+
 **304. Shale's gaps from 2026-10-28: an atomic queue_done, edit between markers, JSON: CC'S** (Steve, 2026-10-29: "queue 1 and 2 for CC".) Three gaps the box and CC hit:
 
 - **queue_done is not atomic.** Twice in one day it ran out of the default step budget (and once the arena budget) after three or so items. Once it removed an item from QUEUE.md without writing its line to QUEUE-ARCHIVE.md. Make one queue_done (and queue_move) a single `edits_all` over both files, so a stop leaves both or neither; and make archiving N items affordable under the default budget (the cost looks quadratic in QUEUE.md's size). Add a test that stops mid-way and finds both files consistent.
