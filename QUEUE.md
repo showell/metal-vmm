@@ -41,39 +41,39 @@ the box instead of guessing. Findings arrive as red tests where they can.
 **310. roc-markdown: finish moving the judge in, and prove it with one command: CC'S** (Steve, 2026-10-29: "give it to CC".) **showell/roc-markdown only.**
 
 **A trial of a new way of finishing** (Steve: "we need to refine our CC process so that we're not constantly worrying about final cold checks"; this item only for now, maybe CLOUD_WORK later):
-- **Your proof is a committed script, not a report.** Write `tools/verify.shale` (Shale; `shale --help` and docs/SHALE-AGENTS.md in the shale repo). In one run it does every check below and prints a fixed checklist: each line is `PASS` or `FAIL` with its numbers. Its last line is `verify: N of N passed` or `verify: FAILED`, and its exit code matches.
+- **Your proof is a committed script, not a report.** Write tools/verify.shale (Shale; `shale --help` and docs/SHALE-AGENTS.md in the shale repo). In one run it does every check below and prints a fixed checklist: each line is `PASS` or `FAIL` with its numbers. Its last line is `verify: N of N passed` or `verify: FAILED`, and its exit code matches.
 - **The planted faults are in the script too.** For each plant, it changes a scratch copy, runs the judge, requires red, and never touches the tree.
-- **You merge it yourself.** When `shale tools/verify.shale` passes on `box/judge-wip`, merge that branch to `main`, push, and delete `box/judge-wip`. Then paste the script's whole output into FEEDBACK.
+- **You merge it yourself.** When shale tools/verify.shale passes on `box/judge-wip`, merge that branch to `main`, push, and delete `box/judge-wip`. Then paste the script's whole output into FEEDBACK.
 - **The box's whole check is rerunning that one command,** which also runs gold, the one thing you can't. If it fails here, the box says so in FEEDBACK with its output.
 
 **Why:** the markdown judge, which holds every case to frozen answers, is moving out of angry-gopher (frozen as reference: Steve, "the training wheels are off") and into roc-markdown, with no Zig markdown left in it. A box agent got halfway and stopped, and its work is pushed on `box/judge-wip`. Start from there; its two commits say what they are.
-- **Done:** `judge/data/` is copied byte for byte from angry-gopher `c67657e4` (`zig-server/` and `zig-server/markdown_twin/`).
-  - `judge/judge.zig` is the old judge, ported from angry-gopher `zig-server/src/markdown_twin_test.zig`, without `--zig`, `zigAnswers`, `judgeZig*`, `fuzz`, the Zig half of `--time`, or the `roc_crashed` verdict. A Roc crash now stops the judge.
+- **Done:** judge/data/ is copied byte for byte from angry-gopher `c67657e4` (zig-server/ and zig-server/markdown_twin/).
+  - judge/judge.zig is the old judge, ported from angry-gopher zig-server/src/markdown_twin_test.zig, without `--zig`, `zigAnswers`, `judgeZig*`, `fuzz`, the Zig half of `--time`, or the `roc_crashed` verdict. A Roc crash now stops the judge.
   - The judge finds its data through a build-option module, `judge_paths.data`.
-  - Also there: `judge/roc_host.zig`, `judge/answers.roc` (the five answers, importing `../package/main.roc`) and `judge/platform/main.roc`.
+  - Also there: judge/roc_host.zig, judge/answers.roc (the five answers, importing ../package/main.roc) and judge/platform/main.roc.
   - None of the Zig has been compiled.
 - **Left:**
   1. **Build files.** `build.zig`, modeled on roc-chat's (github.com/showell/roc-chat):
      - the `rocCompiler` pin check;
-     - `roc build judge/answers.roc --target=x64musl --opt=dev`, with every `.roc` in `judge/` and `package/` as inputs. Use `--opt=dev`: `roc build` defaults to LLVM, which took 5 minutes against 0.9 s;
+     - roc build judge/answers.roc --target=x64musl --opt=dev, with every `.roc` in `judge/` and `package/` as inputs. Use `--opt=dev`: `roc build` defaults to LLVM, which took 5 minutes against 0.9 s;
      - the `judge_paths` options module, pointing at `b.pathFromRoot("judge/data")`;
      - a `judge` step with passthrough args;
-     - a `test` step running `roc test package/main.roc` and then the judge.
+     - a `test` step running roc test package/main.roc and then the judge.
 
-     Also add `build.zig.zon` with `minimum_zig_version = "0.17.0"`, and `roc-version` containing `nightly-2026-10-09-258ab27`.
-  2. **Compile and debug.** The one known risk is whether the pinned Roc passes `List(U8)` by value as `roc_host.zig` assumes. If it doesn't, use roc-webbox's twin shape, `{which, args}`, which is proven (github.com/showell/roc-webbox, `chat/twin/platform/` and `src/twin_abi.zig`).
+     Also add build.zig.zon with `minimum_zig_version = "0.17.0"`, and `roc-version` containing `nightly-2026-10-09-258ab27`.
+  2. **Compile and debug.** The one known risk is whether the pinned Roc passes `List(U8)` by value as roc_host.zig assumes. If it doesn't, use roc-webbox's twin shape, `{which, args}`, which is proven (github.com/showell/roc-webbox, `chat/twin/platform/` and `src/twin_abi.zig`).
   3. **Renames, in one commit after the copy:**
      - `zig_tests` becomes `unit_cases`; record its origin, chat-markdown's Zig unit tests, once in the README;
-     - `corpora.txt`'s paths become bare names, and fix its header;
-     - fix `spec_diverge.txt`'s header, which names the old file;
-     - fix `package/Md.roc` lines 11-13, which name angry-gopher's judge, and any other package module that does the same.
+     - corpora.txt's paths become bare names, and fix its header;
+     - fix spec_diverge.txt's header, which names the old file;
+     - fix package/Md.roc lines 11-13, which name angry-gopher's judge, and any other package module that does the same.
   4. **README:** rewrite the "Its judge" section, give the two commands (`zig build test`, and `zig build judge -- --also <gold>`), and drop "No LICENSE yet".
 
-**What `tools/verify.shale` checks:**
+**What tools/verify.shale checks:**
 - `zig build test` passes, and the judge's case counts per corpus are exactly: adversarial 29, dialect 3, unit_cases 69, spec_agree 269, pinned 3, hostile 983, for 1,356 in all. A different number is a FAIL, never a pass.
 - **Three planted faults, each red:** one byte changed in a frozen answer, one wrong hostile hash, and a spec_diverge id listed that now matches.
 - `zig fmt --check` and `roc fmt --check` are clean.
-- roc-chat's `roc test` still passes against this roc-markdown. Clone roc-chat beside it; it imports `../../roc-markdown/package/main.roc`.
+- roc-chat's `roc test` still passes against this roc-markdown. Clone roc-chat beside it; it imports ../../roc-markdown/package/main.roc.
 - **Gold:** if `~/showell_repos/gopher-gold/gold.jsonl` exists, run `zig build judge -- --also` on it, require 10,103 agreeing, and print only counts. **NEVER PRINT GOLD MESSAGE TEXT.** If it's absent, which it is for you, print `SKIP gold: not on this machine`. That SKIP is the only one allowed, and only for gold.
 - The judge's time, with and without gold, printed as a number.
 
@@ -91,7 +91,7 @@ the box instead of guessing. Findings arrive as red tests where they can.
   - the crash is logged once, with enough to find it.
 - **Hunt past the plants:** a crash during a body read, during a header read, and after the answer has started (if the Roc can crash after headers are sent, what does the client see?). Each finding is a red test, then a fix.
 - **Roc toolchain:** roc-chat pins `nightly-2026-10-09-258ab27` (`roc-version`). `tools/get_roc.sh` fetches from roc-lang's GitHub, which your sandbox can't reach. Use showell/roc-apps release `toolchain-2026-10-27` instead, which has the same nightly.
-- **roc-chat builds against a sibling `../roc-markdown`** (github.com/showell/roc-markdown), so clone it beside roc-chat.
+- **roc-chat builds against a sibling ../roc-markdown** (github.com/showell/roc-markdown), so clone it beside roc-chat.
 
 Done when `zig build test` passes with every plant held, a planted removal of the crash guard turns them red (say so in FEEDBACK), and `zig fmt --check host build.zig` is clean.
 
@@ -100,7 +100,7 @@ Done when `zig build test` passes with every plant held, a planted removal of th
 **Why:** the client relies on things nothing writes down: URLs, SSE frames, JSON payloads, the inline sidebar data, `data-*` attributes on `#chat-root`, and the rendered markdown's classes. On 2026-10-28 a server renamed the sidebar JSON's `sessions` key to `topics` and nothing failed: the unpinned topics showed "No sessions yet" in production until the client was fixed (chat-client `bdc12b50`).
 
 - **Write the contract** as a document in the repo, CONTRACT.md: every request the client makes (method, URL, body), every response shape it reads (JSON fields with types, required vs optional), every SSE event type and its frame, every inline `<script type="application/json">` payload, the `data-*` attributes, and the CSS classes it expects in rendered markdown. Derive it from the JS itself, file by file; cite the file:line that reads each field.
-- **Make it checkable:** a machine-readable form (JSON) of the payload shapes, and tests in the repo (node, as `tools/test_chat_resize.mjs` is) that load each JS module's readers against fixtures matching the contract, so a renamed key fails. Mark which fields are read but never sent by today's servers, if any.
+- **Make it checkable:** a machine-readable form (JSON) of the payload shapes, and tests in the repo (node, as tools/test_chat_resize.mjs is) that load each JS module's readers against fixtures matching the contract, so a renamed key fails. Mark which fields are read but never sent by today's servers, if any.
 - **No server changes.** A server checks itself against CONTRACT.md later; say in the README how.
 
 Done when CONTRACT.md covers every reader, the tests run from one command (listed in the README), and they catch a planted rename of `topics`.
@@ -115,7 +115,7 @@ Done when CONTRACT.md covers every reader, the tests run from one command (liste
   - Make both settable the same way, with sane ceilings, and say in each one's stop message how to raise it.
   - Tests, including a script that needs more than the default and passes once its header asks.
   - Also find out why that per-line loop (a helper called about 25 times per line) used 16 MiB of machine: is something retained per call that shouldn't be?
-- **The doc check reads `` `./ops/check_zig` `` as `ops/check_zi`:** a leading `./` loses the path's last character. Fix it with a plant in the doc check's self-test.
+- **The doc check reads ./ops/check_zig, quoted, as ops/check_zi:** a leading `./` loses the path's last character. Fix it with a plant in the doc check's self-test.
 
 Done when `zig build test` and `zig build consumers` pass and SHALE-AGENTS.md's budget table names both.
 
