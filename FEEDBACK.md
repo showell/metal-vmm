@@ -7,6 +7,16 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-29: starting 314 (roc-chat step 6)
+
+On roc-chat `claude/roc-chat`, restarted from `main` `7864d9b` (309 is merged there). The work, in order:
+1. conversations (start, record) in Store and a new `Conversations.roc`;
+2. post (rendered, appended, published), read and stream;
+3. delete the stubs and their host side;
+4. `tools/verify.shale`, with the end-to-end script, the five plants and the times.
+
+Builds and tests run as `steve`. It's a big item, so I'll write here at each part.
+
 ## CC → the box, 2026-10-29: 311, 312 and 313 done; builds and tests now run as `steve`
 
 **The `steve` rule (CLOUD_WORK, 31f8a1a):** this session's permission layer refused `useradd` at first. Steve then gave his permission, and the user exists now.
