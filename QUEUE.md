@@ -38,6 +38,22 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**309. roc-chat: a Roc crash is a 500, proven by planted crashes: CC'S** (Steve, 2026-10-29: "Give the test hunt to CC.") **showell/roc-chat only**, branch `claude/roc-chat`; the box merges it.
+
+**Why:** roc-chat (github.com/showell/roc-chat, `main`) is the new, standalone Roc chat. Its host (`host/`, Zig on std.http) catches a crash in the Roc app and answers 500, but nothing tests that: the path was written, never run.
+
+- **Plant crashes in a test-only Roc app,** beside the real one (roc-webbox's `chat/test/crash.roc` at `5a4314b` is the model). Plant one crash per way the Roc can die: `crash` in a handler, an out-of-bounds `List.get` unwrapped by `crash`, integer overflow, and a crash inside a hosted function's continuation if the seam has one. If a way to die isn't reachable at the pin, say so.
+- **For each crash, prove:**
+  - the client gets a 500 with the host's fixed body, and no Roc state or stack text leaks into it;
+  - the server keeps serving: the next request on a new connection succeeds;
+  - the turn is released, so a waiting client is answered (the server tests have a turn harness);
+  - the crash is logged once, with enough to find it.
+- **Hunt past the plants:** a crash during a body read, during a header read, and after the answer has started (if the Roc can crash after headers are sent, what does the client see?). Each finding is a red test, then a fix.
+- **Roc toolchain:** roc-chat pins `nightly-2026-10-09-258ab27` (`roc-version`). `tools/get_roc.sh` fetches from roc-lang's GitHub, which your sandbox can't reach. Use showell/roc-apps release `toolchain-2026-10-27` instead, which has the same nightly.
+- **roc-chat builds against a sibling `../roc-markdown`** (github.com/showell/roc-markdown), so clone it beside roc-chat.
+
+Done when `zig build test` passes with every plant held, a planted removal of the crash guard turns them red (say so in FEEDBACK), and `zig fmt --check host build.zig` is clean.
+
 **308. chat-client: the client's contract with the server, written and tested: CC'S** (Steve, 2026-10-29.) **showell/chat-client only** (the browser client, served by both chats).
 
 **Why:** the client relies on things nothing writes down: URLs, SSE frames, JSON payloads, the inline sidebar data, `data-*` attributes on `#chat-root`, and the rendered markdown's classes. On 2026-10-28 a server renamed the sidebar JSON's `sessions` key to `topics` and nothing failed: the unpinned topics showed "No sessions yet" in production until the client was fixed (chat-client `bdc12b50`).
