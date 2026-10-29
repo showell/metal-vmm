@@ -7,6 +7,133 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-29: 320 done (roc-chat's H3, the rest: paging and a bounded backlog); verify 86 of 86; starting 321
+
+- **On roc-chat `claude/roc-chat` `d2a87d6`**, one commit on 319's `314bc75`. The Roc expects are 1,974 (I raised the floor to that), the Zig tests 203, and the e2e 48 steps.
+
+**The new wire, first:**
+- `GET /conversations/<id>` answers a page: the newest `Limits.page_messages` (100) messages, oldest first, or the 100 before `?before=<id>`. The answer is `{"id":N,"messages":[…],"earlier":bool}`.
+  - **New field: `earlier`.** It says messages come before the page's first; `?before=` that first id loads them.
+  - A `before` that is 0, not digits in their one spelling, or given twice is a 400.
+- `GET /conversations/<id>/stream`: the backlog is at most the newest page.
+  - **New event: `gap`**, sent first to a browser more than a page behind: `{"before":<id>}`, the first id it is sent. What it missed is a read's, by `?before=`.
+  - With no `Last-Event-ID`, the backlog is the newest page, which the conversation's page already shows (so the stream doesn't start from message 1 any more).
+- **chat-client's CONTRACT.md is unchanged.** It covers the old chat's pages and angry-gopher's routes, not roc-chat's `/conversations` API, and roc-chat's `/chat` page is its own (Pages.roc). So there's no commit there.
+
+**How the reads are bounded:**
+- **An offsets file per conversation** (`chat/offsets/<id>`): where each message starts, a fixed 11-byte record each (ten digits and a newline). `append_message!` appends the record after the transcript, then writes the tally.
+- **`Store.load_span!(id, tally, {first, last})`** reads the two records that bracket the span, then exactly those bytes of the transcript, with `read_at!` both times. `MessageCodec.span` decodes them, its ids starting at `first`.
+- **The tally's treatment:** an offsets file that doesn't hold one record per message (missing for a transcript from before it, or short after a stop between an append and its record) is read past: that one read is the whole transcript. The next append writes the file again, whole.
+- **`read_at!` is kept and used**, as 319 said it might be. Host.roc and call.zig now call it "a ranged read", not "a cache's".
+- **Bound:** a backlog or a page is at most 100 messages, and never more than the 4 MB transcript cap.
+
+**The rest:**
+- **The page** shows the newest page, with an "Earlier messages" button that loads each page before it, and reloads itself on a `gap`.
+- **The Listener trap:** `until` now waits on `poll` before each read, as `ends` does (one `readable` helper serves both). That covers every step that waits for a frame, not just the new ones.
+- **chat_abi.zig's `Answer`** names its lists, `stream_holder` among them, and says what that field is.
+
+**Steps and plants:**
+- **Steps 45 to 48:**
+  - 105 posts: the newest page is 6 to 105, with `earlier`; `before=6` gives 1 to 5; bad `before`s are 400s; the page shows m6 and not m5, with the button;
+  - the gap: from 1, a `gap` then 6 to 105; from 5, no gap; from 103, 104 and 105;
+  - message 1's line junked: the newest page and a backlog still read, and only the page holding 1 is a 500;
+  - a removed offsets file: the read stays right, and the next post writes 4 records.
+- **Five plants, each red at its step:** a read deaf to `before=`; a backlog unbounded; a gap never said; a page read from the whole transcript; an offsets file never written again.
+
+**verify's whole output** (`as-steve shale tools/verify.shale`):
+
+```
+── budgets from the script's header: steps=200000000, read_bytes=1000000000, changes=10000, change_bytes=200000000, arena_bytes=1000000000
+PASS  zig build test (exit 0, 26208 ms)
+PASS  Roc expects: 1974 (floor 1974)
+PASS  Zig tests: 203 (floor 203)
+PASS  e2e step 1: A and B sign in (and C, the third user) (39 ms)
+PASS  e2e step 2: A starts a conversation with B (3 ms)
+PASS  e2e step 3: B opens its stream (1 ms)
+PASS  e2e step 4: A posts a message of many lines (6 ms)
+PASS  e2e step 5: B's stream gets the message exactly once (100 ms)
+PASS  e2e step 6: A reads the transcript and sees it, its markdown exactly as posted (5 ms)
+PASS  e2e step 7: B reconnects with Last-Event-ID and gets nothing twice (107 ms)
+PASS  e2e step 8: a forged session cookie is refused (3 ms)
+PASS  e2e step 9: a third user cannot post to it (8 ms)
+PASS  e2e step 10: a third user cannot read it, nor stream it (3 ms)
+PASS  e2e step 11: a post between a stream's backlog read and its subscribe arrives once (212 ms)
+PASS  e2e step 12: Steve makes an agent (22 ms)
+PASS  e2e step 13: Steve gets it a key, by an invite (and C cannot invite for it) (18 ms)
+PASS  e2e step 14: the agent, by key alone, starts a conversation with Steve and posts; Steve's stream gets it once (114 ms)
+PASS  e2e step 15: Steve posts, and the agent reads it with its key (9 ms)
+PASS  e2e step 16: the agent's key cannot mint a key, nor make an agent (6 ms)
+PASS  e2e step 17: Steve revokes the key, and its next use is a 401 (14 ms)
+PASS  e2e step 18: an expired key is a 401 (2112 ms)
+PASS  e2e step 19: a key read-scoped to one conversation cannot post there, nor read another (18 ms)
+PASS  e2e step 20: a session cookie and a Bearer key together are a 400 (2 ms)
+PASS  e2e step 21: every key refused in use, and every grant refused, is audited, with no secret (0 ms)
+PASS  e2e step 22: Steve invites his agent; with a cookie the code is refused; alone, the agent redeems it and posts with the key (25 ms)
+PASS  e2e step 23: redeeming the same code again is a 401 (3 ms)
+PASS  e2e step 24: an invite past its ten minutes is a 401 (5 ms)
+PASS  e2e step 25: another human's session cannot invite for Steve's agent, nor see or revoke his invite (21 ms)
+PASS  e2e step 26: a key cannot make an invite (2 ms)
+PASS  e2e step 27: a mint acting as an agent is refused; Steve's own key is minted (4 ms)
+PASS  e2e step 28: after the agent is retired, its invite redeems to nothing (5 ms)
+PASS  e2e step 29: agent ids: make, retire the highest, make, and the id is fresh (7 ms)
+PASS  e2e step 30: every invite made, redeemed, revoked and refused is audited, with no code (0 ms)
+PASS  e2e step 31: the list page shows a conversation the viewer is in, and not one they aren't (5 ms)
+PASS  e2e step 32: a participant's name is written escaped (5 ms)
+PASS  e2e step 33: the conversation page is a 200 to a participant, a 404 to a third user; a page is a 403 to a key (11 ms)
+PASS  e2e step 34: signed out, a page redirects to /login (2 ms)
+PASS  e2e step 35: a message's HTML on the page is exactly step 6's for it (5 ms)
+PASS  e2e step 36: a human's twenty-first agent is refused (134 ms)
+PASS  e2e step 37: C cannot name Steve's agent in a new conversation, nor an unknown id, in the same words; Steve can (18 ms)
+PASS  e2e step 38: a POST with a cookie from another origin, or from none, is a 403 (14 ms)
+PASS  e2e step 39: a logout from another origin is refused; from our own, the old cookie is a 401 (29 ms)
+PASS  e2e step 40: a stream ends at its lifetime, so a key revoked while it is open stops reaching it (516 ms)
+PASS  e2e step 41: junk invite codes, a forged state and no pending sign-up leave the audit as it was (13 ms)
+PASS  e2e step 42: A opening nine streams ends A's own first, and B's stays (78 ms)
+PASS  e2e step 43: a post learns its id from the tally, never reading the transcript whole (31 ms)
+PASS  e2e step 44: a post to a full transcript is a 413, and nothing is appended (33 ms)
+PASS  e2e step 45: a read is the newest page, and before= pages back to the first; the page shows the newest (727 ms)
+PASS  e2e step 46: a stream's backlog is at most the newest page, a gap before it said (38 ms)
+PASS  e2e step 47: a page and a backlog are read from their first message's offset, never the transcript whole (22 ms)
+PASS  e2e step 48: a missing offsets file is read past, and the next post writes it whole (35 ms)
+PASS  e2e: 48 steps (want 48), exit 0, 4717 ms
+PASS  plant: a forged session cookie admitted (the host's hash ignores its bytes) is red at step 8 (exit 1; a forged session cookie is refused (3 ms): ReadWithForgery)
+PASS  plant: a third user's post let through (can_post asked of nobody) is red at step 9 (exit 1; a third user cannot post to it (7 ms): ThirdPosted)
+PASS  plant: a third user's read let through (can_see asked of nobody) is red at step 10 (exit 1; a third user cannot read it, nor stream it (2 ms): ThirdRead)
+PASS  plant: the subscribe after the turn, not in it, is red at step 11 (exit 1; a post between a stream's backlog read and its subscribe arrives once (208 ms): NotOnce)
+PASS  plant: the list showing every conversation (load_mine! keeps them all) is red at step 31 (exit 1; the list page shows a conversation the viewer is in, and not one they aren't (7 ms): OthersShown)
+PASS  plant: a participant's name written unescaped (escape leaves `<`) is red at step 32 (exit 1; a participant's name is written escaped (4 ms): NameNotEscaped)
+PASS  plant: a third user given the conversation's page (can_see asked of nobody) is red at step 33 (exit 1; the conversation page is a 200 to a participant, a 404 to a third user; a page is a 403 to a key (11 ms): ThirdGotPage)
+PASS  plant: a key given a page (answered as a session) is red at step 33 (exit 1; the conversation page is a 200 to a participant, a 404 to a third user; a page is a 403 to a key (11 ms): KeyGotPage)
+PASS  plant: a message's newline written raw into its transcript line is red at step 6 (exit 1; A reads the transcript and sees it, its markdown exactly as posted (2 ms): TranscriptUnread)
+PASS  plant: a revoked key that still works (its revocation never read) is red at step 17 (exit 1; Steve revokes the key, and its next use is a 401 (11 ms): RevokedKeyWorks)
+PASS  plant: a key minting a key (a key's grant bound as a session's) is red at step 16 (exit 1; the agent's key cannot mint a key, nor make an agent (2 ms): KeyMinted)
+PASS  plant: a session's key acting as another human's agent (the owner never asked) is red at step 13 (exit 1; Steve gets it a key, by an invite (and C cannot invite for it) (4 ms): InvitedForAnothersAgent)
+PASS  plant: the Bearer header winning over the cookie when both are sent is red at step 20 (exit 1; a session cookie and a Bearer key together are a 400 (4 ms): BothTaken)
+PASS  plant: an invite redeemable twice (its spending never written) is red at step 23 (exit 1; redeeming the same code again is a 401 (5 ms): RedeemedTwice)
+PASS  plant: an expired invite accepted (its expiry never read) is red at step 24 (exit 1; an invite past its ten minutes is a 401 (8 ms): ExpiredRedeemed)
+PASS  plant: an agent's id taken from the accounts again, a retired one's reused is red at step 29 (exit 1; agent ids: make, retire the highest, make, and the id is fresh (10 ms): IdGivenTwice)
+PASS  plant: a key allowed to make an invite (the grant's GrantedByKey let by) is red at step 26 (exit 1; a key cannot make an invite (3 ms): KeyInvited)
+PASS  plant: agents uncapped (the cap never reached) is red at step 36 (exit 1; a human's twenty-first agent is refused (152 ms): Uncapped)
+PASS  plant: another's agent named in `with=` (the owner never asked) is red at step 37 (exit 1; C cannot name Steve's agent in a new conversation, nor an unknown id, in the same words; Steve can (11 ms): AnothersAgentNamed)
+PASS  plant: a cross-origin POST accepted (Origin never compared) is red at step 38 (exit 1; a POST with a cookie from another origin, or from none, is a 403 (10 ms): CrossOriginAccepted)
+PASS  plant: a logout that leaves the session (its record never removed) is red at step 39 (exit 1; a logout from another origin is refused; from our own, the old cookie is a 401 (33 ms): SessionLives)
+PASS  plant: a stream outliving its lifetime (the test's lifetime never read) is red at step 40 (exit 1; a stream ends at its lifetime, so a key revoked while it is open stops reaching it (3024 ms): StreamOutlived)
+PASS  plant: a junk invite code audited (an unknown invite's refusal appended) is red at step 41 (exit 1; junk invite codes, a forged state and no pending sign-up leave the audit as it was (17 ms): AuditGrew)
+PASS  plant: a forged state audited (every sign-in refusal appended) is red at step 41 (exit 1; junk invite codes, a forged state and no pending sign-up leave the audit as it was (16 ms): AuditGrew)
+PASS  plant: eviction across holders (every stream counted as the new one's holder's) is red at step 42 (exit 1; A opening nine streams ends A's own first, and B's stays (70 ms): EndOfStream)
+PASS  plant: a post reading the whole transcript for its id (the tally never trusted) is red at step 43 (exit 1; a post learns its id from the tally, never reading the transcript whole (24 ms): PostReadTheTranscript)
+PASS  plant: a transcript uncapped (the cap never reached) is red at step 44 (exit 1; a post to a full transcript is a 413, and nothing is appended (150 ms): FullAccepted)
+PASS  plant: a read deaf to `before=` (every page the newest) is red at step 45 (exit 1; a read is the newest page, and before= pages back to the first; the page shows the newest (736 ms): NotAPage)
+PASS  plant: a backlog unbounded (from Last-Event-ID, past the newest page) is red at step 46 (exit 1; a stream's backlog is at most the newest page, a gap before it said (18 ms): NotTheNewestPage)
+PASS  plant: a gap never said (its event never sent) is red at step 46 (exit 1; a stream's backlog is at most the newest page, a gap before it said (28 ms): NoGap)
+PASS  plant: a page read from the whole transcript (its offsets never trusted) is red at step 47 (exit 1; a page and a backlog are read from their first message's offset, never the transcript whole (5 ms): NotRead)
+PASS  plant: an offsets file never written again (only ever appended to) is red at step 48 (exit 1; a missing offsets file is read past, and the next post writes it whole (52 ms): OffsetsNotRebuilt)
+PASS  zig fmt --check host build.zig
+PASS  roc fmt --check app platform
+verify: 86 of 86 passed
+── time: 39 programs, 529.4 s in all; the slowest 26.2 s: zig build test --cache-dir .zig-cache/verify/cache --summary all
+```
+
 ## CC → the box, 2026-10-29: 319 done (roc-chat's readability fixes); verify 77 of 77; starting 320
 
 - **On roc-chat `claude/roc-chat` `314bc75`**, three commits on `box/security-2` (`b2dd182`), so merging it brings both. The Roc expects are 1,952 (floor 1,901), the Zig tests 203, and the e2e 44 steps.
