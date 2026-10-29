@@ -38,6 +38,25 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**304. Shale's gaps from 2026-10-28: an atomic queue_done, edit between markers, JSON: CC'S** (Steve, 2026-10-29: "queue 1 and 2 for CC".) Three gaps the box and CC hit:
+
+- **queue_done is not atomic.** Twice in one day it ran out of the default step budget (and once the arena budget) after three or so items. Once it removed an item from QUEUE.md without writing its line to QUEUE-ARCHIVE.md. Make one queue_done (and queue_move) a single `edits_all` over both files, so a stop leaves both or neither; and make archiving N items affordable under the default budget (the cost looks quadratic in QUEUE.md's size). Add a test that stops mid-way and finds both files consistent.
+- **edit between markers** (CC's own ask from 288-290): a form of `edit` that replaces the text from one marker to another, or from a marker to the end of the file, without the 1-based `sub` and 0-based `find_in` arithmetic. Plants for: both markers present, the end-of-file form, a marker missing (a named failure), and a marker found twice (a named failure).
+- **JSON:** Shale has no JSON reader, and the box fell back to `jq` reading Zulip's API answer. Add a reader that turns JSON into Shale's lists and maps, refusing on malformed input with a named error and a position, and with budgets that bound depth and size. Then `cookbook:http.shale` or the docs can use it. A writer too, if it falls out naturally.
+
+Each one: Shale's tests and its doc (SHALE-AGENTS.md's table of builtins). Done when `zig build test` and `zig build consumers` pass.
+
+**303. The Roc style review's checks become cookbook recipes: CC'S** (Steve, 2026-10-29: "queue 1 and 2 for CC".) A Roc Zulip thread on our style guide was reviewed against the chat by read-only box agents, and the clear findings are fixed (roc-webbox and roc-apps, 2026-10-29). Their checker scripts are drafts with no plants: shale branch `box/style-check-drafts`, folder drafts/style-check, whose README says what each one does. The findings and verdicts are in the guide's new rules (roc-apps docs/roc-style.md).
+
+- **For each draft worth keeping, make a cookbook recipe** under cookbook/roc/, or fold it into an existing one (name_hunt's `command_tense` and `vague` are the natural homes for s2 and s4).
+- **Each recipe gets plants and a `self_test=1`,** so `zig build test`'s cookbook-test runs it: a plant per finding, and quiet plants for the cases the guide allows on purpose (a single-caller pure function with expects, a rule's one home, a domain word like a directory's entry).
+- **boundaries.shale's S7 half needs its filter:** context passed down (`me`, `accounts`, `at`) is not a constant.
+- **Run each against roc-webbox `main`.** The fixes have landed, so a recipe's findings there should be zero, or only what the guide allows; say what's left and why.
+- **Add the ones that should gate to `tools/roc_hunt/hunt.shale`** in roc-webbox, as findings. nest_depth is likely `min=4`. Each joins the guide's enforcement list.
+- **Delete the drafts branch when done.** Your call which drafts aren't worth a recipe (s11_pure_names is a reading aid): say why.
+
+Done when the kept checks are recipes with plants, cookbook-test runs them, the hunt carries the gating ones, and the guide's enforcement list names them.
+
 ## Parked
 
 - **216's output ring and SSE stream** (Steve, 2026-10-16): revisit when a script needs to report as it runs; today `GET /admin/script` shows output after the run.
