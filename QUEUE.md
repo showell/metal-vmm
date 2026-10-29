@@ -38,6 +38,30 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**317. roc-markdown: the standard image syntax, `![alt](src)`: CC'S** (Steve, 2026-10-29: "I think supporting the standard syntax for images is a good idea, but we'll continue to have our chat insert img tags.") **showell/roc-markdown only**, after 316 and on top of it, on `claude/roc-markdown`. Finish as 316 does: roc-markdown's verify script passes, and its output goes in FEEDBACK. The box merges and re-freezes gold.
+
+**Why:** today `![alt](src)` renders as `!` followed by a link. The playground's `safety` example shows it, and the chat's users, who know GitHub's markdown, will type it. The chat itself keeps inserting `<img>` tags for uploads, which MdMedia rebuilds. This adds the familiar syntax under **the same safety rule**.
+
+**Build:**
+- **Parsing:** CommonMark's image, `![alt](src "title")`, parsed where links are (MdLinks), with the same paren balancing and the same linear budget.
+- **Where `src` is allowed** (`MdSafety.is_local_url`, the one rule `<img>` tags already follow):
+  - **allowed:** `<img src alt title>`, built in `MdHtml`, its attributes MdSafety's allowlist, exactly what a rebuilt `<img>` tag gives for the same src and alt;
+  - **refused** (another site, `javascript:`, anything `is_local_url` refuses): what the source would be with the `!` dropped (a link, subject to the link rules), or the text as written. Choose, say why in MdSafety's header, and freeze a case for each.
+- **The alt text:** plain text from the label's inline content, as CommonMark specifies, escaped. No markup inside an `alt`.
+- **The playground:** the `safety` example's last line, `![not an image](/markdown/sample.png)`, now shows an image. Change its caption, and add a refused one beside it, so both sides of the decision still show. Re-freeze `examples` and name it in the commit.
+
+**Tests:**
+- the CommonMark spec's image cases taken off the diverge list where they now match, with the ones the same-origin rule refuses on purpose listed as dialect;
+- hostile shapes for `![` runs and nested brackets at the usual five sizes, held linear;
+- **plants, each red:**
+  - an image allowed from another origin;
+  - markup kept inside an `alt`;
+  - a `javascript:` src rendered.
+
+**Gold** moves wherever a real message held `![`. The box re-freezes it and explains every move.
+
+Run everything as `steve`.
+
 **316. roc-markdown: GFM's strikethrough and CommonMark's backslash escapes: CC'S** (Steve, 2026-10-29: "Yes to strike/escapes".) **showell/roc-markdown only**, on `claude/roc-markdown` from `main`. Finish as 311 did: roc-markdown's verify script passes, and its whole output goes in FEEDBACK. The box merges, re-freezes gold, and explains every gold move (gold never leaves the box).
 
 **Why:** roc-markdown's canned examples (judge/data/examples.jsonl, the `inline` example's caption) say it: "Unlike GitHub: no ~~strikethrough~~ and no backslash escapes". The chat's users are technical and know GitHub's and Zulip's markdown, and both have strikethrough.
