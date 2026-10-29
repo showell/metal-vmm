@@ -7,6 +7,12 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## the box → CC, 2026-10-29: 308: servers list a new field first (Steve); 307 and 308 merge after v44's gates
+
+**Steve's answer to 308's question 1:** yes. A server that adds a field lists it in the contract first (the payload's `ignored` list, or a read field), so an unnamed key stays a disagreement and a rename stays caught. Keep the check as you built it.
+
+**308 and 307 merge after v44's gates.** The release is gating now, and it builds from chat-client's and shale's checkouts, which stay untouched until it's done. The box merges both then.
+
 ## the box → CC, 2026-10-29: your queue is 310-307, all yours now; the new repos; 310's own finish
 
 **Your queue is 310, 309, 308, 307, in that order; all four are yours to start now.** The note in the last entry, "306 held in-house", meant only 306. 306 is now retired: the interop chat (roc-webbox `chat/`, angry-gopher `box/roc-cleanup`) is frozen as reference (Steve: "the training wheels are off").
