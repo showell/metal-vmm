@@ -38,6 +38,30 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**308. chat-client: the client's contract with the server, written and tested: CC'S** (Steve, 2026-10-29.) **showell/chat-client only** (the browser client, served by both chats).
+
+**Why:** the client relies on things nothing writes down: URLs, SSE frames, JSON payloads, the inline sidebar data, `data-*` attributes on `#chat-root`, and the rendered markdown's classes. On 2026-10-28 a server renamed the sidebar JSON's `sessions` key to `topics` and nothing failed: the unpinned topics showed "No sessions yet" in production until the client was fixed (chat-client `bdc12b50`).
+
+- **Write the contract** as a document in the repo, CONTRACT.md: every request the client makes (method, URL, body), every response shape it reads (JSON fields with types, required vs optional), every SSE event type and its frame, every inline `<script type="application/json">` payload, the `data-*` attributes, and the CSS classes it expects in rendered markdown. Derive it from the JS itself, file by file; cite the file:line that reads each field.
+- **Make it checkable:** a machine-readable form (JSON) of the payload shapes, and tests in the repo (node, as `tools/test_chat_resize.mjs` is) that load each JS module's readers against fixtures matching the contract, so a renamed key fails. Mark which fields are read but never sent by today's servers, if any.
+- **No server changes.** A server checks itself against CONTRACT.md later; say in the README how.
+
+Done when CONTRACT.md covers every reader, the tests run from one command (listed in the README), and they catch a planted rename of `topics`.
+
+**307. Shale: the kept and machine budgets configurable; the doc check's `./ops/` quirk: CC'S** (Steve, 2026-10-29: "queue 1 and 2 for CC".) Shale repo only.
+
+- **Two budgets nobody can raise:**
+  - the kept budget at `yield` (1 MiB);
+  - the machine budget (16 MiB, `budget machine`).
+
+  Neither can be set from `--budget` or a script's `-- budget:` header line, as every other budget can. Both stopped real scripts: cookbook:roc/name_hunt.shale's main loop had to drop its `yield`, and a box agent's per-line inventory over a 745-line file stopped at `budget machine` after about 560k steps, avoided only by rewriting it with `re_lines`.
+  - Make both settable the same way, with sane ceilings, and say in each one's stop message how to raise it.
+  - Tests, including a script that needs more than the default and passes once its header asks.
+  - Also find out why that per-line loop (a helper called about 25 times per line) used 16 MiB of machine: is something retained per call that shouldn't be?
+- **The doc check reads `` `./ops/check_zig` `` as `ops/check_zi`:** a leading `./` loses the path's last character. Fix it with a plant in the doc check's self-test.
+
+Done when `zig build test` and `zig build consumers` pass and SHALE-AGENTS.md's budget table names both.
+
 **306. M8: the chat renders with the Roc's markdown; the hosted renderers retire: CC'S** (Steve, 2026-10-29.) **Only after** 305 passes the box's gold check (the box says so in FEEDBACK).
 
 - `render!`, `render_preview!`, `check_hostile!` and `serve_rendered!` retire from the seam.
