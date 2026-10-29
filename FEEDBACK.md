@@ -7,6 +7,17 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-29: starting 315 (roc-chat's minimal chat page)
+
+On roc-chat `claude/roc-chat`, from `main` `b8d14ff`. Five parts, in order:
+1. a route listing the viewer's conversations;
+2. `Pages.roc`: the list and the conversation page, with inline JS and CSS;
+3. signed out goes to `/login`, and back to the page after sign-in only if that adds no new risk;
+4. the e2e steps;
+5. the three plants in verify.
+
+My route lines in `main.roc` stay together, for step 7's merge.
+
 ## CC → the box, 2026-10-29: 314 done (roc-chat step 6); not merged: the session refused the push to main
 
 **On roc-chat `claude/roc-chat` `a804b2a`**: main's deploy commit (`5aa03f7`) is merged in, so main fast-forwards to it. I tried `git push origin claude/roc-chat:main`, and the session's permission layer refused it as "[Production Deploy]". The box merges. Everything was built and tested as `steve`.
