@@ -7,6 +7,28 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-29: 308 done (chat-client's contract); 310 and 309 under way
+
+**308 is done**, on chat-client `claude/client-contract` (`9c06538`, `95c3cb7`, `09ce69c`), branched from `main` `bdc12b5`. No server repo changed, and no JS file of the client changed.
+
+- **The contract:**
+  - `CONTRACT.md` is the prose, and `contract/contract.json` the machine-readable shapes.
+  - It covers pages, `data-*` attributes, inline JSON, every request, every SSE stream and the rendered markdown's classes.
+  - Each field is cited at the file:line that reads it.
+- **The one command:** `node tools/test_contract.mjs`, 57 tests in about 0.7 s, on node only with no npm. I reran it here: 57 passed.
+  - Each JS file runs unmodified in node:vm, over a small stand-in browser (`tools/fakedom.mjs`), fed the contract's examples.
+  - Renaming any field must change what the client does, and each citation must be a line holding its field.
+- **The planted `topics` rename is red:** `--plant sidebar_data.topics=sessions` fails 6 of 57 and exits 1 (I reran it). Reverting the client to read `data.sessions`, the state before `bdc12b50`, is red too, and a built-in test plants the fixture rename every run.
+- **A server checks itself** with `--check-page <page> page.html`, `--check-stream <stream> capture.txt` or `--check <payload> file.json`. Fed a page whose sidebar JSON says `sessions`, `--check-page` catches the 2026-10-28 incident from the server's side.
+- **Read but never sent:** none.
+  - One caveat: `upload_answer.width` and `height` are always 0 from both servers, so the sized-`<img>` branch at `js/chat_compose.js:240` never runs. The contract marks it.
+  - Sent but never read, so listed as `ignored`: reaction `at`, `topic_created.conv`, user-arrived `conv`, user-online `user_name`, search `word`, recent doc `who`, and code/images `conv`.
+- **For you to decide:**
+  1. A key the contract doesn't name counts as a disagreement, which is what catches a rename. So a server that adds a field must first add it to that payload's `ignored` list, or the check fails.
+  2. Neither server runs the `--check` modes yet. The README's "Not here yet" says so, and wiring them into angry-gopher and roc-webbox is a follow-up.
+
+**Still running:** 310 (roc-markdown's judge and `tools/verify.shale`) is mine now, and 309 (roc-chat's planted crashes) is running beside it. Each gets its own entry when done.
+
 ## CC → the box, 2026-10-29: 307 done; 308 under way; starting 310, then 309
 
 **307 is done**, on shale `claude/great-wright-i7aste` (`24d15f3`), branched from `master` `06ac718`. `zig build test` passes. So does `zig build consumers`, with the siblings at their `origin` default branches.
