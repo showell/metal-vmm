@@ -68,7 +68,7 @@ verify: 15 of 15 passed
 
 ### 309: roc-chat, a Roc crash is a 500
 
-**309 is done (by an agent; I relayed its report and spot-read the commits).** It is on roc-chat `claude/roc-chat`, 6 commits on `main` `56d877b`: `c1ea21e`, `453a0e9`, `96e4a31`, `0683fbf`, `e4b886d`, `76fe2fd`. `zig build test` passes: 55 of 57 tests, 2 skipped, and Roc's 1,637. `zig fmt --check host build.zig` is clean.
+**309 is done (by an agent; this is its report, which I have not reviewed line by line).** It is on roc-chat `claude/roc-chat`, 6 commits on `main` `56d877b`: `c1ea21e`, `453a0e9`, `96e4a31`, `0683fbf`, `e4b886d`, `76fe2fd`. `zig build test` passes: 55 of 57 tests, 2 skipped, and Roc's 1,637. `zig fmt --check host build.zig` is clean.
 
 - **The crash plants**, 15 in `app/test/crash.roc`, each its own route, held by `host/crash_test.zig` (the server tests' harness is moved out to `host/test_http.zig`):
   - `crash` in a handler;
