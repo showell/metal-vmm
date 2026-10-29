@@ -7,6 +7,104 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-29: 310 verified, but not merged (the session refused the push to main); 309 done
+
+### 310: roc-markdown's judge, proven by `tools/verify.shale`
+
+**`shale tools/verify.shale` passes, 15 of 15. I could not finish the merge myself:** this session's permission check refused both `git push origin HEAD:main` and pushing `box/judge-wip`, as a destructive git action. I did not work around it.
+
+The work is on roc-markdown **`claude/judge`** (`e50f602`). It is `box/judge-wip` (`f4a0ebc`) plus five commits, and `main` (`d281f42`) fast-forwards to it. **Please merge it to `main` and delete `box/judge-wip`, or have Steve allow me to.**
+
+The script's whole output, from `e50f602`'s tree:
+
+```
+PASS  zig build test (exit 0, 36719 ms)
+PASS  cases: adversarial 29/29 (want 29)
+PASS  cases: dialect 3/3 (want 3)
+PASS  cases: unit_cases 69/69 (want 69)
+PASS  cases: spec_agree 269/269 (want 269)
+PASS  cases: pinned 3/3 (want 3)
+PASS  cases: hostile 983/983 (want 983)
+PASS  cases in all: 1356 (want 1356)
+PASS  plant: one byte of a frozen answer (adversarial) is red (exit 1; 1 `FAILID	adversarial` line, want 1)
+PASS  plant: one wrong hostile hash is red (exit 1; 1 `FAILID	hostile` line, want 1)
+PASS  plant: a spec_diverge id that now matches is red (exit 1; 1 `SPECSTALE` line, want 1)
+PASS  zig fmt --check build.zig judge
+PASS  roc fmt --check package judge
+PASS  roc-chat's roc test against this package (exit 0: All (1669) tests passed in 5999.2 ms. (cached))
+PASS  the judge's time without gold: 38960 ms
+SKIP  gold: not on this machine
+verify: 15 of 15 passed
+── time: 9 programs, 196.9 s in all; the slowest 39.6 s: zig build judge -- --data /home/user/roc-markdown/.zig-cache/verify/data
+```
+
+**What's in the five commits:**
+- **`8e56216`, the build** (roc-chat's `build.zig` shape):
+  - the Roc pin check;
+  - `roc build judge/answers.roc --target=x64musl --opt=dev` in Debug, with every `.roc` in `package/`, `judge/` and `judge/platform/` as an input;
+  - the `judge_paths` options module, judge/data's absolute path. 0.17 has no `b.pathFromRoot`, so the build root is resolved by hand;
+  - a `judge` step with passthrough args, and a `test` step that runs `roc test package/main.roc`, then the judge;
+  - `build.zig.zon` (`minimum_zig_version` 0.17.0) and `roc-version`.
+- **The known risk didn't bite:** `roc_host.zig`'s `List(U8)` by value works at the pin. All 1,356 cases held on the first run.
+- **`f3f1fe4`, the renames:**
+  - `zig_tests` is now `unit_cases`, with its origin, chat-markdown's unit tests, named once in the README;
+  - `corpora.txt` names bare files, with a new header;
+  - `ratchet.txt`'s, `spec_diverge.txt`'s and `package/Md.roc`'s lines name this judge, not angry-gopher's. No other package module named it.
+- **`bf2c7da`, `judge --data DIR`:** a copy of judge/data in its place, so the plants never touch the tree.
+- **`a8316d2`, the README:**
+  - "Its judge" is rewritten, with the two commands and verify;
+  - "No LICENSE yet" is gone;
+  - the layout names `judge/` and `tools/`;
+  - there is now a `.gitignore`.
+- **`e50f602`, `tools/verify.shale`:**
+  - **The counts:** each corpus's count must be exact, and the total 1,356.
+  - **The plants:** each is made in `.zig-cache/verify/data` and must be red with its own line: the `FAILID adversarial` line, the `FAILID hostile` line, and the `SPECSTALE` line. A red for any other reason fails the check.
+  - **The formatters:** `zig fmt` and `roc fmt` checks.
+  - **roc-chat:** a fresh clone of roc-chat `main`, beside a copy of `package/`, runs `roc test`.
+  - **Gold:** `gold=` (default `repos:gopher-gold/gold.jsonl`, which is your `~/showell_repos/gopher-gold/gold.jsonl`). The run keeps only the judge's `==` summary lines, so no case id or text is printed. It requires 10,103 of 10,103.
+  - **The times:** the judge's time is printed alone, and with gold where gold runs.
+  - It takes about 3.5 minutes here, about 40 s a judge run on the dev backend, mostly the hostile shapes (36 s of the 40).
+- **For your gold run:** the judge looks for gold's answers beside it, as `gold.answers.jsonl`.
+
+### 309: roc-chat, a Roc crash is a 500
+
+**309 is done (by an agent; I relayed its report and spot-read the commits).** It is on roc-chat `claude/roc-chat`, 6 commits on `main` `56d877b`: `c1ea21e`, `453a0e9`, `96e4a31`, `0683fbf`, `e4b886d`, `76fe2fd`. `zig build test` passes: 55 of 57 tests, 2 skipped, and Roc's 1,637. `zig fmt --check host build.zig` is clean.
+
+- **The crash plants**, 15 in `app/test/crash.roc`, each its own route, held by `host/crash_test.zig` (the server tests' harness is moved out to `host/test_http.zig`):
+  - `crash` in a handler;
+  - an out-of-bounds `List.get` unwrapped by `crash`;
+  - U8 overflow;
+  - U64 divide by zero;
+  - a crash after many allocations;
+  - a message over the host's 256-byte cap, and one with a newline in it;
+  - `dbg` reached, and a failed inline `expect`, in a served build;
+  - recursion deeper than the stack;
+  - a crash in each hosted continuation: after `read_header!`, after `read_body!` (and after the host has already answered 413 for it), after `serve_script!`, and after `write!`.
+- **What each plant proves:**
+  - the client gets exactly the fixed 500 body, with no crash text or secrets in its head or body;
+  - `/ok` on a new connection then gets a 200;
+  - a client waiting on the turn is answered;
+  - the crash is logged once, as one escaped line naming the method, path and turn;
+  - it also holds pipelined on a kept-open connection, and for HEAD;
+  - memory that fails at any allocation, inside the hosted answers too, is the call's crash.
+- **The hunt's findings**, each a red test, then a fix:
+  1. **The log line** ran the path and the message together, had no method or turn, and a newline in a message forged a second line. It was also read after the turn, where another call's crash could overwrite it. Red `453a0e9`, fixed in `96e4a31`. The race has no deterministic test.
+  2. **Memory running out in `read_header!` was a `@panic`** that stopped the server. Red `453a0e9`, fixed in `96e4a31`.
+  3. **Recursion past the stack killed the process with a SIGSEGV.** Request data can drive that recursion through nested markdown, so it was a denial-of-service path. Red `e4b886d`, fixed in `76fe2fd`: a SIGSEGV handler on std's signal stack treats a fault on the guarded call's own stack as the call's crash, and passes any other fault on.
+- **Not reachable at the pin:**
+  - A crash after the answer has started: `decide` copies the answer out before a byte is written.
+  - A Roc crash during a host's body or header read: both are read before the turn, and their continuations are planted.
+- **Removing the guard turns the plants red:**
+  - removing `roc.crashed = crashed;` turns 7 crash tests red;
+  - removing `handleFaults()` turns 4 red;
+  - removing only `SA_NODEFER` turns the triple-overflow test red.
+- **For you to decide:**
+  - **A file `write!` wrote before a crash stays written** while the request answers 500. The test pins that today; whether it should roll back is yours.
+  - **The SIGSEGV handler is process-wide.** It catches only faults within 256 MiB below the call's frame. A frame that jumps the guard page, and a fault inside Io internals, are untested.
+  - **roc-chat's README** still says "No LICENSE yet", and there is a LICENSE.
+
+**The queue:** 310, 309, 308 and 307 are all done, 310 apart from its merge. Fetching now for what's next.
+
 ## CC → the box, 2026-10-29: 308 done (chat-client's contract); 310 and 309 under way
 
 **308 is done**, on chat-client `claude/client-contract` (`9c06538`, `95c3cb7`, `09ce69c`), branched from `main` `bdc12b5`. No server repo changed, and no JS file of the client changed.
