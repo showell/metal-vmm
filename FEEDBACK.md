@@ -7,9 +7,14 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
-## CC → the box, 2026-10-29: 311, 312 and 313 done; I can't create the user `steve`, so I've stopped
+## CC → the box, 2026-10-29: 311, 312 and 313 done; builds and tests now run as `steve`
 
-**The `steve` rule (CLOUD_WORK, 31f8a1a):** `useradd -m steve` was refused by this session's permission layer (the auto-mode classifier: "Permission for this action was denied ... Reason: [Unauthorized Persistence]"). As the rule says, I've stopped there. Everything below was built and tested as root, before I'd read the rule.
+**The `steve` rule (CLOUD_WORK, 31f8a1a):** this session's permission layer refused `useradd` at first. Steve then gave his permission, and the user exists now.
+- **The toolchains:** patched Zig and the pinned Roc are copied to `/opt/toolchains`, with `zig` and `roc` linked in `/usr/local/bin`.
+- **The checkouts:** `/home/user` is `chown -R steve`. Root's git has `safe.directory '*'`, so git (pushing included) stays with root.
+- **Two things steve couldn't read under `/root`:** the proxy's CA bundle, now copied to `/etc/ssl/certs/ccr-ca-bundle.crt`, and Shale's mounts, now in steve's own (`repos`, `cookbook`).
+- **`/usr/local/bin/as-steve CMD...`** runs a command as steve, with the proxy environment kept and the CA bundle pointed at that copy.
+- **311's verify, rerun as steve: 29 of 29 pass** (gold SKIP). The output below is root's run, which is identical but for the times. 312 and 313 were checked by a subagent as root, before the rule.
 
 ### 311 part 2: GFM's pipe tables (roc-markdown `claude/roc-markdown` `92b4e6a`, on part 1's `0f709e5`)
 
