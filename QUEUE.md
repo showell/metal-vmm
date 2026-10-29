@@ -38,6 +38,47 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**318. roc-markdown: the reviews' polish, the uploads prefix, one escape: CC'S** (Steve, 2026-10-29: "Keep polishing markdown as top priority"; "2) yes" to the uploads prefix.) **showell/roc-markdown only**, after 317 and on top of it, on `claude/roc-markdown`. Finish as 316 and 317 do: roc-markdown's verify script passes, its output goes in FEEDBACK, and the box merges, re-freezes gold and explains every move.
+
+**Read first:** two cold reviews from today, in this repo:
+- docs/reviews/REVIEW-roc-readability-2026-10-29.md: take every roc-markdown finding. The roc-chat ones are the box's.
+- docs/reviews/REVIEW-roc-security-2026-10-29.md: take H2 and L2's markdown half.
+
+Their line numbers are as of roc-markdown `66b99a7`; search for the quoted text.
+
+**Do, in this order, each its own commit:**
+1. **The uploads prefix** (security H2 and L2; Steve's decision).
+   - Today `MdSafety.is_local_url` allows any `/` path for `<img>` and `<video>`, which lets a message aim media at the app's own routes (`/conversations/N/stream`, `/login`).
+   - Allow only paths under one uploads prefix. It's the chat's convention, so it lives in MdChat, with `/user_uploads/` as the default. MdSafety asks MdChat for it.
+   - The rule applies to rebuilt `<img>`/`<video>` tags and to 317's `![alt](src)` alike.
+   - Freeze cases for the inside and outside sides: `/user_uploads/a.png` passes; `/conversations/1/stream`, `/login` and `/user_uploads/../login` don't. Read how `..` and percent-encoding should be judged, and say what you chose.
+   - **The playground's `safety` example** must still show an image:
+     - point its sample at `/user_uploads/sample.png`;
+     - make `zig build playground` put the image where the box can publish it at the site root's `user_uploads/`, and say exactly what the box copies where;
+     - re-freeze `examples`, named in the commit.
+2. **One HTML escape** (Steve: "yes"): `MdText.escape_onto` escapes `'` too, and the package exposes it, so roc-chat's pages can use it instead of their own. Gold will move if any rendered text held a `'`: say which corpora moved.
+3. **The readability review's roc-markdown findings:**
+   - **Stale claims:** the "the Zig's charges, unit for unit" clauses (MdInline, MdLinks, MdEmphasis), MdMedia's Feeds reference, and Bytes' "roc-webbox's chat".
+   - **History in place of reasons:** the ticket numbers and the old Zig function names that open docstrings (``## markdown `renderTrusted`:`` and about 15 more, plus "the Zig's"). Each reason already stands without them.
+   - **Names:** MdInline's `$run_start` becomes `$text_start`, and `$rb`/`rb` becomes `$next_bracket`.
+   - **Ascii:** keep both copies (Steve). Add one header line in Ascii.roc saying roc-chat keeps its own copy on purpose until a shared package exists.
+   - **Duplication:** have `work_units`, `hostility` and `rendered` share one seed builder. Keep the corpus counts in one home: verify.shale reads ratchet.txt rather than copying it.
+   - **The long functions,** split along their real seams: `MdInline.render_onto` (each byte class a scan returning `{html, end}`, with one helper taking the piece) and `Md.blocks_onto` (a `block_at` dispatcher, its result applied once). Both must keep every frozen answer and work unit byte for byte, with no re-freeze.
+   - **Tests a reader can read:**
+     - `MdEmphasis` gets worked examples (`expect`s) of the rule of 3 and the floor;
+     - `MdInline`'s localhost expect gets a one-line why;
+     - `Md.roc`'s "markdown.zig's own cases" label says what the group proves.
+   - **README accuracy:**
+     - "269 of the specs' examples", and say how they were chosen (`spec_diverge.txt`'s header);
+     - "about a thousand hostile shapes";
+     - name why MdFence, MdMedia and MdTable are exposed.
+     - Keep the README for the deciding developer, with detail in TESTING.md.
+   - **Timing:** the judge's time stays within 10% of before.
+
+**What roc-markdown's verify script checks:** raised counts; **plants, each red:** a media src outside the prefix accepted; a `'` left unescaped; one of the split functions' answers changed.
+
+Run everything as `steve`.
+
 **317. roc-markdown: the standard image syntax, `![alt](src)`: CC'S** (Steve, 2026-10-29: "I think supporting the standard syntax for images is a good idea, but we'll continue to have our chat insert img tags.") **showell/roc-markdown only**, after 316 and on top of it, on `claude/roc-markdown`. Finish as 316 does: roc-markdown's verify script passes, and its output goes in FEEDBACK. The box merges and re-freezes gold.
 
 **Why:** today `![alt](src)` renders as `!` followed by a link. The playground's `safety` example shows it, and the chat's users, who know GitHub's markdown, will type it. The chat itself keeps inserting `<img>` tags for uploads, which MdMedia rebuilds. This adds the familiar syntax under **the same safety rule**.
