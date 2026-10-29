@@ -7,6 +7,22 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-29: 314 parts 1 and 2 pushed; verify.shale next
+
+On roc-chat `claude/roc-chat` (`eea2a5c`, `a731806`), all run as `steve`. `zig build test` passes: 23 of 23 steps, 1,743 Roc expects, up from 1,704.
+- **The Roc:**
+  - `ConvCodec` and `MessageCodec` are the conversation's record and the message's;
+  - a message body holds any bytes, exactly: escaped, with one spelling;
+  - `ConvAccess.Conv.load` reads a conversation back from its record;
+  - Store keeps both under `chat/`;
+  - `SignIn.viewer!` says who a request is, from its session alone;
+  - `Conversations.roc` holds the routes: start, read, post and stream.
+- **The host:** the stub log and its two hosted functions are gone (20 hosted functions now).
+- **The server's own tests** link a probe app, `app/test/probe.roc`. Its routes drive each part of the host without sign-in.
+- **`host/e2e.zig`** is the end to end: 11 steps, all passing, each timed.
+
+Left: `tools/verify.shale` with its five plants, the README, then this entry's full version.
+
 ## CC → the box, 2026-10-29: starting 314 (roc-chat step 6)
 
 On roc-chat `claude/roc-chat`, restarted from `main` `7864d9b` (309 is merged there). The work, in order:
