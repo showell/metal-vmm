@@ -7,6 +7,96 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-29: 316 done (roc-markdown's strikethrough and backslash escapes); verify 45 of 45; starting 317
+
+- **On roc-markdown `claude/roc-markdown` `894f563`**, from `main` `44e2651`. The box merges and refreezes gold.
+- **Strikethrough:** `~~text~~` becomes `<del>`. It is a third character on MdEmphasis's delimiter stack, with the same flanking as `*`; it matches only another `~~` and skips the rule of 3. The tags are in MdHtml.
+  - **Only two tildes.** A single `~` and a run of three or more stay text. GFM's spec says two tildes, and "~5 minutes" in a chat must stay as written.
+  - A `~` run that can neither open nor close never goes on the stack. Before I made that change, `lb-mixed-delimiters-tilde` turned hostile at 1,000, because every look-back walked past dead `~` runs.
+- **Backslash escapes:** a backslash before ASCII punctuation makes it literal. Inside a code span or a fence it stays a backslash.
+  - **Link destinations are unescaped before MdSafety reads them**, so `javascript\:` is refused as `javascript:` is.
+  - **A fence's language is unescaped too** (cm/24, which now matches).
+- **My choice for a backslash at a line's end** (CommonMark's hard break):
+  - **In `render` and `render_trusted`**, every newline already breaks, so the backslash asks for a break that is already there. It is dropped.
+  - **In `render_trusted_reflow`**, it is the `<br>`, and the lines either side render separately, so emphasis does not span the break.
+  - **On a paragraph's last line** it is text, as in CommonMark. An even run of backslashes is escaped backslashes, with no break.
+- **Judge:**
+  - **New spec corpora:** `spec_strike` (gfm/491 and 492, both match) and `spec_escapes` (cm/12 to 24). Seven of the 13 escape cases match.
+  - **The six that don't are in spec_diverge.txt, with reasons. None is an escape bug:**
+    - cm/16: every newline is a `<br>` already;
+    - cm/18: no indented code;
+    - cm/20 and cm/21: raw HTML is escaped;
+    - cm/22 `[gap?]`: link titles aren't read (its href is now `/bar*`, correct);
+    - cm/23 `[gap?]`: no reference definitions.
+  - **Seven new hostile shapes, all linear:** `rm-tilde-run`, `rm-strike-nest`, `rm-strike-unclosed`, `rm-strike-mixed`, `rm-strike-star-alternate`, `rm-escaped-strikes`, `rm-backslash-breaks`.
+  - `dialect` gains `xline/strike`: hard-wrap keeps `~~` per line, while reflow pairs it across the line, as it does `**`.
+- **Which frozen corpora moved, and why:**
+  - `examples`: `inline`, a new caption and source.
+  - `hostile`: these moved because escapes now apply:
+    - `backslashes/2..1000`;
+    - `gr-escaped-stars/*`.
+  - `hostile`: `lb-hard-breaks/10..8191` moved because the trailing backslash is now dropped.
+  - `hostile`: `lb-tilde-runs/*` and `lb-mixed-delimiters-tilde/*` changed in work units only, because tilde runs are now scanned as runs. No verdict moved.
+  - `hostile`: 35 cases were added (the seven new shapes at five sizes).
+  - `unit_cases`: `markdown_fence:83:0` and `:93:0`, work units only.
+  - `dialect`: one case added.
+  - Nothing else moved.
+- **Gold will move** wherever a real message held `~~` or a backslash before punctuation. It will also move wherever a paragraph line ended in `\`, and in work units wherever a message held a `~`.
+- **An option, not done:** spec_agree's filter dropped every example whose markdown holds `\`. With escapes in, those could come back as a wider spec check. Say if you want it.
+- **verify's whole output** (`as-steve shale tools/verify.shale`):
+
+```
+── budgets from the script's header: steps=200000000, read_bytes=1000000000, changes=10000, change_bytes=200000000, arena_bytes=1000000000
+PASS  zig build test (exit 0, 45034 ms)
+PASS  cases: adversarial 29/29 (want 29)
+PASS  cases: dialect 4/4 (want 4)
+PASS  cases: unit_cases 69/69 (want 69)
+PASS  cases: spec_agree 269/269 (want 269)
+PASS  cases: spec_tables 8/8 (want 8)
+PASS  cases: spec_strike 2/2 (want 2)
+PASS  cases: spec_escapes 13/13 (want 13)
+PASS  cases: pinned 3/3 (want 3)
+PASS  cases: examples 4/4 (want 4)
+PASS  cases: hostile 1067/1067 (want 1067)
+PASS  cases in all: 1468 (want 1468)
+PASS  the REPL:  9 cases (4 canned examples) in 3 modes, 20 runs of the REPL, 0 fail
+PASS  linear: lb-nested-parens-in-dest 2011 units at 1,000, 16393 at 8,191
+PASS  linear: rm-unbalanced-open-parens 2013 units at 1,000, 16395 at 8,191
+PASS  linear: rm-unbalanced-close-parens 2009 units at 1,000, 16391 at 8,191
+PASS  linear: rm-paren-bait 14996 units at 1,000, 122861 at 8,191
+PASS  linear: rm-paren-links 24989 units at 1,000, 204764 at 8,191
+PASS  linear: tbl-wide 5006 units at 1,000, 40961 at 8,191
+PASS  linear: tbl-many-rows 16010 units at 1,000, 131066 at 8,191
+PASS  linear: tbl-delimiter-alone 10990 units at 1,000, 90091 at 8,191
+PASS  linear: tbl-code-pipes 9010 units at 1,000, 73729 at 8,191
+PASS  linear: tbl-code-pipes-wide 11018 units at 1,000, 90119 at 8,191
+PASS  linear: rm-tilde-run 1006 units at 1,000, 8197 at 8,191
+PASS  linear: rm-strike-nest 17001 units at 1,000, 139248 at 8,191
+PASS  linear: rm-strike-unclosed 8000 units at 1,000, 65528 at 8,191
+PASS  linear: rm-strike-mixed 29001 units at 1,000, 237543 at 8,191
+PASS  linear: rm-strike-star-alternate 12999 units at 1,000, 106482 at 8,191
+PASS  linear: rm-escaped-strikes 7000 units at 1,000, 57337 at 8,191
+PASS  linear: rm-backslash-breaks 6002 units at 1,000, 49148 at 8,191
+PASS  linear: lb-tilde-runs 12001 units at 1,000, 98293 at 8,191
+PASS  linear: lb-mixed-delimiters-tilde 20003 units at 1,000, 163823 at 8,191
+PASS  budget: hostile/tbl-ragged/200 (40,000 padded cells) is refused
+PASS  plant: one byte of a frozen answer (adversarial) is red (exit 1; 1 `FAILID	adversarial` line, want 1)
+PASS  plant: one byte of a frozen table (spec_tables) is red (exit 1; 1 `FAILID	spec_tables` line, want 1)
+PASS  plant: one wrong hostile hash is red (exit 1; 1 `FAILID	hostile` line, want 1)
+PASS  plant: a spec_diverge id that now matches is red (exit 1; 1 `SPECSTALE` line, want 1)
+PASS  plant: a spec_diverge table id that now matches is red (exit 1; 1 `SPECSTALE` line, want 1)
+PASS  plant: `~~` paired across a line is red (exit 1; 1 `FAILID	dialect` line, want 1)
+PASS  plant: a backslash escape applied inside a code span is red (exit 1; 1 `FAILID	spec_escapes` line, want 1)
+PASS  plant: one byte of a frozen strikethrough (spec_strike) is red (exit 1; 1 `FAILID	spec_strike` line, want 1)
+PASS  zig fmt --check build.zig judge
+PASS  roc fmt --check package judge
+PASS  roc-chat's roc test against this package (exit 0: All (1886) tests passed in 7649.8 ms.)
+PASS  the judge's time without gold: 43195 ms
+SKIP  gold: not on this machine
+verify: 45 of 45 passed
+── time: 14 programs, 438.4 s in all; the slowest 45.0 s: zig build test
+```
+
 ## CC → the box, 2026-10-29: 315 is merged with step 7 (`09b6b9b`), verify 44 of 44; starting 316
 
 - **315 on roc-chat `claude/roc-chat` `09b6b9b`:** I merged main into it, with step 7's agents and keys (`79d1511`), so main fast-forwards.
