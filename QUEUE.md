@@ -38,6 +38,24 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**330. listen.shale: an agent hears the posts meant for it: CC'S** (Steve, 2026-10-30, on 328: "yes, mentions plus two hops, build listen.shale first".) Build the recipe 328 proposed, in Shale's cookbook, beside cookbook/zulip.shale. Branch from Shale master; the box merges.
+
+**What it does:** listen.shale holds one roc-chat conversation's stream (`GET /conversations/<id>/stream`, with `Last-Event-ID` to resume) using the agent's key from a secrets mount (`key=keys:<file>`, passed only through `run`'s `secrets`), and prints one line per post that is for the agent: `#<id> by <principal>: <first line, trimmed>`. Arguments: `site=`, `conv=`, `me=` (the agent's principal id, such as `agent:2`), `name=` (the word a mention uses, such as `CC`), `key=`, `after=` (the last id already handled). Never print the key.
+
+**The rules, as 328 proposed:** (1) never a post by `me`; (2) only a post whose markdown mentions `name` as a word (`@CC`, or `CC` leading the post); (3) a post by an agent counts only if a human posted since the last two agent posts: at most two agent hops before a human speaks, counted from the conversation's own posts, not remembered by the listener. Put the decision in one pure function, separate from the stream I/O, so it can be tested alone.
+
+**Modes:**
+- default: listen and print until stopped (a cloud session holds it under `Monitor`);
+- `once=1`: exit 0 on the first post for the agent, printing just that line. **This is how the box listens:** a detached command that exits wakes the box's session. Also exit nonzero, loudly, when the stream ends or the key is refused, so a dead listener is never mistaken for a quiet conversation.
+
+**Tests:** `self_test=1`, run by `zig build cookbook-test`, with no roc-chat build and no network. Feed recorded SSE frames from plant files (a new cookbook/plants/listen folder, in the format the roc-chat stream sends: read its `id:` / `data:` frames and its `: ping` lines) through the same parsing the live path uses. The plants: a human's "@CC hi" gives one line; CC's own post, a post naming nobody, a third agent hop and a `: ping` each give none; resuming with `after=` prints nothing twice. Plant a fault (e.g. rule 3 disabled) and see a test go red. Use `fresh_dir` for anything written.
+
+**A live check against prod, by hand, once:** in conversation 3, run `once=1` as CC, have LC (the box) or Steve post a mention, and see it exit with the line. Say in FEEDBACK when you're listening, so the box can post the "@CC" at the right time, or post it yourself from a second key-holding run only if that doesn't break rule 1.
+
+**Docs:** a row in cookbook/README (or wherever cookbook/zulip.shale is listed) and in docs/SHALE-AGENTS.md's table of recipes. Present tense, no task numbers.
+
+**Finish:** cookbook-test and the doc check, counts in FEEDBACK.
+
 **329. Shale's cookbook: no fixed scratch paths: CC'S** (Found while fixing tools/doc_check.shale's self-test, whose fixed fixture folder made two concurrent runs collide; it now takes a `mktemp -d` folder of its own.) The same pattern is in the cookbook. Under `zig build cookbook-test` each run gets a fresh scratch, but on a box whose `scratch` mount is shared, two runs at once collide:
 - cookbook/branch_prune.shale: `scratch:branch_prune_self_test`
 - cookbook/roc/methods.shale: `scratch:methods`
