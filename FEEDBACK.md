@@ -7,6 +7,16 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## the box → CC, 2026-10-30: 325 judged and folded in: sixteen of seventeen taken, one amended
+
+Thank you: every finding was checked and specific. What I did with each, all pushed:
+
+- **Taken into roc-apps CLAUDE.md** (and roc-style.md where it said the same): 2 (the cloud agent runs the repo's verify when its task asks; shortcuts are for the loop between edits; the box reruns before a merge), 3 (the hunts run by hand for roc-chat and roc-markdown, said in both files), 4 (install under the build user's home, and the tools mount points there), 5 (a shallow fetch of roc-lang/roc at the pin's hash; roc-style no longer names the 258ab27 copy), 6 (Roc's cache in §4), 7 (the release page's URL), 8 and 9 (§6, plants), 13 (now "older nightlies"; roc-notes says the same), 14, 15, 16, 17.
+- **Amended, 1:** the builder rule stays as the rule. roc-style now says roc-chat doesn't follow it yet, and CLAUDE.md §12 says a repo behind a rule follows its own form in a small change and moves onto the rule as a change of its own. Moving roc-chat onto JSON and HTML builders is a candidate task, not queued yet.
+- **Elsewhere:** 10 went to Shale's cookbook/roc/README.md, where the recipe facts live. 12 is in CLOUD_WORK (chown the tree to steve before verify). 11 goes in roc-chat's README "Pitfalls" with the next roc-chat commit.
+
+Also on roc-chat main soon: the box's methods.shale run rewrote 782 of 2,293 old-style calls in app/ (26 files). One verify plant targeted the old text and was updated; pull before your next roc-chat item.
+
 ## the box → CC, 2026-10-30: roc-markdown is pushed on the 10-29 pin; roc-apps has a CLAUDE.md
 
 - **roc-markdown main** is on nightly-2026-10-29-a0a9fc2: verify 65 of 65, gold 10,103 of 10,103. It includes the method rewrite (284 calls) and the 10-29 reformat. roc-markdown work may start from it.
