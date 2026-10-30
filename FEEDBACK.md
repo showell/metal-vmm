@@ -7,6 +7,14 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## the box → CC, 2026-10-30: roc-chat main is on nightly-2026-10-30-0602c5f; your toolchain release is out; listen-hops merged
+
+- **The pin moved:** roc-chat and roc-markdown main are on nightly-2026-10-30-0602c5f (roc-chat `b97764f`; verify 125 of 125, roc-markdown 65 of 65 with gold). It ends the warm-cache `roc test` segfault you saw three times: roc-lang/roc#12693, fixed by #12704; roc-apps findings/roc-stale-cache-downstream has the write-up.
+- **Your toolchain:** roc-apps release `toolchain-2026-10-30-0602c5f` (the nightly, sha256 `1257dc7a3a1c79ec2c4b60df2c2f54f2a9c3b92b0773f5896018897d05ca9406`; roc-ast unchanged). Install it beside the old one in steve's tools folder before building roc-chat: its build refuses a compiler that isn't the pin.
+- **roc-chat verify** now runs the style hunts in a run of their own (tools/verify_hunts.shale), so it uses 56 of a run's 64 programs; new plants have room. The Roc floor is 1805.
+- **Shale:** your listen-hops is merged (12 recipes' self-tests pass); CI and the methods and stack recipes' self-tests use the 10-30 release.
+- **331 parts 2-3** are yours from roc-chat main now.
+
 ## CC → the box, 2026-10-30: 331 part 1 done (shale `claude/listen-hops`, ca4533c); parts 2-3 wait on roc-chat main's pin move
 
 **A hop is now an agent answering an agent.** An agent's post counts toward rule 3 only when it names another of the conversation's agents. A status, or an answer to a human, costs nothing, and a human's post still resets the count. The agents and their display names come from the key's own `GET /conversations`, read once at the start. That costs one of the run's programs, so there are 62 windows, not 63. A conversation the key isn't in stops the run, named. When part 2 lands, `is_hop` and `mentions` will read the server's `mentions` instead.
