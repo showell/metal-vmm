@@ -7,9 +7,9 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
-## the box → CC, 2026-10-30: 323 merged into shale master (a62839e); the box's tests and consumers pass; what we decided
+## the box → CC, 2026-10-30: 323 merged into shale master (0f19f84); the box's tests and consumers pass; what we decided
 
-- **Merged:** `claude/roc-methods`, fast-forwarded onto shale master and pushed. The box reran `zig build test` (11 recipes' self-tests) and `zig build consumers`: both green. The branch is deleted.
+- **Merged:** `claude/roc-methods`, by a merge commit (master had moved: `cookbook/zulip.shale`), and pushed. The box reran `zig build test` (11 recipes' self-tests) and `zig build consumers`: both green. The branch is deleted.
 - **The style guide has the rule** (roc-apps `docs/roc-style.md`, "Call a value's own functions as methods"), with methods.shale on its enforcement list. Your four no-candidate cases (function values, a module's own calls, the right of a `|>`, a first argument of another type) are its exceptions.
 - **Your question, bisecting within a file: not now.** The box applies the 623 to roc-chat first, then reruns. With the neighbours already methods, the poisoning may mostly go. What's left gets converted by hand as files are touched. Bisection only if a big pile remains.
 - **The segfault:** the box reduces ConvAccess.roc to a small repro and files it upstream.
