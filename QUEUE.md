@@ -38,6 +38,28 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**329. Shale's cookbook: no fixed scratch paths: CC'S** (Found while fixing tools/doc_check.shale's self-test, whose fixed fixture folder made two concurrent runs collide; it now takes a `mktemp -d` folder of its own.) The same pattern is in the cookbook. Under `zig build cookbook-test` each run gets a fresh scratch, but on a box whose `scratch` mount is shared, two runs at once collide:
+- cookbook/branch_prune.shale: `scratch:branch_prune_self_test`
+- cookbook/roc/methods.shale: `scratch:methods`
+- cookbook/zulip.shale: `scratch:zulip_topic.json`
+- tools/coverage.shale: `.zig-cache/coverage/prelude_hits`, removed and rebuilt each run
+
+Give each run a folder of its own, cleaned after (doc_check's `fresh_fixture_dir` is the shape), and prove it as doc_check's fix did: run two at once, several pairs, see one collide before and none after. Leave cookbook/zig/move_judge.shale's and cookbook/zig/same_tests.shale's baseline files alone; they're fixed on purpose. Branch from Shale master; finish with `zig build cookbook-test` and the doc check, the counts in FEEDBACK. The box merges.
+
+**328. Agents that listen: a design proposal, no code: CC'S** (Steve, 2026-10-30, after the first three-way conversation.) Today an agent in roc-chat reads only when told to, so a reply comes when Steve nudges. The next layer is agents that listen: an agent learns that a post is for it and answers, or wakes its session. **Write a design proposal in FEEDBACK; change no code.** Steve steers it after lunch.
+
+**Read first:** roc-chat README (routes, "The model", "For an agent"), its stream route and how the page uses `EventSource`, the essay notes/three-of-us-in-conversation-three.md in showell/essay-repl-server, and Shale's docs/SHALE-AGENTS.md on detached jobs.
+
+**Cover, briefly and concretely:**
+- **Who listens, and where it runs.** For the box (a long-lived machine) and for a cloud session (which ends): a Shale recipe that holds a stream; something the roc-chat host runs for an agent; polling; or another shape. What each costs, and what fails when.
+- **What wakes an agent** in each place: what exists today to wake a Claude Code session, on the box and in the cloud, and what doesn't. Say plainly what you don't know.
+- **What a post "for an agent" means:** every post in a conversation it's in, a mention, or something else; and how to keep two agents from answering each other forever.
+- **What roc-chat would need** (routes, a key's scope, limits), and what can be built with what's there now.
+- **A smallest first step** that would make conversation 3 feel live, and how we'd test it (an e2e step, a plant).
+- **Your recommendation,** with the trade-offs.
+
+Keep it under about two screens. The roc-chat JS client is shared with production's Zig chat and stays verbatim for now, so prefer designs that don't change it.
+
 **327. Get ready for your roc-chat invite, then redeem it: CC'S** (Steve, 2026-10-30.) The goal: Steve, CC and LC in one conversation on chat.lynrummy.com. **Do steps 1 to 6 now, before any invite exists,** so nothing unexpected happens inside the invite's ten minutes. Work as steve, in Shale.
 
 **Step (1): Shale.** Pull showell/shale master and rebuild it. Confirm the new option: `run({"printf","x"}, {timeout_ms=5000, stdout_secret="repos:nope"})` must be refused, naming a `secrets` mount. Refused as an unknown option means a stale build.

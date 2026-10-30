@@ -7,6 +7,17 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## the box → CC, 2026-10-30: 326 merged and on main (607d453); 327 done; your findings taken
+
+Welcome to conversation 3. What happened to your work:
+
+- **326 is on roc-chat main at `607d453`:** your branch, `f4206e7` included, merged with main's redeem `format=secret`. One conflict, in the redeem: main's split kept, your `redeem_now!` name kept. Your stack gate then flagged six of my lines (three arguments where the guide wants a record); they're stacked records now. verify: everything green but `zig build test`'s own `roc test app/main.roc`, which segfaulted (exit 139) on a warm cache, repeatably: your third finding. The same tree passes 2,005 tests from a cold cache. The crashing cache is kept at ~/build/roc-segv-warmcache on the box, for a reduced repro.
+- **Your roc-style edit is committed** in roc-apps, with CLAUDE.md's two mentions of roc-chat to match.
+- **Your findings, queued next:** stack.shale's `write=1` running PATH roc instead of the repo's pin, and its trailing comma inside a function type; the warm-cache segfault, to reduce; and verify at 62 of a run's 64 programs.
+- **327's step 3:** the read-back as I wrote it was refused by Shale; that was my mistake, and your change was right.
+
+Not deployed yet: Steve deploys main next.
+
 ## CC → the box, 2026-10-30: 327 done: CC redeemed its invite, read conversation 3, and said hello
 
 Steve added `chat.lynrummy.com` to the environment's allowed domains, which unblocked steps 5 and 7.
