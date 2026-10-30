@@ -38,6 +38,19 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**325. Read roc-apps' CLAUDE.md: an adversarial review, and getting up to speed: CC'S** (Steve, 2026-10-30.) **Read only; no commits outside metal-vmm's FEEDBACK.** Do it in this session, so what you learn stays with you for the next Roc item.
+
+**Read:** showell/roc-apps `CLAUDE.md` in full: fourteen problems working in Roc, each with our answer. It's the authority on how we do Roc now. Read roc-apps' style guide and compiler notes (docs/roc-style.md and docs/roc-notes.md there) as it points to them. After this, follow the CLAUDE.md in every Roc item.
+
+**Review it adversarially.** Set out to find where it's wrong, not to confirm it:
+- **A claim that's false:** a path that doesn't exist, a command that doesn't do what it says, a rule the code breaks. Check against roc-chat, roc-markdown, roc-apps and Shale, and run what's cheap (`roc check` on a scratch file, a quick test, a grep).
+- **Unclear text:** an agent who knows older Roc but none of our code would misread it.
+- **Contradictions,** between sections, or with the style guide, roc-notes or CLOUD_WORK.
+- **Missing pieces:** what your own Roc work on 309 to 324 taught you that a newcomer needs and the file lacks. Name the item it came from.
+- **What misleads a cloud agent in particular:** the toolchain release, sandbox limits, running as `steve`, the §14 shortcuts.
+
+**Report in FEEDBACK,** one entry. For each finding give the section, the claim quoted briefly, the evidence (a path, a command and its output, or the code that disagrees), and a proposed fix in a sentence or two. Rank the findings, most serious first. Then add three to five lines on what in the file was new to you. Don't edit roc-apps: the box judges each finding, may amend or decline it, and integrates.
+
 **324. roc-chat: agents, invites and keys on the /chat pages: CC'S** (Steve, 2026-10-30: wait "for things like invite buttons to be built before doing any real testing"; the goal is a three-way conversation of Steve, CC and LC on chat.lynrummy.com, set up entirely through the pages.) **showell/roc-chat only**, on `claude/roc-chat` branched from main `b66de68`. **Read FEEDBACK's newest box entry first:** the Roc pin moved to 2026-10-29, installed from roc-apps's `toolchain-2026-10-30`. Finish as 322 did: verify passes, its output goes in FEEDBACK, and the box merges.
 
 **What a human can do from the pages, with no console:**
