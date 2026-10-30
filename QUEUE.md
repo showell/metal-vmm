@@ -38,6 +38,24 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**327. Get ready for your roc-chat invite, then redeem it: CC'S** (Steve, 2026-10-30.) The goal: Steve, CC and LC in one conversation on chat.lynrummy.com. **Do steps 1 to 6 now, before any invite exists,** so nothing unexpected happens inside the invite's ten minutes. Work as steve, in Shale.
+
+**Step (1): Shale.** Pull showell/shale master and rebuild it. Confirm the new option: `run({"printf","x"}, {timeout_ms=5000, stdout_secret="repos:nope"})` must be refused, naming a `secrets` mount. Refused as an unknown option means a stale build.
+
+**Step (2): your secrets folder,** as Shale's docs/SHALE-AGENTS.md, "Setting up your own secrets folder", says: a folder made with mode 700 at steve's home, .shale-keys, owned by steve, and the mounts line `keys = ~/.shale-keys secrets`.
+
+**Step (3): a rehearsal,** with a harmless value. `run({"printf","rehearsal"}, {timeout_ms=5000, stdout_secret="keys:rehearsal", secret_replace=true})`: `secret_written` true and `secret_bytes` 9. Read it back only through `secrets`: `run({"sh","-c","test \"$R\" = rehearsal"}, {timeout_ms=5000, tail=5, secrets={R="keys:rehearsal"}})` exits 0.
+
+**Step (4): curl** is 8.3 or newer (`--variable` and `--expand-header` need it).
+
+**Step (5): prod, spending nothing.** `curl -s -w '\n%{http_code}' https://chat.lynrummy.com/invites/redeem -d code=00 -d format=bogus` answers 400, "format is `secret`, or left out for the key as JSON".
+
+**Step (6): the redeem, written and not run.** A Shale script taking `code=` that runs `run({"curl","-s","https://chat.lynrummy.com/invites/redeem","-d","code=" .. code,"-d","format=secret"}, {timeout_ms=30000, stdout_secret="keys:roc_chat_cc_key"})`, fails loudly unless `secret_written`, prints only the exit code and `secret_bytes` (65 expected), then lists your conversations with the key: curl `--variable %CC_KEY --expand-header 'Authorization: Bearer {{CC_KEY:trim}}'` with `secrets={CC_KEY="keys:roc_chat_cc_key"}`. Never print the secret.
+
+**Then report in FEEDBACK:** a line per step, pass or fail, and "ready for the code". Also write 326's FEEDBACK entry (the box merged your 326 branch with main's redeem change and is verifying it).
+
+**Step (7), when Steve gives you the code and a conversation number:** run the script from step 6 at once, then read that conversation with your key (roc-chat README, "For an agent") and post a hello. Say in FEEDBACK how it went.
+
 **326. roc-chat onto the style guide: builders, then the hunts: CC'S** (Steve, 2026-10-30: "Let's get roc-chat up to speed with the style guide, of course.") Start from roc-chat main after the box's commit "Method calls: 782 of ..." lands (pull first); work on `claude/roc-chat`.
 
 **Working loop (Steve, 2026-10-30):** roc-chat is unused and unannounced, so move optimistically. Between edits use the shortcuts (roc-apps CLAUDE.md §14): the dev backend, `roc check` on app/main.roc, `roc test`, one targeted plant. Commit each part as it holds. Run `tools/verify.shale` once, at the end; if a part breaks something only verify sees, say so rather than re-running verify after every part.
