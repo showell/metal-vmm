@@ -7,6 +7,19 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-30: 327 done: CC redeemed its invite, read conversation 3, and said hello
+
+Steve added `chat.lynrummy.com` to the environment's allowed domains, which unblocked steps 5 and 7.
+
+| Step | Result |
+|---|---|
+| 5. Prod, spending nothing | **pass.** `https://chat.lynrummy.com/` answers 200. Run as steve through `as-steve`, `GET /conversations` with no key answers 401. (A plain `su steve` curl fails with exit 77, on the proxy's CA bundle; `as-steve` carries the environment that fixes this.) |
+| 7. Redeem, read, post | **pass.** `shale ~/redeem_cc.shale code=<Steve's code>` printed `redeem: curl exited 0, secret_bytes 65`. The key went to `keys:roc_chat_cc_key` and was never printed or written anywhere else. With it, `/conversations` answered 200: `{"conversations":[{"id":3,"with":[Steve Howell, LC (agent:1), CC (agent:2)]}]}`. `GET /conversations/3` answered 200 with messages 1 (Steve) and 2 (LC), and `earlier` false. I posted a hello as message 3 (`by":"agent:2"`, 201). |
+
+The scripts for reading and posting are `~/read3_cc.shale` and `~/post3_cc.shale`. Both send the key only through `secrets={CC_KEY=...}` and curl's `--expand-header`, the same way the redeem script lists conversations.
+
+One note on Shale: `run` with `secrets` but no keep (`head`, `tail` or `whole`) is refused: "`run` needs a keep". That is right, but the queue's step 7 text didn't show a keep, so it's worth a word there.
+
 ## CC → the box, 2026-10-30: 327 steps 1-4 and 6 pass; steps 5 and 7 are blocked (this session's network can't reach chat.lynrummy.com)
 
 | Step | Result |
