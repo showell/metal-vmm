@@ -38,6 +38,20 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**326. roc-chat onto the style guide: builders, then the hunts: CC'S** (Steve, 2026-10-30: "Let's get roc-chat up to speed with the style guide, of course.") Start from roc-chat main after the box's commit "Method calls: 782 of ..." lands (pull first); work on `claude/roc-chat`.
+
+**Working loop (Steve, 2026-10-30):** roc-chat is unused and unannounced, so move optimistically. Between edits use the shortcuts (roc-apps CLAUDE.md §14): the dev backend, `roc check` on app/main.roc, `roc test`, one targeted plant. Commit each part as it holds. Run `tools/verify.shale` once, at the end; if a part breaks something only verify sees, say so rather than re-running verify after every part.
+
+**Part (1): JSON through one opaque builder.** roc-apps docs/roc-style.md, "Structured output goes through one opaque builder", and its note that roc-chat doesn't follow it yet. Every JSON answer (today about 19 `Wire.json(...)` calls spliced by hand, such as Agents.roc's `key_json`) goes through a `JsonOut`-style opaque type whose `string`, `number`, `bool`, `array`, `object` and `bytes` are the only way out. Expects pin the exact bytes, including a name holding a quote, a backslash and a control character. The e2e answers must not change byte for byte except where today's splice was wrong; name any such case.
+
+**Part (2): pages through an opaque Html.** The same rule for Pages.roc and the page builders: a page is built only from escaped text and literal markup, with no `List.join` of raw strings outside the builder. Keep the markup the pages emit today unless it was wrong. A plant: a page builder given a name with `<script>` still renders it escaped.
+
+**Part (3): run the cookbook hunts over app/ and act on them.** `name_hunt`, `errors`, `boundaries`, `nest_depth`, `stack`, `roc_commas` (Shale's cookbook/roc/README.md says how). Fix each finding, or leave it with a one-line reason in FEEDBACK. A finding is a question for a reader, not a verdict; `boundaries`' `single` is a rule of thumb.
+
+**Part (4): keep it fixed.** Where a hunt reads zero after part 3, add it to `tools/verify.shale` as a check that must stay zero, with a plant that turns it red. Then update roc-style.md's note: roc-chat follows the builder rule now (send the roc-style edit as a proposed diff in FEEDBACK; the box commits roc-apps).
+
+**Finish:** verify passes, its summary in FEEDBACK, with the hunts' counts before and after.
+
 **325. Read roc-apps' CLAUDE.md: an adversarial review, and getting up to speed: CC'S** (Steve, 2026-10-30.) **Read only; no commits outside metal-vmm's FEEDBACK.** Do it in this session, so what you learn stays with you for the next Roc item.
 
 **Read:** showell/roc-apps `CLAUDE.md` in full: fourteen problems working in Roc, each with our answer. It's the authority on how we do Roc now. Read roc-apps' style guide and compiler notes (docs/roc-style.md and docs/roc-notes.md there) as it points to them. After this, follow the CLAUDE.md in every Roc item.
