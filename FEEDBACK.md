@@ -7,6 +7,203 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-30: 323 done (methods.shale, old-style Roc calls as method calls); zig build test and consumers pass; roc-chat: 623 of 2212 calls rewritten
+
+**showell/shale `claude/roc-methods`** (`678796a`, `a62839e`), from master `db16ae9`. New:
+`cookbook/roc/methods.shale`, its plants in `cookbook/roc/plants/methods/`, a README row,
+and an "Install Roc" step in `.github/workflows/test.yml` (roc-apps' `258ab27` release
+tarball, sha256 checked, into `~/tools`) so CI's cookbook-test can run the compiler.
+
+**What it does, and the choices.** Candidates come from roc-ast: an `e-apply` whose
+callee is `Module.fn` (capitalised module, lowercase function). `Module.fn(first, rest...)`
+becomes `first.fn(rest...)`. Chains are rewritten from the inside out. A first argument
+that isn't an atom gets parentheses (`(a + b).fn()`). The compiler judges each file:
+
+- `roc check` runs on `root=`, the app's main.
+- An error on a rewritten call's lines leaves that call, with the error's title as its
+  reason, and the file is tried again, up to 4 rounds.
+- Any other error, a compiler crash, or a changed `roc test` summary puts the whole file
+  back.
+
+These are the choices you asked me to judge or that I made:
+
+- **A module's own calls (`Rewrite.count(xs)` inside Rewrite.roc) are not candidates.**
+  Inside its own body, the qualified name says which function is meant, where a method
+  name would be resolved from the type being defined. Every module does this, so listing
+  them would bury the calls that need a hand.
+- **The right side of a `|>` is listed and left.** The pipe supplies its first argument.
+- **A call used as a function value is not a candidate.** `List.map(xs, Str.trim)` becomes
+  `xs.map(Str.trim)`.
+- **The dry run (the default) writes each trial in place and puts it back byte for byte.**
+  Run it with `--undo-on-stop`, so a stop mid-trial is put back too. `apply=1` keeps what
+  passes, and `roc fmt` runs only on files that were fmt-clean before.
+- **A Shale run starts at most 64 programs.** That limit is hard-coded in the host and a
+  `-- budget:` header can't set it. A file needs at most 9 programs (4 checks, the test,
+  2 fmts, the root's baseline 2). So a run stops before a file it couldn't finish and
+  prints `go on with from=N`, and the next run starts at that file.
+- **The plants:**
+
+  | Plant | Expected |
+  |---|---|
+  | Rewrite | rewritten |
+  | Chained | rewritten |
+  | FunctionValue | rewritten |
+  | Own | unchanged |
+  | Pipe | 1 left (`|>`) |
+  | OtherType | 1 left (`Str.from_utf8`, `missing method`) |
+  | Decode, Breaks | Decode's rewrite breaks a check in Breaks, which imports it. The error is on no rewritten call, so Decode is put back and reported. |
+
+**roc-chat `app/`, dry run, in two runs (`from=1`, then `from=23`); the tree is unchanged afterwards:**
+
+```
+dry run: candidates 1490, rewritten 347, left 1143, in files 1 to 22 of 34: a run holds 64 programs; go on with from=23
+dry run: candidates 722, rewritten 276, left 446
+```
+
+Together: **candidates 2212, rewritten 623, left 1589.** Why calls were left:
+
+| Count | Reason |
+|---:|---|
+| 466 | `missing method` (the first argument isn't the module's type) |
+| 405 | `type not determined` |
+| 234 | in a file put back because an error landed on no rewritten call (`type not determined` 141, `type mismatch` 59, `non exhaustive match` 30, `unconditional condition` 4) |
+| 85 | in ConvAccess.roc, put back because **the Roc compiler segfaulted** |
+| 62 | `does not exist` |
+| 23 | `type mismatch` |
+| 13 | `unconditional condition` |
+| 13 | the right side of a `|>` |
+
+**A Roc compiler crash, found on the way.** Bisecting ConvAccess's trial against the
+original found one rewrite that segfaults `roc check app/main.roc` (258ab27). At line 336,
+inside `can_post = |viewer, { conv, accounts }| ...`:
+
+- before: `Access.can_post(viewer, conv.resource(accounts))`
+- after: `viewer.can_post(conv.resource(accounts))`
+
+The error expected instead is `missing method`. `viewer` is an `Access.Viewer(id)`, and
+the call sits inside a function that is itself named `can_post`. A ten-line standalone
+copy of that shape checks clean, so I have no small repro, and I haven't filed it
+upstream. The recipe reports that file's calls as `roc check failed, naming no line:
+Segmentation fault (SIGSEGV) in the Roc compiler.`
+
+**Costs and environment notes:**
+
+- Each trial is a new entry in Roc's cache. The roc-chat runs left about 7 GB in
+  `~/.cache/roc` and filled this session's disk, so I cleared it, and the recipe's
+  header says so.
+- On this container I made `/home/steve/tools` a symlink to `/opt/tools`, so that
+  cookbook-test, run as steve, finds roc-ast.
+- A file of 1500 lines takes about 4 s per check, and a full pass of roc-chat takes
+  about 5 minutes.
+
+**What I don't know.** Many of the `type not determined` and stray-error file reverts
+probably come from one bad call poisoning the inference of its neighbours. Bisecting
+within a file would recover more, at many more programs per file. Whether that's worth
+it is yours to say.
+
+`zig build test` (as steve), whole:
+
+```
+cookbook-test: ok   cookbook/branch_prune.shale: branch_prune self_test: PASS (merged deleted, one commit ahead kept, the default kept, other prefixes untouched)
+cookbook-test: ok   cookbook/prose.shale: prose: 9 finds and 4 edits as their plants say
+cookbook-test: ok   cookbook/roc/boundaries.shale: boundaries (Roc) self_test: PASS (each check fires on its plants alone, the quiet_ plants on none)
+cookbook-test: ok   cookbook/roc/errors.shale: errors (Roc) self_test: PASS (each check fires on its plants alone, the quiet_ plants on none)
+cookbook-test: ok   cookbook/roc/methods.shale: methods: self-test: every plant as it says
+cookbook-test: ok   cookbook/roc/name_hunt.shale: name_hunt (Roc) self_test: PASS (each check fires on its plants alone, the quiet_ plants on none, and the census gives each verdict its known word)
+cookbook-test: ok   cookbook/roc/nest_depth.shale: nest_depth (Roc) self_test: PASS (each marked line gives its depth, the outermost only, and no other line a finding)
+cookbook-test: ok   cookbook/roc/stack.shale: PASS: every plant gives its finding, the clean ones none
+cookbook-test: ok   cookbook/zig/align_hunt.shale: PASS: each check fired on its plant, none on clean.zig
+cookbook-test: ok   cookbook/zig/name_hunt.shale: name_hunt self_test: PASS (each check fires on its plants alone, the quiet_ plants on none, and the census gives each verdict its known word)
+cookbook-test: ok   cookbook/zig/stack.shale: PASS: every plant gives its finding, clean.zig none
+cookbook-test: 11 recipes' self-tests passed
+web smoke test: ok
+TEST_EXIT 0
+```
+
+`zig build consumers` (as steve), whole:
+
+```
+── budgets from the script's header: steps=200000000, arena_bytes=2000000000
+ok  a path that is gone is a finding
+ok  a path real in an optional sibling that is here passes, by the line's naming and by `../`
+ok  a made-up path in an optional sibling that is here is gone: not written yet is a finding
+ok  a path in an optional sibling not checked out is passed by, never gone
+ok  an optional sibling not checked out is named once; one that is here is not
+ok  a `./` path with no extension is read whole, never one character short
+ok  a data file's name with no data root is a finding
+ok  a path a sibling ignores, on a line naming no sibling, is a finding
+ok  a sibling-named path is found there, by the line's naming and by `../`
+ok  a path in this repo is this repo's, though siblings have it; a name another repo answers, an optional sibling's too, is the other repo's
+ok  a sibling's path the line names is found
+ok  a link to a doc resolves from the doc's folder
+ok  a history file, a review and an essay are passed by
+ok  a fenced block is passed by
+ok  a name that is gone is a finding
+ok  a made-up member of a real declaration, and a name only a comment says, are gone
+ok  a file that does not parse is a finding, not a stop
+ok  names by the parser; a member (`Inner.depth`) and a nested one alone by declaration or field
+ok  a path the repo's .gitignore covers, or a named sibling's, is a build's, passed by
+ok  each rule passes its own by, and counts it
+ok  `file:N` counted, and its line checked beside a name
+ok  a path only in two siblings, the line naming neither, is ambiguous; the line naming one is that one's
+ok  plain: a bare name the repo's .gitignore names outright is a build's, wherever it lands; one really gone is a finding; no sibling's file of that name decides it
+ok  wt: a bare name the repo's .gitignore names outright is a build's, wherever it lands; one really gone is a finding; no sibling's file of that name decides it
+doc check: its fixtures each come out as they should
+shale: 16 docs, 173 paths (0 with `:N`), 0 names (0 by a word match, 0 in a file two have); gone 0, ambiguous 0, names gone 0; `:N` beside a name 0, its line without the name 0
+  passed by: 1 git ignores (a build's output, here or in a sibling the line names), 11 a folder named alone, 11 an extension or a suffix
+doc check: every cited path resolves and every cited name is there
+==> metal-vmm: shale .shale/queue_test.shale
+── time: 42 programs, 1.3 s in all; the slowest 0.0 s: shale --verbose --budget steps=4180 -e queue_done(11, "cut", "tests/queue/scratc
+==> dog-park: zig build test
+==> zig-metal-unikernel: zig build gopher
+==> angry-gopher: ./ops/check_zig
+zig_source: its self-test passes
+==> webbox library lint (its test, then the tree)
+lint_webbox_library: its self-test passes (an application's file by name; by path, on one line or split, or embedding one, a finding; a commented import none; the library's own tests not the application's)
+webbox library: angry-gopher reaches webbox and shale by name, never by path (webbox's own shape: zig-webbox's library_test.zig)
+==> doc check (this repo's docs)
+==> head-access lint (its plants, then the tree)
+head-access lint: its 17 plants come out as they must (each form fires however split, a string, a comment and the exempt files do not)
+head-access lint: clean (raw head access confined to http.zig)
+==> portable lint (its plants, then the tree)
+portable lint: its 86 plants come out as they must (each rule fires, each exemption holds, a string or a comment is no code)
+portable lint: the 128 modules the route table and the webbox library reach stay off the host
+==> seal lint
+── budgets from the script's header: steps=500000000
+sealed: PASS (93 files)
+── budgets from the script's header: steps=500000000
+sealed: PASS (130 files)
+==> store-absence lint (its tests, then the tree)
+.......................................
+----------------------------------------------------------------------
+Ran 39 tests in 0.069s
+
+OK
+store-absence lint: no read of the store makes its failure a value without saying why
+  an upload: Caddy 110,000,000 bytes, the application 105,906,176
+  any other body: Caddy 1,048,576 bytes, the application 1,048,576
+CADDY LIMITS: Caddy lets through what the application allows
+==> test roots (its plants, then the tree)
+test roots: its plants fire (a test file nothing imports, one only an unreached file imports, a production import of the harness), and an import outside a test block enrols
+test roots: every file holding tests runs, and only tests import the harness
+==> zig fmt --check
+web smoke test: ok
+cookbook-test: ok   cookbook/branch_prune.shale: branch_prune self_test: PASS (merged deleted, one commit ahead kept, the default kept, other prefixes untouched)
+cookbook-test: ok   cookbook/prose.shale: prose: 9 finds and 4 edits as their plants say
+cookbook-test: ok   cookbook/roc/boundaries.shale: boundaries (Roc) self_test: PASS (each check fires on its plants alone, the quiet_ plants on none)
+cookbook-test: ok   cookbook/roc/errors.shale: errors (Roc) self_test: PASS (each check fires on its plants alone, the quiet_ plants on none)
+cookbook-test: ok   cookbook/roc/methods.shale: methods: self-test: every plant as it says
+cookbook-test: ok   cookbook/roc/name_hunt.shale: name_hunt (Roc) self_test: PASS (each check fires on its plants alone, the quiet_ plants on none, and the census gives each verdict its known word)
+cookbook-test: ok   cookbook/roc/nest_depth.shale: nest_depth (Roc) self_test: PASS (each marked line gives its depth, the outermost only, and no other line a finding)
+cookbook-test: ok   cookbook/roc/stack.shale: PASS: every plant gives its finding, the clean ones none
+cookbook-test: ok   cookbook/zig/align_hunt.shale: PASS: each check fired on its plant, none on clean.zig
+cookbook-test: ok   cookbook/zig/name_hunt.shale: name_hunt self_test: PASS (each check fires on its plants alone, the quiet_ plants on none, and the census gives each verdict its known word)
+cookbook-test: ok   cookbook/zig/stack.shale: PASS: every plant gives its finding, clean.zig none
+cookbook-test: 11 recipes' self-tests passed
+zig-server build + unit tests, and zig-webbox's and shale's unit tests, passed in 89s.
+CONS_EXIT 0
+```
+
 ## CC → the box, 2026-10-30: 322 done (the host says which URLs are its uploads); roc-markdown verify 64 of 64, roc-chat 98 of 98
 
 - **Where:**
