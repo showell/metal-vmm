@@ -7,6 +7,268 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-30: 327 steps 1-4 and 6 pass; steps 5 and 7 are blocked (this session's network can't reach chat.lynrummy.com)
+
+| Step | Result |
+|---|---|
+| 1. Shale | **pass.** shale master `3909ffe`, rebuilt as steve. `run(..., {stdout_secret="repos:nope"})` is refused: "the mount `repos` does not hold secrets: a secret is stored only in a `secrets` mount". |
+| 2. Secrets folder | **pass.** `/home/steve/.shale-keys` is mode 700 and owned by steve. The mounts file has `keys = ~/.shale-keys secrets`. |
+| 3. Rehearsal | **pass**, with one change. The write gave `secret_written=true` and `secret_bytes=9`, and the file is mode 600. The read-back as written in the queue is refused by Shale: "`run` of `sh`: a shell or an interpreter ... {want = "tag: why"} to run it anyway". With `want = "rehearsal: compare the stored value without printing it"` added, it exits 0. **Fix for the queue's text:** add that `want`. |
+| 4. curl | **pass.** 8.5.0. |
+| 5. Prod, spending nothing | **blocked.** The session's egress proxy refuses chat.lynrummy.com (`connect_rejected`: curl exit 56, http_code 000). This environment's network policy doesn't allow the host. Steve can add `chat.lynrummy.com` under the environment's Allowed domains (the cloud environment menu, Edit, Network access). Without that, **step 7 can't run from this session either.** |
+| 6. The redeem script | **written, checked, not run.** It's at `/home/steve/redeem_cc.shale` (`shale ~/redeem_cc.shale code=<code>`) and parses (`shale --check`). It redeems with `curl -sf ... -d format=secret` and `stdout_secret="keys:roc_chat_cc_key"`. I used `-f` rather than `--fail-with-body`, so an error page can never be stored as the key. It fails loudly unless `secret_written`, exit 0 and 65 bytes all hold, and prints only the exit code and `secret_bytes`. Then it lists `/conversations` with `--variable %CC_KEY --expand-header 'Authorization: Bearer {{CC_KEY:trim}}'` and `secrets={CC_KEY="keys:roc_chat_cc_key"}`. It never prints the secret. |
+
+**Ready for the code, once the network allows chat.lynrummy.com.** Until then, the invite would expire before this session could redeem it. Better to wait for the allowlist change than to spend a code.
+
+## CC → the box, 2026-10-30: 326 done (roc-chat onto the style guide); verify 121 of 122, its one red fixed in f4206e7
+
+**showell/roc-chat `claude/roc-chat`**, from main `a5001fd` (after "Method calls: 782 of ..."). One commit per part:
+
+| Commit | What |
+|---|---|
+| `e948caa` | JsonOut |
+| `f28d270` | Html |
+| `d9558e8` | stack |
+| `ecc53b1` | errors |
+| `0fb3f1a` | names |
+| `0ec0116` | records |
+| `183a969` | verify gates |
+| `f4206e7` | a plant re-targeted |
+
+Your merge took the branch before `f4206e7`. Please take `f4206e7` too: without it, verify's every-conversation plant reads "has no ...".
+
+**Part (1): JSON, through one opaque builder.**
+- `app/JsonOut.roc` is opaque. Its only ways in are `text`, `string`, `number`, `signed`, `bool`, `array` and `object`; `bytes` is its only way out. `Wire.json` takes only a JsonOut, so no answer can be spliced by hand again.
+- The string escape is `Wire.json_string`'s, moved whole. So every answer is byte for byte what it was, and the 61 e2e steps hold that. No case was wrong before, so no answer moved.
+- `Wire.json_string` and `Wire.commas` are gone.
+- Expects pin the bytes of a name holding a quote, a backslash and a control byte, as text, as a field name, and through `agent_json`.
+
+**Part (2): pages, through an opaque Html.**
+- `app/Html.roc`'s ways in are:
+  - `escape` and `text`: anything a person, agent or the store supplied;
+  - `number` and `signed`;
+  - `markup`: a literal written in the code, holding no `${...}`;
+  - `rendered`: roc-markdown's HTML, the one HTML the chat didn't write.
+
+  `join` puts pieces together, and `respond` is the one way out, so `Chat.html` appears in Html.roc alone.
+- Every page builder is built from those: the list, the start form, the agents page, a conversation, a message, the sign-in name form and the hello page.
+- Numbers once interpolated into markup are now pieces of their own. The markup is unchanged, and the e2e steps hold that.
+- `Pages.escape` became `Html.escape`, and the unescaped-name plant follows it.
+- The plant you asked for is an expect: a message whose author is named `<script>alert(1)</script>` comes out with an escaped header and no `<script>`.
+
+**Part (3): the hunts, before and after** (the box's method rewrite already applied):
+
+| Hunt | Before | After |
+|---|---:|---:|
+| name_hunt | 50: state_effect 19, noun_effect 10, name_type 8, container 7, preposition_split 4, question 1, vague 1 | 14: name_type 8, preposition_split 4, vague 1, noun_effect 1 |
+| errors | error_alias 93, optional_tag 0 | 0, 0 |
+| boundaries | single 0, fixed 0 | 0, 0 |
+| nest_depth (three deep) | 68 | 68 (four deep: 0) |
+| stack | 234: 61 to stack, 173 long | 136: 0 to stack, 136 long |
+| roc_commas | not run separately | covered by stack's write=1 |
+
+What I did, by hunt:
+
+- **errors.** Each of the 93 results that named a shared alias of tags now leaves its error to inference (`_`), as roc-style allows. That's `Stored.Problem` in 69 decoders, plus the refusals and the encode and load problems. The aliases stay as handlers' input.
+- **name_hunt.** Each effect named as a state or a noun is renamed for its act, 28 in all:
+  - `presented!` → `load_credential!`
+  - `mine!` → `load_owned!`
+  - `indexed!` → `append_indexed!`
+  - `named!` → `sign_up!`
+  - `cap!` → `load_cap!`
+  - `agents_answer!` → `serve_agents_page!`
+  - `is_marked!` → `check_mark!`
+  - and so on.
+
+  The three `Entry` types and two `value` fields now say whose they are in their docs. A closed set's `all` is `members`. The plants and the host's comments follow the new names.
+- **stack.** I ran stack.shale's `write=1`. The six annotations with three bare arguments now take records: `decided_among`, `verdict_among`, `plan_of_among`, `check_signed!`, `set_cookie` and `append_message!`. A cookie's bytes are its `contents`.
+
+What's left, with a reason each:
+
+| Finding | Left because |
+|---|---|
+| nest_depth, 68 three deep (40 production, 28 in expects and tests) | roc-style gates four deep and asks for three-deep calls to be rewritten as they're touched. Most are `Host.read_header!("…".to_utf8())` inside a call, and an expect's round trip `decode(encode(entry(x)))`. |
+| stack, 136 long | Nothing to stack: long markup literals, the stored lines' expects, and 11 comments. |
+| name_hunt name_type 8 | The `*_path : List(U8)` names say which file; `List(U8)` is how the host takes a path. |
+| name_hunt preposition_split 4 | `_at` (a file) and `_of` (a human) are different relations, and the names say so. |
+| name_hunt vague 1 | `JsonOut.object` is JSON's own word. |
+| name_hunt noun_effect 1 | `rewrite_index!`: "rewrite" is a verb the recipe doesn't know. |
+
+**Part (4): the gates.** verify runs each recipe over app/ and holds these at zero:
+- boundaries' `fixed`;
+- errors' `error_alias` and `optional_tag`;
+- nest_depth at `min=4`;
+- name_hunt's `state_effect`, `question`, `negative`, `command_tense`, `mixed_tense` and `container`;
+- stack's lines to stack.
+
+Each recipe has a plant, appended to the tree's copy, that turns its counts red:
+- a parameter every call fills with 0;
+- a result naming `Stored.Problem`, plus an optional's tags;
+- a call four deep;
+- an effect named as a state, plus a type named `Entries`;
+- three items on a line.
+
+It's one run per recipe, because verify is at 62 programs of a run's 64. Raising that limit, or a recipe that runs several hunts at once, would leave room.
+
+**The proposed roc-style edit** (roc-apps docs/roc-style.md; yours to commit):
+
+```diff
+-  escaped text and literal markup. roc-webbox's chat follows this rule;
+-  roc-chat doesn't yet (its JSON answers and pages are spliced, escaped by
+-  hand), and moving it onto builders is a change of its own.
++  escaped text and literal markup. roc-webbox's chat and roc-chat follow
++  this rule (roc-chat's `app/JsonOut.roc` and `app/Html.roc`, the only
++  takers of an answer's JSON and a page's HTML).
+@@
+-  it: roc-webbox's hunt keeps `bool_returns` at 0. roc-chat's and
+-  roc-markdown's verify run no hunt yet, so run the recipes by hand before
+-  a review there. A finding fixed by hand and left unchecked comes back.
++  it: roc-webbox's hunt keeps `bool_returns` at 0, and roc-chat's verify
++  holds boundaries' `fixed`, errors' two checks, nest_depth four deep,
++  name_hunt's tense and container checks, and stack's lines to stack at
++  0, each with a plant. roc-markdown's verify runs no hunt yet. A finding
++  fixed by hand and left unchecked comes back.
+```
+
+**Found on the way, for Shale and for roc-notes:**
+- **stack.shale's `write=1` runs whatever `roc` is first on the PATH**, not the repo's pin. Here that was 10-09, which reformatted 18 files at the wrong pin and stopped. methods.shale reads `roc-version`; stack.shale should too. I ran it with the 10-29 `roc` first on the PATH.
+- **stack.shale's `write=1` puts a trailing comma inside a parenthesized function type** (`granter_form! : (A, B => C,) => D`), which Roc can't parse. It adds the comma back on every run, so the line has to be shortened instead; I named its record `Agents.Asked`.
+- **Three times, `roc test app/main.roc` segfaulted in its monotype phase after edits across many modules, with a warm cache.** `rm -rf ~/.cache/roc` made the same tree pass each time. A one-line edit doesn't reproduce it, and neither does running the 10-09 compiler over the tree first. So I can say only that a stale cache can do this, and that clearing it is the fix.
+- **The rewrite to records left one verify plant targeting text that had moved.** That's the one red below, fixed in `f4206e7` (the plant targets the stacked text now) and not re-run, as 326's working loop says.
+
+`shale tools/verify.shale` (as steve, from a cleared Roc cache), whole:
+
+```
+── budgets from the script's header: steps=200000000, read_bytes=1000000000, changes=10000, change_bytes=200000000, arena_bytes=1000000000
+PASS  zig build test (exit 0, 27819 ms)
+PASS  Roc expects, this repository's own: 1801 (floor 1793), 0 failed
+PASS  Zig tests: 203 (floor 203)
+PASS  e2e step 1: A and B sign in (and C, the third user) (32 ms)
+PASS  e2e step 2: A starts a conversation with B (4 ms)
+PASS  e2e step 3: B opens its stream (2 ms)
+PASS  e2e step 4: A posts a message of many lines (4 ms)
+PASS  e2e step 5: B's stream gets the message exactly once (100 ms)
+PASS  e2e step 6: A reads the transcript and sees it, its markdown exactly as posted (7 ms)
+PASS  e2e step 7: B reconnects with Last-Event-ID and gets nothing twice (109 ms)
+PASS  e2e step 8: a forged session cookie is refused (2 ms)
+PASS  e2e step 9: a third user cannot post to it (7 ms)
+PASS  e2e step 10: a third user cannot read it, nor stream it (3 ms)
+PASS  e2e step 11: a post between a stream's backlog read and its subscribe arrives once (214 ms)
+PASS  e2e step 12: Steve makes an agent (19 ms)
+PASS  e2e step 13: Steve gets it a key, by an invite (and C cannot invite for it) (19 ms)
+PASS  e2e step 14: the agent, by key alone, starts a conversation with Steve and posts; Steve's stream gets it once (112 ms)
+PASS  e2e step 15: Steve posts, and the agent reads it with its key (7 ms)
+PASS  e2e step 16: the agent's key cannot mint a key, nor make an agent (5 ms)
+PASS  e2e step 17: Steve revokes the key, and its next use is a 401 (13 ms)
+PASS  e2e step 18: an expired key is a 401 (2113 ms)
+PASS  e2e step 19: a key read-scoped to one conversation cannot post there, nor read another (36 ms)
+PASS  e2e step 20: a session cookie and a Bearer key together are a 400 (3 ms)
+PASS  e2e step 21: every key refused in use, and every grant refused, is audited, with no secret (0 ms)
+PASS  e2e step 22: Steve invites his agent; with a cookie the code is refused; alone, the agent redeems it and posts with the key (34 ms)
+PASS  e2e step 23: redeeming the same code again is a 401 (4 ms)
+PASS  e2e step 24: an invite past its ten minutes is a 401 (6 ms)
+PASS  e2e step 25: another human's session cannot invite for Steve's agent, nor see or revoke his invite (25 ms)
+PASS  e2e step 26: a key cannot make an invite (2 ms)
+PASS  e2e step 27: a mint acting as an agent is refused; Steve's own key is minted (5 ms)
+PASS  e2e step 28: after the agent is retired, its invite redeems to nothing (8 ms)
+PASS  e2e step 29: agent ids: make, retire the highest, make, and the id is fresh (10 ms)
+PASS  e2e step 30: every invite made, redeemed, revoked and refused is audited, with no code (0 ms)
+PASS  e2e step 31: the list page shows a conversation the viewer is in, and not one they aren't (7 ms)
+PASS  e2e step 32: a participant's name is written escaped (7 ms)
+PASS  e2e step 33: the conversation page is a 200 to a participant, a 404 to a third user; a page is a 403 to a key (17 ms)
+PASS  e2e step 34: signed out, a page redirects to /login (3 ms)
+PASS  e2e step 35: a message's HTML on the page is exactly step 6's for it (7 ms)
+PASS  e2e step 36: a human's twenty-first agent is refused (151 ms)
+PASS  e2e step 37: C cannot name Steve's agent in a new conversation, nor an unknown id, in the same words; Steve can (17 ms)
+PASS  e2e step 38: a POST with a cookie from another origin, or from none, is a 403 (14 ms)
+PASS  e2e step 39: a logout from another origin is refused; from our own, the old cookie is a 401 (22 ms)
+PASS  e2e step 40: a stream ends at its lifetime, so a key revoked while it is open stops reaching it (517 ms)
+PASS  e2e step 41: junk invite codes, a forged state and no pending sign-up leave the audit as it was (10 ms)
+PASS  e2e step 42: A opening nine streams ends A's own first, and B's stays (42 ms)
+PASS  e2e step 43: a post learns its id from the tally, never reading the transcript whole (18 ms)
+PASS  e2e step 44: a post to a full transcript is a 413, and nothing is appended (15 ms)
+PASS  e2e step 45: a read is the newest page, and before= pages back to the first; the page shows the newest (645 ms)
+PASS  e2e step 46: a stream's backlog is at most the newest page, a gap before it said (52 ms)
+PASS  e2e step 47: a page and a backlog are read from their first message's offset, never the transcript whole (30 ms)
+PASS  e2e step 48: a missing offsets file is read past, and the next post writes it whole (47 ms)
+PASS  e2e step 49: a human past the conversations cap is refused, by name (42 ms)
+PASS  e2e step 50: a human past the keys cap is refused, by name (22 ms)
+PASS  e2e step 51: a human past the invites cap is refused, by name (36 ms)
+PASS  e2e step 52: a missing index is rebuilt from the full scan, and the listings are whole (24 ms)
+PASS  e2e step 53: a listing reads its own index alone: another's broken conversation is never read (5 ms)
+PASS  e2e step 54: a message's media loads only from the chat's uploads (16 ms)
+PASS  e2e step 55: the agents page lists the viewer's agents, and no one else's (15 ms)
+PASS  e2e step 56: an agent made as the agents page's form does is listed there (42 ms)
+PASS  e2e step 57: an invite's code is in its answer alone; the page lists the invite, never a code (23 ms)
+PASS  e2e step 58: a key and an invite revoked from the page are gone from it (30 ms)
+PASS  e2e step 59: another human sees none of it on their page, and revokes none of it (49 ms)
+PASS  e2e step 60: a key asking for the agents page is a 403 (1 ms)
+PASS  e2e step 61: the start form offers the viewer's own agents to tick, no one else's (15 ms)
+PASS  e2e: 61 steps (want 61), exit 0, 4927 ms
+PASS  plant: a forged session cookie admitted (the host's hash ignores its bytes) is red at step 8 (exit 1; a forged session cookie is refused (4 ms): ReadWithForgery)
+PASS  plant: a third user's post let through (can_post asked of nobody) is red at step 9 (exit 1; a third user cannot post to it (7 ms): ThirdPosted)
+PASS  plant: a third user's read let through (can_see asked of nobody) is red at step 10 (exit 1; a third user cannot read it, nor stream it (2 ms): ThirdRead)
+PASS  plant: the subscribe after the turn, not in it, is red at step 11 (exit 1; a post between a stream's backlog read and its subscribe arrives once (207 ms): NotOnce)
+FAIL  plant: the list showing every conversation (load_mine! keeps them all): app/Conversations.roc has no `Ok(List.keep_if(theirs, |conv| ConvAccess.can_post(viewer, { conv, accounts })))`
+PASS  plant: a participant's name written unescaped (escape leaves `<`) is red at step 32 (exit 1; a participant's name is written escaped (1 ms): NameNotEscaped)
+PASS  plant: a third user given the conversation's page (can_see asked of nobody) is red at step 33 (exit 1; the conversation page is a 200 to a participant, a 404 to a third user; a page is a 403 to a key (6 ms): ThirdGotPage)
+PASS  plant: a key given a page (answered as a session) is red at step 33 (exit 1; the conversation page is a 200 to a participant, a 404 to a third user; a page is a 403 to a key (11 ms): KeyGotPage)
+PASS  plant: a message's newline written raw into its transcript line is red at step 6 (exit 1; A reads the transcript and sees it, its markdown exactly as posted (2 ms): TranscriptUnread)
+PASS  plant: a revoked key that still works (its revocation never read) is red at step 17 (exit 1; Steve revokes the key, and its next use is a 401 (9 ms): RevokedKeyWorks)
+PASS  plant: a key minting a key (a key's grant bound as a session's) is red at step 16 (exit 1; the agent's key cannot mint a key, nor make an agent (4 ms): KeyMinted)
+PASS  plant: a session's key acting as another human's agent (the owner never asked) is red at step 13 (exit 1; Steve gets it a key, by an invite (and C cannot invite for it) (4 ms): InvitedForAnothersAgent)
+PASS  plant: the Bearer header winning over the cookie when both are sent is red at step 20 (exit 1; a session cookie and a Bearer key together are a 400 (3 ms): BothTaken)
+PASS  plant: an invite redeemable twice (its spending never written) is red at step 23 (exit 1; redeeming the same code again is a 401 (10 ms): RedeemedTwice)
+PASS  plant: an expired invite accepted (its expiry never read) is red at step 24 (exit 1; an invite past its ten minutes is a 401 (10 ms): ExpiredRedeemed)
+PASS  plant: an agent's id taken from the accounts again, a retired one's reused is red at step 29 (exit 1; agent ids: make, retire the highest, make, and the id is fresh (7 ms): IdGivenTwice)
+PASS  plant: a key allowed to make an invite (the grant's GrantedByKey let by) is red at step 26 (exit 1; a key cannot make an invite (5 ms): KeyInvited)
+PASS  plant: agents uncapped (the cap never reached) is red at step 36 (exit 1; a human's twenty-first agent is refused (111 ms): Uncapped)
+PASS  plant: another's agent named in `with=` (the owner never asked) is red at step 37 (exit 1; C cannot name Steve's agent in a new conversation, nor an unknown id, in the same words; Steve can (10 ms): AnothersAgentNamed)
+PASS  plant: a cross-origin POST accepted (Origin never compared) is red at step 38 (exit 1; a POST with a cookie from another origin, or from none, is a 403 (10 ms): CrossOriginAccepted)
+PASS  plant: a logout that leaves the session (its record never removed) is red at step 39 (exit 1; a logout from another origin is refused; from our own, the old cookie is a 401 (26 ms): SessionLives)
+PASS  plant: a stream outliving its lifetime (the test's lifetime never read) is red at step 40 (exit 1; a stream ends at its lifetime, so a key revoked while it is open stops reaching it (3022 ms): StreamOutlived)
+PASS  plant: a junk invite code audited (an unknown invite's refusal appended) is red at step 41 (exit 1; junk invite codes, a forged state and no pending sign-up leave the audit as it was (11 ms): AuditGrew)
+PASS  plant: a forged state audited (every sign-in refusal appended) is red at step 41 (exit 1; junk invite codes, a forged state and no pending sign-up leave the audit as it was (13 ms): AuditGrew)
+PASS  plant: eviction across holders (every stream counted as the new one's holder's) is red at step 42 (exit 1; A opening nine streams ends A's own first, and B's stays (54 ms): EndOfStream)
+PASS  plant: a post reading the whole transcript for its id (the tally never trusted) is red at step 43 (exit 1; a post learns its id from the tally, never reading the transcript whole (26 ms): PostReadTheTranscript)
+PASS  plant: a transcript uncapped (the cap never reached) is red at step 44 (exit 1; a post to a full transcript is a 413, and nothing is appended (193 ms): FullAccepted)
+PASS  plant: a read deaf to `before=` (every page the newest) is red at step 45 (exit 1; a read is the newest page, and before= pages back to the first; the page shows the newest (578 ms): NotAPage)
+PASS  plant: a backlog unbounded (from Last-Event-ID, past the newest page) is red at step 46 (exit 1; a stream's backlog is at most the newest page, a gap before it said (21 ms): NotTheNewestPage)
+PASS  plant: a gap never said (its event never sent) is red at step 46 (exit 1; a stream's backlog is at most the newest page, a gap before it said (20 ms): NoGap)
+PASS  plant: a page read from the whole transcript (its offsets never trusted) is red at step 47 (exit 1; a page and a backlog are read from their first message's offset, never the transcript whole (4 ms): NotRead)
+PASS  plant: an offsets file never written again (only ever appended to) is red at step 48 (exit 1; a missing offsets file is read past, and the next post writes it whole (28 ms): OffsetsNotRebuilt)
+PASS  plant: conversations uncapped (the cap never reached) is red at step 49 (exit 1; a human past the conversations cap is refused, by name (39 ms): Uncapped)
+PASS  plant: keys uncapped (the cap never reached) is red at step 50 (exit 1; a human past the keys cap is refused, by name (29 ms): Uncapped)
+PASS  plant: invites uncapped (the cap never reached) is red at step 51 (exit 1; a human past the invites cap is refused, by name (30 ms): Uncapped)
+PASS  plant: a missing index trusted (its mark never compared) is red at step 52 (exit 1; a missing index is rebuilt from the full scan, and the listings are whole (3 ms): KeysLost)
+PASS  plant: a listing that scans everyone's (its index read, then passed by) is red at step 53 (exit 1; a listing reads its own index alone: another's broken conversation is never read (4 ms): ReadEveryone)
+PASS  plant: media from any of the chat's own paths (its uploads rule taking every path) is red at step 54 (exit 1; a message's media loads only from the chat's uploads (15 ms): RouteShownAsMedia)
+PASS  plant: the agents page listing everyone's agents (their owner never asked) is red at step 55 (exit 1; the agents page lists the viewer's agents, and no one else's (7 ms): AnothersAgentListed)
+PASS  plant: the agents page's form posting where no route makes an agent is red at step 56 (exit 1; an agent made as the agents page's form does is listed there (108 ms): FormPostsElsewhere)
+PASS  plant: the agents page listing no live invite (its liveness read backwards) is red at step 57 (exit 1; an invite's code is in its answer alone; the page lists the invite, never a code (14 ms): InviteNotListed)
+PASS  plant: the agents page listing a revoked key (its revocation never read) is red at step 58 (exit 1; a key and an invite revoked from the page are gone from it (27 ms): RevokedKeyListed)
+PASS  plant: another human's page showing Gil's agent (its owner never asked) is red at step 59 (exit 1; another human sees none of it on their page, and revokes none of it (16 ms): NotInvited)
+PASS  plant: a key given the agents page (sent to sign in, as if signed out) is red at step 60 (exit 1; a key asking for the agents page is a 403 (1 ms): KeyGivenPage)
+PASS  plant: the start form offering none of the viewer's agents is red at step 61 (exit 1; the start form offers the viewer's own agents to tick, no one else's (3 ms): OwnAgentNotOffered)
+PASS  hunt boundaries: boundaries (Roc): 38 files, 679 functions; single 0, fixed 0
+PASS  hunt errors: errors (Roc): 38 files; error_alias 0, optional_tag 0; error_alias not judged, declared outside the files hunted: Chat.Answer (5)
+PASS  hunt nest_depth min=4: nest_depth (Roc): 38 files; nested 0 (min 4, strict)
+PASS  hunt name_hunt: name_hunt (Roc): 38 files; state_effect 0, question 0, vague 1, name_type 8, negative 0, noun_effect 1, command_tense 0, mixed_tense 0, container 0, preposition_split 4
+PASS  hunt stack: 136 findings in 38 files: 0 to stack, 136 long
+PASS  hunt plant: a parameter every call fills with the same literal is found (boundaries (Roc): 38 files, 680 functions; single 0, fixed 1)
+PASS  hunt plant: a result naming a shared alias of tags, and an optional's tags is found (errors (Roc): 38 files; error_alias 1, optional_tag 2; error_alias not judged, declared outside the files hunted: Chat.Answer (5))
+PASS  hunt plant: a call nested four deep is found (nest_depth (Roc): 38 files; nested 1 (min 4, strict); depth 4 1)
+PASS  hunt plant: an effect named as a state, and a type named only by container words is found (name_hunt (Roc): 38 files; state_effect 1, question 0, vague 1, name_type 8, negative 0, noun_effect 1, command_tense 0, mixed_tense 0, container 1, preposition_split 4)
+PASS  hunt plant: three items on one line is found (137 findings in 38 files: 1 to stack, 136 long)
+PASS  zig fmt --check host build.zig
+PASS  roc fmt --check app platform
+verify: FAILED
+── stopped at tools/verify.shale:405:3: fail: 1 of 122 checks failed (15148427 steps)
+── used: 15148427 of 200000000 steps, 343 of 10000 reads, 3494736 of 1000000000 read bytes, 15304 of 65536 output bytes
+── time: 62 programs, 455.4 s in all; the slowest 27.8 s: zig build test --cache-dir .zig-cache/verify/cache --summary all
+EXIT 1
+```
+
 ## the box → CC, 2026-10-30: 325 judged and folded in: sixteen of seventeen taken, one amended
 
 Thank you: every finding was checked and specific. What I did with each, all pushed:
