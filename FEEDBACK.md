@@ -12,6 +12,180 @@ the list of work; this is the conversation about it.
 - **roc-markdown main** is on nightly-2026-10-29-a0a9fc2: verify 65 of 65, gold 10,103 of 10,103. It includes the method rewrite (284 calls) and the 10-29 reformat. roc-markdown work may start from it.
 - **roc-apps `CLAUDE.md`** is now the authority on how we do Roc: pinning, reading the compiler, `--opt=dev`, testing, hybrids, the style guide. Read it with `docs/roc-style.md` before Roc work. Its §14: the box runs the long release builds and gates; you take the shortcuts that buy about 90% confidence and say which ones you took.
 
+## CC → the box, 2026-10-30: 325 done: an adversarial review of roc-apps' CLAUDE.md (at 1e90283); seventeen findings, most serious first
+
+I read the whole file, with roc-style.md and roc-notes.md. I checked every backticked path against
+origin/main or master of roc-chat, roc-markdown, roc-apps, Shale and Dog Park, and all of them exist. I ran
+the cheap claims on scratch files, as steve with the 10-29 pin. I didn't edit roc-apps.
+
+### A claim the code breaks, or two documents that disagree
+
+**1. §12 and roc-style "Structured output goes through one opaque builder": roc-chat breaks the rule
+everywhere, and §1 tells agents to copy the repo.**
+- *The claim.* roc-style says "JSON is `JsonOut :: List(U8)` ... Html is opaque the same way". CLAUDE.md
+  §12 says to read the guide before writing Roc.
+- *The evidence.* `JsonOut` exists only in roc-webbox (`chat/Conversation.roc`). roc-chat has no JSON or HTML
+  builder: `git grep -n 'Wire.json(' origin/main -- app` finds 19 answers spliced by hand, such as
+  Agents.roc `key_json` (`"{\"id\":${...}`). Pages.roc builds pages with `List.join` and `Pages.escape`,
+  and my own 324 page follows that pattern. §1 says "Follow the code that's already in the repo for which
+  forms we use". An agent can't obey both.
+- *Fix.* Either mark the rule as not yet true of roc-chat (a builder to adopt, with a hunt for spliced
+  `\"`), or add the builders to roc-chat. Until then, say in §12 which wins when the guide and the repo
+  disagree.
+
+**2. §14 contradicts CLOUD_WORK and the queue on who runs the full verify.**
+- *The claim.* §14: "A subagent or cloud agent gets shortcuts ... the orchestrator runs the full verify
+  before anything merges."
+- *The evidence.* CLOUD_WORK ("as-steve shale tools/verify.shale") and QUEUE 322 and 324 ("Finish as 322
+  did: verify passes, its output goes in FEEDBACK") tell the cloud agent to run the whole verify. It's also
+  affordable: roc-chat's full verify, 112 checks, took 357-390 s here. A cloud agent reading §14 would skip
+  the check the queue item requires.
+- *Fix.* Say the cloud agent runs the repo's verify when the item asks for it (it fits in minutes), and that
+  §14's shortcuts are for the loop between edits. Or move this rule into CLOUD_WORK and point §14 at it.
+
+**3. §13 "A rule a script can check gets a check, and a gate runs it ... `bool_returns` must stay 0": no
+gate of roc-chat's or roc-markdown's runs any hunt.**
+- *The evidence.* `git grep -n "hunt\|bool_returns\|name_hunt\|methods.shale" origin/main --
+  tools/verify.shale` finds nothing in either repo. roc-style places `bool_returns` in
+  "`tools/roc_hunt/hunt.shale` in roc-webbox". A newcomer reads it as a gate on the code they're about to
+  change.
+- *Fix.* Name the gate that runs each hunt, and the repos it covers. Or say plainly that the hunts are run by
+  hand for roc-chat and roc-markdown.
+
+### What misleads a cloud agent in particular
+
+**4. §2 "untar it into `~/tools/`": in a cloud session that's the wrong home.**
+- *The evidence.* Git runs as root, and builds and verify run as `steve` (CLOUD_WORK). So the right home is
+  steve's: `/home/steve/tools/roc-<pin>/roc`. That's where `build.zig` looks (`$HOME/tools`) and where
+  Shale's `tools:` mount must point. Untarring as root into `/root/tools` makes the build stop with "no Roc
+  compiler at ...". Here I untarred to `/opt/tools` and linked both homes to it. The same applies to
+  `roc-ast`, which Shale's recipes reach as `tools:roc-ast/bin/roc-ast`.
+- *Fix.* One line in §2: "In a cloud session, install under the build user's home (`/home/steve/tools/`),
+  and point Shale's `tools` mount at it."
+
+**5. §1 "Read the pin's `Builtin.roc` ... at the pin's commit" and roc-style's "our pinned copy is
+`~/tools/roc-258ab27/docs/langref/`": neither is at hand for the 10-29 pin.**
+- *The evidence.* The toolchain release carries the compiler and roc-ast, but no source. `~/tools` here
+  holds a source checkout at 258ab27, which is the old pin. So a cloud agent following §1 reads the 10-09
+  builtins and langref while compiling against 10-29.
+- *Fix.* Either put the pin's `Builtin.roc` and `docs/langref/` in the toolchain release, or say how to get
+  them (a shallow `git fetch` of roc-lang/roc at `a0a9fc2`), and update roc-style's path to the current pin.
+
+**6. Missing: Roc's cache fills a cloud disk** (from 323, and again in 324).
+- *The evidence.* Every distinct compile adds to `~/.cache/roc`:
+  - methods.shale's dry run over roc-chat left about 7 GB there, filled the session's disk, and stopped the
+    run;
+  - one verify plus a few e2e runs here left 2.4 GB (`du -sh /home/steve/.cache/roc`).
+
+  Your FEEDBACK says the box clears it after each run, but CLAUDE.md doesn't say so.
+- *Fix.* §4 or §14: "Roc's cache grows with each compile and is only a cache: clear `~/.cache/roc` after a
+  long run, and watch `df` in a sandbox with a fixed disk."
+
+**7. §2 `gh release list --repo roc-lang/nightlies`.**
+- *The evidence.* A cloud session has a `gh` binary but no authenticated GitHub CLI; it's told to use the
+  GitHub MCP tools instead. The download URL itself was reachable here (`curl -I` gave 200).
+- *Fix.* Give the release page's URL beside the command.
+
+### Missing from the file: what 309-324 taught
+
+**8. Missing from §6: a planted fault must still build** (from 324).
+- Two of my plants removed the only use of a variable. The unused-variable warning then failed the build, so
+  the end to end never ran a step. verify reports that as "no step line", which is right, but it's confusing
+  the first time you see it.
+- *Fix.* In §6's "Plants must turn red": "a plant must build: a warning it causes (an unused variable) fails
+  the build before any step runs. Keep every name in use (`… == human or Bool.True`)."
+
+**9. Missing from §6: a property with two independent guards has no single-fault plant** (from 324).
+- In roc-chat, another human's invites are guarded twice: the per-human index, and the ownership check on
+  each record. Planting either check alone left step 59 green.
+- *Fix.* One sentence: "If no one fault turns a step red, the step is guarded twice. Say so beside the plant,
+  and plant the guard that stands alone." Step 59 now uses the agents filter, the one guard that stands alone.
+
+**10. Missing from §13, for anyone writing a recipe like methods.shale** (from 323):
+- A Shale run starts at most 64 programs, and nothing can set that higher. A recipe that compiles once per
+  file must stop and resume: methods.shale's `from=`.
+- A dry run that writes in place needs `--undo-on-stop`, or a stop mid-trial leaves the trial in the file.
+- roc-ast's columns are bytes, and each span's end is exclusive. Spans overlap: `type-mod` and
+  `s-type-decl` both start at the type's name. The file node starts after the leading comments, and a `|>`
+  is `e-arrow-call`.
+- `roc check` can report two errors on one line, or report an error at the enclosing definition's line.
+- *Fix.* A short paragraph in §13, or Shale's `cookbook/roc/README.md` (which §13 already points to).
+
+**11. Missing from §11: a browser check against the test rig must send the rig's origin** (from 324).
+- Chromium on `127.0.0.1` sends its own `Origin`, and the server's Origin check refuses that write.
+  `tools/browser_check.js` had been failing on it. The fix sends the configured origin, using `route.fetch`
+  and `fulfill`, because `route.continue` with new headers drops the cookie.
+- *Fix.* One line where §11 discusses the seam, or in roc-chat's README "Pitfalls".
+
+**12. Missing from §14 or CLOUD_WORK: git's "dubious ownership" for steve** (from 319).
+- Run as steve, verify can't run git in a worktree root made: the clone belongs to root. I ran it in the main
+  checkout instead.
+- *Fix.* One line: run verify where steve owns the tree (`chown -R steve:steve` after root's edits).
+
+### False, or true only at times
+
+**13. §3 "Roc deletes every `roc-*` directory in the system temp root when it runs": I couldn't reproduce
+it.** `/tmp/roc-keepme-325`, made as steve, survived:
+- `roc check` and `roc test` on the 10-29 pin;
+- `roc test` on the 10-09 pin;
+- roc-chat's `zig build` from a fresh cache.
+
+If it happens only under `roc run` or a crashed build, name the command. Otherwise mark it as seen on an
+older nightly, or drop it (roc-notes says the same).
+
+**14. §1 "It takes well under a second".** That's true once the cache is warm: a five-line file took 5 ms.
+The first `roc check` in a fresh container took 7.4 s. *Fix:* "under a second once Roc's cache is warm; the
+first check in a fresh sandbox takes seconds."
+
+### Unclear text
+
+**15. §1 "`X(v)` where the pin wants `X.(v)`".**
+- An agent will read this as "constructors changed". But a tag is still `X(v)`: roc-chat's
+  `Principal.Agent({...})`. Only wrapping a value in a nominal or opaque type is `X.(v)` (roc-style:
+  "Plain `X(v)` parses as a tag").
+- *Fix:* "`X(v)` to wrap a nominal or opaque value, where the pin wants `X.(v)` (`X(v)` is a tag)".
+
+**16. §2's ConvAccess example reads as if roc-chat's code held `viewer.can_post(...)`.**
+- The code says `Access.can_post(viewer, ...)` (ConvAccess.roc:336). The method form was methods.shale's
+  trial rewrite, and I bisected the crash to that one rewrite.
+- *Fix:* "a trial rewrite of roc-chat's ConvAccess to `viewer.can_post(...)` dispatched ...".
+
+**17. §1 "(the 10-29 nightly warns 'module header deprecated' ...)".**
+- True: `module [f]` gives "● module header deprecated" and exits 2. But 258ab27 (10-09) gives the same
+  warning, so the date suggests a change that isn't new.
+- *Fix:* drop the date, or say "since at least 10-09".
+
+### Checked and true
+
+These held as written:
+- the pin chain in roc-chat `build.zig`: `-Droc`, then `~/tools/roc-<pin>`, then the PATH, refusing a
+  mismatch with `std.process.fatal`;
+- `rocOpt` (`.dev` for Debug) and `appArchive`;
+- roc-markdown's `playground_opt = .dev`;
+- `pinned_roc` and its fmt scope (`package judge playground`);
+- `--main=` and `--timings` on `roc check`; `--opt` only on `build`;
+- `Str.len`'s `[LearnAboutStringsInRoc(Str)]`;
+- the annotation refusing a trailing comma;
+- `X :: T` with `X.(v)` wrapping;
+- the six copying shapes in roc-notes;
+- `copycheck.sh`'s FLAT and LINEAR;
+- `allowed_headers`, `secret-header-value`, and `hostility`'s two tags;
+- the two `Ascii.roc` headers naming each other;
+- b66de68's 27 reformatted `.roc` files;
+- Dog Park's "Changing the game in Roc" and `walk-judge`;
+- roc-apps' `roc-nightly.txt` at 09-22.
+
+### What was new to me
+
+- **The receiver-extension history (§2).** I bisected that crash blind in 323. "Try the newer nightlies
+  first" would have saved most of that time.
+- **The reformat judge (§5).** A reformat changes the archive's bytes but not its machine code, and
+  `same_code.shale` compares instructions with procedure names masked.
+- **Holding the writes fixed and varying the size (§7).** That's how to tell a copy from a write, and the
+  six shapes are written down. I would have written `List.set(l, i, v) ?? l` myself.
+- **Compile-time evaluation has no step limit (§3).** A check can hang, and that hang is a finding, not a
+  fault in the code.
+
 ## CC → the box, 2026-10-30: 324 done (agents, invites and keys on the pages); verify 112 of 112
 
 **showell/roc-chat `claude/roc-chat`** (`fab3a20`, `ec39c69`, `2befa25`), branched from main `b66de68`. Built and
