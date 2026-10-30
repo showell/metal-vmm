@@ -38,6 +38,28 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**324. roc-chat: agents, invites and keys on the /chat pages: CC'S** (Steve, 2026-10-30: wait "for things like invite buttons to be built before doing any real testing"; the goal is a three-way conversation of Steve, CC and LC on chat.lynrummy.com, set up entirely through the pages.) **showell/roc-chat only**, on `claude/roc-chat` branched from main `b66de68`. **Read FEEDBACK's newest box entry first:** the Roc pin moved to 2026-10-29, installed from roc-apps's `toolchain-2026-10-30`. Finish as 322 did: verify passes, its output goes in FEEDBACK, and the box merges.
+
+**What a human can do from the pages, with no console:**
+- **See and make agents:** the viewer's agents (name and id), and a form to make one (`name=`). Their keys show alongside, with a revoke button.
+- **Invite an agent:** a button on each agent makes an invite and shows its code once, with the ten minutes it lives and plain words on what to do with it. A copy button helps. Live invites list with a revoke button, never showing a code.
+- **Start a conversation with people and agents:** the start form already takes `with=`. Make it easy to pick one's own agents, plus another person's id typed in.
+- **Where it lives:** a page of its own (for example `/chat/agents`) linked from `/chat`, or a section of `/chat`. Choose one and say why.
+
+**Rules:**
+- The pages call the routes that exist. Add a route only if a page truly needs one, and say why.
+- A code or secret appears in exactly one response, the one that made it, and never in a list, a log or the audit.
+- Everything a page writes itself is escaped. A key is never given a page (403).
+- Posts from the pages pass the Origin check, as they do today.
+
+**The agent's side stays the API:** an agent redeems with `POST /invites/redeem` and then uses its key. Add a short "For an agent" section to the README: redeem with curl, keep the secret in a file, post and read with `Authorization: Bearer`.
+
+**Proof:**
+- e2e steps that drive the pages as a browser would: the agents page lists only the viewer's agents; making an agent appears there; an invite shows a code once and the next load shows none; a revoke removes it; another human sees none of it (404 or nothing listed); a key gets a 403. Each step needs a plant that turns it red.
+- `tools/browser_check.js`, extended to click through: make an agent, invite it, see the code once.
+
+**Not here:** roc-chat's method-syntax rewrite (`cookbook/roc/methods.shale`). The box runs it after this merges, so don't hand-convert calls beyond the code you touch. The style guide's rule applies to new code.
+
 **323. Shale cookbook: old-style Roc calls rewritten to method syntax: CC'S** (Steve, 2026-10-30.) **showell/shale only**, on a `claude/` branch. Finish with Shale's `zig build test` (which runs every recipe's self-test) and `zig build consumers` passing, their output in FEEDBACK; the box merges.
 
 - **What it does:** it turns `Module.fn(first, rest...)` into `first.fn(rest...)` (static dispatch), but only where that is the same call: where `first`'s type is `Module`'s own type. Examples are `List.map(xs, f)` to `xs.map(f)` and `Str.concat(a, b)` to `a.concat(b)`.

@@ -7,6 +7,15 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## the box → CC, 2026-10-30: The Roc pin moved to nightly-2026-10-29-a0a9fc2; install it from toolchain-2026-10-30; 324 is yours
+
+- **Why:** Roc before 2026-10-28 let a module's function become a method on another module's type (receiver extensions). A method call could then dispatch to the wrong function, or recurse at compile time and crash `roc check`. Upstream: roc-lang/roc#12194 (the crash, fixed 10-10) and #12630 (the rule removed 10-28). It's what crashed your 323 dry run on ConvAccess.roc.
+- **Install:** from showell/roc-apps release `toolchain-2026-10-30`, untar `roc-nightly-2026-10-29-a0a9fc2-linux-x86_64.tar.gz` into `~/tools/` (checksums in its notes). `roc-ast` is unchanged.
+- **Pins live side by side in `~/tools/roc-<pin>/roc`.** roc-chat's and roc-markdown's builds, verify and chat_glue find the Roc their own `roc-version` names there before the PATH. Shale's `methods.shale` does the same. Dog Park and roc-webbox stay on 10-09 until they next get features.
+- **roc-chat main `b66de68`:** pinned to 10-29, verify 98 of 98. The 10-29 formatter parenthesizes a one-line `if`'s condition. The glue snapshot regenerated unchanged. Verify counts its own expects whether Roc prints whole paths or relative ones.
+- **roc-markdown:** its 10-29 move (reformat, verify) is the box's, in progress. Don't start roc-markdown work until a box entry says it's pushed.
+- **324 (QUEUE):** agents, invites and keys on the /chat pages, from `b66de68`. Steve wants the three-way conversation set up entirely through the pages before real testing.
+
 ## the box → CC, 2026-10-30: 323 merged into shale master (0f19f84); the box's tests and consumers pass; what we decided
 
 - **Merged:** `claude/roc-methods`, by a merge commit (master had moved: `cookbook/zulip.shale`), and pushed. The box reran `zig build test` (11 recipes' self-tests) and `zig build consumers`: both green. The branch is deleted.
