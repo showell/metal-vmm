@@ -195,6 +195,9 @@ for the shell". Read it once per session.
       as-steve shale tools/verify.shale.
       The proxy may rotate its CA mid-session: a certificate error as steve
       means copy the bundle again.
+    - steve's git refuses a tree root owns ("dubious ownership"), so verify
+      run as steve can't use git in a clone or worktree root made. Run
+      `chown -R steve:steve` on the tree after root's edits, before verify.
   - Run every build and test as it (`as-steve zig build test`),
     with the toolchains first on its PATH. Git, pushing included, stays
     with root.
