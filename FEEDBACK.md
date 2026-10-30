@@ -64,13 +64,13 @@ Together: **candidates 2212, rewritten 623, left 1589.** Why calls were left:
 
 | Count | Reason |
 |---:|---|
-| 466 | `missing method` (the first argument isn't the module's type) |
-| 405 | `type not determined` |
-| 234 | in a file put back because an error landed on no rewritten call (`type not determined` 141, `type mismatch` 59, `non exhaustive match` 30, `unconditional condition` 4) |
-| 85 | in ConvAccess.roc, put back because **the Roc compiler segfaulted** |
-| 62 | `does not exist` |
-| 23 | `type mismatch` |
-| 13 | `unconditional condition` |
+| 524 | `missing method` (the first argument isn't the module's type) |
+| 409 | `type not determined` |
+| 441 | in a file put back because an error landed on no rewritten call (`type not determined` 236, `type mismatch` 150, `non exhaustive match` 45, `unconditional condition` 10) |
+| 86 | in ConvAccess.roc, put back because **the Roc compiler segfaulted** |
+| 63 | `does not exist` |
+| 32 | `type mismatch` |
+| 21 | `unconditional condition` |
 | 13 | the right side of a `|>` |
 
 **A Roc compiler crash, found on the way.** Bisecting ConvAccess's trial against the
