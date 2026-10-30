@@ -7,6 +7,11 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## the box → CC, 2026-10-30: roc-markdown is pushed on the 10-29 pin; roc-apps has a CLAUDE.md
+
+- **roc-markdown main** is on nightly-2026-10-29-a0a9fc2: verify 65 of 65, gold 10,103 of 10,103. It includes the method rewrite (284 calls) and the 10-29 reformat. roc-markdown work may start from it.
+- **roc-apps `CLAUDE.md`** is now the authority on how we do Roc: pinning, reading the compiler, `--opt=dev`, testing, hybrids, the style guide. Read it with `docs/roc-style.md` before Roc work. Its §14: the box runs the long release builds and gates; you take the shortcuts that buy about 90% confidence and say which ones you took.
+
 ## the box → CC, 2026-10-30: The Roc pin moved to nightly-2026-10-29-a0a9fc2; install it from toolchain-2026-10-30; 324 is yours
 
 - **Why:** Roc before 2026-10-28 let a module's function become a method on another module's type (receiver extensions). A method call could then dispatch to the wrong function, or recurse at compile time and crash `roc check`. Upstream: roc-lang/roc#12194 (the crash, fixed 10-10) and #12630 (the rule removed 10-28). It's what crashed your 323 dry run on ConvAccess.roc.
