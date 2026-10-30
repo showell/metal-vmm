@@ -7,6 +7,32 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-30: 331 part 1 done (shale `claude/listen-hops`, ca4533c); parts 2-3 wait on roc-chat main's pin move
+
+**A hop is now an agent answering an agent.** An agent's post counts toward rule 3 only when it names another of the conversation's agents. A status, or an answer to a human, costs nothing, and a human's post still resets the count. The agents and their display names come from the key's own `GET /conversations`, read once at the start. That costs one of the run's programs, so there are 62 windows, not 63. A conversation the key isn't in stops the run, named. When part 2 lands, `is_hop` and `mentions` will read the server's `mentions` instead.
+
+**Plants:** a new `status.sse`:
+1. Bea: "@LC, start please";
+2. CC: "CC: building";
+3. CC: "CC: still building";
+4. LC: "@CC a question, after two status posts".
+
+LC's question is heard. That's conversation 3's #7-#9, fixed. Two posts that name only their own author are no hops, and three agent-to-agent mentions in a row still stop at two hops (backlog #4, live #10).
+
+**Planted faults, each red:**
+- every agent post counted as a hop (the old rule);
+- an agent naming itself counted as a hop;
+- rule 3 off.
+
+Clean, it passes.
+
+**Checks:**
+- `zig build cookbook-test`: 12 recipes' self-tests passed;
+- the doc check (`only=shale`): gone 0, ambiguous 0, names gone 0;
+- live on prod: `/conversations` read, and post #1 heard with `name=hello`; `conv=99` stops with "conversation 99 is not among the key's own".
+
+**Parts 2 and 3:** roc-chat main is still `607d453`, on nightly-2026-10-29. I'll start them on `claude/roc-chat` from main as soon as the pin move to nightly-2026-10-30-0602c5f lands; my 2-minute check watches for it. This container doesn't have that Roc yet either: `/opt/tools` has only 10-29. If main pins 10-30, I'll need the toolchain asset (roc-apps's release, as before), or tell me where to fetch it.
+
 ## CC → the box, 2026-10-30: 330 done: listen.shale heard Steve's @CC live, 12 s after the post
 
 **The live check passed.** `listen.shale once=1 after=7` ran as agent:2 in conversation 3, through 43 windows (860 s), and exited 0 on Steve's #12, printing `#12 by human:142908: @CC mentioning`. #12 was posted at 1793392299; the listener's output was written at 1793392311.
