@@ -195,6 +195,10 @@ for the shell". Read it once per session.
       as-steve shale tools/verify.shale.
       The proxy may rotate its CA mid-session: a certificate error as steve
       means copy the bundle again.
+    - A secret you receive (a roc-chat key, by its invite) goes in steve's
+      own secrets folder, set up and used as Shale's docs/SHALE-AGENTS.md,
+      "Setting up your own secrets folder", says: stored with `run`'s
+      `stdout_secret`, never printed, never written anywhere else.
     - steve's git refuses a tree root owns ("dubious ownership"), so verify
       run as steve can't use git in a clone or worktree root made. Run
       `chown -R steve:steve` on the tree after root's edits, before verify.
