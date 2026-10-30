@@ -38,6 +38,31 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**323. Shale cookbook: old-style Roc calls rewritten to method syntax: CC'S** (Steve, 2026-10-30.) **showell/shale only**, on a `claude/` branch. Finish with Shale's `zig build test` (which runs every recipe's self-test) and `zig build consumers` passing, their output in FEEDBACK; the box merges.
+
+- **What it does:** it turns `Module.fn(first, rest...)` into `first.fn(rest...)` (static dispatch), but only where that is the same call: where `first`'s type is `Module`'s own type. Examples are `List.map(xs, f)` to `xs.map(f)` and `Str.concat(a, b)` to `a.concat(b)`.
+- **How:** follow cookbook/roc/name_hunt.shale for the parse and for roc-ast.
+  1. Find each candidate in roc-ast's tree.
+  2. Rewrite one file at a time.
+  3. Keep a file's rewrite only when `roc check` passes and `roc test`'s expect count and results are unchanged.
+  4. Otherwise revert that file and list its candidates as left for a hand fix, each with its reason.
+
+  The syntax tree alone can't prove the type, so the compiler is the judge.
+- **Its output:** a count line (candidates, rewritten, left), and for each one left, `file:line` and why. Make the default a dry run that lists what it would change; `apply=1` writes.
+- **Don't rewrite:**
+  - a call whose first argument's type differs from the module's (`Str.from_utf8(bytes)` takes a list);
+  - a call used as a function value (`List.map(xs, Str.trim)`: the outer call converts, the inner `Str.trim` stays as it is);
+  - a module's own call to one of its functions, where a method would be ambiguous: judge this, and say what you chose.
+- **Chained calls:** `List.len(List.keep_if(xs, p))` becomes `xs.keep_if(p).len()`, from the inside out.
+- **Plants:** each must come out as it says, under `self_test=1`:
+  - a call that must be rewritten;
+  - one that must stay because its first argument's type differs;
+  - a chained call;
+  - a call passed as a function value;
+  - a file whose rewrite breaks `roc check`, which must be reverted and reported.
+- **README:** a row in cookbook/roc/README.md.
+- **Try it on roc-chat's `app/`** as a dry run only, and put the count line in FEEDBACK. Don't commit to roc-chat.
+
 **322. roc-markdown: the chat says which URLs are its uploads: CC'S** (Steve, 2026-10-30: "The URL is what makes sense from the markdown processor's perspective. The actual file location of the image is the chat's responsibility, not the markdown processor's.") **showell/roc-markdown and showell/roc-chat**, on `claude/roc-markdown` (on top of 318) and `claude/roc-chat`. Finish as 318 does, plus roc-chat's verify; the box merges both and re-freezes gold.
 
 - **The split:**
