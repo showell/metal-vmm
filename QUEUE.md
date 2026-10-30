@@ -38,6 +38,20 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**322. roc-markdown: the chat says which URLs are its uploads: CC'S** (Steve, 2026-10-30: "The URL is what makes sense from the markdown processor's perspective. The actual file location of the image is the chat's responsibility, not the markdown processor's.") **showell/roc-markdown and showell/roc-chat**, on `claude/roc-markdown` (on top of 318) and `claude/roc-chat`. Finish as 318 does, plus roc-chat's verify; the box merges both and re-freezes gold.
+
+- **The split:**
+  - **The package** judges a media URL as a URL: same origin, no `..` in any spelling a browser resolves, no encoded separator, no control bytes. 318 already does all this.
+  - **The caller** says which same-origin paths are its uploads, through the render options. A predicate on the path is the likely shape, since the old chat's uploads (`/chat/c/<conv>/<topic>/uploads/…`) are no single prefix. Choose what the pin allows and say why.
+  - MdChat keeps no uploads path of its own, and nothing defaults to one: a caller that names no rule renders no media.
+- **Who passes what:**
+  - roc-chat passes its own uploads URL (`/user_uploads/` unless roc-chat already serves uploads elsewhere; check).
+  - The judge passes, per corpus, the rule its cases were written for: the old chat's shape for gold and the Zig-derived corpora, and `/user_uploads/` for the dialect and examples.
+  - The playground passes `/user_uploads/`, where its sample image lives.
+- **Expected effect:** with the old chat's rule, most of 318's 13 `unit_cases` moves and its gold moves should come back. Every remaining move is named in the commit.
+- **README:** one line saying where the uploads rule lives and why.
+- **Plants:** a caller's rule ignored (media rendered without asking it); a `..` path passed by a permissive rule.
+
 **321. roc-chat: security H4, per-person indexes and caps: CC'S** (Steve, 2026-10-29: the security review's H4, which nobody has started.) **showell/roc-chat only**, on `claude/roc-chat`, after 320 and on top of it. Finish as 319 does.
 
 - **Per-principal index files** for conversations, keys and invites, so that listing what one person owns no longer scans everyone's. A missing index is rebuilt once from the full scan, the same pattern as H3's tally, so no deploy migration is needed. Give a stale index the tally's treatment too: detect it and rebuild.

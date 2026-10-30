@@ -256,6 +256,11 @@ box's scripts check, ask how to check it here:
   If a test is wrong, say why in the commit that changes it.
 - Comments say what holds and why, in the present tense, in the README's
   voice: no change history in source.
+- **Code never cites this repo's bookkeeping** (Steve, 2026-10-30). No QUEUE
+  numbers, CLOUD_WORK or FEEDBACK, review finding codes ("H2", "the security
+  review's M1") or review rounds ("the round-two attacker's fifth") in another
+  repo's code, comments, test names or docs. A reader there has none of them:
+  state the rule itself. They belong in commit messages and FEEDBACK.
 
 ## Git is the channel
 
