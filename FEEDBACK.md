@@ -7,6 +7,42 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-30: 329 done: the cookbook has no fixed scratch paths (shale `claude/scratch-paths`, 09a4182)
+
+**One shape, in the Linux prelude:** `fresh_dir(parent, prefix)` uses `mktemp -d` below `parent` (it makes `parent` when missing). It returns the folder as `path_under` spells it (`scratch:methods.Ab12Cd`). The caller removes the folder. It's doc_check's `fresh_fixture_dir`, made general. A prefix with `/`, an empty one, or one starting with `-` is refused. The test runs once rather than through the gate, because the folder's random name differs run to run; it's the git prelude's `expectOnce` shape. It's in SHALE-AGENTS.md and in SHALE.md's prelude list.
+
+**The four sites:**
+- **branch_prune:** `fresh_dir("scratch:", "branch_prune_self_test")`, removed when the test passes, as before.
+- **methods:** its self-test copies the plants into `fresh_dir("scratch:", "methods")` and removes the folder when every plant holds. `GLOB` no longer depends on it.
+- **zulip:** the body goes to `<fresh_dir("scratch:", "zulip")>/topic.json`, removed once read or when curl fails.
+- **coverage:** the folder belonged to the unit tests, so the test host now writes its hits to `$SHALE_PRELUDE_HITS` when that is set; otherwise it uses the old path, so a plain `zig build test` is unchanged. `coverage.shale` makes `fresh_dir(".zig-cache/coverage", "prelude_hits")`, passes it through `run`'s `env`, reads it and removes it. It keeps the merged hits in `.zig-cache/coverage/prelude_hits.txt`, which `from=` reads, as build.log is kept. `from=` gives the same prelude row as the full run.
+
+I left move_judge's and same_tests's baselines alone.
+
+**Two at once, 5 pairs each, on one shared `scratch` mount** (cookbook-test's own mounts file; master built in a worktree beside this checkout):
+
+| | master | this branch |
+|---|---|---|
+| branch_prune `self_test=1` | **7 of 10 runs failed** ("claude/merged should be delete, is keep", "no key box/default"); 1 folder left in scratch | 0 of 10; nothing left |
+| methods `self_test=1` | **9 of 10 runs failed** ("2-7 failed", "replace scratch:methods/Own.want: not found", "roc check ... fails before any rewrite"); 1 folder left | 0 of 10; nothing left |
+| coverage, two 20 s apart | both the same rows | both the same rows; no `prelude_hits.*` left |
+
+**coverage's collision didn't show up in my one pair on master**: both runs got the same prelude row. The window is narrow. It only opens if the second run's `remove_tree` lands while the first run's unit tests are writing, and zig build's lock on the shared cache likely serializes the two script-coverage builds. The fix closes the window anyway.
+
+**Something to know, not caused by this change:** in this container, coverage fails against `coverage/lines.txt` on **master too**, with the same 10 modules differing:
+- `shale_host_zig.zig`: 32 in the floor, 66 here;
+- `regex.zig`: 0 in the floor, 4 here;
+- the Linux prelude: 0 in the floor, 4 here;
+- and seven others, each a few lines.
+
+Master and this branch give the same numbers, so the floor is the box's measure. The prelude's 4 lines are `curl_http`'s (103, 150, 151, ...), which this container's tests don't reach. I didn't write the floor.
+
+**Checks on this branch:**
+- `zig build test`: 23 of 23 steps, 431 of 431 tests;
+- `zig build cookbook-test`: 11 recipes' self-tests passed;
+- `zig build doc-check -- only=shale`: 16 docs, 175 paths, gone 0, ambiguous 0, names gone 0; "every cited path resolves and every cited name is there";
+- `shale --check` on the four changed scripts: each parses and compiles.
+
 ## CC → the box and Steve, 2026-10-30: 328, agents that listen (a design proposal, no code)
 
 **What I tested first, from this cloud session:** I held `GET /conversations/3/stream` with `Last-Event-ID: 6` for 35 s through the proxy. It sent message 7 from the backlog, then the 25 s `: ping`, and stayed open. curl read the key itself with `--variable 'K@/home/steve/.shale-keys/roc_chat_cc_key' --expand-header 'Authorization: Bearer {{K:trim}}'`. That matters because Shale's `job_start` takes no `secrets`. A job doesn't need them, since curl reads the file and the key never passes through a script.
