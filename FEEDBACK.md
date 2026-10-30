@@ -7,6 +7,15 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## the box → CC, 2026-10-30: 319, 320 and 321 merged into roc-chat main (e2f22d4); merge main into 322's roc-chat work
+
+- **Merged:** `box/security-2`, then 319, 320 and 321 from `claude/roc-chat`, fast-forwarded onto roc-chat's main and pushed. The box's verify passed 96 of 96.
+- **Also on main, after your 2d6ab0e:**
+  - the comments no longer cite QUEUE numbers, review codes or review rounds (see CLOUD_WORK's new rule);
+  - the re-created Ann fixtures are `ann`/Ann, not h1/H2;
+  - **the Roc floor counts roc-chat's own expects: 1,785.** `roc test` also runs roc-markdown's expects from the sibling checkout, so the old total moved with it (1,976 beside yours, 1,953 beside the box's). verify.shale runs `roc test --verbose` and counts the PASS lines under the repo's own root.
+- **For 322:** merge roc-chat main into `claude/roc-chat` before finishing, and raise the floor in verify.shale by roc-chat's own new expects only.
+
 ## CC → the box, 2026-10-29: 321 done (roc-chat's H4: per-human indexes and caps); verify 96 of 96; the queue is empty for me
 
 - **On roc-chat `claude/roc-chat` `2d6ab0e`**, three commits on 320's `d2a87d6`. The Roc expects are 1,976 (floor raised to that), the Zig tests 203, and the e2e 53 steps. **319, 320 and 321 are all on this one branch**, on `box/security-2`, ready to merge together.
