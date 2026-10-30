@@ -7,6 +7,221 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-30: 322 done (the host says which URLs are its uploads); roc-markdown verify 64 of 64, roc-chat 98 of 98
+
+- **Where:**
+  - roc-markdown `claude/roc-markdown` `5cc78bd`: main merged in (`6f837de`, its README conflict resolved), on top of 318;
+  - roc-chat `claude/roc-chat` `6fa9bf3`, on roc-chat main (`e2f22d4`, a fast-forward).
+- **Merge them together:** roc-chat's renders now pass options, and roc-markdown's verify clones roc-chat. It takes a new `chat=` argument, the branch to clone (default `main`), so I ran it with `chat=claude/roc-chat`. Once both are merged, the default is right again.
+
+**The split, as chosen:**
+- **The package judges a src as a URL**, as 318 did: one `/` (never `//`), no control byte or backslash, no `..` in any spelling, no `%2f` or `%5c`. Only then does it ask the host's rule. No rule can let through what the URL checks refuse.
+- **The host's rule is a predicate on the path:** `MdSafety.Uploads : List(U8) -> Bool`, passed in `Md.Options`, `{ uploads }`.
+  - **The render API changed:** every public render and measure function now takes options: `render`, `render_trusted`, `render_trusted_reflow`, `work_units` and `hostility`.
+  - **Why a predicate:** it is the shape the old chat needs. Its uploads are `<base>/<topic>/uploads/<file>`, no single prefix. The pin takes a function in a record without fuss.
+  - **Helpers:** `Md.uploads_under(prefix)` is the one-folder rule, and `Md.no_uploads` the rule of a host with none.
+- **MdChat keeps no uploads path, and nothing defaults to one:** a caller must name a rule to render media.
+- **roc-chat** passes `/user_uploads/`, from one place (`Conversations.markdown`), to `html_of`, `hostility` and the hello page. roc-chat serves no uploads yet, so that is the folder they'll be served from.
+
+**Who passes what in roc-markdown:**
+- **The judge:** `corpora.txt` names each corpus's rule on its line, with no default; a line without one is an error. The rules are defined in judge/answers.roc and cross to Roc as a second argument (the judge's platform and `roc_host.zig` changed).
+  - `same-origin` (any same-origin path) for `unit_cases`. These are the Zig renderer's test inputs, written against its rule, any local path (`/u/cat.png` and so on), not the old chat's shape.
+  - `user-uploads` for the dialect, the spec corpora, pinned, examples, the hostile shapes, the REPL and the playground.
+  - `old-chat` (`/chat/c/<pair>/<topic>/uploads/<file>` or `/channel/<name>/<topic>/uploads/<file>`) for any `--also` corpus, which is gold. **Gold's 318 moves should come back when you re-run it; I can't run gold here.**
+- **The playground** passes `/user_uploads/`, where its sample image lives.
+
+**Moved:**
+- **`unit_cases`: all 13 of 318's moves came back**, byte for byte the answers from before 318 (I compared the file to `588ffa5^`'s): markdown:715:0, 716:0, 722:0, markdown_media:298:0, 299:0, 311:0, 315:0, 316:0, 336:0, 337:0, 348:1, 349:1, 353:0. No other corpus moved.
+- **Added:**
+  - dialect `uploads/rule-asked`: same-origin srcs (`/files/…`) that roc-chat's rule refuses, so they stay text;
+  - a `same_origin` corpus, four cases under the most permissive rule: an inside path renders; a `..`, another site and an encoded `/` are refused.
+- **Ratchet:** dialect 13, and same_origin 4.
+
+**Plants, each red:**
+- in roc-markdown, a host's uploads rule ignored (dialect), and a `..` path let through by a permissive rule (`same_origin`);
+- in roc-chat, an uploads rule taking every path, red at the new e2e step 54 (a message's upload renders, and a route as a src is text).
+
+**Docs:** the README says where the rule lives and why; TESTING names each corpus's rule; roc-chat's README has one line. roc-chat's floor is 1,787: its own expects, plus my two.
+
+**roc-markdown's verify** (`as-steve shale tools/verify.shale chat=claude/roc-chat`):
+
+```
+── budgets from the script's header: steps=200000000, read_bytes=1000000000, changes=10000, change_bytes=200000000, arena_bytes=1000000000
+PASS  zig build test (exit 0, 58099 ms)
+PASS  cases: adversarial 29/29 (want 29)
+PASS  cases: dialect 13/13 (want 13)
+PASS  cases: unit_cases 69/69 (want 69)
+PASS  cases: same_origin 4/4 (want 4)
+PASS  cases: spec_agree 269/269 (want 269)
+PASS  cases: spec_tables 8/8 (want 8)
+PASS  cases: spec_strike 2/2 (want 2)
+PASS  cases: spec_escapes 13/13 (want 13)
+PASS  cases: spec_images 22/22 (want 22)
+PASS  cases: pinned 3/3 (want 3)
+PASS  cases: examples 5/5 (want 5)
+PASS  cases: hostile 1097/1097 (want 1097)
+PASS  cases in all: 1534 (want 1534)
+PASS  the REPL:  10 cases (5 canned examples) in 3 modes, 23 runs of the REPL, 0 fail
+PASS  the playground:  10 cases (5 canned examples) in 3 modes through md.wasm in node, 0 fail; `blocks` renders in 1.05 ms (the median of 50 runs)
+PASS  the playground's page: starts on inline; 5 examples chosen, 3 modes, typing, a hostile message and the source toggle; fetched md.wasm, examples.jsonl
+PASS  linear: lb-nested-parens-in-dest 2011 units at 1,000, 16393 at 8,191
+PASS  linear: rm-unbalanced-open-parens 2013 units at 1,000, 16395 at 8,191
+PASS  linear: rm-unbalanced-close-parens 2009 units at 1,000, 16391 at 8,191
+PASS  linear: rm-paren-bait 14996 units at 1,000, 122861 at 8,191
+PASS  linear: rm-paren-links 24989 units at 1,000, 204764 at 8,191
+PASS  linear: tbl-wide 5006 units at 1,000, 40961 at 8,191
+PASS  linear: tbl-many-rows 16010 units at 1,000, 131066 at 8,191
+PASS  linear: tbl-delimiter-alone 10990 units at 1,000, 90091 at 8,191
+PASS  linear: tbl-code-pipes 9010 units at 1,000, 73729 at 8,191
+PASS  linear: tbl-code-pipes-wide 11018 units at 1,000, 90119 at 8,191
+PASS  linear: rm-image-openers 2001 units at 1,000, 16383 at 8,191
+PASS  linear: rm-images 56973 units at 1,000, 466860 at 8,191
+PASS  linear: rm-image-nest 63964 units at 1,000, 524188 at 8,191
+PASS  linear: rm-image-alt-markup 164953 units at 1,000, 1351468 at 8,191
+PASS  linear: rm-images-refused 53975 units at 1,000, 442289 at 8,191
+PASS  linear: rm-image-labels-alone 7997 units at 1,000, 65525 at 8,191
+PASS  linear: lb-nested-images 13997 units at 1,000, 114671 at 8,191
+PASS  linear: rm-tilde-run 1006 units at 1,000, 8197 at 8,191
+PASS  linear: rm-strike-nest 17001 units at 1,000, 139248 at 8,191
+PASS  linear: rm-strike-unclosed 8000 units at 1,000, 65528 at 8,191
+PASS  linear: rm-strike-mixed 29001 units at 1,000, 237543 at 8,191
+PASS  linear: rm-strike-star-alternate 12999 units at 1,000, 106482 at 8,191
+PASS  linear: rm-escaped-strikes 7000 units at 1,000, 57337 at 8,191
+PASS  linear: rm-backslash-breaks 6002 units at 1,000, 49148 at 8,191
+PASS  linear: lb-tilde-runs 12001 units at 1,000, 98293 at 8,191
+PASS  linear: lb-mixed-delimiters-tilde 20003 units at 1,000, 163823 at 8,191
+PASS  budget: hostile/tbl-ragged/200 (40,000 padded cells) is refused
+PASS  plant: one byte of a frozen answer (adversarial) is red (exit 1; 1 `FAILID	adversarial` line, want 1)
+PASS  plant: one byte of a frozen table (spec_tables) is red (exit 1; 1 `FAILID	spec_tables` line, want 1)
+PASS  plant: one wrong hostile hash is red (exit 1; 1 `FAILID	hostile` line, want 1)
+PASS  plant: a spec_diverge id that now matches is red (exit 1; 1 `SPECSTALE` line, want 1)
+PASS  plant: a spec_diverge table id that now matches is red (exit 1; 1 `SPECSTALE` line, want 1)
+PASS  plant: `~~` paired across a line is red (exit 1; 1 `FAILID	dialect` line, want 1)
+PASS  plant: a backslash escape applied inside a code span is red (exit 1; 1 `FAILID	spec_escapes` line, want 1)
+PASS  plant: one byte of a frozen strikethrough (spec_strike) is red (exit 1; 1 `FAILID	spec_strike` line, want 1)
+PASS  plant: an image allowed from another origin is red (exit 1; 1 `FAILID	dialect` line, want 1)
+PASS  plant: markup kept inside an alt is red (exit 1; 1 `FAILID	dialect` line, want 1)
+PASS  plant: a javascript: src rendered is red (exit 1; 1 `FAILID	dialect` line, want 1)
+PASS  plant: a media src outside the host's uploads accepted is red (exit 1; 1 `FAILID	dialect` line, want 1)
+PASS  plant: a ' left unescaped is red (exit 1; 1 `FAILID	spec_escapes` line, want 1)
+PASS  plant: one byte of a split function's answer (a heading) is red (exit 1; 1 `FAILID	examples` line, want 1)
+PASS  plant: a host's uploads rule ignored (media rendered without asking it) is red (exit 1; 1 `FAILID	dialect` line, want 1)
+PASS  plant: a `..` path passed by a permissive rule is red (exit 1; 1 `FAILID	same_origin` line, want 1)
+PASS  zig fmt --check build.zig judge playground
+PASS  roc fmt --check package judge playground
+PASS  roc-chat's roc test against this package (exit 0: All (1987) tests passed in 7818.0 ms. (cached))
+PASS  the judge's time without gold: 51665 ms
+SKIP  gold: not on this machine
+verify: 64 of 64 passed
+── time: 22 programs, 930.5 s in all; the slowest 58.0 s: zig build test
+```
+
+**roc-chat's verify** (`as-steve shale tools/verify.shale`):
+
+```
+── budgets from the script's header: steps=200000000, read_bytes=1000000000, changes=10000, change_bytes=200000000, arena_bytes=1000000000
+PASS  zig build test (exit 0, 19186 ms)
+PASS  Roc expects, this repository's own: 1787 (floor 1787), 0 failed
+PASS  Zig tests: 203 (floor 203)
+PASS  e2e step 1: A and B sign in (and C, the third user) (32 ms)
+PASS  e2e step 2: A starts a conversation with B (6 ms)
+PASS  e2e step 3: B opens its stream (2 ms)
+PASS  e2e step 4: A posts a message of many lines (7 ms)
+PASS  e2e step 5: B's stream gets the message exactly once (100 ms)
+PASS  e2e step 6: A reads the transcript and sees it, its markdown exactly as posted (5 ms)
+PASS  e2e step 7: B reconnects with Last-Event-ID and gets nothing twice (107 ms)
+PASS  e2e step 8: a forged session cookie is refused (2 ms)
+PASS  e2e step 9: a third user cannot post to it (8 ms)
+PASS  e2e step 10: a third user cannot read it, nor stream it (3 ms)
+PASS  e2e step 11: a post between a stream's backlog read and its subscribe arrives once (212 ms)
+PASS  e2e step 12: Steve makes an agent (20 ms)
+PASS  e2e step 13: Steve gets it a key, by an invite (and C cannot invite for it) (18 ms)
+PASS  e2e step 14: the agent, by key alone, starts a conversation with Steve and posts; Steve's stream gets it once (111 ms)
+PASS  e2e step 15: Steve posts, and the agent reads it with its key (7 ms)
+PASS  e2e step 16: the agent's key cannot mint a key, nor make an agent (5 ms)
+PASS  e2e step 17: Steve revokes the key, and its next use is a 401 (13 ms)
+PASS  e2e step 18: an expired key is a 401 (2114 ms)
+PASS  e2e step 19: a key read-scoped to one conversation cannot post there, nor read another (22 ms)
+PASS  e2e step 20: a session cookie and a Bearer key together are a 400 (3 ms)
+PASS  e2e step 21: every key refused in use, and every grant refused, is audited, with no secret (0 ms)
+PASS  e2e step 22: Steve invites his agent; with a cookie the code is refused; alone, the agent redeems it and posts with the key (27 ms)
+PASS  e2e step 23: redeeming the same code again is a 401 (3 ms)
+PASS  e2e step 24: an invite past its ten minutes is a 401 (6 ms)
+PASS  e2e step 25: another human's session cannot invite for Steve's agent, nor see or revoke his invite (19 ms)
+PASS  e2e step 26: a key cannot make an invite (2 ms)
+PASS  e2e step 27: a mint acting as an agent is refused; Steve's own key is minted (5 ms)
+PASS  e2e step 28: after the agent is retired, its invite redeems to nothing (6 ms)
+PASS  e2e step 29: agent ids: make, retire the highest, make, and the id is fresh (7 ms)
+PASS  e2e step 30: every invite made, redeemed, revoked and refused is audited, with no code (0 ms)
+PASS  e2e step 31: the list page shows a conversation the viewer is in, and not one they aren't (6 ms)
+PASS  e2e step 32: a participant's name is written escaped (5 ms)
+PASS  e2e step 33: the conversation page is a 200 to a participant, a 404 to a third user; a page is a 403 to a key (12 ms)
+PASS  e2e step 34: signed out, a page redirects to /login (2 ms)
+PASS  e2e step 35: a message's HTML on the page is exactly step 6's for it (5 ms)
+PASS  e2e step 36: a human's twenty-first agent is refused (131 ms)
+PASS  e2e step 37: C cannot name Steve's agent in a new conversation, nor an unknown id, in the same words; Steve can (20 ms)
+PASS  e2e step 38: a POST with a cookie from another origin, or from none, is a 403 (14 ms)
+PASS  e2e step 39: a logout from another origin is refused; from our own, the old cookie is a 401 (26 ms)
+PASS  e2e step 40: a stream ends at its lifetime, so a key revoked while it is open stops reaching it (537 ms)
+PASS  e2e step 41: junk invite codes, a forged state and no pending sign-up leave the audit as it was (9 ms)
+PASS  e2e step 42: A opening nine streams ends A's own first, and B's stays (51 ms)
+PASS  e2e step 43: a post learns its id from the tally, never reading the transcript whole (24 ms)
+PASS  e2e step 44: a post to a full transcript is a 413, and nothing is appended (17 ms)
+PASS  e2e step 45: a read is the newest page, and before= pages back to the first; the page shows the newest (639 ms)
+PASS  e2e step 46: a stream's backlog is at most the newest page, a gap before it said (37 ms)
+PASS  e2e step 47: a page and a backlog are read from their first message's offset, never the transcript whole (22 ms)
+PASS  e2e step 48: a missing offsets file is read past, and the next post writes it whole (33 ms)
+PASS  e2e step 49: a human past the conversations cap is refused, by name (39 ms)
+PASS  e2e step 50: a human past the keys cap is refused, by name (24 ms)
+PASS  e2e step 51: a human past the invites cap is refused, by name (32 ms)
+PASS  e2e step 52: a missing index is rebuilt from the full scan, and the listings are whole (24 ms)
+PASS  e2e step 53: a listing reads its own index alone: another's broken conversation is never read (4 ms)
+PASS  e2e step 54: a message's media loads only from the chat's uploads (12 ms)
+PASS  e2e: 54 steps (want 54), exit 0, 4719 ms
+PASS  plant: a forged session cookie admitted (the host's hash ignores its bytes) is red at step 8 (exit 1; a forged session cookie is refused (2 ms): ReadWithForgery)
+PASS  plant: a third user's post let through (can_post asked of nobody) is red at step 9 (exit 1; a third user cannot post to it (7 ms): ThirdPosted)
+PASS  plant: a third user's read let through (can_see asked of nobody) is red at step 10 (exit 1; a third user cannot read it, nor stream it (2 ms): ThirdRead)
+PASS  plant: the subscribe after the turn, not in it, is red at step 11 (exit 1; a post between a stream's backlog read and its subscribe arrives once (207 ms): NotOnce)
+PASS  plant: the list showing every conversation (load_mine! keeps them all) is red at step 31 (exit 1; the list page shows a conversation the viewer is in, and not one they aren't (8 ms): OthersShown)
+PASS  plant: a participant's name written unescaped (escape leaves `<`) is red at step 32 (exit 1; a participant's name is written escaped (2 ms): NameNotEscaped)
+PASS  plant: a third user given the conversation's page (can_see asked of nobody) is red at step 33 (exit 1; the conversation page is a 200 to a participant, a 404 to a third user; a page is a 403 to a key (9 ms): ThirdGotPage)
+PASS  plant: a key given a page (answered as a session) is red at step 33 (exit 1; the conversation page is a 200 to a participant, a 404 to a third user; a page is a 403 to a key (14 ms): KeyGotPage)
+PASS  plant: a message's newline written raw into its transcript line is red at step 6 (exit 1; A reads the transcript and sees it, its markdown exactly as posted (2 ms): TranscriptUnread)
+PASS  plant: a revoked key that still works (its revocation never read) is red at step 17 (exit 1; Steve revokes the key, and its next use is a 401 (14 ms): RevokedKeyWorks)
+PASS  plant: a key minting a key (a key's grant bound as a session's) is red at step 16 (exit 1; the agent's key cannot mint a key, nor make an agent (6 ms): KeyMinted)
+PASS  plant: a session's key acting as another human's agent (the owner never asked) is red at step 13 (exit 1; Steve gets it a key, by an invite (and C cannot invite for it) (4 ms): InvitedForAnothersAgent)
+PASS  plant: the Bearer header winning over the cookie when both are sent is red at step 20 (exit 1; a session cookie and a Bearer key together are a 400 (4 ms): BothTaken)
+PASS  plant: an invite redeemable twice (its spending never written) is red at step 23 (exit 1; redeeming the same code again is a 401 (5 ms): RedeemedTwice)
+PASS  plant: an expired invite accepted (its expiry never read) is red at step 24 (exit 1; an invite past its ten minutes is a 401 (14 ms): ExpiredRedeemed)
+PASS  plant: an agent's id taken from the accounts again, a retired one's reused is red at step 29 (exit 1; agent ids: make, retire the highest, make, and the id is fresh (9 ms): IdGivenTwice)
+PASS  plant: a key allowed to make an invite (the grant's GrantedByKey let by) is red at step 26 (exit 1; a key cannot make an invite (5 ms): KeyInvited)
+PASS  plant: agents uncapped (the cap never reached) is red at step 36 (exit 1; a human's twenty-first agent is refused (151 ms): Uncapped)
+PASS  plant: another's agent named in `with=` (the owner never asked) is red at step 37 (exit 1; C cannot name Steve's agent in a new conversation, nor an unknown id, in the same words; Steve can (14 ms): AnothersAgentNamed)
+PASS  plant: a cross-origin POST accepted (Origin never compared) is red at step 38 (exit 1; a POST with a cookie from another origin, or from none, is a 403 (11 ms): CrossOriginAccepted)
+PASS  plant: a logout that leaves the session (its record never removed) is red at step 39 (exit 1; a logout from another origin is refused; from our own, the old cookie is a 401 (26 ms): SessionLives)
+PASS  plant: a stream outliving its lifetime (the test's lifetime never read) is red at step 40 (exit 1; a stream ends at its lifetime, so a key revoked while it is open stops reaching it (3027 ms): StreamOutlived)
+PASS  plant: a junk invite code audited (an unknown invite's refusal appended) is red at step 41 (exit 1; junk invite codes, a forged state and no pending sign-up leave the audit as it was (17 ms): AuditGrew)
+PASS  plant: a forged state audited (every sign-in refusal appended) is red at step 41 (exit 1; junk invite codes, a forged state and no pending sign-up leave the audit as it was (13 ms): AuditGrew)
+PASS  plant: eviction across holders (every stream counted as the new one's holder's) is red at step 42 (exit 1; A opening nine streams ends A's own first, and B's stays (49 ms): EndOfStream)
+PASS  plant: a post reading the whole transcript for its id (the tally never trusted) is red at step 43 (exit 1; a post learns its id from the tally, never reading the transcript whole (23 ms): PostReadTheTranscript)
+PASS  plant: a transcript uncapped (the cap never reached) is red at step 44 (exit 1; a post to a full transcript is a 413, and nothing is appended (116 ms): FullAccepted)
+PASS  plant: a read deaf to `before=` (every page the newest) is red at step 45 (exit 1; a read is the newest page, and before= pages back to the first; the page shows the newest (578 ms): NotAPage)
+PASS  plant: a backlog unbounded (from Last-Event-ID, past the newest page) is red at step 46 (exit 1; a stream's backlog is at most the newest page, a gap before it said (26 ms): NotTheNewestPage)
+PASS  plant: a gap never said (its event never sent) is red at step 46 (exit 1; a stream's backlog is at most the newest page, a gap before it said (16 ms): NoGap)
+PASS  plant: a page read from the whole transcript (its offsets never trusted) is red at step 47 (exit 1; a page and a backlog are read from their first message's offset, never the transcript whole (6 ms): NotRead)
+PASS  plant: an offsets file never written again (only ever appended to) is red at step 48 (exit 1; a missing offsets file is read past, and the next post writes it whole (32 ms): OffsetsNotRebuilt)
+PASS  plant: conversations uncapped (the cap never reached) is red at step 49 (exit 1; a human past the conversations cap is refused, by name (45 ms): Uncapped)
+PASS  plant: keys uncapped (the cap never reached) is red at step 50 (exit 1; a human past the keys cap is refused, by name (33 ms): Uncapped)
+PASS  plant: invites uncapped (the cap never reached) is red at step 51 (exit 1; a human past the invites cap is refused, by name (42 ms): Uncapped)
+PASS  plant: a missing index trusted (its mark never compared) is red at step 52 (exit 1; a missing index is rebuilt from the full scan, and the listings are whole (5 ms): KeysLost)
+PASS  plant: a listing that scans everyone's (its index read, then passed by) is red at step 53 (exit 1; a listing reads its own index alone: another's broken conversation is never read (4 ms): ReadEveryone)
+PASS  plant: media from any of the chat's own paths (its uploads rule taking every path) is red at step 54 (exit 1; a message's media loads only from the chat's uploads (15 ms): RouteShownAsMedia)
+PASS  zig fmt --check host build.zig
+PASS  roc fmt --check app platform
+verify: 98 of 98 passed
+── time: 46 programs, 819.7 s in all; the slowest 128.6 s: zig build e2e
+```
+
 ## the box → CC, 2026-10-30: 319, 320 and 321 merged into roc-chat main (e2f22d4); merge main into 322's roc-chat work
 
 - **Merged:** `box/security-2`, then 319, 320 and 321 from `claude/roc-chat`, fast-forwarded onto roc-chat's main and pushed. The box's verify passed 96 of 96.
