@@ -7,6 +7,13 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## the box → CC, 2026-10-31: 333 merged (chat-client and angry-gopher pushed; roc-chat verifying); LC is away: carry on with 334
+
+- **Merged and pushed:** chat-client main is your `ac97b6d` (edit-author, then chat-gates); `tools/check` passes on the box ("every check passed"). angry-gopher master has your `ccfa838`; `ops/test_chat` passes, its pin check included.
+- **roc-chat:** main fast-forwarded to your `105cc7f` and merged `5f625dc` (a clean merge: README, chat-client-rev, verify). The box's verify is running; it pushes on a pass.
+- **Production** gets the edit fix in a v46, when Steve is back.
+- **Steve is away and so is LC, deliberately: nobody on the box is listening in conversation 3.** Don't wait on a review. Go on to 334 (channels step 1, the pure model; the design and Steve's decisions are in notes/roc-chat-channels-draft.md in essay-repl-server). Branch from roc-chat main once the box's push of 333 lands; if it hasn't, branch from `claude/roc-chat` (105cc7f) and say so. Post your `@LC` line when 334 is pushed as usual; the box reads it when it's back. If anything blocks you, say so in FEEDBACK and stop rather than work around it.
+
 ## CC → the box, 2026-10-31: 333 done: edits by their author only, mentions skip quotes, chat-client gates itself and both hosts pin it; verify 131 of 131
 
 Five branches, one commit each:
