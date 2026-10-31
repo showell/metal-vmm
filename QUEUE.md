@@ -38,6 +38,19 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**333. chat-client: edits by their author only; roc-chat: mentions skip quotes; chat-client gates itself, hosts pin it: CC'S** (Steve, 2026-10-31, from the box's audit: essay notes/sharing-the-chat-client.md in showell/essay-repl-server, read it first.) Three parts, in order, one commit each, each on its own branch.
+
+**Part (1): an edit applies only to its author's own message (chat-client, a production bug).** Today any post beginning `Edit of MSG_<id>` replaces that message for every viewer with "Edited in…" and hides the original, whoever wrote it (js/chat.js, the EDIT_RE handling), and every bubble has an edit button (js/message.js). Apply an edit only when its author (`from_uid`) is the original's; otherwise render it as an ordinary message. Show the edit button only on the viewer's own messages (`data-me`). The contract test (tools/test_contract.mjs) gets a case for each: an edit by the author applies, an edit by someone else doesn't. Gates: chat-client's three and angry-gopher's ops/test_chat only. Branch `claude/edit-author`.
+
+**Part (2): roc-chat's mentions skip quoted and fenced text.** `Mentions.of` (app/Mentions.roc) scans every byte, so quote-replying to a post that said `@CC` pings CC again and resets the agent-hop count. Skip fenced blocks (``` and ~~~, including the client's `~~~ quote` fence), indented code, and `>` blockquote lines; take roc-markdown's own block rules as the spec rather than inventing new ones (say which you followed). Expects for each, and an e2e step: a human quoting an agent's `@CC` post names nobody. Finish with roc-chat's `tools/verify.shale`. Branch `claude/roc-chat` from main.
+
+**Part (3): chat-client gates itself, and each host pins it.**
+- chat-client gets one command that runs every check of its own: the JS syntax check, the lint (move angry-gopher's tools/lint.py's chat-client rules, and tools/check_js_syntax.mjs, into chat-client, so the `// lint:` markers and their rules live together), the resize test and the contract test. angry-gopher's ops/test_chat then calls it instead of holding its own copies.
+- **Pinning, the way roc-version pins Roc:** each host (angry-gopher's zig-server, roc-chat) records the chat-client commit it expects in one file, `chat-client-rev`, and each host's gate fails loudly, naming both commits, when the checkout's HEAD isn't that commit. Building stays by path (zig-metal-unikernel's release builder passes `-Dchat-client-root`, keep that working); a bump is a deliberate one-line commit with both hosts' checks. Update chat-client's README ("Not here yet") and CONTRACT.md's host list (it names roc-webbox's chat as the second host, not roc-chat).
+- Branches `claude/chat-gates` in each repo you touch. Gates: JS gates, plus the pin check in each host shown failing on a wrong rev and passing on the right one.
+
+**Talk:** FEEDBACK for the content; when all three are pushed, a short `@LC` line in roc-chat conversation 3 wakes the box.
+
 **332. chat-client: no back/forward navigation; r quotes like q: CC'S** (Steve, 2026-10-31.) Slim the shared JS client, showell/chat-client, which production's Zig chat serves (angry-gopher's zig-server builds it by path) and roc-chat may reuse. Branch `claude/slim-nav` in chat-client; the box reviews, runs the JS gates, merges, and Steve deploys production.
 
 **Remove the back/forward navigation, all of it:**
