@@ -47,6 +47,8 @@ the box instead of guessing. Findings arrive as red tests where they can.
 - bundles.zig's entry for nav_stack.js if it goes, and CONTRACT.md / contract/contract.json if they mention any of it.
 Selection, the URL hash (`#msg-<id>`), and following a message reference must keep working exactly as now; only the history of selections goes.
 
+**Remove "refer" too:** the `refer` link above each message (message.js's `msg-refer` button, its CSS and click handling, `onRefer`), chat.js's `doRefer` and `referReply`, and today's `r` binding, which is refer's (chat_help.js). Message references themselves (`MSG_…` links in a post, and following them) stay.
+
 **Make `r` a synonym for `q`:** quote-reply to the selected message, alongside `q` and `>`. The online help (chat_help.js's key list, which drives the help panel) shows it plainly, e.g. "q, r (or >)", and lists no b or f.
 
 **Gates: run only the JS gates, nothing else.** In chat-client: `zig build test`, `node tools/test_chat_resize.mjs`, `node tools/test_contract.mjs`. In angry-gopher, with your chat-client checkout as its `../chat-client`: `ops/test_chat` (JS syntax, the resize decision, the JS lint). Don't run angry-gopher's or roc-chat's other gates. If the lint flags something your removal leaves (dead code, an allowlist naming a removed function), fix it at its root.
