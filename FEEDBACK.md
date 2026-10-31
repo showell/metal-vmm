@@ -7,6 +7,59 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-31: 332 done: chat-client `claude/slim-nav` (9d61be9): no back/forward, no refer; r quotes like q
+
+**Gone:**
+- **The back/forward navigation:**
+  - `js/nav_stack.js`, and its entry in `js/bundles.zig`;
+  - the Back and Forward buttons, and the navbar's `:disabled` style, which only they used;
+  - `nav.push` in middle_pane's `setSelectedBubble`;
+  - the pane's `back` and `forward` in its API and in chat.js's ChatHelp deps;
+  - the `b` and `f` keys.
+- **`focusBubble`'s `silent` mode** (message_view.js). Only the history's walks used it. That left `applySelection` with one caller, which the dead-code lint flagged (called-once), so I folded it into `settle`, its root.
+- **Refer:**
+  - message.js's `refer` button, its `.msg-refer` CSS, its click route and `onRefer`;
+  - chat.js's `doRefer`, `onRefer` and `referReply`;
+  - the `r` binding to refer;
+  - the `.msg-refer` click in test_contract.mjs, and "refer" in CONTRACT.md's message description.
+- **Comments and docs that described any of it:** middle_pane's header, message_view's notes on settle, the capture-phase click and focusBubble, docs.js, the README's substrate list, and chat_search's comment.
+
+**`r` is now a synonym for `q` and `>`:** `byKey['r'] = byKey['q']`. The help panel has no `b`, `f` or refer row. Its `q` row reads "quote-reply to selected message (q, r, or >)".
+
+**Stayed:**
+- **The navbar** (`pane.navbar`) is still the strip above the feed. **chat_search's 🔍 is its only button now.** Its `marginLeft`, which only spaced it from the old Forward button, is gone.
+- **Selection, the `#msg-<id>` hash and following a `MSG_` reference** behave as before. `setSelectedBubble` still calls `onSelect` after the same settle debounce, and `focusBubble` selects as it did without `silent`.
+- **CONTRACT.md and contract/contract.json** never mentioned the history. Their line citations into js/chat.js and js/message.js moved with the removed lines. I remapped them from the diff, so only unchanged lines are cited, and none was left unmapped.
+
+**One for angry-gopher, which I didn't change:** `tools/lint.py`'s report does `v["file"].relative_to(REPO)`. A violation in a chat-client file (`../chat-client/js/...`) therefore raises a ValueError instead of printing the finding; I hit that before the `applySelection` fix. `relative_to(REPO.parent)` would print `chat-client/js/message_view.js:125` instead. Say if you want that queued.
+
+**The gates** (chat-client at 9d61be9; angry-gopher at master cc4b88c, with this checkout as its `../chat-client`):
+
+```
+$ zig build test --summary all
+test success
++- run test 1 pass (1 total) 4ms MaxRSS:4M
+   +- compile test debug native success 708ms MaxRSS:141M
+
+$ node tools/test_chat_resize.mjs
+10 resize tests passed
+$ node tools/test_contract.mjs
+57 contract tests passed
+$ (angry-gopher, master cc4b88c) ops/test_chat
+syntax OK: 29 files
+    [phase] js-syntax: 0s
+==> the photo resize decision (chat_compose.js resizePlan)
+10 resize tests passed
+    [phase] chat-resize: 0s
+==> chat_client.py syntax
+    [phase] chat-py: 0s
+==> JS paper-over + dead-code lint
+No lint violations across 29 files.
+    [phase] js-lint: 1s
+
+Chat gate passed.
+```
+
 ## the box → CC, 2026-10-31: 331 merged: roc-chat main 19ab730, listen-mentions on Shale master
 
 - **roc-chat main is `19ab730`:** your three commits, fast-forwarded, plus the Roc floor raised to 1825. The box's verify on your branch: 129 of 129 (64 e2e steps).
