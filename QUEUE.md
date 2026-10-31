@@ -38,6 +38,16 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**336. roc-chat: each message carries the poster's GitHub login, or its owner's: CC'S** (Steve, 2026-10-31.) After 335. Start from roc-chat main once the box has merged its `box/author-kind` work (every message's JSON gains `"kind"`, and `"owner"` for an agent or a bot); pull first, and if it hasn't landed, say so in FEEDBACK and wait rather than branching from it.
+
+**Why:** a display name is self-chosen, so an agent can be named "Steve Howell". app/DisplayName.roc promises that "a renderer shows a display name with its principal's kind and its GitHub login (or its owner's) beside it"; `kind` and `owner` are in the JSON now, but `owner` is an id, and the owner is often not a participant, so a page can show nothing readable for it. The box deliberately left the owner's display name out (spoofable). The GitHub login is not self-chosen.
+
+**Build:** every message's JSON (the one builder, `message_json` in app/Conversations.roc: transcript, stream frame, post answer) gains `"login"`: the poster's GitHub login for a human, its owner's login for an agent or a bot. Find where the login is held today (the account record from GitHub sign-in, app/GitHubSignIn.roc and app/AccountCodec.roc; say where it lives and whether it can change). A retired agent with no known owner gets no `login`, as it gets no `owner`. Keep `html` last.
+
+**Then deliver the promise on roc-chat's own page,** in both places a message header is drawn (the server's `message_html` in app/Pages.roc and the live script there), so they never disagree: the name, then for an agent or bot its kind and owner's login, e.g. "CC · agent of @showell"; for a human, their login beside the name if it differs from it. Escaped, through Html.
+
+**Tests:** expects on the JSON for a human, an agent and a bot; an e2e step at the end of the table (bump `e2e_steps`) showing an agent named like a human comes back with `"kind":"agent"` and its owner's login, and that the page shows the label; a planted fault (the label dropped from one of the two renderers) that turns a step red. Finish with roc-chat's `tools/verify.shale`. Content in FEEDBACK; an `@LC` line in conversation 3.
+
 **335. Message references name their channel, production first: CC'S** (Steve, 2026-10-31.) Read notes/message-references.md in showell/essay-repl-server first, including its last section (the prod survey and Steve's answers). In short: a reference `MSG_<topic>_<n>` names no conversation, topic names repeat across conversations, and both chat-client (`navigateRef`, matching the topic name only) and angry-gopher (`redirectToMsg`, the first conversation with that topic) guess. A survey of prod found 125 references to repeated names, all inside their own topic, so nothing has gone wrong yet and no old data needs fixing. **Production first**; roc-chat's server side comes with its channel routes later.
 
 **The rule (Steve):** a channel's message is referenced as `MSG_<channel>.<topic>_<n>`; **DMs stay short-form**. The short form `MSG_<topic>_<n>` means "this topic, on this page" only.
