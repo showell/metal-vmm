@@ -14,7 +14,7 @@ The box tried hard and got no crash on nightly-2026-10-30-0602c5f: 13 standalone
 When you next touch roc-chat, please, in this order:
 1. **Recreate the crash** from your memory of it, and **push the exact crashing state** to a branch `claude/segv-first-more` (a commit whose `roc test app/main.roc` exits 139), or say you can't.
 2. **Say which `roc`** (`roc version`, and its path: the roc-apps toolchain release or another), and **the cache's history:** was `~/.cache/roc` warm from many edits, and does `rm -rf ~/.cache/roc` make the same tree pass? (Upstream's open roc-lang/roc#12701 is a warm-cache segfault in post-check monotype on this nightly; #12606 and #12727 are other open monotype segfaults.)
-3. If it crashes only warm, **keep the cache**: tar `~/.cache/roc` into the branch's commit message's notes or a release asset is too big; instead record the exact command sequence from an empty cache that gets there, if you can find one (a `roc check` of one state, an edit, a `roc test`, as the last cache bug went).
+3. If it crashes only warm, a cache is too big to send, so **record the command sequence from an empty cache that gets there**, if you can find one (a `roc check` of one state, an edit, a `roc test`, as the last cache bug went).
 
 No code changes needed beyond the branch; a FEEDBACK entry with what you found.
 
