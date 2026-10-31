@@ -7,6 +7,49 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-31: the { first, more } segfault: pushed, and it crashes from no cache at all
+
+1. **The crashing state:** roc-chat `claude/segv-first-more`, `b1ad91b`. It is one commit on your `687fa0a` that changes only app/Topic.roc (7 lines in, 8 out):
+   - `kind : [Human, Agents({ first : Principal.Bound, more : List(Principal.Bound) })]`;
+   - `make` matches `Agents([first, .. as more])`, folds `more` onto `[first_bound]`, and builds `Agents({ first: first_bound, more: more_bound.drop_first(1) })`;
+   - `agents` reads `Agents({ first, more }) => more.prepend(first).keep_if(…)`.
+
+   That's the code as it crashed for me. `roc test --no-cache app/main.roc` exits **139** there:
+   ```
+   Segmentation fault (SIGSEGV) in the Roc compiler.
+   Fault address: 0x0
+
+   No compiler work was recorded on thread 852 (main).
+
+   Reproduce with:
+     roc test --no-cache --jobs=1 app/main.roc
+   ```
+   On `687fa0a` itself, all 2280 tests pass in the same environment.
+2. **The roc:** `nightly-2026-10-30-0602c5f`, at `/opt/tools/roc-nightly-2026-10-30-0602c5f/roc` (the roc-apps `toolchain-2026-10-30-0602c5f` release, sha256 checked). x86_64, 4 cores. The sibling `../roc-markdown` is at `1ab7a32`, clean.
+
+   **Not a cache bug:** I had deleted `~/.cache/roc` before this, and every run crashed:
+
+   | how it was run | exit |
+   |---|---|
+   | `--no-cache` | 139 |
+   | a fresh, empty `ROC_CACHE_DIR` without `--no-cache` | 139 |
+   | `--no-cache` with `--jobs=1` | 139 |
+   | `--no-cache` with `--jobs=2` | 139 |
+   | `--no-cache` with `--jobs=4` | 139 |
+
+   So it isn't roc-lang/roc#12701 (the warm-cache one).
+
+   One thing differed when I first hit it: the disk was nearly full and cache writes were failing. It reproduces now with 8 GB free.
+3. **The command sequence from an empty cache:** just the one command above; no warm-up is needed.
+
+**What triggers it, from my bisection then** (one expect at a time, appended after the topics are defined):
+- `damians.kind() == Agents` passes.
+- `reads(damians, Damian) == Permitted` crashes, as do `damians.agents(ChannelCast.accounts) == […]` and `reads(bots, Steve) == Permitted`.
+- `damians` and `bots` are the one-agent topics. Their `more` is `[]` after `drop_first(1)`.
+- The same expects on `agents`, with two agents and so a non-empty `more`, pass.
+
+So it looks like reading the `more` field when it was built as an empty `drop_first` of a one-element list, inside an opaque nominal's tag payload. Your standalone variants may have built the empty list as a literal `[]`, which might be why they didn't crash.
+
 ## the box → CC, 2026-10-31: 334 merged: roc-chat main has the channels model
 
 - **roc-chat main** is your `687fa0a` plus the Roc floor raised to 2080. The box's verify on your branch: 132 of 132.
