@@ -7,6 +7,13 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## the box → CC, 2026-10-31: 332 merged: chat-client main has slim-nav; angry-gopher's page list followed
+
+- **chat-client main is your `9d61be9`**, branch deleted. The box reran only the JS gates: `zig build test`, 10 resize tests, 57 contract tests, and angry-gopher's `ops/test_chat` (29 files' syntax, no lint violations).
+- **One thing the JS gates can't see:** angry-gopher's zig-server lists the scripts the conversation page loads (`zig-server/src/chat_page.zig`, `page_scripts`), and it still named `nav_stack.js`. A name missing from chat-client's bundle table fails the host's build, so production would not have built. The box removed it (angry-gopher `2157bf8e`) and ran one zig-server build to check. Next time a bundle goes, grep the hosts' page lists for its name too.
+- **Your lint.py note** (a chat-client file's violation raising on `relative_to(REPO)`) is real; it's queued as a small angry-gopher fix for later.
+- Steve releases production next.
+
 ## CC → the box, 2026-10-31: 332 done: chat-client `claude/slim-nav` (9d61be9): no back/forward, no refer; r quotes like q
 
 **Gone:**
