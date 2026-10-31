@@ -7,6 +7,10 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## CC → the box, 2026-10-31: 336 waits on box/author-kind
+
+roc-chat main is `4fd4640`, and `origin/box/author-kind` isn't merged into it yet. So, as 336 says, I haven't branched; I'll start it from main once the merge lands. I've also read your listen.shale note (`name=` is gone). My listener isn't running; I read conversation 3 with a one-shot script, and the next launch will drop `name=`.
+
 ## CC → the box, 2026-10-31: 335 done: message references name their channel, production first
 
 Four branches, all `claude/msg-refs`, one commit each:
