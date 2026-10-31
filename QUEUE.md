@@ -38,6 +38,21 @@ takes minutes); metal-vmm's `zig build test` and its `sweep_test.sh` need no
 guest. Where a claim needs a real boot, write the recipe under Questions for
 the box instead of guessing. Findings arrive as red tests where they can.
 
+**332. chat-client: no back/forward navigation; r quotes like q: CC'S** (Steve, 2026-10-31.) Slim the shared JS client, showell/chat-client, which production's Zig chat serves (angry-gopher's zig-server builds it by path) and roc-chat may reuse. Branch `claude/slim-nav` in chat-client; the box reviews, runs the JS gates, merges, and Steve deploys production.
+
+**Remove the back/forward navigation, all of it:**
+- the `b` and `f` keys (chat_help.js's table, and anything else that binds them);
+- the Back and Forward buttons in the middle pane's navbar (middle_pane.js), and the navbar itself if nothing else lives there (chat_search.js puts a control "next to back/fwd": keep that control working wherever it lands, and say where);
+- js/nav_stack.js and every caller and dependency (`back`, `forward`, `onChange`, the pushes from setSelectedBubble), plus comments and docs that describe it (the README's layout list, message_view.js's notes, docs.js);
+- bundles.zig's entry for nav_stack.js if it goes, and CONTRACT.md / contract/contract.json if they mention any of it.
+Selection, the URL hash (`#msg-<id>`), and following a message reference must keep working exactly as now; only the history of selections goes.
+
+**Make `r` a synonym for `q`:** quote-reply to the selected message, alongside `q` and `>`. The online help (chat_help.js's key list, which drives the help panel) shows it plainly, e.g. "q, r (or >)", and lists no b or f.
+
+**Gates: run only the JS gates, nothing else.** In chat-client: `zig build test`, `node tools/test_chat_resize.mjs`, `node tools/test_contract.mjs`. In angry-gopher, with your chat-client checkout as its `../chat-client`: `ops/test_chat` (JS syntax, the resize decision, the JS lint). Don't run angry-gopher's or roc-chat's other gates. If the lint flags something your removal leaves (dead code, an allowlist naming a removed function), fix it at its root.
+
+**Talk:** the content goes in FEEDBACK as usual (what went, what stayed and why, the gates' output). When it's pushed, also post a short line in roc-chat conversation 3 that mentions `@LC` (e.g. "@LC slim-nav is pushed; details in FEEDBACK"): that wakes the box, which is listening there.
+
 **331. Agent-to-agent, next: a hop is an agent answering an agent; mentions parsed by the server; a server cap: CC'S** (Steve, 2026-10-30, on the box's plan after the first round trip: "go with your order".) Three parts, in order, one commit each. Shale's listen recipe is merged on master; roc-chat work goes on `claude/roc-chat` from main, after the box's pin move to nightly-2026-10-30-0602c5f lands (pull main first; if it hasn't landed, start with part 1).
 
 **Part (1): rule 3 counts only agent-to-agent replies.** In conversation 3, your status post #8 used up a hop, so LC's real question #9 was dropped. Change the count in cookbook/listen.shale's `for_me`/`consume`: an agent's post is a hop only when it mentions another agent; an agent's post that mentions no agent (a status, an answer to a human) costs nothing; a human's post still resets. Plants: an agent status post followed by an agent question is heard; three agent-to-agent mentions in a row still stop at two hops.
