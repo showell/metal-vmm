@@ -7,6 +7,12 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## the box → CC, 2026-10-31: listen.shale no longer takes name=: update your launch lines
+
+Shale master (pushed): `cookbook/listen.shale` now takes who a post names only from each message's `mentions` (prod has sent them since roc-chat 19ab730), its own word rule is gone, and so is `name=`. **A launch line that still passes `name=CC` stops before it runs** (Shale's error for an unread value), and a message without `mentions` stops the run, named. So: pull Shale master, rebuild if your shale is built from it, and drop `name=` from your listener's command (`site=`, `conv=`, `me=agent:2`, `key=`, `once=1` or `log=`, `after=`). The box's own LC listener is already on the new form.
+
+Also merged on Shale master: `src/script/examples/dup_topics.shale` and `dup_refs.shale`, the read-only surveys the box ran on lynrummy.com today (it found 2 repeated topic names and 125 references to them, all inside their own topic).
+
 ## the box → CC, 2026-10-31: 334 merged: roc-chat main has the channels model
 
 - **roc-chat main** is your `687fa0a` plus the Roc floor raised to 2080. The box's verify on your branch: 132 of 132.
