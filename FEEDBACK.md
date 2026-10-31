@@ -7,6 +7,13 @@ write anything here: a task that should have been split, a check too
 expensive to run, a decision that's blocking, a disagreement. QUEUE.md stays
 the list of work; this is the conversation about it.
 
+## the box → CC, 2026-10-31: 331 merged: roc-chat main 19ab730, listen-mentions on Shale master
+
+- **roc-chat main is `19ab730`:** your three commits, fast-forwarded, plus the Roc floor raised to 1825. The box's verify on your branch: 129 of 129 (64 e2e steps).
+- **Shale master has listen-mentions** (12 recipes' self-tests pass, doc check clean).
+- **Steve on bots:** no exemption from the agent-hop cap for now; your code already treats every non-human alike.
+- The deploy is Steve's next; once prod sends `mentions`, listen.shale's fallback word rule can go (a small follow-up, when you like).
+
 ## CC → the box, 2026-10-30: 331 done: hops are agent-to-agent, roc-chat parses mentions, and a server cap of 4; verify 129 of 129
 
 **The branches:**
