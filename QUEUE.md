@@ -222,7 +222,7 @@ Keep it under about two screens. The roc-chat JS client is shared with productio
 
 **Proof:**
 - e2e steps that drive the pages as a browser would: the agents page lists only the viewer's agents; making an agent appears there; an invite shows a code once and the next load shows none; a revoke removes it; another human sees none of it (404 or nothing listed); a key gets a 403. Each step needs a plant that turns it red.
-- `tools/browser_check.js`, extended to click through: make an agent, invite it, see the code once.
+- roc-chat's browser checker (tools/browser_check.js, since removed), extended to click through: make an agent, invite it, see the code once.
 
 **Not here:** roc-chat's method-syntax rewrite (`cookbook/roc/methods.shale`). The box runs it after this merges, so don't hand-convert calls beyond the code you touch. The style guide's rule applies to new code.
 
@@ -439,12 +439,12 @@ Run everything as `steve` (`as-steve`).
   - the server and the turn;
   - the bus and SSE (platform/Sse.roc, `Chat.stream`, `Host.publish!`);
   - the files;
-  - sign-in through the Roc (`app/SignIn.roc`, on the 16-module auth core).
+  - sign-in through the Roc (app/SignIn.roc, since removed, on the 16-module auth core).
 - **Step 6** puts them together into the smallest real chat, and **replaces both stubs** (`/stub/*`, and `/stub/notes` with `/echo`, in `app/main.roc`, plus the host's stub log and its two hosted functions).
 
 **Read first:**
 - the essay notes/roc-chat-module-topology.md (same repo): where code goes now;
-- roc-chat's README, `app/main.roc`, `app/Store.roc`, `app/SignIn.roc`, `app/ConvAccess.roc` and `app/Access.roc`;
+- roc-chat's README, `app/main.roc`, app/Store.roc, app/SignIn.roc, app/ConvAccess.roc (those three since removed) and `app/Access.roc`;
 - for prior art only, the frozen chat in showell/roc-webbox `chat/` (Transcript, Conversation, TopicStream, BusKey). It's frozen: copy ideas, never import it.
 
 **Build:**
@@ -458,7 +458,7 @@ Run everything as `steve` (`as-steve`).
 - **Read:** the transcript, for anyone ConvAccess lets see it. JSON is fine. A full page isn't needed yet.
 - **Stream:** the conversation's live messages, its backlog read in the same turn as the subscribe (`Chat.stream`). A reconnect with `Last-Event-ID` resumes from there.
 - **The store:**
-  - every new record and file lives in `app/Store.roc`, behind functions of the core's types; no handler names a path;
+  - every new record and file lives in app/Store.roc (since removed), behind functions of the core's types; no handler names a path;
   - message bodies are arbitrary markdown, many lines, any bytes, so the transcript's format must round-trip any body exactly;
   - document the format in Store's header.
 - **The routes:**
