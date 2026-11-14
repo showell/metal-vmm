@@ -488,22 +488,6 @@ Run everything as `steve` (`as-steve`).
 
 Run everything as `steve`, as CLOUD_WORK says (`as-steve`).
 
-**312. lynrummy.com without the Cobblestone apps: CC'S** (Steve, 2026-10-29: "I eventually want to remove the cobblestone apps (UO server and chat) from our deployments. They have already been demoed.") **angry-gopher and zig-metal-unikernel**, on your `claude/` branches; the box gates it and ships it after v44.
-
-**Why:** lynrummy.com mounts two cobble-webbox guests beside angry-gopher, Codex Chat at `/codex-chat/` and the UO town at `/uo/town/`, through webbox's `combo.Mount` in `zig-server/src/router.zig`. Both have been demoed, and they cost a sibling checkout, a lint, build flags and a README section.
-
-- **angry-gopher:**
-  - drop both mounts, so angry-gopher is a plain webbox app again with no combo;
-  - drop cobble-webbox from `build.zig.zon` and the build;
-  - drop `codex_chat` and `uo_town` from `tools/lint_portable.shale`'s trees and modules;
-  - remove the README's "Mounted guests" section and every mention of `/codex-chat` and `/uo`;
-  - any test that asked those routes now expects the router's plain 404.
-- **zig-metal-unikernel:** gopher.elf no longer builds cobble-webbox's `src`. `git grep -il cobble` there lists the places: `build.zig`, `DEPLOY.md`, `README.md`, `tools/verdicts.py`, `tools/tier_lib.sh`, `long.sh`, and the probe and docs files. The verdicts stop keying on cobble-webbox's commit. Probes that ask `/codex-chat/` or `/uo/town/` stop asking.
-- **Leave alone:** cobble-webbox itself, and the data on the volume (`codex-chat/` and `uo/` under the data and auth roots, which the box removes by hand later if Steve wants). Dog Park's `/todo` combo is a different deployment and stays.
-- **Say in FEEDBACK** what the image loses in size and build time, measured.
-
-Done when angry-gopher's `ops/check_zig` passes (`zig build consumers` in shale too) and zig-metal-unikernel's `zig build test` passes, with no `cobble` left in either repo's code (`git grep -il cobble` lists only history-free prose you can justify). The box runs the gates.
-
 ## Parked
 
 - **216's output ring and SSE stream** (Steve, 2026-10-16): revisit when a script needs to report as it runs; today `GET /admin/script` shows output after the run.

@@ -9,6 +9,7 @@ full text of everything below is in git: `git show 3697b1c:QUEUE.md` (items
 
 ## Archived 2026-10-19 to 2026-10-27
 
+- **312.** lynrummy.com without the Cobblestone apps: done by CC; merged (angry-gopher a6b8ed95, merge 8c8b25a5; zig-metal-unikernel 10d02bd); the last Cobblestone comments went, and every Cobblestone repo left the box, 2026-11-14 (Steve); commits named: none.
 - **313.** The doc check knows roc-chat, roc-markdown and chat-client, each optional: done by CC; merged into shale master (`bf51f47`, with 307); commits named: shale bf51f47.
 - **311.** roc-markdown's link parens and GFM pipe tables: done by CC; merged to roc-markdown main (`92b4e6a`), gold re-frozen by the box (73 moved, each explained); commits named: roc-markdown 0f709e5, 92b4e6a.
 - **310.** roc-markdown's judge moved in, proven by tools/verify.shale (the trial finish): done by CC; merged by the box (CC's session refused its push to main); commits named: roc-markdown e50f602.
