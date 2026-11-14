@@ -79,7 +79,7 @@ unless the item already asks for it.
 - **Polish is the last thing**, after the deliverable is green and pushed.
 
 **Never sit waiting on something slow.**
-- A GitHub Actions run (`cookbook/gh_build.shale`) is fire-and-forget: start
+- A GitHub Actions run (`cookbook/build_on_github.shale`) is fire-and-forget: start
   it, carry on with other work, and read its result later. Never poll in a
   loop. Never let a 20-minute CI run be the thing your session waits for.
 - If the next step really does need the result, push and report what is
@@ -126,7 +126,7 @@ Every routine operation already has a Shale form. Use it:
 - **Finding and reading:** `shale cookbook:look.shale find=... in=...` and
   `at=file:a-b`.
 - **Programs:** `run` (or `cookbook:run.shale`) instead of `cmd | tail | grep`.
-- **GitHub:** `cookbook/gh_build.shale`.
+- **GitHub:** `cookbook/build_on_github.shale`.
 
 The full list is in shale's `docs/SHALE-AGENTS.md`, under "Before you reach
 for the shell". Read it once per session.

@@ -119,7 +119,7 @@ Selection, the URL hash (`#msg-<id>`), and following a message reference must ke
 
 **Finish:** roc-chat's `tools/verify.shale` once at the end, and cookbook-test for part 1; counts in FEEDBACK. Fast loop as before: quick checks between parts.
 
-**330. listen.shale: an agent hears the posts meant for it: CC'S** (Steve, 2026-10-30, on 328: "yes, mentions plus two hops, build listen.shale first".) Build the recipe 328 proposed, in Shale's cookbook, beside cookbook/zulip.shale. Branch from Shale master; the box merges.
+**330. listen.shale: an agent hears the posts meant for it: CC'S** (Steve, 2026-10-30, on 328: "yes, mentions plus two hops, build listen.shale first".) Build the recipe 328 proposed, in Shale's cookbook, beside cookbook/read_zulip_topic.shale. Branch from Shale master; the box merges.
 
 **What it does:** listen.shale holds one roc-chat conversation's stream (`GET /conversations/<id>/stream`, with `Last-Event-ID` to resume) using the agent's key from a secrets mount (`key=keys:<file>`, passed only through `run`'s `secrets`), and prints one line per post that is for the agent: `#<id> by <principal>: <first line, trimmed>`. Arguments: `site=`, `conv=`, `me=` (the agent's principal id, such as `agent:2`), `name=` (the word a mention uses, such as `CC`), `key=`, `after=` (the last id already handled). Never print the key.
 
@@ -133,17 +133,17 @@ Selection, the URL hash (`#msg-<id>`), and following a message reference must ke
 
 **A live check against prod, by hand, once:** in conversation 3, run `once=1` as CC, have LC (the box) or Steve post a mention, and see it exit with the line. Say in FEEDBACK when you're listening, so the box can post the "@CC" at the right time, or post it yourself from a second key-holding run only if that doesn't break rule 1.
 
-**Docs:** a row in cookbook/README (or wherever cookbook/zulip.shale is listed) and in docs/SHALE-AGENTS.md's table of recipes. Present tense, no task numbers.
+**Docs:** a row in cookbook/README (or wherever cookbook/read_zulip_topic.shale is listed) and in docs/SHALE-AGENTS.md's table of recipes. Present tense, no task numbers.
 
 **Finish:** cookbook-test and the doc check, counts in FEEDBACK.
 
 **329. Shale's cookbook: no fixed scratch paths: CC'S** (Found while fixing tools/doc_check.shale's self-test, whose fixed fixture folder made two concurrent runs collide; it now takes a `mktemp -d` folder of its own.) The same pattern is in the cookbook. Under `zig build cookbook-test` each run gets a fresh scratch, but on a box whose `scratch` mount is shared, two runs at once collide:
-- cookbook/branch_prune.shale: `scratch:branch_prune_self_test`
-- cookbook/roc/methods.shale: `scratch:methods`
-- cookbook/zulip.shale: `scratch:zulip_topic.json`
+- cookbook/prune_merged_branches.shale: `scratch:branch_prune_self_test`
+- cookbook/roc/rewrite_method_calls.shale: `scratch:methods`
+- cookbook/read_zulip_topic.shale: `scratch:zulip_topic.json`
 - tools/coverage.shale: `.zig-cache/coverage/prelude_hits`, removed and rebuilt each run
 
-Give each run a folder of its own, cleaned after (doc_check's `fresh_fixture_dir` is the shape), and prove it as doc_check's fix did: run two at once, several pairs, see one collide before and none after. Leave cookbook/zig/move_judge.shale's and cookbook/zig/same_tests.shale's baseline files alone; they're fixed on purpose. Branch from Shale master; finish with `zig build cookbook-test` and the doc check, the counts in FEEDBACK. The box merges.
+Give each run a folder of its own, cleaned after (doc_check's `fresh_fixture_dir` is the shape), and prove it as doc_check's fix did: run two at once, several pairs, see one collide before and none after. Leave cookbook/zig/judge_move.shale's and cookbook/zig/check_same_tests.shale's baseline files alone; they're fixed on purpose. Branch from Shale master; finish with `zig build cookbook-test` and the doc check, the counts in FEEDBACK. The box merges.
 
 **328. Agents that listen: a design proposal, no code: CC'S** (Steve, 2026-10-30, after the first three-way conversation.) Today an agent in roc-chat reads only when told to, so a reply comes when Steve nudges. The next layer is agents that listen: an agent learns that a post is for it and answers, or wakes its session. **Write a design proposal in FEEDBACK; change no code.** Steve steers it after lunch.
 
@@ -185,7 +185,7 @@ Keep it under about two screens. The roc-chat JS client is shared with productio
 
 **Part (2): pages through an opaque Html.** The same rule for Pages.roc and the page builders: a page is built only from escaped text and literal markup, with no `List.join` of raw strings outside the builder. Keep the markup the pages emit today unless it was wrong. A plant: a page builder given a name with `<script>` still renders it escaped.
 
-**Part (3): run the cookbook hunts over app/ and act on them.** `name_hunt`, `errors`, `boundaries`, `nest_depth`, `stack`, `roc_commas` (Shale's cookbook/roc/README.md says how). Fix each finding, or leave it with a one-line reason in FEEDBACK. A finding is a question for a reader, not a verdict; `boundaries`' `single` is a rule of thumb.
+**Part (3): run the cookbook hunts over app/ and act on them.** `hunt_names`, `check_errors`, `check_boundaries`, `find_deep_calls`, `check_stacking`, `wrap_long_lines` (Shale's cookbook/roc/README.md says how). Fix each finding, or leave it with a one-line reason in FEEDBACK. A finding is a question for a reader, not a verdict; `check_boundaries`' `single` is a rule of thumb.
 
 **Part (4): keep it fixed.** Where a hunt reads zero after part 3, add it to `tools/verify.shale` as a check that must stay zero, with a plant that turns it red. Then update roc-style.md's note: roc-chat follows the builder rule now (send the roc-style edit as a proposed diff in FEEDBACK; the box commits roc-apps).
 
@@ -224,12 +224,12 @@ Keep it under about two screens. The roc-chat JS client is shared with productio
 - e2e steps that drive the pages as a browser would: the agents page lists only the viewer's agents; making an agent appears there; an invite shows a code once and the next load shows none; a revoke removes it; another human sees none of it (404 or nothing listed); a key gets a 403. Each step needs a plant that turns it red.
 - roc-chat's browser checker (tools/browser_check.js, since removed), extended to click through: make an agent, invite it, see the code once.
 
-**Not here:** roc-chat's method-syntax rewrite (`cookbook/roc/methods.shale`). The box runs it after this merges, so don't hand-convert calls beyond the code you touch. The style guide's rule applies to new code.
+**Not here:** roc-chat's method-syntax rewrite (`cookbook/roc/rewrite_method_calls.shale`). The box runs it after this merges, so don't hand-convert calls beyond the code you touch. The style guide's rule applies to new code.
 
 **323. Shale cookbook: old-style Roc calls rewritten to method syntax: CC'S** (Steve, 2026-10-30.) **showell/shale only**, on a `claude/` branch. Finish with Shale's `zig build test` (which runs every recipe's self-test) and `zig build consumers` passing, their output in FEEDBACK; the box merges.
 
 - **What it does:** it turns `Module.fn(first, rest...)` into `first.fn(rest...)` (static dispatch), but only where that is the same call: where `first`'s type is `Module`'s own type. Examples are `List.map(xs, f)` to `xs.map(f)` and `Str.concat(a, b)` to `a.concat(b)`.
-- **How:** follow cookbook/roc/name_hunt.shale for the parse and for roc-ast.
+- **How:** follow cookbook/roc/hunt_names.shale for the parse and for roc-ast.
   1. Find each candidate in roc-ast's tree.
   2. Rewrite one file at a time.
   3. Keep a file's rewrite only when `roc check` passes and `roc test`'s expect count and results are unchanged.
@@ -294,7 +294,7 @@ Its line numbers are old (a restyle and renames came since: the Store's lookups 
 
 **Also:**
 - **The bypass:** `ConvAccess.Conv.start` (the raw constructor) is still public beside `start_by`, which holds the owner rule (security M2). Make the rule impossible to bypass from app code: test-only construction, or one constructor taking the starter, whichever the pin allows. Say which.
-- **`name_hunt`'s 24 remaining `noun_effect` findings:** route handlers are `serve_*!`, and fallible lookups `load_*!`. A Shale fix teaching it mint, redeem, audit, spend and echo may land first; rerun the recipe.
+- **`hunt_names`'s 24 remaining `noun_effect` findings:** route handlers are `serve_*!`, and fallible lookups `load_*!`. A Shale fix teaching it mint, redeem, audit, spend and echo may land first; rerun the recipe.
 - **The domain refusal aliases `errors` flags** (`GitHubSignIn.Refusal`, `InviteCodec.Refusal`, `ApiKey.Refusal`, and so on): judge each one, keep a shared alias only where it's one vocabulary on purpose, and say why at its definition.
 
 **Verify:** the floors don't fall, every plant stays red at its step, and both formatters are clean. Run as `steve`.
