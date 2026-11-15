@@ -263,6 +263,13 @@ box's scripts check, ask how to check it here:
   If a test is wrong, say why in the commit that changes it.
 - Comments say what holds and why, in the present tense, in the README's
   voice: no change history in source.
+- **A backticked path in this repo's docs is a claim, and `check.sh` checks
+  it first.** Shale's doc check (`zig build doc-check -- only=metal-vmm`, run
+  in shale, a few seconds) looks for every backticked or linked path in
+  these docs, QUEUE.md and this file among them, in this repo and its
+  siblings, and one found nowhere fails the check. A file a QUEUE item plans before it exists
+  is plain text, not backticked; a part a reader fills in goes in angle
+  brackets. Run the check before a commit that adds paths.
 - **Code never cites this repo's bookkeeping** (Steve, 2026-10-30). No QUEUE
   numbers, CLOUD_WORK or FEEDBACK, review finding codes ("H2", "the security
   review's M1") or review rounds ("the round-two attacker's fifth") in another

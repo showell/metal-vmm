@@ -381,6 +381,8 @@ power-cut knob, or stops making progress:
   watches: `GUEST_S` seconds of guest time, then a normal end, exit 0. A guest that is stuck or faults leaves the image
   as it was.
 
+A run's stdout is the guest's serial output and the client's one line; its
+stderr is this program's own lines, so each fact is read from its own stream.
 The error stream then says what the run cost (exits and guest time), what
 each fault knob did, and the coverage line below.
 
@@ -425,7 +427,9 @@ a read, because a blind jump could carry the guest past a deadline held in
 its registers and change which branch it takes. The way to skip those is a
 hook, not a guess: the guest marks its wait with its deadline, as it marks
 `rdtsc`, and the machine jumps to it. Not built yet; the PC-shaped machine,
-which halts, is where waiting is free today.
+which halts, is where waiting is free today. So a check that proves a timeout
+fires belongs here (`timeouts.sh`), and QEMU keeps the happy path and one or
+two sanity checks that really let time pass.
 
 ## QEMU is the oracle
 
@@ -452,7 +456,8 @@ PASS append/fat32 same words, same verdict (6531 ms here, 4587 ms under QEMU, so
   differs between the two sides by design, so its clock line is left out and
   its two disks are each judged by `fsck.vfat` rather than compared;
   `vfat/fat32` is the byte-for-byte one.
-- **`rng` and `clock` are compared by verdict** rather than by words, for
+- **`rng` and `clock` are compared by verdict** (their last line and exit
+  code) rather than by words, for
   opposite reasons: one is random on purpose, and the other is a measurement
   of the machine it ran on, which is a different machine on each side on
   purpose.
