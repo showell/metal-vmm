@@ -393,11 +393,11 @@ about the module, not a gap in the simulator. So:
 
 ## Essays
 
-An essay the box points you to lives in github.com/showell/essay-repl-server
-under `notes/`: read it at
-`https://github.com/showell/essay-repl-server/blob/master/notes/<name>.md`.
-The box's own address for them (port 9100) isn't reachable from your
-environment.
+The box's essay surface is private and transient: its notes never leave the
+box, and it keeps only the newest few. So anything an assignment needs is in
+a repo, and a brief names the file. An older essay a brief or a doc names as
+`notes/<name>.md` is in the parked github.com/showell/essay-repl-server: read
+it at `https://github.com/showell/essay-repl-server/blob/master/notes/<name>.md`.
 
 ## Long assignments
 
