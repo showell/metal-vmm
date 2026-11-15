@@ -21,8 +21,8 @@ differ from the unhurt one, and is the difference excused?" to "did anything
 forbidden happen?", and `plants.sh` (a standing set of planted bugs, the
 names in zig-metal-unikernel build.zig's `Plant` enum) runs on every change
 to it. The whole-machine snapshot (`docs/SNAPSHOT.md`) is
-parked. Essays: `notes/the-plan-after-the-postmortem.md`,
-`notes/our-lexicon.md` (the shared vocabulary).
+parked. Essays: [the plan after the postmortem](https://github.com/showell/essay-repl-server/blob/master/notes/the-plan-after-the-postmortem.md),
+[our lexicon](https://github.com/showell/essay-repl-server/blob/master/notes/our-lexicon.md) (the shared vocabulary).
 
 ## Wall time is the cost
 
