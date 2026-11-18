@@ -24,7 +24,7 @@ What we learned:
 
 ---
 
-**Active on `master`.** A deterministic hypervisor of our own, on
+A deterministic hypervisor of our own, on
 KVM, for one kind of guest: [zig-metal-unikernel](https://github.com/showell/zig-metal-unikernel)'s
 bare-metal kernels, the probes and the real server behind lynrummy.com. It is
 a test machine, never a production one. The same guest with the same seed
