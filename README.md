@@ -1,5 +1,29 @@
 # metal-vmm
 
+**Deprecated (2026-11-18): metal-vmm is no longer developed.**
+
+metal-vmm is a deterministic hypervisor on KVM for one kind of guest,
+zig-metal-unikernel's kernels: the same guest and seed give the same run,
+byte for byte, and any input (a frame, a disk request, a clock read) can be
+withheld or damaged to a recipe. It was that kernel's test machine and
+judge, never a production one, and it retires with the kernel; there is no
+successor. The explorer it aimed at, steered by zig-coverage-sdk's
+properties, was never built.
+
+What we learned:
+- Determinism was nearly free for this guest: one thread, interrupts only
+  at a halt, every byte through one seam. Time was the work: `rdtsc` and the
+  deadline timer don't exit, so the guest marks them and the loader rewrites
+  them.
+- "It answered" is a weaker question than "is it sound": judging each run's
+  volume found one refused write that left a volume that could never mount
+  again, and a DHCP client that never retransmitted (`docs/findings.md`).
+- A judge needs its own check: `plants.sh` builds kernels with deliberate
+  bugs the judge must catch. Later, the kernel's own simulators and hunts
+  for one class of mistake found more than the sweeps did.
+
+---
+
 **Active on `master`.** A deterministic hypervisor of our own, on
 KVM, for one kind of guest: [zig-metal-unikernel](https://github.com/showell/zig-metal-unikernel)'s
 bare-metal kernels, the probes and the real server behind lynrummy.com. It is
