@@ -2,7 +2,7 @@
 # with an API key the volume has never held: refused at the first lock, 401,
 # under every seed's faults, before the body's envelope is read. The site
 # volume holds no shale.conf and no admin key, so a run past both locks is
-# not a shape's: script_story.sh makes that volume (mtools), runs the
-# signed script unhurt and with the disk gone mid-run, and the restart.
+# not a shape's. Shale's signing tool is retired and the route is slated
+# for removal, so no story here signs a script that runs.
 PEER_REQUEST=script-refused.http
 EXPECT=401
